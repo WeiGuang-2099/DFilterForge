@@ -1,0 +1,90 @@
+name: dfilterforge
+
+x-runtime-hardening: &runtime-hardening
+  cap_drop:
+    - ALL
+  init: true
+  pids_limit: 128
+  read_only: true
+  restart: "no"
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+
+services:
+  lab:
+    <<: *runtime-hardening
+    profiles:
+      - pilot
+    build:
+      context: .
+      target: runtime
+    image: dfilterforge-lab:0.1.0
+    command:
+      - doctor
+      - --require-tshark-version
+      - 4.6.8
+    network_mode: none
+    cpus: 1.0
+    mem_limit: 512m
+    volumes:
+      - type: bind
+        source: ./pcap_lab/fixtures
+        target: /workspace/pcap_lab/fixtures
+        read_only: true
+      - type: bind
+        source: ./artifacts
+        target: /workspace/artifacts
+
+  test:
+    <<: *runtime-hardening
+    profiles:
+      - dev
+    build:
+      context: .
+      target: test
+    image: dfilterforge-test:0.1.0
+    network_mode: none
+    cpus: 2.0
+    mem_limit: 2g
+
+  dev:
+    <<: *runtime-hardening
+    profiles:
+      - dev
+    build:
+      context: .
+      target: dev
+    image: dfilterforge-dev:0.1.0
+    command:
+      - python
+      - -m
+      - dfilterforge
+      - doctor
+    network_mode: none
+    cpus: 2.0
+    mem_limit: 2g
+    volumes:
+      - type: bind
+        source: ./src
+        target: /workspace/src
+        read_only: true
+      - type: bind
+        source: ./tests
+        target: /workspace/tests
+        read_only: true
+
+  web:
+    <<: *runtime-hardening
+    profiles:
+      - web-local
+      - public-demo
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: dfilterforge-web:0.1.0
+    cpus: 1.0
+    mem_limit: 512m
+    ports:
+      - "3000:3000"

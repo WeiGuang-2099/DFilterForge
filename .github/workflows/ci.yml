@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python quality gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          version: 0.9.28
+      - run: uv sync --frozen --extra dev
+      - run: uv run pyink --check src tests
+      - run: uv run isort --check-only src tests
+      - run: uv run pylint src
+      - run: uv run pyright
+      - run: uv run lint-imports
+      - run: uv run pytest --cov=dfilterforge --cov-branch
+
+  web:
+    name: Web quality gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.34.5 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm web:typecheck
+      - run: pnpm web:lint
+      - run: pnpm web:build
+      - run: pnpm --filter @dfilterforge/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @dfilterforge/web test:e2e
+
+  containers:
+    name: Docker contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate all Compose profiles
+        run: >-
+          docker compose
+          --profile pilot
+          --profile dev
+          --profile web-local
+          --profile public-demo
+          config
+      - name: Build deterministic test image
+        run: docker build --target test --tag dfilterforge-test:ci .
+      - name: Run tests without network or Linux capabilities
+        run: >-
+          docker run --rm
+          --network none
+          --read-only
+          --cap-drop ALL
+          --security-opt no-new-privileges
+          --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m
+          dfilterforge-test:ci

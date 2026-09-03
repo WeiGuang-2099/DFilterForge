@@ -1,0 +1,12 @@
+{
+  "name": "dfilterforge-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "scripts": {
+    "web:dev": "pnpm --filter @dfilterforge/web dev",
+    "web:build": "pnpm --filter @dfilterforge/web build",
+    "web:lint": "pnpm --filter @dfilterforge/web lint",
+    "web:typecheck": "pnpm --filter @dfilterforge/web typecheck"
+  }
+}

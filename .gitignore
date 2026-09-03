@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.venv/
+.uv-cache/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+.corepack-cache/
+.task-tmp/
+.next/
+*.tsbuildinfo
+out/
+coverage/
+playwright-report/
+test-results/
+
+# Local data and secrets
+.env
+.env.*
+!.env.example
+artifacts/
+!artifacts/
+artifacts/*
+!artifacts/.gitkeep
+results/
+*.pcap
+*.pcapng
+!pcap_lab/fixtures/*.pcap
+!pcap_lab/fixtures/*.pcapng
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local agent context and non-release planning material
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+**/CLAUDE.md
+FILTERSMITH_FEASIBILITY_REVIEW_2026-08-31.md
+docs/implementation-plan.md
+docs/design/
+docs/plans/
+docs/drafts/
+docs/**/*-design.md
+docs/**/*-plan.md
+
+# Temporary ablation worktrees
+.worktrees/
