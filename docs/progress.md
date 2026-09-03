@@ -23,6 +23,8 @@ Day 0 engineering baseline and recorded vertical slice.
 - `uv.lock` is generated and the local environment is pinned to Python 3.12.
 - The empty local Git repository is initialized on `main`; the user-provided
   `origin` was inspected and had no remote refs before the initial push.
+- Initial implementation commit `8f7eb4f` was pushed to `origin/main` and the
+  local branch now tracks the remote branch.
 - Docker Compose v5.3.0 is installed on the host.
 
 ## In progress
@@ -35,7 +37,6 @@ Day 0 engineering baseline and recorded vertical slice.
 
 - The Docker daemon is not running, so images and container security contracts
   cannot yet be built or tested.
-- GitHub push credentials remain unverified until the first push completes.
 - All three Playwright cases pass, but the local Windows process does not exit
   cleanly after its development server is stopped. Linux CI teardown remains
   unverified.
