@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
+from datetime import datetime
 import json
 from pathlib import Path
 import platform
-import subprocess
 import sys
 from typing import cast, TypeVar
 
@@ -31,7 +31,13 @@ from dfilterforge.field_catalog import CatalogError
 from dfilterforge.field_catalog import FieldCatalogV1
 from dfilterforge.field_catalog import parse_tshark_fields
 from dfilterforge.field_catalog import parse_tshark_values
+from dfilterforge.fixtures import generate_fixtures
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.live import evaluate_live
+from dfilterforge.live import LiveError
+from dfilterforge.live import packet_set_hash
+from dfilterforge.runner import RunnerError
+from dfilterforge.runner import TsharkRunner
 
 JsonObject = dict[str, object]
 Command = Callable[[argparse.Namespace], object]
@@ -50,10 +56,10 @@ def _read_json(path: Path) -> object:
     try:
         with path.open("r", encoding="utf-8") as source:
             return json.load(source)
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, ValueError):
         raise CliError(
-            "input_invalid", f"Cannot read {path}: {error}"
-        ) from error
+            "input_invalid", "Cannot read valid JSON input"
+        ) from None
 
 
 def _write_json(value: object, output: Path | None) -> None:
@@ -68,37 +74,30 @@ def _write_json(value: object, output: Path | None) -> None:
 def _load_model(path: Path, model_type: type[ModelT]) -> ModelT:
     try:
         return model_type.model_validate(_read_json(path))
-    except ValidationError as error:
-        raise CliError("schema_invalid", str(error)) from error
+    except ValidationError:
+        raise CliError(
+            "schema_invalid", "Input does not match the required schema"
+        ) from None
 
 
 def _doctor(arguments: argparse.Namespace) -> object:
     tshark_status: JsonObject
     try:
-        completed = subprocess.run(
-            [arguments.tshark, "--version"],
-            capture_output=True,
-            check=False,
-            encoding="utf-8",
-            errors="replace",
-            shell=False,
-            timeout=5,
-        )
-        first_line = (completed.stdout or completed.stderr).splitlines()[0]
-        version_ok = (
-            completed.returncode == 0
-            and arguments.require_tshark_version in first_line
-        )
+        version = TsharkRunner(tshark=arguments.tshark).version()
+        version_ok = version == arguments.require_tshark_version
         tshark_status = {
-            "available": completed.returncode == 0,
+            "available": True,
             "required_version": arguments.require_tshark_version,
-            "version_line": first_line,
+            "version": version,
             "version_ok": version_ok,
         }
-    except (FileNotFoundError, subprocess.TimeoutExpired, IndexError) as error:
+        if not version_ok:
+            arguments.exit_code = 2
+    except RunnerError as error:
+        arguments.exit_code = 2
         tshark_status = {
             "available": False,
-            "error": type(error).__name__,
+            "error": error.code,
             "required_version": arguments.require_tshark_version,
             "version_ok": False,
         }
@@ -233,6 +232,47 @@ def _evaluate(arguments: argparse.Namespace) -> None:
     _write_json(receipt, arguments.output)
 
 
+def _fixtures_generate(arguments: argparse.Namespace) -> object:
+    manifest = generate_fixtures(arguments.output_dir)
+    return {"manifest_path": manifest.as_posix()}
+
+
+def _evaluate_live(arguments: argparse.Namespace) -> object:
+    spec = _load_model(arguments.spec, SemanticSpecV1)
+    candidate_ir = _load_model(arguments.candidate_ir, IntentIrV1)
+    catalog = (
+        None
+        if arguments.catalog is None
+        else _load_model(arguments.catalog, FieldCatalogV1)
+    )
+    receipt, environment = evaluate_live(
+        spec,
+        candidate_ir,
+        arguments.capture_root,
+        run_id=arguments.run_id,
+        created_at=arguments.created_at,
+        code_revision=arguments.code_revision,
+        catalog=catalog,
+        runner=TsharkRunner(tshark=arguments.tshark),
+    )
+    summary: JsonObject = {
+        "receipt_hash": receipt.receipt_hash(),
+        "environment_hash": environment.environment_hash(),
+        "packet_set_hash": packet_set_hash(receipt),
+    }
+    if arguments.output is None:
+        return {**summary, "receipt": receipt, "environment": environment}
+    output = cast(Path, arguments.output)
+    environment_output = output.with_name(f"{output.stem}.environment.json")
+    _write_json(receipt, output)
+    _write_json(environment, environment_output)
+    return {
+        **summary,
+        "receipt_path": output.as_posix(),
+        "environment_path": environment_output.as_posix(),
+    }
+
+
 def _benchmark_run(arguments: argparse.Namespace) -> object:
     receipts: list[EvaluationReceiptV1] = []
     for path in arguments.receipts:
@@ -285,6 +325,7 @@ def _path(value: str) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     """Builds the CLI parser without mutating global process state."""
     parser = argparse.ArgumentParser(prog="dfilterforge")
+    parser.set_defaults(exit_code=0)
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -336,6 +377,28 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--output", type=_path)
     evaluate.set_defaults(handler=_evaluate)
 
+    fixtures = commands.add_parser("fixtures")
+    fixture_commands = fixtures.add_subparsers(
+        dest="fixtures_command", required=True
+    )
+    fixture_generate = fixture_commands.add_parser("generate")
+    fixture_generate.add_argument("--output-dir", type=_path, required=True)
+    fixture_generate.set_defaults(handler=_fixtures_generate)
+
+    live = commands.add_parser("evaluate-live")
+    live.add_argument("--spec", type=_path, required=True)
+    live.add_argument("--candidate-ir", type=_path, required=True)
+    live.add_argument("--capture-root", type=_path, required=True)
+    live.add_argument("--catalog", type=_path)
+    live.add_argument("--run-id", required=True)
+    live.add_argument(
+        "--created-at", type=datetime.fromisoformat, required=True
+    )
+    live.add_argument("--code-revision", required=True)
+    live.add_argument("--output", type=_path)
+    live.add_argument("--tshark", default="tshark")
+    live.set_defaults(handler=_evaluate_live)
+
     benchmark = commands.add_parser("benchmark")
     benchmark_commands = benchmark.add_subparsers(
         dest="benchmark_command", required=True
@@ -371,8 +434,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = handler(arguments)
         if result is not None:
             _write_json(result, None)
-        return 0
-    except (CatalogError, CompileError) as error:
+        return int(arguments.exit_code)
+    except (CatalogError, CompileError, LiveError, RunnerError) as error:
         print(
             canonical_json(
                 {"error": {"code": error.code, "message": str(error)}}
@@ -388,10 +451,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    except ValidationError as error:
+    except ValidationError:
         print(
             canonical_json(
-                {"error": {"code": "schema_invalid", "message": str(error)}}
+                {
+                    "error": {
+                        "code": "schema_invalid",
+                        "message": "Input does not match the required schema",
+                    }
+                }
+            ),
+            file=sys.stderr,
+        )
+        return 2
+    except OSError:
+        print(
+            canonical_json(
+                {
+                    "error": {
+                        "code": "io_error",
+                        "message": "File operation failed",
+                    }
+                }
             ),
             file=sys.stderr,
         )

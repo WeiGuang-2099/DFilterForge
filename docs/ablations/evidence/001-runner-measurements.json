@@ -1,0 +1,1335 @@
+{
+  "correctness": {
+    "all_full_labels_match": true,
+    "all_paired_frame_sets_equal": true,
+    "all_simplified_labels_match": true,
+    "mutation_kills": 27,
+    "mutation_samples": 27,
+    "pilot_scale_gate_verified": false
+  },
+  "environment": {
+    "name_resolution": false,
+    "pass_mode": "single",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python_version": "3.12.3 (main, Jul 15 2026, 23:46:41) [GCC 13.3.0]",
+    "runner_limits": {
+      "max_capture_bytes": 16777216,
+      "max_filter_bytes": 8192,
+      "max_frames": 100000,
+      "max_stderr_bytes": 65536,
+      "max_stdout_bytes": 2097152,
+      "timeout_seconds": 5.0
+    },
+    "runner_source_sha256": "b1c21445e66bd11c5bc51688ac622037752bde5e60e8a0894237dfc5aae92d93",
+    "scope": "Nine synthetic pilot captures and one finite output-limit witness. This records executable/process identity; the caller must record the enclosing Docker image ID separately. It is not a complete isolation or pilot-scale gate measurement.",
+    "timezone": "UTC",
+    "tshark_executable_sha256": "67d31bae9ec022705e8b18cbbb21380d86773cdac619da14d075226a6f47e0b8",
+    "tshark_version": "4.6.8"
+  },
+  "environment_hash": "2d19d02bdb49de61bb6384773552031d735f181deef9956f77b869a8aeca56f2",
+  "fixture_manifest_sha256": "f274caefb339d330baa48a1f0f115d7b9eaada4398a9cbe96a5c970c692bd602",
+  "full_script_sha256": "1472dc891b5651282094bf9ccebcbc5ccb202a96f92a408df6c16a218197555b",
+  "paired_samples": [
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 69.24113799982479,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-compiled-0",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 89.08735500017428
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 77.40188999991915,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-reference-0",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 85.37996900008693
+    },
+    {
+      "expected_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "full_runtime_ms": 76.83204099998875,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-near-wrong-0",
+      "simplified_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "simplified_runtime_ms": 79.67733299983593
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 72.09974300008071,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-compiled-0",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 69.43569300005947
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 75.3884680000283,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-reference-0",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 81.1249040000348
+    },
+    {
+      "expected_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "full_runtime_ms": 78.80633400009174,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-near-wrong-0",
+      "simplified_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "simplified_runtime_ms": 81.97195799994006
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 76.62525000000642,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-compiled-0",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 84.79302400019151
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 77.0326809999915,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-reference-0",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 81.35056800006168
+    },
+    {
+      "expected_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "full_runtime_ms": 73.66833100013537,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-near-wrong-0",
+      "simplified_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "simplified_runtime_ms": 78.12868399992112
+    },
+    {
+      "expected_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "full_runtime_ms": 73.77195999993091,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-17-compiled-0",
+      "simplified_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "simplified_runtime_ms": 77.20647799988001
+    },
+    {
+      "expected_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "full_runtime_ms": 76.38449399996716,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-17-reference-0",
+      "simplified_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "simplified_runtime_ms": 76.2441869999293
+    },
+    {
+      "expected_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "full_runtime_ms": 76.17024599994693,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-17-near-wrong-0",
+      "simplified_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "simplified_runtime_ms": 77.63001800003622
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 75.1049640000474,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-42-compiled-0",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 73.30049899996993
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 71.4461279999341,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-42-reference-0",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 72.83149099998809
+    },
+    {
+      "expected_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "full_runtime_ms": 66.36535699999513,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-42-near-wrong-0",
+      "simplified_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "simplified_runtime_ms": 70.17075599992495
+    },
+    {
+      "expected_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "full_runtime_ms": 66.62020999988272,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-2026-compiled-0",
+      "simplified_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "simplified_runtime_ms": 73.16392899997481
+    },
+    {
+      "expected_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "full_runtime_ms": 66.80625600006351,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-2026-reference-0",
+      "simplified_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "simplified_runtime_ms": 69.97171600005458
+    },
+    {
+      "expected_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "full_runtime_ms": 65.41443900005106,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-2026-near-wrong-0",
+      "simplified_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "simplified_runtime_ms": 72.95901199995569
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 66.2446030000865,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-17-compiled-0",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 69.42938600013804
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 64.80909800006884,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-17-reference-0",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 74.40424600008555
+    },
+    {
+      "expected_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "full_runtime_ms": 63.50137000003997,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-17-near-wrong-0",
+      "simplified_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "simplified_runtime_ms": 73.75481500002934
+    },
+    {
+      "expected_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "full_runtime_ms": 65.83268999997927,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-42-compiled-0",
+      "simplified_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "simplified_runtime_ms": 70.21387500003584
+    },
+    {
+      "expected_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "full_runtime_ms": 65.86011400008829,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-42-reference-0",
+      "simplified_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "simplified_runtime_ms": 72.9884760000914
+    },
+    {
+      "expected_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "full_runtime_ms": 65.7847990000846,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-42-near-wrong-0",
+      "simplified_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "simplified_runtime_ms": 72.00230800003737
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 67.4436340000284,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-2026-compiled-0",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 69.58621700005096
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 63.64934099997299,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-2026-reference-0",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 69.92081799990046
+    },
+    {
+      "expected_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "full_runtime_ms": 63.922117999936745,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-2026-near-wrong-0",
+      "simplified_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "simplified_runtime_ms": 68.87357799996607
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 66.17911900002582,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-compiled-1",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 73.0041120000351
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 64.12637900007212,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-reference-1",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 71.00559399987105
+    },
+    {
+      "expected_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "full_runtime_ms": 65.81224299998212,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-near-wrong-1",
+      "simplified_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "simplified_runtime_ms": 70.2844949998962
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 65.20859400006884,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-compiled-1",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 70.62579299986282
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 65.24906499998906,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-reference-1",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 74.46850199994515
+    },
+    {
+      "expected_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "full_runtime_ms": 72.82623600008264,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-near-wrong-1",
+      "simplified_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "simplified_runtime_ms": 73.1178229998477
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 74.23173300003327,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-compiled-1",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 79.23390900009508
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 76.0760460000256,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-reference-1",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 78.06582400007755
+    },
+    {
+      "expected_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "full_runtime_ms": 67.10723399987728,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-near-wrong-1",
+      "simplified_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "simplified_runtime_ms": 82.86168999984511
+    },
+    {
+      "expected_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "full_runtime_ms": 69.16471600015939,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-17-compiled-1",
+      "simplified_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "simplified_runtime_ms": 70.04515799985711
+    },
+    {
+      "expected_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "full_runtime_ms": 65.67642400000295,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-17-reference-1",
+      "simplified_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "simplified_runtime_ms": 71.96138600011182
+    },
+    {
+      "expected_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "full_runtime_ms": 67.16068700006872,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-17-near-wrong-1",
+      "simplified_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "simplified_runtime_ms": 74.94305000000168
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 66.2737659999948,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-42-compiled-1",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 71.49674799984496
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 64.38278800010266,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-42-reference-1",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 71.08009999979004
+    },
+    {
+      "expected_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "full_runtime_ms": 64.50351900002715,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-42-near-wrong-1",
+      "simplified_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "simplified_runtime_ms": 69.01270899993506
+    },
+    {
+      "expected_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "full_runtime_ms": 65.58307700015575,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-2026-compiled-1",
+      "simplified_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "simplified_runtime_ms": 73.27831199995671
+    },
+    {
+      "expected_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "full_runtime_ms": 64.65526700003466,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-2026-reference-1",
+      "simplified_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "simplified_runtime_ms": 72.14672300005986
+    },
+    {
+      "expected_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "full_runtime_ms": 65.69944600005329,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "dns-udp-query-2026-near-wrong-1",
+      "simplified_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "simplified_runtime_ms": 68.77607799992802
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 66.6391830000066,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-17-compiled-1",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 69.34593199980554
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 73.43065400004889,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-17-reference-1",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 71.32601000012073
+    },
+    {
+      "expected_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "full_runtime_ms": 65.5637120000847,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-17-near-wrong-1",
+      "simplified_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "simplified_runtime_ms": 69.7985570000128
+    },
+    {
+      "expected_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "full_runtime_ms": 65.4506460000448,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-42-compiled-1",
+      "simplified_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "simplified_runtime_ms": 68.74545999994552
+    },
+    {
+      "expected_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "full_runtime_ms": 68.99451100002807,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-42-reference-1",
+      "simplified_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "simplified_runtime_ms": 70.76284799995847
+    },
+    {
+      "expected_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "full_runtime_ms": 64.54616500013799,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-42-near-wrong-1",
+      "simplified_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "simplified_runtime_ms": 69.16855999998006
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 64.52939199994034,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-2026-compiled-1",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 71.86303899993618
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 64.3593059999148,
+      "mutation_killed": null,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-2026-reference-1",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 70.21015000009356
+    },
+    {
+      "expected_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "full_runtime_ms": 68.61711999999898,
+      "mutation_killed": true,
+      "order": [
+        "simplified",
+        "full"
+      ],
+      "sample_id": "udp-destination-53-2026-near-wrong-1",
+      "simplified_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "simplified_runtime_ms": 70.73562499999753
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 67.9927079997924,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-compiled-2",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 70.55085799993321
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 63.66005400013819,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-reference-2",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 68.95913099992868
+    },
+    {
+      "expected_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "full_runtime_ms": 63.85971800000334,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-17-near-wrong-2",
+      "simplified_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "simplified_runtime_ms": 71.47855899984279
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 67.60579100000541,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-compiled-2",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 70.57023200013646
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 65.2660600001127,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-reference-2",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 70.23119199993744
+    },
+    {
+      "expected_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "full_runtime_ms": 63.7208720002036,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-42-near-wrong-2",
+      "simplified_frames_hash": "d7eefc196ef023da67dd9b5259fed0808f1facf4725975cd7b4d65d0b897fbfa",
+      "simplified_runtime_ms": 74.4394089999787
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 71.71326599996064,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-compiled-2",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 70.24871200019334
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 65.95103500012556,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-reference-2",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 78.96619000007377
+    },
+    {
+      "expected_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "full_runtime_ms": 71.20836800004327,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "tcp-syn-no-ack-2026-near-wrong-2",
+      "simplified_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "simplified_runtime_ms": 90.43978900012917
+    },
+    {
+      "expected_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "full_runtime_ms": 81.68441299994811,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-17-compiled-2",
+      "simplified_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "simplified_runtime_ms": 80.98074700001234
+    },
+    {
+      "expected_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "full_runtime_ms": 75.3859179999381,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-17-reference-2",
+      "simplified_frames_hash": "2335c54ffe3749ceafac20eea51040b4fa52beab7682f26d5d1bb75d1878478b",
+      "simplified_runtime_ms": 79.652403999944
+    },
+    {
+      "expected_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "full_runtime_ms": 69.43136899985802,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-17-near-wrong-2",
+      "simplified_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "simplified_runtime_ms": 75.25820000000749
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 73.50596500009487,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-42-compiled-2",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 73.97862500010888
+    },
+    {
+      "expected_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "full_runtime_ms": 77.34622900011345,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-42-reference-2",
+      "simplified_frames_hash": "8be6d66e9099c68d8feb52ce42478d2153cac2763b784174ae6ae96cd636b596",
+      "simplified_runtime_ms": 77.24007699994218
+    },
+    {
+      "expected_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "full_runtime_ms": 67.24658600001021,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-42-near-wrong-2",
+      "simplified_frames_hash": "4614978b279759e8070ee2c50ccc165f1a7dffe29bdd07de7af1cdf11fa91873",
+      "simplified_runtime_ms": 70.43988200007334
+    },
+    {
+      "expected_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "full_runtime_ms": 71.2028929999633,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-2026-compiled-2",
+      "simplified_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "simplified_runtime_ms": 82.88893000008102
+    },
+    {
+      "expected_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "full_runtime_ms": 96.09747600006813,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-2026-reference-2",
+      "simplified_frames_hash": "0d31723e833eeb45c40667532b9e2ced6c6f415075df529041aaf59d787f452c",
+      "simplified_runtime_ms": 83.20772799993392
+    },
+    {
+      "expected_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "full_runtime_ms": 66.07859600012489,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "dns-udp-query-2026-near-wrong-2",
+      "simplified_frames_hash": "e6e93bacd7239f258d3af1018679149d2a9a3e0bfc41a91da7e684b4666dc8ce",
+      "simplified_runtime_ms": 71.6340650001257
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 64.46864500003358,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-17-compiled-2",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 71.81808999985151
+    },
+    {
+      "expected_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "full_runtime_ms": 65.59544800006734,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-17-reference-2",
+      "simplified_frames_hash": "080a9ed428559ef602668b4c00f114f1a11c3f6b02a435f0bdc154578e4d7f22",
+      "simplified_runtime_ms": 69.97021400002268
+    },
+    {
+      "expected_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "full_runtime_ms": 63.827012000047034,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-17-near-wrong-2",
+      "simplified_frames_hash": "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+      "simplified_runtime_ms": 73.53181500002393
+    },
+    {
+      "expected_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "full_runtime_ms": 66.86139699991145,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-42-compiled-2",
+      "simplified_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "simplified_runtime_ms": 70.27767900012805
+    },
+    {
+      "expected_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "full_runtime_ms": 63.93540699991718,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-42-reference-2",
+      "simplified_frames_hash": "18b058689d010062a25cd7fb949b2abfea1757d2de45ca3abdda17db956e506b",
+      "simplified_runtime_ms": 75.0173490000634
+    },
+    {
+      "expected_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "full_runtime_ms": 67.6783390001674,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-42-near-wrong-2",
+      "simplified_frames_hash": "a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+      "simplified_runtime_ms": 72.40750400001161
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "compiled",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 63.512637000030736,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-2026-compiled-2",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 71.0541620001095
+    },
+    {
+      "expected_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "filter_kind": "reference",
+      "frame_sets_equal": true,
+      "full_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "full_runtime_ms": 68.30758299997797,
+      "mutation_killed": null,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-2026-reference-2",
+      "simplified_frames_hash": "bd0a0651ccfbeba3bf2507398e3d12f8b87c643984c65a8868d1a1797290dd25",
+      "simplified_runtime_ms": 70.52631000010479
+    },
+    {
+      "expected_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "filter_kind": "near-wrong",
+      "frame_sets_equal": true,
+      "full_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "full_runtime_ms": 64.30689399985567,
+      "mutation_killed": true,
+      "order": [
+        "full",
+        "simplified"
+      ],
+      "sample_id": "udp-destination-53-2026-near-wrong-2",
+      "simplified_frames_hash": "3031dfe32f0eb1c774c2365302573130a567802943dc59ce71d4041715a41c20",
+      "simplified_runtime_ms": 72.1123510002144
+    }
+  ],
+  "receipt": {
+    "ablation_id": "001-bounded-tshark-runner",
+    "decision": "keep_protected",
+    "full_complexity": {
+      "dependency_count": 0,
+      "module_count": 1,
+      "public_symbol_count": 4
+    },
+    "full_metrics": {
+      "empty_set_coincidence_count": 0,
+      "macro_f1": 1.0,
+      "macro_jaccard": 1.0,
+      "macro_precision": 1.0,
+      "macro_recall": 1.0,
+      "p50_runtime_ms": 66.6391830000066,
+      "p95_runtime_ms": 77.34622900011345,
+      "probe_count": 81,
+      "strong_exact_count": 81
+    },
+    "full_revision": "4228b46+working-tree",
+    "hypothesis": "Direct subprocess buffering preserves the bounded runner's behavior and safety.",
+    "input_hashes": [
+      "3298f80daed611c7aff77ba54d842f253fe3bbd6798f3e543bb694c35d2624d0",
+      "4046222af084e8c8694025914ce49b47c9558a1a461abec61312147665db9221",
+      "5414035928fe3df744bad4836227c2aec73d08cae825bf4c17c227f0fd4bc5ef",
+      "6107324f3f42c1b1791644424d97be7f023f921986e3aded5de918c8e4747e7e",
+      "d333295989caef57e209d5511c9b9ab7d8a934c082595bd5484c0b9018220127",
+      "e24d54c284c8f4899fb5cff7bd931ba0c58fb049b6b9383ac2134e10b431b957",
+      "e80140844c36037dde5ba82fc834d20dd8954e4e76c371ae5244a75ecb7ad4ae",
+      "e8ee0da2bde68602be0648331290ca38d335c01dbeb3c2aff9f92d01d938b7cc",
+      "f274caefb339d330baa48a1f0f115d7b9eaada4398a9cbe96a5c970c692bd602",
+      "faf3a3b05a814c991de622673e99b3cfa8d12fc80b6e61ec1593993bf1708208"
+    ],
+    "rationale": "Direct subprocess buffering accepts output above the configured cap. The finite safety witness prevents adopting the simpler candidate, independently of latency. Equivalence is limited to nine pilot captures.",
+    "schema_version": "1.0",
+    "seeds": [
+      17,
+      42,
+      2026
+    ],
+    "simplified_complexity": {
+      "dependency_count": 0,
+      "module_count": 1,
+      "public_symbol_count": 0
+    },
+    "simplified_metrics": {
+      "empty_set_coincidence_count": 0,
+      "macro_f1": 1.0,
+      "macro_jaccard": 1.0,
+      "macro_precision": 1.0,
+      "macro_recall": 1.0,
+      "p50_runtime_ms": 72.1123510002144,
+      "p95_runtime_ms": 83.20772799993392,
+      "probe_count": 81,
+      "strong_exact_count": 81
+    },
+    "simplified_patch_hash": "78f54b30cb05ae0aaf4c2e6f32ebd7430b41a122f255636380c88e6f09ea3c65"
+  },
+  "repetitions": 3,
+  "safety_witness": {
+    "configured_stdout_limit_bytes": 128,
+    "full_outcome": "output_limit",
+    "generated_stdout_bytes": 3893,
+    "name": "finite-stdout-limit-witness",
+    "scope": "A finite output-cap witness, not a complete isolation audit.",
+    "simplification_preserves_safety": false,
+    "simplified_frame_count": 1000,
+    "simplified_outcome": "accepted"
+  },
+  "sample_count_per_variant": 81,
+  "schema_version": "1.0",
+  "sources": {
+    "additional_third_party_dependencies": 0,
+    "full": {
+      "public_symbols": 4,
+      "source_lines": 366
+    },
+    "full_sha256": "b1c21445e66bd11c5bc51688ac622037752bde5e60e8a0894237dfc5aae92d93",
+    "simplified": {
+      "public_symbols": 0,
+      "source_lines": 42
+    },
+    "simplified_sha256": "78f54b30cb05ae0aaf4c2e6f32ebd7430b41a122f255636380c88e6f09ea3c65"
+  },
+  "timing_scope": "End-to-end call including capture hashing; cached version check after warmup.",
+  "tshark_version": "4.6.8"
+}

@@ -1,0 +1,251 @@
+{
+  "cases": [
+    {
+      "intent_path": "intents/tcp-syn-no-ack.json",
+      "intent_sha256": "317d6cd104e90d4087e1130afa269dd2d538492df1176945090cf0c6be6b9fab",
+      "near_wrong_filter": "tcp.flags.syn == true",
+      "probes": [
+        {
+          "capture_path": "captures/tcp-syn-no-ack-17.pcap",
+          "capture_sha256": "3298f80daed611c7aff77ba54d842f253fe3bbd6798f3e543bb694c35d2624d0",
+          "expected_frames": [
+            1
+          ],
+          "near_wrong_frames": [
+            1,
+            2
+          ],
+          "packet_count": 5,
+          "packet_recipes": [
+            "syn",
+            "syn-ack",
+            "ack",
+            "udp-query",
+            "fin"
+          ],
+          "probe_id": "tcp-syn-no-ack-17",
+          "seed": 17
+        },
+        {
+          "capture_path": "captures/tcp-syn-no-ack-42.pcap",
+          "capture_sha256": "e80140844c36037dde5ba82fc834d20dd8954e4e76c371ae5244a75ecb7ad4ae",
+          "expected_frames": [
+            3,
+            4
+          ],
+          "near_wrong_frames": [
+            2,
+            3,
+            4
+          ],
+          "packet_count": 6,
+          "packet_recipes": [
+            "ack",
+            "syn-ack",
+            "syn",
+            "ecn-syn",
+            "udp-other",
+            "reset"
+          ],
+          "probe_id": "tcp-syn-no-ack-42",
+          "seed": 42
+        },
+        {
+          "capture_path": "captures/tcp-syn-no-ack-2026.pcap",
+          "capture_sha256": "4046222af084e8c8694025914ce49b47c9558a1a461abec61312147665db9221",
+          "expected_frames": [
+            4,
+            6
+          ],
+          "near_wrong_frames": [
+            2,
+            4,
+            5,
+            6
+          ],
+          "packet_count": 6,
+          "packet_recipes": [
+            "udp-query",
+            "syn-ack",
+            "ack",
+            "syn",
+            "syn-ack",
+            "syn"
+          ],
+          "probe_id": "tcp-syn-no-ack-2026",
+          "seed": 2026
+        }
+      ],
+      "spec_path": "specs/tcp-syn-no-ack.json",
+      "spec_sha256": "a375332c5bc7cef6a1e9b094245b2698ba519a25cf9c7af2448f5212c25e6d69",
+      "task_id": "tcp-syn-no-ack"
+    },
+    {
+      "intent_path": "intents/dns-udp-query.json",
+      "intent_sha256": "e9631f594f17ae0b81440722682a1d890a86c8097577c6874a714a35cedffd63",
+      "near_wrong_filter": "udp && dns",
+      "probes": [
+        {
+          "capture_path": "captures/dns-udp-query-17.pcap",
+          "capture_sha256": "5414035928fe3df744bad4836227c2aec73d08cae825bf4c17c227f0fd4bc5ef",
+          "expected_frames": [
+            1,
+            3
+          ],
+          "near_wrong_frames": [
+            1,
+            2,
+            3
+          ],
+          "packet_count": 5,
+          "packet_recipes": [
+            "udp-query",
+            "udp-response",
+            "udp-query",
+            "udp-other",
+            "tcp-query"
+          ],
+          "probe_id": "dns-udp-query-17",
+          "seed": 17
+        },
+        {
+          "capture_path": "captures/dns-udp-query-42.pcap",
+          "capture_sha256": "faf3a3b05a814c991de622673e99b3cfa8d12fc80b6e61ec1593993bf1708208",
+          "expected_frames": [
+            3,
+            4
+          ],
+          "near_wrong_frames": [
+            1,
+            3,
+            4
+          ],
+          "packet_count": 4,
+          "packet_recipes": [
+            "udp-response",
+            "tcp-query",
+            "udp-query",
+            "udp-query"
+          ],
+          "probe_id": "dns-udp-query-42",
+          "seed": 42
+        },
+        {
+          "capture_path": "captures/dns-udp-query-2026.pcap",
+          "capture_sha256": "e8ee0da2bde68602be0648331290ca38d335c01dbeb3c2aff9f92d01d938b7cc",
+          "expected_frames": [
+            2,
+            5
+          ],
+          "near_wrong_frames": [
+            2,
+            3,
+            5
+          ],
+          "packet_count": 5,
+          "packet_recipes": [
+            "udp-other",
+            "udp-query",
+            "udp-response",
+            "tcp-query",
+            "udp-query"
+          ],
+          "probe_id": "dns-udp-query-2026",
+          "seed": 2026
+        }
+      ],
+      "spec_path": "specs/dns-udp-query.json",
+      "spec_sha256": "c9673ffe305f1bd990ae629fefcb1f76513fbae7963166edcab6c169a57ea0f6",
+      "task_id": "dns-udp-query"
+    },
+    {
+      "intent_path": "intents/udp-destination-53.json",
+      "intent_sha256": "ee1f4296f53db664cf87c591313b2849e285a66ac334b39252bc63072c75d154",
+      "near_wrong_filter": "udp.port == 53",
+      "probes": [
+        {
+          "capture_path": "captures/udp-destination-53-17.pcap",
+          "capture_sha256": "6107324f3f42c1b1791644424d97be7f023f921986e3aded5de918c8e4747e7e",
+          "expected_frames": [
+            1
+          ],
+          "near_wrong_frames": [
+            1,
+            2
+          ],
+          "packet_count": 4,
+          "packet_recipes": [
+            "udp-query",
+            "udp-response",
+            "udp-other",
+            "tcp-query"
+          ],
+          "probe_id": "udp-destination-53-17",
+          "seed": 17
+        },
+        {
+          "capture_path": "captures/udp-destination-53-42.pcap",
+          "capture_sha256": "e24d54c284c8f4899fb5cff7bd931ba0c58fb049b6b9383ac2134e10b431b957",
+          "expected_frames": [
+            2,
+            3
+          ],
+          "near_wrong_frames": [
+            1,
+            2,
+            3
+          ],
+          "packet_count": 5,
+          "packet_recipes": [
+            "udp-response",
+            "udp-both-53",
+            "udp-query",
+            "tcp-query",
+            "udp-other"
+          ],
+          "probe_id": "udp-destination-53-42",
+          "seed": 42
+        },
+        {
+          "capture_path": "captures/udp-destination-53-2026.pcap",
+          "capture_sha256": "d333295989caef57e209d5511c9b9ab7d8a934c082595bd5484c0b9018220127",
+          "expected_frames": [
+            4,
+            6
+          ],
+          "near_wrong_frames": [
+            2,
+            4,
+            5,
+            6
+          ],
+          "packet_count": 6,
+          "packet_recipes": [
+            "tcp-query",
+            "udp-response",
+            "udp-other",
+            "udp-query",
+            "udp-response",
+            "udp-both-53"
+          ],
+          "probe_id": "udp-destination-53-2026",
+          "seed": 2026
+        }
+      ],
+      "spec_path": "specs/udp-destination-53.json",
+      "spec_sha256": "6b7cb9723aac252e068d82b3b4f82a324be0bc80f28b205d91ac4e9b3d1f631d",
+      "task_id": "udp-destination-53"
+    }
+  ],
+  "generator": "dfilterforge.fixtures/v1",
+  "license": "MIT",
+  "provenance": "Synthetic Ethernet/IPv4 packets generated by dfilterforge.fixtures v1; independently authored packet labels; seeds 17, 42, 2026. Review covers packet recipes and labels; tshark agreement is a separate execution gate. No captured user traffic.",
+  "review_status": "reviewed",
+  "schema_version": "1.0",
+  "seeds": [
+    17,
+    42,
+    2026
+  ],
+  "split": "pilot"
+}

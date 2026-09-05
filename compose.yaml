@@ -48,6 +48,9 @@ services:
     network_mode: none
     cpus: 2.0
     mem_limit: 2g
+    # Test doubles are executable scripts; production /tmp remains noexec.
+    tmpfs:
+      - /tmp:rw,exec,nosuid,nodev,size=128m
 
   dev:
     <<: *runtime-hardening

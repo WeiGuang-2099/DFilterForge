@@ -15,21 +15,17 @@ concurrency:
 
 jobs:
   python:
-    name: Python quality gates
+    name: Python quality gates (pinned Docker runtime)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          version: 0.9.28
-      - run: uv sync --frozen --extra dev
-      - run: uv run pyink --check src tests
-      - run: uv run isort --check-only src tests
-      - run: uv run pylint src
-      - run: uv run pyright
-      - run: uv run lint-imports
-      - run: uv run pytest --cov=dfilterforge --cov-branch
+      - run: docker compose --profile dev build test
+      - run: docker compose --profile dev run --rm test pyink --check src tests scripts
+      - run: docker compose --profile dev run --rm test isort --check-only src tests scripts
+      - run: docker compose --profile dev run --rm test pylint src
+      - run: docker compose --profile dev run --rm test pyright
+      - run: docker compose --profile dev run --rm test lint-imports --no-cache
+      - run: docker compose --profile dev run --rm test
 
   web:
     name: Web quality gates
@@ -61,14 +57,3 @@ jobs:
           --profile web-local
           --profile public-demo
           config
-      - name: Build deterministic test image
-        run: docker build --target test --tag dfilterforge-test:ci .
-      - name: Run tests without network or Linux capabilities
-        run: >-
-          docker run --rm
-          --network none
-          --read-only
-          --cap-drop ALL
-          --security-opt no-new-privileges
-          --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m
-          dfilterforge-test:ci

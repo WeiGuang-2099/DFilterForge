@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "ablation_id": "001-bounded-tshark-runner",
+  "hypothesis": "Direct subprocess buffering preserves the bounded runner's behavior and safety.",
+  "full_revision": "4228b46+working-tree",
+  "simplified_patch_hash": "78f54b30cb05ae0aaf4c2e6f32ebd7430b41a122f255636380c88e6f09ea3c65",
+  "input_hashes": [
+    "3298f80daed611c7aff77ba54d842f253fe3bbd6798f3e543bb694c35d2624d0",
+    "4046222af084e8c8694025914ce49b47c9558a1a461abec61312147665db9221",
+    "5414035928fe3df744bad4836227c2aec73d08cae825bf4c17c227f0fd4bc5ef",
+    "6107324f3f42c1b1791644424d97be7f023f921986e3aded5de918c8e4747e7e",
+    "d333295989caef57e209d5511c9b9ab7d8a934c082595bd5484c0b9018220127",
+    "e24d54c284c8f4899fb5cff7bd931ba0c58fb049b6b9383ac2134e10b431b957",
+    "e80140844c36037dde5ba82fc834d20dd8954e4e76c371ae5244a75ecb7ad4ae",
+    "e8ee0da2bde68602be0648331290ca38d335c01dbeb3c2aff9f92d01d938b7cc",
+    "f274caefb339d330baa48a1f0f115d7b9eaada4398a9cbe96a5c970c692bd602",
+    "faf3a3b05a814c991de622673e99b3cfa8d12fc80b6e61ec1593993bf1708208"
+  ],
+  "seeds": [
+    17,
+    42,
+    2026
+  ],
+  "full_metrics": {
+    "probe_count": 81,
+    "strong_exact_count": 81,
+    "empty_set_coincidence_count": 0,
+    "macro_precision": 1.0,
+    "macro_recall": 1.0,
+    "macro_f1": 1.0,
+    "macro_jaccard": 1.0,
+    "p50_runtime_ms": 66.6391830000066,
+    "p95_runtime_ms": 77.34622900011345
+  },
+  "simplified_metrics": {
+    "probe_count": 81,
+    "strong_exact_count": 81,
+    "empty_set_coincidence_count": 0,
+    "macro_precision": 1.0,
+    "macro_recall": 1.0,
+    "macro_f1": 1.0,
+    "macro_jaccard": 1.0,
+    "p50_runtime_ms": 72.1123510002144,
+    "p95_runtime_ms": 83.20772799993392
+  },
+  "full_complexity": {
+    "module_count": 1,
+    "dependency_count": 0,
+    "public_symbol_count": 4
+  },
+  "simplified_complexity": {
+    "module_count": 1,
+    "dependency_count": 0,
+    "public_symbol_count": 0
+  },
+  "decision": "keep_protected",
+  "rationale": "Direct subprocess buffering accepts output above the configured cap. The finite safety witness prevents adopting the simpler candidate, independently of latency. Equivalence is limited to nine pilot captures."
+}

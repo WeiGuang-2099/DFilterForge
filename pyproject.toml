@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -85,4 +85,7 @@ source_modules = [
 ]
 forbidden_modules = [
   "dfilterforge.cli",
+  "dfilterforge.runner",
+  "dfilterforge.live",
+  "dfilterforge.fixtures",
 ]

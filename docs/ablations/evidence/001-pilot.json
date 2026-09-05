@@ -1,0 +1,138 @@
+{
+  "date": "2026-09-04",
+  "cases": [
+    {
+      "task_id": "tcp-syn-no-ack",
+      "probe_count": 3,
+      "packet_set_hash": "b6e453f03cef7ea9ae8e4518438aeadf866c8e5497e41ced555d20d627438b95",
+      "first_receipt_hash": "1ade1a9ffb35732846917e617adc088efc3b89e6bbbafeda2cfd6da1bc58a738",
+      "second_receipt_hash": "b1c8a6abba42d988da0f6f29d850ff0a7fd042c271389a40aae0b975e1902718",
+      "environment_hash": "de86a22b9f6984b5fdb7c24540e65dad6237a71873b74929203b0b54240ec845",
+      "repeated_packet_sets_stable": true,
+      "metrics": {
+        "empty_set_coincidence_count": 0,
+        "macro_f1": 1.0,
+        "macro_jaccard": 1.0,
+        "macro_precision": 1.0,
+        "macro_recall": 1.0,
+        "p50_runtime_ms": 65.88113400016482,
+        "p95_runtime_ms": 72.12717399988833,
+        "probe_count": 3,
+        "strong_exact_count": 3
+      }
+    },
+    {
+      "task_id": "dns-udp-query",
+      "probe_count": 3,
+      "packet_set_hash": "a2dec346604e677aa052c1ae7c79c5276d93fb4fcc99af90f20746df35f37068",
+      "first_receipt_hash": "1ddb295f489f54e602743236a4fb5fd4a7252179cf301d704fd00374f3ab2bde",
+      "second_receipt_hash": "7afe8059f55b67e85315649a14d85332dab9447c18c0246b5cbf01d7ded2bdd4",
+      "environment_hash": "de86a22b9f6984b5fdb7c24540e65dad6237a71873b74929203b0b54240ec845",
+      "repeated_packet_sets_stable": true,
+      "metrics": {
+        "empty_set_coincidence_count": 0,
+        "macro_f1": 1.0,
+        "macro_jaccard": 1.0,
+        "macro_precision": 1.0,
+        "macro_recall": 1.0,
+        "p50_runtime_ms": 64.31908600006864,
+        "p95_runtime_ms": 67.91853300001094,
+        "probe_count": 3,
+        "strong_exact_count": 3
+      }
+    },
+    {
+      "task_id": "udp-destination-53",
+      "probe_count": 3,
+      "packet_set_hash": "5ea960a9869b3391977ee9f5c1b416452b9d4145421dfda81a5d9a61920cea77",
+      "first_receipt_hash": "58ac4847e2a9b8bf97dda5b1b843a83794a35e7d20ecad2b62f3efaf7e0158de",
+      "second_receipt_hash": "f342bfbbb482bc04d5b8b1b4a0c44821bfd0bd455c731bbcfdef7dfbfd209b73",
+      "environment_hash": "de86a22b9f6984b5fdb7c24540e65dad6237a71873b74929203b0b54240ec845",
+      "repeated_packet_sets_stable": true,
+      "metrics": {
+        "empty_set_coincidence_count": 0,
+        "macro_f1": 1.0,
+        "macro_jaccard": 1.0,
+        "macro_precision": 1.0,
+        "macro_recall": 1.0,
+        "p50_runtime_ms": 64.03951400011465,
+        "p95_runtime_ms": 65.91582300006849,
+        "probe_count": 3,
+        "strong_exact_count": 3
+      }
+    }
+  ],
+  "production_container": {
+    "user": "10001:10001",
+    "read_only_root": true,
+    "network": "none",
+    "dropped_capabilities": [
+      "ALL"
+    ],
+    "security_options": [
+      "no-new-privileges:true"
+    ],
+    "memory_bytes": 536870912,
+    "cpu_nanocpus": 1000000000,
+    "pids_limit": 128,
+    "init": true,
+    "tmpfs": {
+      "/tmp": "rw,noexec,nosuid,nodev,size=64m"
+    },
+    "mounts": [
+      {
+        "Destination": "/workspace/artifacts",
+        "RW": true
+      },
+      {
+        "Destination": "/workspace/pcap_lab/fixtures",
+        "RW": false
+      }
+    ],
+    "image_id": "sha256:b03395d3fed27a8aa9cf4bb29f20513d0965c2a7f98179e2d02b366aaeb56eec"
+  },
+  "source": {
+    "base_revision": "4228b46b9896b228aece6e28a43f0a60832f1dfd",
+    "source_manifest_sha256": "8b896bf1ffda3707f761d80446d38ecb701107e7ff40260a319f313f5ff57923",
+    "code_revision": "4228b46+source:8b896bf1ffda3707f761d80446d38ecb701107e7ff40260a319f313f5ff57923",
+    "files": {
+      "compose.yaml": "67bc7360654598ebb23ee1e6e515713e4a45f01c7385dcef2add9a16320f9da5",
+      "Dockerfile": "d2ea0fa1c0686847ff5f9960aeba96f76ffb3418c11ca41414281992b4233187",
+      "pyproject.toml": "3dbe81cb697c5a5b0196d1d34988ad417460b98b053cd9092547417d0364f6a4",
+      "scripts/runner_ablation.py": "1472dc891b5651282094bf9ccebcbc5ccb202a96f92a408df6c16a218197555b",
+      "src/dfilterforge/__init__.py": "fb164f8e916b2839f95e6bb635f4e39ab25e83e94f7223fae73e75476a8ac1a0",
+      "src/dfilterforge/__main__.py": "4494efc46d5a811844e6e0141c365fca62360023dc20a056b4fa99951a0cad65",
+      "src/dfilterforge/canonical.py": "54a6f9494ee56e74103ec421e12fc60c6f4b4bc3be38ea7c1cb7ea99d6388d38",
+      "src/dfilterforge/cli.py": "dfbae8818b8f1a39b90cce27f6556d79216dd7436ddcf7ef628cef16c2526c0a",
+      "src/dfilterforge/compiler.py": "79bec6b3b2955369e0565d4c21d33d5ab148d702ac234b93c6fd18bc1f58c02d",
+      "src/dfilterforge/evaluation.py": "01b4a425a8726fbd15d75aa96d9c55964190f8d3f693b292bd126897a80b0925",
+      "src/dfilterforge/field_catalog.py": "b35df7abb91624076798f846c8d43d7b5490c93d55e933cec5f37cbaf2fa2ea2",
+      "src/dfilterforge/fixtures.py": "f3bc289020fc272eb2edf1ce1924d8a92b9edfe6cd16c742c570e1fb23d28e9a",
+      "src/dfilterforge/intent_ir.py": "c54c557e5fb7b61479122e7b8a94805067f64ceedbe4a94db4353a837908b4ff",
+      "src/dfilterforge/live.py": "60eb4c1680840d5e4d84179cad81d1ab0854cc749a40fa298005f49cef3c4c84",
+      "src/dfilterforge/runner.py": "b1c21445e66bd11c5bc51688ac622037752bde5e60e8a0894237dfc5aae92d93",
+      "tests/test_canonical.py": "e67db4ec64733c27c3c72058653868af0717cc71c67b1a35df64a9c3c5fc7c74",
+      "tests/test_cli_live.py": "4cd2de59f754e99aab4eab8405a6d93c1c846f49dc7f8f568888e1389923b3cb",
+      "tests/test_cli.py": "6e98f7cacf7fccbfdc8f6474528ece187928f745677ff5eb1ce23329083a86f4",
+      "tests/test_compiler.py": "577824ac51fb606c53f5a23a6841eb7e25d13f6fff6785ea1d50c6d0bb07b9ab",
+      "tests/test_evaluation.py": "663b61ad0a9f57a994772622937017820700dfcd5844a4c333f8a6ab6d8f1017",
+      "tests/test_field_catalog.py": "1f6a887bf22abb1c476ae543d61bc645aee2651ba877bb017fef48571706e7bd",
+      "tests/test_fixtures.py": "61b39904a78af79037da3e5a2b63657be1d703b6ddd7a64f7eb802bba284d123",
+      "tests/test_intent_ir.py": "21c7413208b24dbe0740676c01990279a095122cb8a32bf198e0c7d419ea71b0",
+      "tests/test_live.py": "a4f9bfd195cf6dba8ff5e30072bd02c3e721e333f1d1f30764d47fb5bf0d760f",
+      "tests/test_runner.py": "8bced8e1459cbbd0dd232f0c1de0b3f6e356c16562334474fb679661be0a0006",
+      "uv.lock": "2fac5eded2dc71b7a11981c74c9d702d20343bfa2a62345d5319700b227923f5"
+    }
+  },
+  "doctor": {
+    "dfilterforge_version": "0.1.0",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python_version": "3.12.3",
+    "tshark": {
+      "available": true,
+      "required_version": "4.6.8",
+      "version": "4.6.8",
+      "version_ok": true
+    }
+  }
+}

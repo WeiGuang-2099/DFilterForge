@@ -112,7 +112,7 @@ def test_doctor_reports_missing_tshark(
     exit_code = main(["doctor", "--tshark", "definitely-not-tshark"])
 
     result = json.loads(capsys.readouterr().out)
-    assert exit_code == 0
+    assert exit_code == 2
     assert result["tshark"]["available"] is False
 
 

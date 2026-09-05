@@ -69,7 +69,8 @@ RUN curl --fail --location --proto '=https' --tlsv1.2 \
         -DBUILD_dpauxmon=OFF \
         -DBUILD_randpktdump=OFF \
         -DENABLE_PLUGINS=OFF \
-    && cmake --build out --parallel --target tshark \
+        -DENABLE_LUA=OFF \
+    && cmake --build out --parallel 2 \
     && cmake --install out \
     && /opt/wireshark/bin/tshark --version | grep --fixed-strings \
         "TShark (Wireshark) ${WIRESHARK_VERSION}"
@@ -91,7 +92,10 @@ WORKDIR /workspace
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-RUN uv build --frozen --wheel --out-dir /wheels
+RUN uv export --frozen --no-dev --no-emit-project \
+        --format requirements-txt --output-file /tmp/requirements.txt \
+    && uv build --wheel --out-dir /wheels \
+    && cp /tmp/requirements.txt /wheels/requirements.txt
 
 FROM ${UBUNTU_IMAGE} AS runtime
 
@@ -115,7 +119,7 @@ RUN apt-get update \
         libgnutls30t64 \
         liblz4-1 \
         libmaxminddb0 \
-        libnghttp2-14t64 \
+        libnghttp2-14 \
         libpcap0.8t64 \
         libpcre2-8-0 \
         libsnappy1v5 \
@@ -140,7 +144,9 @@ COPY --from=tshark-build /opt/wireshark /opt/wireshark
 COPY --from=python-build /wheels /wheels
 
 RUN ldconfig \
-    && /opt/dfilterforge/bin/pip install --no-cache-dir /wheels/*.whl \
+    && /opt/dfilterforge/bin/pip install --no-cache-dir --require-hashes \
+        --requirement /wheels/requirements.txt \
+    && /opt/dfilterforge/bin/pip install --no-cache-dir --no-deps /wheels/*.whl \
     && rm -rf /wheels \
     && tshark --version | grep --fixed-strings \
         "TShark (Wireshark) ${WIRESHARK_VERSION}" \
@@ -155,16 +161,26 @@ CMD ["doctor"]
 FROM runtime AS test
 
 USER root
+ENV UV_CACHE_DIR=/tmp/uv-cache \
+    COVERAGE_FILE=/tmp/.coverage \
+    PYLINTHOME=/tmp/pylint \
+    XDG_CACHE_HOME=/tmp/cache \
+    HYPOTHESIS_STORAGE_DIRECTORY=/tmp/hypothesis
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=uv-bin /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY tests ./tests
+COPY pcap_lab ./pcap_lab
+COPY scripts ./scripts
 
 RUN uv sync --frozen --extra dev
 
 USER 10001:10001
-ENTRYPOINT ["uv", "run", "--frozen", "--extra", "dev"]
-CMD ["pytest", "--cov=dfilterforge", "--cov-branch"]
+ENTRYPOINT ["uv", "run", "--frozen", "--no-sync", "--extra", "dev"]
+CMD ["pytest", "--cov=dfilterforge", "--cov-branch", "-o", "cache_dir=/tmp/pytest-cache"]
 
 FROM test AS dev
 
