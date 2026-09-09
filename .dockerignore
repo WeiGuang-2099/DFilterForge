@@ -12,6 +12,7 @@
 **/test-results
 artifacts/*
 !artifacts/.gitkeep
+pcap_lab/catalog/*.gz
 *.pcap
 *.pcapng
 !pcap_lab/fixtures/*.pcap

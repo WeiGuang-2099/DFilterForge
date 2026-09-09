@@ -13,6 +13,7 @@ from typing import Literal
 
 from dfilterforge import runner as runner_module
 from dfilterforge.canonical import content_sha256
+from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.compiler import compile_intent
 from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import evaluate_probe
@@ -52,6 +53,7 @@ class LiveEnvironmentV1(FrozenModel):
     runner_source_sha256: str
     runner_limits_hash: str
     catalog_hash: str | None
+    catalog_profile_hash: str | None = None
     python_version: str
     platform_machine: str
     unmeasured: tuple[str, ...] = (
@@ -143,7 +145,10 @@ def _environment(
                 "max_frames": runner.limits.max_frames,
             }
         ),
-        catalog_hash=None if catalog is None else catalog.compute_hash(),
+        catalog_hash=None
+        if catalog is None
+        else catalog.source_catalog_hash or catalog.compute_hash(),
+        catalog_profile_hash=None if catalog is None else catalog.profile_hash,
         python_version=platform.python_version(),
         platform_machine=platform.machine(),
     )
@@ -187,7 +192,11 @@ def evaluate_live(
             "timestamp_invalid", "created_at must include a timezone"
         )
     active_runner = runner if runner is not None else TsharkRunner()
+    catalog = bind_catalog(
+        active_runner, (candidate_ir, spec.canonical_ir), catalog
+    )
     candidate_filter = compile_intent(candidate_ir, catalog)
+    compile_intent(spec.canonical_ir, catalog)
     environment = _environment(active_runner, catalog)
     probes: list[ProbeResultV1] = []
     for expected in spec.probes:

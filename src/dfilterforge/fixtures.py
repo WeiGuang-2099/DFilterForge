@@ -195,7 +195,7 @@ def _case_plans() -> tuple[_CasePlan, ...]:
     )
 
 
-def _checksum(payload: bytes) -> int:
+def internet_checksum(payload: bytes) -> int:
     """Computes the Internet checksum over bytes in network order."""
     padded = payload + (b"\0" if len(payload) % 2 else b"")
     total = sum(struct.unpack(f"!{len(padded) // 2}H", padded))
@@ -279,7 +279,7 @@ def _transport_packet(
     pseudo = (
         source + destination + struct.pack("!BBH", 0, protocol, len(segment))
     )
-    checksum = _checksum(pseudo + segment) or 0xFFFF
+    checksum = internet_checksum(pseudo + segment) or 0xFFFF
     segment = (
         segment[:checksum_offset]
         + struct.pack("!H", checksum)
@@ -288,7 +288,8 @@ def _transport_packet(
     return protocol, segment
 
 
-def _ethernet_packet(recipe: str, seed: int, ordinal: int) -> bytes:
+def ethernet_packet(recipe: str, seed: int, ordinal: int) -> bytes:
+    """Builds one complete synthetic Ethernet/IPv4 packet for a named recipe."""
     source = bytes((192, 0, 2, seed % 200 + 1))
     destination = bytes((198, 51, 100, ordinal))
     protocol, segment = _transport_packet(
@@ -307,7 +308,9 @@ def _ethernet_packet(recipe: str, seed: int, ordinal: int) -> bytes:
         source,
         destination,
     )
-    header = header[:10] + struct.pack("!H", _checksum(header)) + header[12:]
+    header = (
+        header[:10] + struct.pack("!H", internet_checksum(header)) + header[12:]
+    )
     ethernet = bytes.fromhex("0200000000020200000000010800")
     return (ethernet + header + segment).ljust(60, b"\0")
 
@@ -316,7 +319,7 @@ def _capture_bytes(probe: _ProbePlan) -> bytes:
     """Serializes little-endian microsecond PCAP with Ethernet link type."""
     records = [struct.pack("<IHHIIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)]
     for ordinal, recipe in enumerate(probe.packets, 1):
-        packet = _ethernet_packet(recipe, probe.seed, ordinal)
+        packet = ethernet_packet(recipe, probe.seed, ordinal)
         records.append(
             struct.pack(
                 "<IIII",

@@ -116,7 +116,7 @@ def test_doctor_reports_missing_tshark(
     assert result["tshark"]["available"] is False
 
 
-def test_catalog_build_and_compile_with_catalog(
+def test_compile_rejects_catalog_built_for_another_profile(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     fields_path = tmp_path / "fields.tsv"
@@ -157,15 +157,15 @@ def test_catalog_build_and_compile_with_catalog(
         ]
     )
 
-    output = json.loads(capsys.readouterr().out)
+    output = json.loads(capsys.readouterr().err)
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     assert exit_code == 0
-    assert compile_code == 0
+    assert compile_code == 2
     assert len(catalog["catalog_hash"]) == 64
-    assert output["display_filter"] == "tcp"
+    assert output["error"]["code"] == "catalog_profile_mismatch"
 
 
-def test_compile_reports_catalog_error(
+def test_compile_checks_profile_before_catalog_projection(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     intent_path = tmp_path / "intent.json"
@@ -192,7 +192,7 @@ def test_compile_reports_catalog_error(
 
     error = json.loads(capsys.readouterr().err)
     assert exit_code == 2
-    assert error["error"]["code"] == "unknown_field"
+    assert error["error"]["code"] == "catalog_profile_mismatch"
 
 
 def test_spec_validate_returns_content_hash(

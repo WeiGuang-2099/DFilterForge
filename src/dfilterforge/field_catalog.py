@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from enum import StrEnum
 import ipaddress
+import re
 from typing import Literal
 
 from pydantic import field_validator
@@ -40,6 +41,7 @@ class FieldType(StrEnum):
     IPV4 = "ipv4"
     IPV6 = "ipv6"
     ENUM = "enum"
+    UNSUPPORTED = "unsupported"
 
 
 class EnumValue(FrozenModel):
@@ -57,6 +59,7 @@ class FieldDefinition(FrozenModel):
     protocol: str
     display_name: str
     enum_values: tuple[EnumValue, ...] = ()
+    tshark_type: str | None = None
 
     @field_validator("abbreviation", "protocol")
     @classmethod
@@ -75,6 +78,7 @@ class FieldCatalogV1(FrozenModel):
     profile_hash: str
     fields: tuple[FieldDefinition, ...]
     catalog_hash: str | None = None
+    source_catalog_hash: str | None = None
     _by_name: dict[str, FieldDefinition] = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="after")
@@ -84,8 +88,10 @@ class FieldCatalogV1(FrozenModel):
         if len(by_name) != len(self.fields):
             raise ValueError("catalog contains duplicate field abbreviations")
         object.__setattr__(self, "_by_name", by_name)
-        expected = self.compute_hash()
-        if self.catalog_hash is not None and self.catalog_hash != expected:
+        if (
+            self.catalog_hash is not None
+            and self.catalog_hash != self.compute_hash()
+        ):
             raise ValueError("catalog_hash does not match catalog contents")
         return self
 
@@ -124,10 +130,26 @@ def _value_matches(  # pylint: disable=too-many-return-statements
     if field.field_type == FieldType.BOOLEAN:
         return isinstance(value, bool)
     if field.field_type == FieldType.INTEGER:
-        return isinstance(value, int) and not isinstance(value, bool)
+        if not isinstance(value, int) or isinstance(value, bool):
+            return False
+        match = re.fullmatch(r"FT_(U?)INT(\d+)", field.tshark_type or "")
+        if match is None:
+            return True
+        bits = int(match.group(2))
+        return (
+            0 <= value < 2**bits
+            if match.group(1)
+            else -(2 ** (bits - 1)) <= value < 2 ** (bits - 1)
+        )
     if field.field_type == FieldType.FLOAT:
         return _is_number(value)
-    if field.field_type in {FieldType.STRING, FieldType.BYTES}:
+    if field.field_type == FieldType.BYTES:
+        return (
+            isinstance(value, str)
+            and re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2})*", value)
+            is not None
+        )
+    if field.field_type == FieldType.STRING:
         return isinstance(value, str)
     if field.field_type in _IP_TYPES:
         if not isinstance(value, str):
@@ -151,6 +173,10 @@ def validate_predicate(predicate: Predicate, catalog: FieldCatalogV1) -> None:
         CatalogError: If the field, operator, or value is invalid.
     """
     field = catalog.get(predicate.field)
+    if field.field_type == FieldType.UNSUPPORTED:
+        raise CatalogError(
+            "unsupported_type", f"Unsupported field type: {field.tshark_type}"
+        )
     operator = predicate.operator
     if operator == Operator.EXISTS:
         return
@@ -250,8 +276,8 @@ _TSHARK_TYPE_MAP: dict[str, FieldType] = {
 def parse_tshark_fields(lines: Iterable[str]) -> tuple[FieldDefinition, ...]:
     """Parses the stable prefix of ``tshark -G fields`` tabular output.
 
-    Unsupported field types are skipped because the version-one IR cannot
-    represent them safely.
+    Unsupported field types remain identifiable so validation can reject them
+    with a stable error before tshark execution.
     """
     definitions: list[FieldDefinition] = []
     for line in lines:
@@ -270,15 +296,14 @@ def parse_tshark_fields(lines: Iterable[str]) -> tuple[FieldDefinition, ...]:
             continue
         if len(columns) < 5:
             continue
-        field_type = _TSHARK_TYPE_MAP.get(columns[3])
-        if field_type is None:
-            continue
+        field_type = _TSHARK_TYPE_MAP.get(columns[3], FieldType.UNSUPPORTED)
         definitions.append(
             FieldDefinition(
                 abbreviation=columns[2],
                 field_type=field_type,
                 protocol=columns[4],
                 display_name=columns[1],
+                tshark_type=columns[3],
             )
         )
     return tuple(definitions)
@@ -295,7 +320,7 @@ def parse_tshark_values(
     values: dict[str, list[EnumValue]] = {}
     for line in lines:
         columns = line.rstrip("\r\n").split("\t")
-        if len(columns) < 4 or columns[0] != "V":
+        if len(columns) < 4 or columns[0] not in {"V", "V64"}:
             continue
         raw_value: int | str
         try:
@@ -320,7 +345,6 @@ def apply_enum_values(
             enriched.append(
                 field.model_copy(
                     update={
-                        "field_type": FieldType.ENUM,
                         "enum_values": members,
                     }
                 )

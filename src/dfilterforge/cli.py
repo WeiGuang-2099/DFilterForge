@@ -17,6 +17,8 @@ from pydantic import ValidationError
 from dfilterforge import __version__
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
+from dfilterforge.catalog_runtime import bind_catalog
+from dfilterforge.catalog_runtime import freeze_catalog
 from dfilterforge.compiler import compile_intent
 from dfilterforge.compiler import CompileError
 from dfilterforge.evaluation import AblationReceiptV1
@@ -138,9 +140,23 @@ def _compile(arguments: argparse.Namespace) -> object:
     catalog: FieldCatalogV1 | None = None
     if arguments.catalog is not None:
         catalog = _load_model(arguments.catalog, FieldCatalogV1)
+    catalog = bind_catalog(
+        TsharkRunner(tshark=arguments.tshark), (intent,), catalog
+    )
     return {
         "display_filter": compile_intent(intent, catalog),
         "intent_hash": content_sha256(intent),
+    }
+
+
+def _catalog_freeze(arguments: argparse.Namespace) -> object:
+    metadata = freeze_catalog(
+        arguments.output, TsharkRunner(tshark=arguments.tshark)
+    )
+    return {
+        "catalog_path": arguments.output.as_posix(),
+        "counts": metadata["counts"],
+        "catalog_hash": metadata["catalog_hash"],
     }
 
 
@@ -345,6 +361,10 @@ def build_parser() -> argparse.ArgumentParser:
     catalog_build.add_argument("--profile-hash", required=True)
     catalog_build.add_argument("--output", type=_path)
     catalog_build.set_defaults(handler=_catalog_build)
+    catalog_freeze = catalog_commands.add_parser("freeze")
+    catalog_freeze.add_argument("--output", type=_path, required=True)
+    catalog_freeze.add_argument("--tshark", default="tshark")
+    catalog_freeze.set_defaults(handler=_catalog_freeze)
 
     spec = commands.add_parser("spec")
     spec_commands = spec.add_subparsers(dest="spec_command", required=True)
@@ -355,6 +375,7 @@ def build_parser() -> argparse.ArgumentParser:
     compile_command = commands.add_parser("compile")
     compile_command.add_argument("--intent-ir", type=_path, required=True)
     compile_command.add_argument("--catalog", type=_path)
+    compile_command.add_argument("--tshark", default="tshark")
     compile_command.set_defaults(handler=_compile)
 
     generate = commands.add_parser("generate")

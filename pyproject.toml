@@ -85,6 +85,8 @@ source_modules = [
 ]
 forbidden_modules = [
   "dfilterforge.cli",
+  "dfilterforge.catalog_runtime",
+  "dfilterforge.benchmark",
   "dfilterforge.runner",
   "dfilterforge.live",
   "dfilterforge.fixtures",

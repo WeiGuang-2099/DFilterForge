@@ -152,6 +152,11 @@ RUN ldconfig \
         "TShark (Wireshark) ${WIRESHARK_VERSION}" \
     && dfilterforge --version
 
+# Freeze the entire inventory from the same binary and isolated profile used by
+# compilation and capture execution. Runtime queries load only referenced fields.
+RUN dfilterforge catalog freeze --output /opt/dfilterforge/catalog.sqlite3 \
+    && chmod 0444 /opt/dfilterforge/catalog.sqlite3
+
 WORKDIR /workspace
 USER 10001:10001
 

@@ -65,6 +65,59 @@ per tshark process, limits output and frame count, and kills the process group
 on completion or failure. Display filters are passed as a single argument with
 `shell=False`. These limits complement the container resource restrictions.
 
+## Frozen field catalog
+
+The Docker build freezes the complete tshark field and value inventory in
+`/opt/dfilterforge/catalog.sqlite3`, including the actual version and isolated
+dissector configuration. SQLite is part of Python's standard library. The
+compiler reads the fields referenced by an intent from that inventory, keeping
+memory bounded without restricting validation to a protocol whitelist.
+
+`compile` and `evaluate-live` validate fields, operators, literal types, and the
+catalog's runtime binding before any capture execution. A supplied catalog is
+checked against the frozen environment. The domain compiler remains independent
+of file storage and subprocess execution.
+
+```text
+docker compose --profile pilot run --rm lab catalog freeze --output /workspace/artifacts/catalog.sqlite3
+docker compose --profile pilot run --rm lab compile --intent-ir /workspace/artifacts/pilot/intents/tcp-syn-no-ack.json
+```
+
+The SQLite catalog is generated inside the pinned image. Rebuilding and
+extracting twice in the same environment must produce identical catalog bytes;
+this checks reproducibility without adding repeated whole-file work to
+compilation.
+
+## Semantic benchmark
+
+The pilot suite contains 36 authored specifications with an independent
+semantic review, each with three probes and a near-wrong filter. Packet labels
+come from named synthetic packet recipes independently of the IR and
+display-filter strings. The suite includes explicit counterexamples for field
+absence, direction, Boolean flags, numeric boundaries, DNS, subnets, and nested
+logic. Generated manifests record `ready` status, `reviewed` review status, and
+the review provenance. These are curated pilot fixtures, not a held-out model
+test set.
+
+```text
+docker compose --profile dev run --rm --volume "${PWD}/artifacts:/workspace/artifacts" test python scripts/benchmark_gate.py --phase suite --source-revision YOUR_REVISION --output-dir /workspace/artifacts/benchmark
+docker compose --profile dev run --rm --volume "${PWD}/artifacts:/workspace/artifacts" test python scripts/benchmark_gate.py --phase stability --source-revision YOUR_REVISION --output-dir /workspace/artifacts/benchmark
+```
+
+The stability phase executes all 50 byte-distinct captures against all 150
+different filter strings twice (15,000 tshark calls). It compares exact frame
+tuples and writes progress after each capture. The extra boundary filters are
+runtime stress inputs, not additional authored specifications. Different filter
+strings do not imply different semantics.
+
+An interrupted stability run can resume from a matching local checkpoint. Use
+`--restart-stability` to discard an existing checkpoint explicitly.
+
+CI runs the semantic oracle and mutation checks. The longer complete stability
+matrix is an explicit release measurement. Passing these synthetic gates does
+not measure model compile validity, silent-wrong rate, or the complete Pilot
+Go/No-Go decision. The Web remains recorded-only until that decision passes.
+
 ## Safety boundary
 
 The public demo accepts only repository-curated captures. Do not expose tshark

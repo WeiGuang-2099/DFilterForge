@@ -248,11 +248,28 @@ class TsharkRunner:
             capture_sha256=capture_hash,
         )
 
+    def report(self, name: str) -> bytes:
+        """Read an allowlisted metadata report with bounded output and time."""
+        if name not in {
+            "fields",
+            "values",
+            "currentprefs",
+            "decodes",
+            "heuristic-decodes",
+            "version",
+        }:
+            raise RunnerError("report_invalid", "Unsupported metadata report")
+        self.version()
+        arguments = ["--version"] if name == "version" else ["-G", name]
+        output, _ = self._execute(arguments, max_stdout_bytes=192 * 1024 * 1024)
+        return output
+
     def _execute(
         self,
         arguments: list[str],
         pass_fds: tuple[int, ...] = (),
         frame_limit: int | None = None,
+        max_stdout_bytes: int | None = None,
     ) -> tuple[bytes, float]:
         environment = {
             "PATH": _SEARCH_PATH,
@@ -285,7 +302,9 @@ class TsharkRunner:
                 "tshark_unavailable", "tshark cannot be started"
             ) from None
         try:
-            output = self._read_output(process, started, frame_limit)
+            output = self._read_output(
+                process, started, frame_limit, max_stdout_bytes
+            )
             remaining = self._limits.timeout_seconds - (
                 time.monotonic() - started
             )
@@ -319,12 +338,13 @@ class TsharkRunner:
         process: subprocess.Popen[bytes],
         started: float,
         frame_limit: int | None,
+        max_stdout_bytes: int | None = None,
     ) -> bytes:
         assert process.stdout is not None and process.stderr is not None
         stdout = bytearray()
         sizes = {"stdout": 0, "stderr": 0}
         maximums = {
-            "stdout": self._limits.max_stdout_bytes,
+            "stdout": max_stdout_bytes or self._limits.max_stdout_bytes,
             "stderr": self._limits.max_stderr_bytes,
         }
         lines = 0

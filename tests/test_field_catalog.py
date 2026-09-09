@@ -172,7 +172,7 @@ def test_field_types_reject_mismatched_equality(
     assert error.value.code == "type_mismatch"
 
 
-def test_enum_accepts_only_catalog_members() -> None:
+def test_enum_labels_do_not_close_the_numeric_domain() -> None:
     fields = apply_enum_values(
         (
             FieldDefinition(
@@ -191,13 +191,9 @@ def test_enum_accepts_only_catalog_members() -> None:
         Predicate(field="dns.qry.type", operator=Operator.EQ, value=1), catalog
     )
 
-    with pytest.raises(CatalogError) as error:
-        validate_predicate(
-            Predicate(field="dns.qry.type", operator=Operator.EQ, value=28),
-            catalog,
-        )
-
-    assert error.value.code == "type_mismatch"
+    validate_predicate(
+        Predicate(field="dns.qry.type", operator=Operator.EQ, value=28), catalog
+    )
 
 
 def test_parse_tshark_fields_and_values() -> None:
@@ -218,8 +214,13 @@ def test_parse_tshark_fields_and_values() -> None:
 
     enriched = apply_enum_values(fields, values)
 
-    assert [field.abbreviation for field in enriched] == ["dns", "dns.qry.type"]
-    assert enriched[1].field_type == FieldType.ENUM
+    assert [field.abbreviation for field in enriched] == [
+        "dns",
+        "dns.qry.type",
+        "dns.time",
+    ]
+    assert enriched[1].field_type == FieldType.INTEGER
+    assert enriched[2].field_type == FieldType.UNSUPPORTED
     assert [member.value for member in enriched[1].enum_values] == [1, 28]
 
 

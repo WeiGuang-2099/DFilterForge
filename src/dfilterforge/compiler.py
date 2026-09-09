@@ -64,10 +64,11 @@ def _compile_predicate(
     assert predicate.value is not None
     if predicate.operator == Operator.CONTAINS:
         assert isinstance(predicate.value, str)
-        return f"{predicate.field} contains {_compile_string(predicate.value)}"
+        value = _compile_field_value(predicate.value, field)
+        return f"{predicate.field} contains {value}"
     if predicate.operator == Operator.IN_SUBNET:
         assert isinstance(predicate.value, str)
-        return f"{predicate.field} in {predicate.value}"
+        return f"{predicate.field} == {predicate.value}"
     if predicate.operator == Operator.IN:
         assert isinstance(predicate.value, tuple)
         members = ", ".join(
@@ -85,7 +86,8 @@ def _compile_field_value(
 ) -> str:
     if (
         field is not None
-        and field.field_type in {FieldType.IPV4, FieldType.IPV6}
+        and field.field_type
+        in {FieldType.IPV4, FieldType.IPV6, FieldType.BYTES}
         and isinstance(value, str)
     ):
         return value

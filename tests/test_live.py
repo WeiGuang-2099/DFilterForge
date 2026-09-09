@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.evaluation import SemanticSpecV1
-from dfilterforge.field_catalog import FieldCatalogV1
-from dfilterforge.field_catalog import FieldDefinition
-from dfilterforge.field_catalog import FieldType
+from dfilterforge.field_catalog import CatalogError
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.live import evaluate_live
 from dfilterforge.live import LiveError
@@ -43,6 +42,9 @@ class _RecordedRunner(TsharkRunner):
 
     def version(self) -> str:
         return "4.6.8"
+
+    def report(self, name: str) -> bytes:
+        return TsharkRunner().report(name)
 
     def run(self, capture: Path, display_filter: str) -> RunResult:
         self.calls.append((capture, display_filter))
@@ -263,17 +265,8 @@ def test_catalog_version_must_match_runtime(
     tmp_path: Path, version: str
 ) -> None:
     spec = _spec(tmp_path)
-    catalog = FieldCatalogV1(
-        tshark_version=version,
-        profile_hash="default",
-        fields=(
-            FieldDefinition(
-                abbreviation="tcp",
-                field_type=FieldType.PROTOCOL,
-                protocol="tcp",
-                display_name="TCP",
-            ),
-        ),
+    catalog = bind_catalog(_RecordedRunner(), (spec.canonical_ir,)).model_copy(
+        update={"tshark_version": version}
     )
     if version == "4.6.8":
         _, environment = evaluate_live(
@@ -286,9 +279,9 @@ def test_catalog_version_must_match_runtime(
             runner=_RecordedRunner(),
             catalog=catalog,
         )
-        assert environment.catalog_hash == catalog.compute_hash()
+        assert environment.catalog_hash == catalog.source_catalog_hash
         return
-    with pytest.raises(LiveError) as caught:
+    with pytest.raises(CatalogError) as caught:
         evaluate_live(
             spec,
             spec.canonical_ir,

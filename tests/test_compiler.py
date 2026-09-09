@@ -70,7 +70,7 @@ def test_compile_supported_literals_and_operators() -> None:
     )
 
     assert compile_intent(intent) == (
-        "(ip.src in 10.0.0.0/8 && tcp.dstport in {80, 443} && "
+        "(ip.src == 10.0.0.0/8 && tcp.dstport in {80, 443} && "
         'http.host contains "a\\"b\\\\c")'
     )
 
