@@ -1,12 +1,12 @@
 # Implementation Progress
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
 
 ## Current slice
 
-The frozen tshark catalog and reviewed multi-probe semantic benchmark slices
-are implemented and verified. The complete 50-capture by 150-filter stability
-gate remains unverified because the latest run was stopped before completion.
+The frozen tshark catalog, reviewed multi-probe semantic benchmark, predicate
+trace, and executable replay slices are implemented and verified. The complete
+50-capture by 150-filter stability gate remains unverified by explicit choice.
 Local generated benchmark reports remain under the ignored `artifacts/`
 directory and are not part of the uploadable project evidence.
 
@@ -46,6 +46,19 @@ directory and are not part of the uploadable project evidence.
   killed 36/36 mutations; Simplified killed 35/36 and missed `syn-no-ack`.
   The decision is `keep_full` because the variants are not behaviorally
   equivalent.
+- Ablation 004 measured 12 valid executable replay samples per variant using
+  real tshark 4.6.8. Both variants were exact on valid candidate tuples. Full
+  verified all 12 references, traced 12/12 counterexample frames on both
+  candidate and canonical sides, and diagnosed all 12 broad-SYN extra frames.
+  A real reference-label drift witness was rejected by Full and falsely
+  accepted by candidate-only Simplified. The decision is `keep_full`.
+- Predicate traces are bounded to 64 predicate paths, 64 tshark calls, 1,024
+  counterexample frames, and 65,536 trace cells. Exact probes do not execute
+  leaf predicates; mismatch probes retain only frame numbers and predicate
+  memberships, never raw packet payloads.
+- Executable replay compares actual frame tuples and does not trust recorded
+  data, receipt, packet-set, or environment hash claims. Existing capture
+  identity checks remain internal execution safety checks.
 - The benchmark runner supports explicit restart, exact frame-tuple comparison,
   reversed second-pass filter order, atomic progress replacement, stale-input
   rejection, and resume from a validated completed capture.
@@ -62,8 +75,6 @@ directory and are not part of the uploadable project evidence.
 
 ## Planned next
 
-- Add predicate-level traces and executable replay while keeping the domain
-  core independent of storage, queues, FastAPI, and the Web application.
 - Compare prompt-only, field-retrieval, and typed-IR baselines on a held-out
   model-facing evaluation split.
 - Measure model compile validity and silent-wrong rate, then assemble the Pilot
@@ -79,8 +90,8 @@ directory and are not part of the uploadable project evidence.
 - Model compile validity, silent-wrong rate, prompt and retrieval baselines,
   SFT, DPO, and GRPO remain unmeasured. The complete Pilot Go/No-Go decision is
   still unverified.
-- Full predicate traces and execution replay remain future work; current replay
-  validates stored receipts and metrics without re-executing tshark.
+- The complete 50-capture by 150-filter stability gate remains unverified, and
+  the standalone hash-validation phase was intentionally not run.
 - The Web remains recorded-only. Linux CI teardown and the current production
   container were not re-verified in this session, so no live Web job boundary
   should be enabled.
@@ -89,14 +100,9 @@ directory and are not part of the uploadable project evidence.
 
 ## Next verification
 
-1. If the stability gate is retained, rerun the 50 by 150 matrix and retain
-   only aggregate exact-frame comparison results needed for the release
-   decision.
-2. Implement predicate traces and executable replay with a Full versus
-   Simplified ablation.
-3. Run prompt-only, retrieval, and typed-IR model baselines and measure compile
+1. Run prompt-only, retrieval, and typed-IR model baselines and measure compile
    validity, semantic accuracy, mutation sensitivity, and silent-wrong rate.
-4. Add clarification and not-expressible cases, then produce the Pilot
+2. Add clarification and not-expressible cases, then produce the Pilot
    Go/No-Go report.
-5. Re-verify the Web production container and Linux Playwright teardown before
+3. Re-verify the Web production container and Linux Playwright teardown before
    enabling any live Web execution boundary.

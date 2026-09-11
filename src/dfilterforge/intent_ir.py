@@ -107,6 +107,35 @@ Expression: TypeAlias = Annotated[
 ]
 
 
+def walk_predicates(
+    expression: Expression,
+) -> tuple[tuple[tuple[int, ...], Predicate], ...]:
+    """Returns leaf predicates in stable preorder with their AST paths.
+
+    ``All`` and ``AnyOf`` children use their zero-based child index. A ``Not``
+    child uses index zero. A predicate at the expression root has an empty
+    path.
+
+    Args:
+        expression: Typed expression tree to traverse.
+
+    Returns:
+        Predicate paths and values in stable preorder.
+    """
+    predicates: list[tuple[tuple[int, ...], Predicate]] = []
+    pending: list[tuple[tuple[int, ...], Expression]] = [((), expression)]
+    while pending:
+        path, node = pending.pop()
+        if isinstance(node, Predicate):
+            predicates.append((path, node))
+        elif isinstance(node, (All, AnyOf)):
+            for index in range(len(node.children) - 1, -1, -1):
+                pending.append((path + (index,), node.children[index]))
+        else:
+            pending.append((path + (0,), node.child))
+    return tuple(predicates)
+
+
 class IntentIrV1(FrozenModel):
     """Root contract for a packet-scoped version-one intent."""
 

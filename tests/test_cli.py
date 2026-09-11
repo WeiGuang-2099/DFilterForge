@@ -207,7 +207,7 @@ def test_spec_validate_returns_content_hash(
     assert len(output["spec_hash"]) == 64
 
 
-def test_evaluate_replay_and_benchmark_workflow(
+def test_evaluate_and_benchmark_workflow(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     intent_path, spec_path, observations_path, environment_path = (
@@ -236,65 +236,13 @@ def test_evaluate_replay_and_benchmark_workflow(
             str(receipt_path),
         ]
     )
-    replay_code = main(["replay-run", "--receipt", str(receipt_path)])
-    replay_output = json.loads(capsys.readouterr().out)
     benchmark_code = main(["benchmark", "run", "--receipts", str(receipt_path)])
     benchmark_output = json.loads(capsys.readouterr().out)
 
     assert evaluate_code == 0
-    assert replay_code == 0
-    assert replay_output["validated"] is True
     assert benchmark_code == 0
     assert benchmark_output["receipt_count"] == 1
     assert benchmark_output["receipts"][0]["metrics"]["strong_exact_count"] == 1
-
-
-def test_replay_rejects_environment_mismatch(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    intent_path, spec_path, observations_path, environment_path = (
-        _evaluation_inputs(tmp_path)
-    )
-    receipt_path = tmp_path / "receipt.json"
-    assert (
-        main(
-            [
-                "evaluate",
-                "--spec",
-                str(spec_path),
-                "--candidate-ir",
-                str(intent_path),
-                "--observations",
-                str(observations_path),
-                "--environment",
-                str(environment_path),
-                "--run-id",
-                "run-1",
-                "--created-at",
-                "2026-09-02T00:00:00Z",
-                "--code-revision",
-                "abc123",
-                "--output",
-                str(receipt_path),
-            ]
-        )
-        == 0
-    )
-    capsys.readouterr()
-
-    exit_code = main(
-        [
-            "replay-run",
-            "--receipt",
-            str(receipt_path),
-            "--environment-hash",
-            "different",
-        ]
-    )
-
-    error = json.loads(capsys.readouterr().err)
-    assert exit_code == 2
-    assert error["error"]["code"] == "environment_mismatch"
 
 
 def test_ablation_manifest_is_validated(

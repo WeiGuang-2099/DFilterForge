@@ -70,11 +70,15 @@ def test_live_cli_executes_three_curated_cases_and_writes_replayable_receipt(
     environment = LiveEnvironmentV1.model_validate_json(
         (tmp_path / "receipt.environment.json").read_text()
     )
+    trace = json.loads((tmp_path / "receipt.trace.json").read_text())
     assert receipt.metrics.strong_exact_count == 3
     assert receipt.metrics.macro_f1 == 1
     assert all(probe.runtime_ms > 0 for probe in receipt.probes)
     assert receipt.environment_hash == environment.environment_hash()
     assert summary["receipt_hash"] == receipt.receipt_hash()
+    assert summary["trace_path"].endswith("receipt.trace.json")
+    assert trace["schema_version"] == "predicate-trace/1.0"
+    assert all(not probe["counterexample_frames"] for probe in trace["probes"])
     assert (
         environment.executable_sha256
         == hashlib.sha256(
@@ -87,13 +91,20 @@ def test_live_cli_executes_three_curated_cases_and_writes_replayable_receipt(
                 "replay-run",
                 "--receipt",
                 str(output),
-                "--environment-hash",
-                environment.environment_hash(),
+                "--spec",
+                str(tmp_path / "specs" / f"{case}.json"),
+                "--candidate-ir",
+                str(tmp_path / "intents" / f"{case}.json"),
+                "--capture-root",
+                str(tmp_path / "captures"),
             ]
         )
         == 0
     )
-    assert json.loads(capsys.readouterr().out)["validated"] is True
+    replay = json.loads(capsys.readouterr().out)["replay"]
+    assert replay["executed"] is True
+    assert replay["reference_verified"] is True
+    assert replay["exact"] is True
 
 
 def test_live_repeat_has_stable_packet_sets(
@@ -135,6 +146,10 @@ def test_live_near_wrong_candidate_keeps_packet_differences(
     receipt = result["receipt"]
     assert receipt["metrics"]["strong_exact_count"] == 0
     assert all(probe["candidate_only"] for probe in receipt["probes"])
+    trace = result["trace"]
+    assert all(probe["counterexample_frames"] for probe in trace["probes"])
+    assert all(probe["candidate_predicates"] for probe in trace["probes"])
+    assert all(probe["canonical_predicates"] for probe in trace["probes"])
 
 
 def test_live_missing_executable_is_machine_readable(

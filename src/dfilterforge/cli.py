@@ -35,9 +35,11 @@ from dfilterforge.field_catalog import parse_tshark_fields
 from dfilterforge.field_catalog import parse_tshark_values
 from dfilterforge.fixtures import generate_fixtures
 from dfilterforge.intent_ir import IntentIrV1
-from dfilterforge.live import evaluate_live
+from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import LiveError
 from dfilterforge.live import packet_set_hash
+from dfilterforge.replay import replay_live
+from dfilterforge.replay import ReplayError
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
 
@@ -261,7 +263,7 @@ def _evaluate_live(arguments: argparse.Namespace) -> object:
         if arguments.catalog is None
         else _load_model(arguments.catalog, FieldCatalogV1)
     )
-    receipt, environment = evaluate_live(
+    receipt, environment, trace = evaluate_live_with_trace(
         spec,
         candidate_ir,
         arguments.capture_root,
@@ -277,15 +279,23 @@ def _evaluate_live(arguments: argparse.Namespace) -> object:
         "packet_set_hash": packet_set_hash(receipt),
     }
     if arguments.output is None:
-        return {**summary, "receipt": receipt, "environment": environment}
+        return {
+            **summary,
+            "receipt": receipt,
+            "environment": environment,
+            "trace": trace,
+        }
     output = cast(Path, arguments.output)
     environment_output = output.with_name(f"{output.stem}.environment.json")
+    trace_output = output.with_name(f"{output.stem}.trace.json")
     _write_json(receipt, output)
     _write_json(environment, environment_output)
+    _write_json(trace, trace_output)
     return {
         **summary,
         "receipt_path": output.as_posix(),
         "environment_path": environment_output.as_posix(),
+        "trace_path": trace_output.as_posix(),
     }
 
 
@@ -309,18 +319,30 @@ def _benchmark_run(arguments: argparse.Namespace) -> object:
 
 def _replay(arguments: argparse.Namespace) -> object:
     receipt = _load_model(arguments.receipt, EvaluationReceiptV1)
-    if (
-        arguments.environment_hash is not None
-        and arguments.environment_hash != receipt.environment_hash
-    ):
-        raise CliError(
-            "environment_mismatch",
-            "Current environment hash does not match the receipt",
-        )
+    spec = _load_model(arguments.spec, SemanticSpecV1)
+    candidate_ir = _load_model(arguments.candidate_ir, IntentIrV1)
+    catalog = (
+        None
+        if arguments.catalog is None
+        else _load_model(arguments.catalog, FieldCatalogV1)
+    )
+    replay, environment = replay_live(
+        receipt,
+        spec,
+        candidate_ir,
+        arguments.capture_root,
+        catalog=catalog,
+        runner=TsharkRunner(tshark=arguments.tshark),
+    )
+    arguments.exit_code = 0 if replay.exact else 1
+    result = {"replay": replay, "environment": environment}
+    if arguments.output is None:
+        return result
+    _write_json(result, arguments.output)
     return {
-        "receipt_hash": receipt.receipt_hash(),
-        "run_id": receipt.run_id,
-        "validated": True,
+        "run_id": replay.run_id,
+        "exact": replay.exact,
+        "output_path": arguments.output.as_posix(),
     }
 
 
@@ -433,7 +455,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     replay = commands.add_parser("replay-run")
     replay.add_argument("--receipt", type=_path, required=True)
-    replay.add_argument("--environment-hash")
+    replay.add_argument("--spec", type=_path, required=True)
+    replay.add_argument("--candidate-ir", type=_path, required=True)
+    replay.add_argument("--capture-root", type=_path, required=True)
+    replay.add_argument("--catalog", type=_path)
+    replay.add_argument("--tshark", default="tshark")
+    replay.add_argument("--output", type=_path)
     replay.set_defaults(handler=_replay)
 
     ablation = commands.add_parser("ablation")
@@ -456,7 +483,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if result is not None:
             _write_json(result, None)
         return int(arguments.exit_code)
-    except (CatalogError, CompileError, LiveError, RunnerError) as error:
+    except (
+        CatalogError,
+        CompileError,
+        LiveError,
+        ReplayError,
+        RunnerError,
+    ) as error:
         print(
             canonical_json(
                 {"error": {"code": error.code, "message": str(error)}}
