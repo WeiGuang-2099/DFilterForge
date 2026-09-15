@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-09-10
+Last updated: 2026-09-15
 
 ## Current slice
 
@@ -73,14 +73,38 @@ directory and are not part of the uploadable project evidence.
   production-build, Playwright, and accessibility results are unchanged by
   this Python-only slice.
 
+## Replan: 2026-09-15
+
+- The 200 AUD cloud pilot PRD is withdrawn. The public protocol is now
+  `docs/protocol.md` (four prompt conditions, splits, metrics, decoding and
+  provenance rules, training rules) and the decision is recorded in
+  `docs/adr/0002-hosted-inference-and-small-model.md`: hosted endpoints for
+  prompt baselines, a 1.7B-class model for QLoRA-SFT and verifier-labelled
+  DPO, GRPO measured but not trained, total spend under 50 USD.
+- Added `LICENSE` (MIT) and `NOTICE` (Wireshark GPL-2.0-or-later attribution
+  for the tshark build and the frozen catalog).
+- The Web now has two routes, Evaluate and Methodology. The hand-written
+  benchmark table, the placeholder ablation, receipt and workbench pages are
+  removed. The Evaluate page is labelled as a hand-written illustrative
+  example until it is regenerated from a real receipt. Web build, typecheck,
+  ESLint, Playwright and axe checks pass locally.
+- Shared `dfilterforge.errors.DFilterForgeError` base introduced; the model
+  scaffolding is being committed behind tests and the core modules are
+  getting a duplication and dead-code pass. No measured behaviour changes.
+- No model inference or training has run yet. Nothing in this entry is a
+  measured result.
+
 ## Planned next
 
-- Compare prompt-only, field-retrieval, and typed-IR baselines on a held-out
-  model-facing evaluation split.
-- Measure model compile validity and silent-wrong rate, then assemble the Pilot
-  Go/No-Go report.
-- Record the outstanding executable ablations for the earlier core and recorded
-  Web slices.
+1. By 2026-09-21: one hosted model on the dev split under all four conditions,
+   scored offline in the lab container, with the table committed and one real
+   number in the README.
+2. Boundary witnesses, shortcut policy, non-ready gold, frozen test set
+   (`docs/protocol.md` splits table).
+3. Counterexample repair with three feedback arms; four hosted models on the
+   frozen test; hosted static page generated from receipts.
+4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
+   control, three seeds each; GRPO variance gate measured.
 
 ## Blocked or unverified
 
@@ -100,9 +124,8 @@ directory and are not part of the uploadable project evidence.
 
 ## Next verification
 
-1. Run prompt-only, retrieval, and typed-IR model baselines and measure compile
-   validity, semantic accuracy, mutation sensitivity, and silent-wrong rate.
-2. Add clarification and not-expressible cases, then produce the Pilot
-   Go/No-Go report.
-3. Re-verify the Web production container and Linux Playwright teardown before
-   enabling any live Web execution boundary.
+1. First dev-split model table committed with raw completions and receipts.
+2. Boundary-witness ablation: count of loosened-threshold mutations that were
+   reward-identical before and after witnesses.
+3. Locked-test run replayed offline from a clean checkout without an API key.
+4. Web numbers checked against the scored summary by a CI test.

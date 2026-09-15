@@ -12,9 +12,10 @@ proof.
 
 The local CLI connects the typed compiler to a bounded tshark 4.6.8 runner,
 synthetic multi-probe captures, packet diffs, predicate traces, executable
-replay, and measured receipts. The Web Evaluation Lab still uses recorded
-data. See `docs/progress.md` for verified results and the remaining pilot
-gates.
+replay, and measured receipts. No language model has been evaluated or
+trained yet; the Web Evaluation Lab shows a hand-written illustrative example
+until the first model run replaces it. See `docs/progress.md` for verified
+results and `docs/protocol.md` for the model evaluation protocol.
 
 ## Development
 
@@ -121,9 +122,16 @@ An interrupted stability run can resume from a matching local checkpoint. Use
 CI runs the semantic oracle and mutation checks. The longer complete stability
 matrix is an explicit release measurement. Passing these synthetic gates does
 not measure model compile validity, silent-wrong rate, or the complete Pilot
-Go/No-Go decision. The Web remains recorded-only until that decision passes.
+Go/No-Go decision. The Web stays illustrative until a measured run replaces
+its data.
 
 ## Safety boundary
 
 The public demo accepts only repository-curated captures. Do not expose tshark
 or arbitrary capture upload directly to the public internet.
+
+## License
+
+MIT, see `LICENSE`. The Docker images build tshark from the Wireshark 4.6.8
+source archive (GPL-2.0-or-later) and the frozen field catalog is derived from
+that build; see `NOTICE`.
