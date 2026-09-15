@@ -3,10 +3,7 @@ import type {ReactNode} from 'react';
 
 const navigation = [
   {href: '/evaluate', label: 'Evaluate'},
-  {href: '/workbench', label: 'Workbench'},
-  {href: '/benchmarks/held-out-v1', label: 'Benchmarks'},
-  {href: '/ablations/day0', label: 'Ablations'},
-  {href: '/receipts/ev-recorded-dns', label: 'Receipts'},
+  {href: '/methodology', label: 'Methodology'},
 ] as const;
 
 interface ShellProps {
@@ -20,7 +17,7 @@ export function Shell({children}: ShellProps) {
         <Link className="brand" href="/evaluate">
           DFilterForge
         </Link>
-        <span className="mode-label">Public demo</span>
+        <span className="mode-label">Illustrative mock</span>
       </header>
       <aside className="sidebar">
         <Link className="brand" href="/evaluate">
@@ -35,8 +32,7 @@ export function Shell({children}: ShellProps) {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <Link href="/methodology">Methodology</Link>
-          <span>Recorded vertical slice</span>
+          <span>Illustrative mock. No model has been evaluated yet.</span>
         </div>
       </aside>
       <main className="main-content">{children}</main>

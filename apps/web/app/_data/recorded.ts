@@ -25,6 +25,8 @@ export interface ProbeResult {
   readonly runtimeMs: number;
 }
 
+// Hand-written illustrative data. It is not the output of any run and is
+// replaced by receipt-generated JSON in the v2 plan.
 export const recordedEvaluation = {
   id: 'ev-recorded-dns',
   intent:
@@ -132,10 +134,3 @@ export const recordedEvaluation = {
     },
   ] satisfies readonly PacketDiff[],
 } as const;
-
-export const benchmarkRows = [
-  {pipeline: 'Prompt only', exact: '41/80', f1: 0.742, invalid: 11, p95: 820},
-  {pipeline: 'Field retrieval', exact: '49/80', f1: 0.801, invalid: 5, p95: 910},
-  {pipeline: 'Typed IR', exact: '61/80', f1: 0.884, invalid: 1, p95: 1040},
-  {pipeline: 'SFT + typed IR', exact: '67/80', f1: 0.921, invalid: 0, p95: 760},
-] as const;
