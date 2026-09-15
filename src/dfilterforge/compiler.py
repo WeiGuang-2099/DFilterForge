@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.field_catalog import FieldCatalogV1
 from dfilterforge.field_catalog import FieldDefinition
 from dfilterforge.field_catalog import FieldType
@@ -17,12 +18,8 @@ from dfilterforge.intent_ir import Predicate
 from dfilterforge.intent_ir import ScalarValue
 
 
-class CompileError(ValueError):
+class CompileError(DFilterForgeError, ValueError):
     """Raised when an IR value cannot be safely compiled."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 _OPERATOR_TEXT = {

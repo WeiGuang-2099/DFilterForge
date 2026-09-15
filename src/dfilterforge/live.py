@@ -17,6 +17,7 @@ from dfilterforge import runner as runner_module
 from dfilterforge.canonical import content_sha256
 from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.compiler import compile_intent
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import evaluate_probe
 from dfilterforge.evaluation import EvaluationReceiptV1
@@ -44,12 +45,8 @@ _MAX_TRACE_CELLS = 65_536
 _CompiledPredicate: TypeAlias = tuple[tuple[int, ...], Predicate, str]
 
 
-class LiveError(RuntimeError):
+class LiveError(DFilterForgeError, RuntimeError):
     """A sanitized failure at the local evaluation boundary."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 class LiveEnvironmentV1(FrozenModel):

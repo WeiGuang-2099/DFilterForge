@@ -20,16 +20,14 @@ import tempfile
 import time
 from typing import BinaryIO, cast
 
+from dfilterforge.errors import DFilterForgeError
+
 PINNED_TSHARK_VERSION = "4.6.8"
 _SEARCH_PATH = "/opt/wireshark/bin:/usr/bin:/bin"
 
 
-class RunnerError(RuntimeError):
+class RunnerError(DFilterForgeError, RuntimeError):
     """An execution error containing only a stable code and safe message."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 @dataclass(frozen=True, slots=True)

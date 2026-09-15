@@ -13,6 +13,7 @@ from pydantic import model_validator
 
 from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.compiler import compile_intent
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.evaluation import EvaluationReceiptV1
 from dfilterforge.evaluation import EvaluationTraceV1
 from dfilterforge.evaluation import ProbeResultV1
@@ -25,12 +26,8 @@ from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.runner import TsharkRunner
 
 
-class ReplayError(RuntimeError):
+class ReplayError(DFilterForgeError, RuntimeError):
     """A sanitized executable replay failure."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 class ReplayProbeResultV1(FrozenModel):

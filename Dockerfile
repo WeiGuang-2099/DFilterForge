@@ -107,8 +107,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/dfilterforge/bin:/opt/wireshark/bin:${PATH} \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TZ=UTC \
-    WIRESHARK_CONFIG_DIR=/opt/dfilterforge-profile
+    TZ=UTC
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
@@ -136,7 +135,7 @@ RUN apt-get update \
     && useradd --uid 10001 --gid 10001 --no-create-home \
         --home-dir /nonexistent --shell /usr/sbin/nologin dfilterforge \
     && install --directory --owner=10001 --group=10001 \
-        /opt/dfilterforge-profile /workspace /workspace/artifacts \
+        /workspace /workspace/artifacts \
     && printf '%s\n' '/opt/wireshark/lib' \
         >/etc/ld.so.conf.d/wireshark.conf
 
@@ -153,7 +152,10 @@ RUN ldconfig \
     && dfilterforge --version
 
 # Freeze the entire inventory from the same binary and isolated profile used by
-# compilation and capture execution. Runtime queries load only referenced fields.
+# compilation and capture execution. The isolation lives in runner.py, which
+# replaces the whole subprocess environment (WIRESHARK_CONFIG_DIR=/nonexistent)
+# for every tshark call, so the image sets no profile directory of its own.
+# Runtime queries load only referenced fields.
 RUN dfilterforge catalog freeze --output /opt/dfilterforge/catalog.sqlite3 \
     && chmod 0444 /opt/dfilterforge/catalog.sqlite3
 
