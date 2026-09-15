@@ -20,7 +20,7 @@ from dfilterforge.canonical import content_sha256
 from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.catalog_runtime import freeze_catalog
 from dfilterforge.compiler import compile_intent
-from dfilterforge.compiler import CompileError
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.evaluation import AblationReceiptV1
 from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import EnvironmentManifestV1
@@ -29,17 +29,14 @@ from dfilterforge.evaluation import EvaluationReceiptV1
 from dfilterforge.evaluation import ProbeResultV1
 from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.field_catalog import apply_enum_values
-from dfilterforge.field_catalog import CatalogError
 from dfilterforge.field_catalog import FieldCatalogV1
 from dfilterforge.field_catalog import parse_tshark_fields
 from dfilterforge.field_catalog import parse_tshark_values
 from dfilterforge.fixtures import generate_fixtures
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.live import evaluate_live_with_trace
-from dfilterforge.live import LiveError
 from dfilterforge.live import packet_set_hash
 from dfilterforge.replay import replay_live
-from dfilterforge.replay import ReplayError
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
 
@@ -48,12 +45,8 @@ Command = Callable[[argparse.Namespace], object]
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
-class CliError(RuntimeError):
+class CliError(DFilterForgeError, RuntimeError):
     """A user-facing error with a stable machine-readable code."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 def _read_json(path: Path) -> object:
@@ -82,6 +75,21 @@ def _load_model(path: Path, model_type: type[ModelT]) -> ModelT:
         raise CliError(
             "schema_invalid", "Input does not match the required schema"
         ) from None
+
+
+def _optional_catalog(arguments: argparse.Namespace) -> FieldCatalogV1 | None:
+    """Loads the caller-supplied catalog projection when one was given."""
+    if arguments.catalog is None:
+        return None
+    return _load_model(arguments.catalog, FieldCatalogV1)
+
+
+def _print_error(code: str, message: str) -> None:
+    """Writes the machine-readable error envelope to stderr."""
+    print(
+        canonical_json({"error": {"code": code, "message": message}}),
+        file=sys.stderr,
+    )
 
 
 def _doctor(arguments: argparse.Namespace) -> object:
@@ -139,11 +147,10 @@ def _catalog_build(arguments: argparse.Namespace) -> None:
 
 def _compile(arguments: argparse.Namespace) -> object:
     intent = _load_model(arguments.intent_ir, IntentIrV1)
-    catalog: FieldCatalogV1 | None = None
-    if arguments.catalog is not None:
-        catalog = _load_model(arguments.catalog, FieldCatalogV1)
     catalog = bind_catalog(
-        TsharkRunner(tshark=arguments.tshark), (intent,), catalog
+        TsharkRunner(tshark=arguments.tshark),
+        (intent,),
+        _optional_catalog(arguments),
     )
     return {
         "display_filter": compile_intent(intent, catalog),
@@ -163,6 +170,10 @@ def _catalog_freeze(arguments: argparse.Namespace) -> object:
 
 
 def _spec_validate(arguments: argparse.Namespace) -> object:
+    """Checks a specification against its schema and prints its content hash.
+
+    Nothing is executed: captures are neither read nor hashed here.
+    """
     spec = _load_model(arguments.spec, SemanticSpecV1)
     return {
         "schema_version": spec.schema_version,
@@ -218,7 +229,13 @@ def _evaluate(arguments: argparse.Namespace) -> None:
     if not isinstance(observations, dict):
         raise CliError("schema_invalid", "observations must be a JSON object")
     observation_map = cast(dict[str, object], observations)
-    candidate_filter = compile_intent(candidate_ir)
+    # Bind exactly as the live path does so replay recompiles to this text.
+    catalog = bind_catalog(
+        TsharkRunner(tshark=arguments.tshark),
+        (candidate_ir, spec.canonical_ir),
+        _optional_catalog(arguments),
+    )
+    candidate_filter = compile_intent(candidate_ir, catalog)
     probes: list[ProbeResultV1] = []
     for expected in spec.probes:
         observation = observation_map.get(expected.probe_id)
@@ -258,11 +275,6 @@ def _fixtures_generate(arguments: argparse.Namespace) -> object:
 def _evaluate_live(arguments: argparse.Namespace) -> object:
     spec = _load_model(arguments.spec, SemanticSpecV1)
     candidate_ir = _load_model(arguments.candidate_ir, IntentIrV1)
-    catalog = (
-        None
-        if arguments.catalog is None
-        else _load_model(arguments.catalog, FieldCatalogV1)
-    )
     receipt, environment, trace = evaluate_live_with_trace(
         spec,
         candidate_ir,
@@ -270,7 +282,7 @@ def _evaluate_live(arguments: argparse.Namespace) -> object:
         run_id=arguments.run_id,
         created_at=arguments.created_at,
         code_revision=arguments.code_revision,
-        catalog=catalog,
+        catalog=_optional_catalog(arguments),
         runner=TsharkRunner(tshark=arguments.tshark),
     )
     summary: JsonObject = {
@@ -300,6 +312,7 @@ def _evaluate_live(arguments: argparse.Namespace) -> object:
 
 
 def _benchmark_run(arguments: argparse.Namespace) -> object:
+    """Summarizes recorded receipts; it does not execute any capture."""
     receipts: list[EvaluationReceiptV1] = []
     for path in arguments.receipts:
         receipt = _load_model(path, EvaluationReceiptV1)
@@ -321,17 +334,12 @@ def _replay(arguments: argparse.Namespace) -> object:
     receipt = _load_model(arguments.receipt, EvaluationReceiptV1)
     spec = _load_model(arguments.spec, SemanticSpecV1)
     candidate_ir = _load_model(arguments.candidate_ir, IntentIrV1)
-    catalog = (
-        None
-        if arguments.catalog is None
-        else _load_model(arguments.catalog, FieldCatalogV1)
-    )
     replay, environment = replay_live(
         receipt,
         spec,
         candidate_ir,
         arguments.capture_root,
-        catalog=catalog,
+        catalog=_optional_catalog(arguments),
         runner=TsharkRunner(tshark=arguments.tshark),
     )
     arguments.exit_code = 0 if replay.exact else 1
@@ -347,6 +355,12 @@ def _replay(arguments: argparse.Namespace) -> object:
 
 
 def _ablation_run(arguments: argparse.Namespace) -> object:
+    """Checks a recorded ablation receipt and prints its identity.
+
+    No ablation is executed here. Receipts come from the ablation scripts
+    under ``scripts/``; this command only re-validates the schema and reports
+    the receipt hash, identifier, and recorded decision.
+    """
     receipt = _load_model(arguments.manifest, AblationReceiptV1)
     return {
         "ablation_hash": content_sha256(receipt),
@@ -357,6 +371,19 @@ def _ablation_run(arguments: argparse.Namespace) -> object:
 
 def _path(value: str) -> Path:
     return Path(value)
+
+
+_SPEC_VALIDATE_HELP = (
+    "Validate a specification's schema and print its content hash; "
+    "nothing is executed."
+)
+_BENCHMARK_RUN_HELP = (
+    "Summarize recorded evaluation receipts; no capture is executed."
+)
+_ABLATION_RUN_HELP = (
+    "Validate a recorded ablation receipt and print its hash, identifier, "
+    "and decision; no ablation is executed."
+)
 
 
 # pylint: disable-next=too-many-locals,too-many-statements
@@ -390,7 +417,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     spec = commands.add_parser("spec")
     spec_commands = spec.add_subparsers(dest="spec_command", required=True)
-    spec_validate = spec_commands.add_parser("validate")
+    spec_validate = spec_commands.add_parser(
+        "validate", help=_SPEC_VALIDATE_HELP, description=_SPEC_VALIDATE_HELP
+    )
     spec_validate.add_argument("--spec", type=_path, required=True)
     spec_validate.set_defaults(handler=_spec_validate)
 
@@ -412,6 +441,8 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--candidate-ir", type=_path, required=True)
     evaluate.add_argument("--observations", type=_path, required=True)
     evaluate.add_argument("--environment", type=_path, required=True)
+    evaluate.add_argument("--catalog", type=_path)
+    evaluate.add_argument("--tshark", default="tshark")
     evaluate.add_argument("--run-id", required=True)
     evaluate.add_argument("--created-at", required=True)
     evaluate.add_argument("--code-revision", required=True)
@@ -446,8 +477,9 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_commands = benchmark.add_subparsers(
         dest="benchmark_command", required=True
     )
-    benchmark_run = benchmark_commands.add_parser("run")
-    benchmark_run.add_argument("--suite")
+    benchmark_run = benchmark_commands.add_parser(
+        "run", help=_BENCHMARK_RUN_HELP, description=_BENCHMARK_RUN_HELP
+    )
     benchmark_run.add_argument(
         "--receipts", nargs="+", type=_path, required=True
     )
@@ -467,7 +499,9 @@ def build_parser() -> argparse.ArgumentParser:
     ablation_commands = ablation.add_subparsers(
         dest="ablation_command", required=True
     )
-    ablation_run = ablation_commands.add_parser("run")
+    ablation_run = ablation_commands.add_parser(
+        "run", help=_ABLATION_RUN_HELP, description=_ABLATION_RUN_HELP
+    )
     ablation_run.add_argument("--manifest", type=_path, required=True)
     ablation_run.set_defaults(handler=_ablation_run)
     return parser
@@ -483,54 +517,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         if result is not None:
             _write_json(result, None)
         return int(arguments.exit_code)
-    except (
-        CatalogError,
-        CompileError,
-        LiveError,
-        ReplayError,
-        RunnerError,
-    ) as error:
-        print(
-            canonical_json(
-                {"error": {"code": error.code, "message": str(error)}}
-            ),
-            file=sys.stderr,
-        )
-        return 2
-    except CliError as error:
-        print(
-            canonical_json(
-                {"error": {"code": error.code, "message": str(error)}}
-            ),
-            file=sys.stderr,
-        )
-        return 2
+    except DFilterForgeError as error:
+        _print_error(error.code, str(error))
     except ValidationError:
-        print(
-            canonical_json(
-                {
-                    "error": {
-                        "code": "schema_invalid",
-                        "message": "Input does not match the required schema",
-                    }
-                }
-            ),
-            file=sys.stderr,
+        _print_error(
+            "schema_invalid", "Input does not match the required schema"
         )
-        return 2
     except OSError:
-        print(
-            canonical_json(
-                {
-                    "error": {
-                        "code": "io_error",
-                        "message": "File operation failed",
-                    }
-                }
-            ),
-            file=sys.stderr,
-        )
-        return 2
+        _print_error("io_error", "File operation failed")
+    return 2
 
 
 if __name__ == "__main__":
