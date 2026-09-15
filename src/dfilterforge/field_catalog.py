@@ -13,6 +13,7 @@ from pydantic import model_validator
 from pydantic import PrivateAttr
 
 from dfilterforge.canonical import content_sha256
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.intent_ir import All
 from dfilterforge.intent_ir import AnyOf
 from dfilterforge.intent_ir import Expression
@@ -21,12 +22,8 @@ from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 
 
-class CatalogError(ValueError):
+class CatalogError(DFilterForgeError, ValueError):
     """Raised when an intent is incompatible with a field catalog."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 class FieldType(StrEnum):
@@ -40,12 +37,11 @@ class FieldType(StrEnum):
     BYTES = "bytes"
     IPV4 = "ipv4"
     IPV6 = "ipv6"
-    ENUM = "enum"
     UNSUPPORTED = "unsupported"
 
 
 class EnumValue(FrozenModel):
-    """One legal numeric or textual enum value."""
+    """One descriptive value label; labels never close a field's domain."""
 
     value: int | str
     label: str
@@ -161,8 +157,6 @@ def _value_matches(  # pylint: disable=too-many-return-statements
         return (
             field.field_type == FieldType.IPV4 and address.version == 4
         ) or (field.field_type == FieldType.IPV6 and address.version == 6)
-    if field.field_type == FieldType.ENUM:
-        return value in {member.value for member in field.enum_values}
     return False
 
 

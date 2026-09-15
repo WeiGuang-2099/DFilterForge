@@ -8,11 +8,17 @@ from pathlib import Path
 
 import pytest
 
+from dfilterforge.canonical import canonical_json
 from dfilterforge.catalog_runtime import bind_catalog
+from dfilterforge.evaluation import ProbeExpectationV1
 from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.field_catalog import CatalogError
+from dfilterforge.intent_ir import All
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import Operator
+from dfilterforge.intent_ir import Predicate
 from dfilterforge.live import evaluate_live
+from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import LiveError
 from dfilterforge.live import packet_set_hash
 from dfilterforge.runner import RunnerLimits
@@ -78,6 +84,41 @@ def _spec(tmp_path: Path) -> SemanticSpecV1:
             "review_status": "reviewed",
         }
     )
+
+
+def _syn_spec(tmp_path: Path) -> tuple[SemanticSpecV1, IntentIrV1]:
+    (tmp_path / "syn-probe.pcap").write_bytes(_CAPTURE)
+    syn = Predicate(field="tcp.flags.syn", operator=Operator.EQ, value=True)
+    canonical = IntentIrV1(
+        expression=All(
+            children=(
+                syn,
+                Predicate(
+                    field="tcp.flags.ack",
+                    operator=Operator.EQ,
+                    value=False,
+                ),
+            )
+        )
+    )
+    spec = SemanticSpecV1(
+        task_id="syn-no-ack",
+        intent="Show SYN packets without ACK",
+        canonical_ir=canonical,
+        reference_filter=("(tcp.flags.syn == true && tcp.flags.ack == false)"),
+        probes=(
+            ProbeExpectationV1(
+                probe_id="syn-probe",
+                capture_sha256=_CAPTURE_HASH,
+                expected_frames=(1,),
+            ),
+        ),
+        split="test",
+        provenance="generated",
+        license="CC0",
+        review_status="reviewed",
+    )
+    return spec, IntentIrV1(expression=syn)
 
 
 def test_receipt_records_candidate_difference_and_measured_environment(
@@ -348,3 +389,97 @@ def test_packet_hash_excludes_runtime_and_metadata(tmp_path: Path) -> None:
     )
     assert packet_set_hash(first) == packet_set_hash(second)
     assert first.receipt_hash() != second.receipt_hash()
+
+
+def test_trace_executes_both_sides_for_actual_counterexamples(
+    tmp_path: Path,
+) -> None:
+    spec, candidate = _syn_spec(tmp_path)
+    runner = _RecordedRunner(
+        [
+            RunResult((1,), 2, _CAPTURE_HASH),
+            RunResult((1, 2), 3, _CAPTURE_HASH),
+            RunResult((1,), 4, _CAPTURE_HASH),
+        ]
+    )
+
+    receipt, _, trace = evaluate_live_with_trace(
+        spec,
+        candidate,
+        tmp_path,
+        run_id="trace",
+        created_at=_TIME,
+        code_revision="test",
+        runner=runner,
+    )
+
+    assert receipt.probes[0].candidate_only == (2,)
+    probe = trace.probes[0]
+    assert probe.counterexample_frames == (2,)
+    assert probe.candidate_predicates[0].matched_frames == (2,)
+    assert [entry.matched_frames for entry in probe.canonical_predicates] == [
+        (2,),
+        (),
+    ]
+    assert [display_filter for _, display_filter in runner.calls] == [
+        spec.reference_filter,
+        "tcp.flags.syn == true",
+        "tcp.flags.ack == false",
+    ]
+    serialized = canonical_json(trace)
+    assert "observed" not in serialized
+    assert "synthetic unit-test capture" not in serialized
+
+
+def test_exact_probe_skips_predicate_execution(tmp_path: Path) -> None:
+    spec, _ = _syn_spec(tmp_path)
+    runner = _RecordedRunner(
+        [
+            RunResult((1,), 2, _CAPTURE_HASH),
+            RunResult((1,), 3, _CAPTURE_HASH),
+        ]
+    )
+
+    _, _, trace = evaluate_live_with_trace(
+        spec,
+        spec.canonical_ir,
+        tmp_path,
+        run_id="exact",
+        created_at=_TIME,
+        code_revision="test",
+        runner=runner,
+    )
+
+    assert len(runner.calls) == 2
+    assert trace.probes[0].counterexample_frames == ()
+    assert trace.probes[0].candidate_predicates == ()
+    assert trace.probes[0].canonical_predicates == ()
+
+
+def test_trace_budget_fails_before_first_leaf_call(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    predicates = tuple(
+        Predicate(field="tcp", operator=Operator.EXISTS) for _ in range(33)
+    )
+    large = IntentIrV1(expression=All(children=predicates))
+    spec = spec.model_copy(update={"canonical_ir": large})
+    runner = _RecordedRunner(
+        [
+            RunResult((1, 3), 2, _CAPTURE_HASH),
+            RunResult((1, 2, 3), 3, _CAPTURE_HASH),
+        ]
+    )
+
+    with pytest.raises(LiveError) as caught:
+        evaluate_live_with_trace(
+            spec,
+            large,
+            tmp_path,
+            run_id="limited",
+            created_at=_TIME,
+            code_revision="test",
+            runner=runner,
+        )
+
+    assert caught.value.code == "trace_limit"
+    assert len(runner.calls) == 2

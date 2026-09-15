@@ -11,9 +11,11 @@ proof.
 ## Current status
 
 The local CLI connects the typed compiler to a bounded tshark 4.6.8 runner,
-synthetic multi-probe captures, packet diffs, and measured receipts. The Web
-Evaluation Lab still uses recorded data. See `docs/progress.md` for verified
-results and the remaining pilot gates.
+synthetic multi-probe captures, packet diffs, predicate traces, executable
+replay, and measured receipts. No language model has been evaluated or
+trained yet; the Web Evaluation Lab shows a hand-written illustrative example
+until the first model run replaces it. See `docs/progress.md` for verified
+results and `docs/protocol.md` for the model evaluation protocol.
 
 ## Development
 
@@ -48,7 +50,7 @@ filter witness. Run a case with the source revision you are evaluating:
 
 ```text
 docker compose --profile pilot run --rm lab evaluate-live --spec /workspace/artifacts/pilot/specs/tcp-syn-no-ack.json --candidate-ir /workspace/artifacts/pilot/intents/tcp-syn-no-ack.json --capture-root /workspace/artifacts/pilot/captures --run-id syn-example --created-at 2026-09-04T00:00:00Z --code-revision YOUR_REVISION --output /workspace/artifacts/pilot/syn.receipt.json
-docker compose --profile pilot run --rm lab replay-run --receipt /workspace/artifacts/pilot/syn.receipt.json
+docker compose --profile pilot run --rm lab replay-run --receipt /workspace/artifacts/pilot/syn.receipt.json --spec /workspace/artifacts/pilot/specs/tcp-syn-no-ack.json --candidate-ir /workspace/artifacts/pilot/intents/tcp-syn-no-ack.json --capture-root /workspace/artifacts/pilot/captures
 ```
 
 Replace the task ID to run the DNS and UDP cases. `evaluate-live` executes
@@ -57,8 +59,12 @@ with the independent labels. Candidate differences remain visible in the
 receipt. Its environment sidecar records measured binary and runner identity;
 it explicitly lists unmeasured container and shared-library properties.
 The summary includes a packet-set hash that excludes runtime measurements.
-`replay-run` validates receipt structure and metrics; it does not re-execute
-tshark. Pass `--environment-hash` to check against a known environment hash.
+For a packet diff, the trace sidecar records actual tshark matches for every
+candidate and canonical leaf predicate on counterexample frames. It does not
+record packet payloads or inferred field values. `replay-run` requires the
+specification, candidate IR, and curated capture root, then re-executes the
+reference, candidate, and any needed predicate filters. Its replay decision
+uses exact frame tuples and ignores runtime and stored hash claims.
 
 The runner snapshots at most 16 MiB per capture, allows at most five seconds
 per tshark process, limits output and frame count, and kills the process group
@@ -116,9 +122,16 @@ An interrupted stability run can resume from a matching local checkpoint. Use
 CI runs the semantic oracle and mutation checks. The longer complete stability
 matrix is an explicit release measurement. Passing these synthetic gates does
 not measure model compile validity, silent-wrong rate, or the complete Pilot
-Go/No-Go decision. The Web remains recorded-only until that decision passes.
+Go/No-Go decision. The Web stays illustrative until a measured run replaces
+its data.
 
 ## Safety boundary
 
 The public demo accepts only repository-curated captures. Do not expose tshark
 or arbitrary capture upload directly to the public internet.
+
+## License
+
+MIT, see `LICENSE`. The Docker images build tshark from the Wireshark 4.6.8
+source archive (GPL-2.0-or-later) and the frozen field catalog is derived from
+that build; see `NOTICE`.

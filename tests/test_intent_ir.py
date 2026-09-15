@@ -4,11 +4,14 @@ from pydantic import ValidationError
 import pytest
 
 from dfilterforge.intent_ir import All
+from dfilterforge.intent_ir import AnyOf
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import Not
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
+from dfilterforge.intent_ir import walk_predicates
 
 
 def test_recursive_ir_parses_discriminated_nodes() -> None:
@@ -148,3 +151,43 @@ def test_generation_ready_payload_rules() -> None:
 def test_scalar_operator_rejects_list_value() -> None:
     with pytest.raises(ValidationError, match="requires a scalar"):
         Predicate(field="tcp.port", operator=Operator.EQ, value=(80, 443))
+
+
+def test_walk_predicates_returns_stable_preorder_paths() -> None:
+    expression = All(
+        children=(
+            Predicate(field="tcp", operator=Operator.EXISTS),
+            Not(
+                child=AnyOf(
+                    children=(
+                        Predicate(
+                            field="tcp.flags.syn",
+                            operator=Operator.EQ,
+                            value=True,
+                        ),
+                        Predicate(
+                            field="tcp.flags.reset",
+                            operator=Operator.EQ,
+                            value=True,
+                        ),
+                    )
+                )
+            ),
+            Predicate(field="dns", operator=Operator.EXISTS),
+        )
+    )
+
+    walked = walk_predicates(expression)
+
+    assert tuple((path, predicate.field) for path, predicate in walked) == (
+        ((0,), "tcp"),
+        ((1, 0, 0), "tcp.flags.syn"),
+        ((1, 0, 1), "tcp.flags.reset"),
+        ((2,), "dns"),
+    )
+
+
+def test_walk_predicates_uses_empty_path_for_root_predicate() -> None:
+    predicate = Predicate(field="udp", operator=Operator.EXISTS)
+
+    assert walk_predicates(predicate) == (((), predicate),)

@@ -17,8 +17,10 @@ export function EvaluationLab() {
           <p className="eyebrow">Evaluation Lab</p>
           <h1>Find the packet that disproves the filter.</h1>
           <p className="lede">
-            A recorded, inspectable evaluation. Ready means compilable; it does
-            not mean globally correct.
+            A hand-written example of the evidence chain: intent, typed IR,
+            compiled filter, per-probe results, packet diff, predicate trace.
+            No run produced these numbers; measured receipts replace this page
+            once the first model evaluation is committed.
           </p>
         </div>
         <a className="button" href="#packet-diff">

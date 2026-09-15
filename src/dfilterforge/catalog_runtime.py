@@ -203,71 +203,50 @@ def _definition(database: sqlite3.Connection, name: str) -> FieldDefinition:
     return apply_enum_values((fields[0],), values)[0]
 
 
+def _invalid_metadata() -> CatalogError:
+    """Build the one sanitized error raised for malformed frozen metadata."""
+    return CatalogError(
+        "catalog_invalid", "Frozen inventory metadata is invalid"
+    )
+
+
 def _profile_metadata(value: object) -> dict[str, str]:
     """Validate and narrow a decoded runtime profile."""
     if not isinstance(value, dict):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
+        raise _invalid_metadata()
     mapping = cast(dict[object, object], value)
-    if set(mapping) != set(_PROFILE_KEYS):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    if not all(
+    if set(mapping) != set(_PROFILE_KEYS) or not all(
         isinstance(key, str) and isinstance(item, str)
         for key, item in mapping.items()
     ):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
+        raise _invalid_metadata()
     return cast(dict[str, str], mapping)
 
 
 def _count_metadata(value: object) -> dict[str, int]:
     """Validate and narrow decoded inventory record counts."""
     if not isinstance(value, dict):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
+        raise _invalid_metadata()
     mapping = cast(dict[object, object], value)
-    if set(mapping) != set(_CATALOG_REPORTS):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    if not all(isinstance(key, str) for key in mapping):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    if not all(
-        isinstance(item, int) and not isinstance(item, bool)
-        for item in mapping.values()
+    if set(mapping) != set(_CATALOG_REPORTS) or not all(
+        isinstance(key, str)
+        and isinstance(item, int)
+        and not isinstance(item, bool)
+        and item >= 0
+        for key, item in mapping.items()
     ):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    counts = cast(dict[str, int], mapping)
-    if any(count < 0 for count in counts.values()):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    return counts
+        raise _invalid_metadata()
+    return cast(dict[str, int], mapping)
 
 
 def _catalog_identity(value: object) -> str:
     """Validate and narrow a frozen inventory digest."""
-    if not isinstance(value, str):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    if len(value) != 64:
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
-    if any(character not in "0123456789abcdef" for character in value):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        )
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise _invalid_metadata()
     return value
 
 
@@ -279,9 +258,7 @@ def _catalog_metadata(
     metadata: dict[str, object] = {}
     for name, value in rows:
         if not isinstance(name, str) or not isinstance(value, str):
-            raise CatalogError(
-                "catalog_invalid", "Frozen inventory metadata is invalid"
-            )
+            raise _invalid_metadata()
         metadata[name] = cast(object, json.loads(value))
     required = {"schema_version", "profile", "catalog_hash", "counts"}
     if (
@@ -404,6 +381,4 @@ def bind_catalog(
             "Frozen catalog cannot be opened; build the pinned Docker image",
         ) from None
     except (ValueError, TypeError, KeyError, UnicodeError):
-        raise CatalogError(
-            "catalog_invalid", "Frozen inventory metadata is invalid"
-        ) from None
+        raise _invalid_metadata() from None

@@ -15,6 +15,105 @@ from pydantic import model_validator
 from dfilterforge.canonical import content_sha256
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import Predicate
+
+
+def _normalize_frame_numbers(
+    frames: tuple[int, ...], *, description: str
+) -> tuple[int, ...]:
+    """Sorts frame numbers and rejects duplicates or non-positive IDs."""
+    if any(frame < 1 for frame in frames):
+        raise ValueError(f"{description} must be positive")
+    if len(set(frames)) != len(frames):
+        raise ValueError(f"{description} must be unique")
+    return tuple(sorted(frames))
+
+
+class PredicateTraceV1(FrozenModel):
+    """Raw tshark match evidence for one typed predicate."""
+
+    node_path: tuple[int, ...]
+    predicate: Predicate
+    display_filter: str
+    matched_frames: tuple[int, ...]
+
+    @field_validator("node_path")
+    @classmethod
+    def validate_node_path(cls, path: tuple[int, ...]) -> tuple[int, ...]:
+        """Rejects child indexes that cannot identify an AST node."""
+        if any(index < 0 for index in path):
+            raise ValueError("node path indexes must be non-negative")
+        return path
+
+    @field_validator("matched_frames")
+    @classmethod
+    def normalize_matched_frames(
+        cls, frames: tuple[int, ...]
+    ) -> tuple[int, ...]:
+        """Normalizes validated predicate-match frame numbers."""
+        return _normalize_frame_numbers(
+            frames, description="matched frame numbers"
+        )
+
+
+class ProbeTraceV1(FrozenModel):
+    """Candidate and canonical predicate evidence for one packet diff."""
+
+    probe_id: str
+    counterexample_frames: tuple[int, ...]
+    candidate_predicates: tuple[PredicateTraceV1, ...] = ()
+    canonical_predicates: tuple[PredicateTraceV1, ...] = ()
+
+    @field_validator("counterexample_frames")
+    @classmethod
+    def normalize_counterexample_frames(
+        cls, frames: tuple[int, ...]
+    ) -> tuple[int, ...]:
+        """Normalizes validated counterexample frame numbers."""
+        return _normalize_frame_numbers(
+            frames, description="counterexample frame numbers"
+        )
+
+    @model_validator(mode="after")
+    def validate_predicate_evidence(self) -> "ProbeTraceV1":
+        """Checks trace coverage, paths, and packet-diff membership."""
+        sides = (self.candidate_predicates, self.canonical_predicates)
+        if not self.counterexample_frames:
+            if any(sides):
+                raise ValueError("exact probes cannot contain predicate traces")
+            return self
+        if not all(sides):
+            raise ValueError(
+                "counterexample probes require candidate and canonical traces"
+            )
+        counterexamples = set(self.counterexample_frames)
+        for traces in sides:
+            paths = [trace.node_path for trace in traces]
+            if len(set(paths)) != len(paths):
+                raise ValueError(
+                    "predicate trace paths must be unique per side"
+                )
+            if any(
+                not set(trace.matched_frames).issubset(counterexamples)
+                for trace in traces
+            ):
+                raise ValueError("matched frames must be counterexample frames")
+        return self
+
+
+class EvaluationTraceV1(FrozenModel):
+    """Versioned predicate-level evidence for one evaluation run."""
+
+    schema_version: Literal["predicate-trace/1.0"] = "predicate-trace/1.0"
+    run_id: str
+    probes: tuple[ProbeTraceV1, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_probe_ids(self) -> "EvaluationTraceV1":
+        """Rejects ambiguous duplicate probe identifiers."""
+        if len({probe.probe_id for probe in self.probes}) != len(self.probes):
+            raise ValueError("trace probe IDs must be unique")
+        return self
 
 
 class ProbeResultV1(FrozenModel):

@@ -1,5 +1,7 @@
 """Local execution boundary joining curated captures and domain evaluation."""
 
+# pylint: disable=line-too-long,too-many-arguments,too-many-positional-arguments,too-many-locals
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,31 +11,42 @@ from pathlib import Path
 import platform
 import re
 import stat
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from dfilterforge import runner as runner_module
 from dfilterforge.canonical import content_sha256
 from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.compiler import compile_intent
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import evaluate_probe
 from dfilterforge.evaluation import EvaluationReceiptV1
+from dfilterforge.evaluation import EvaluationTraceV1
+from dfilterforge.evaluation import PredicateTraceV1
 from dfilterforge.evaluation import ProbeResultV1
+from dfilterforge.evaluation import ProbeTraceV1
 from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.field_catalog import FieldCatalogV1
+from dfilterforge.intent_ir import All
+from dfilterforge.intent_ir import AnyOf
+from dfilterforge.intent_ir import Expression
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import Not
+from dfilterforge.intent_ir import Predicate
+from dfilterforge.intent_ir import walk_predicates
 from dfilterforge.runner import TsharkRunner
 
 _PROBE_ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}\Z")
+_MAX_TRACE_PREDICATE_PATHS = 64
+_MAX_TRACE_CALLS = 64
+_MAX_TRACE_COUNTEREXAMPLES = 1024
+_MAX_TRACE_CELLS = 65_536
+_CompiledPredicate: TypeAlias = tuple[tuple[int, ...], Predicate, str]
 
 
-class LiveError(RuntimeError):
+class LiveError(DFilterForgeError, RuntimeError):
     """A sanitized failure at the local evaluation boundary."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 class LiveEnvironmentV1(FrozenModel):
@@ -165,6 +178,241 @@ def packet_set_hash(receipt: EvaluationReceiptV1) -> str:
             }
             for probe in receipt.probes
         ]
+    )
+
+
+def _compiled_predicates(
+    intent: IntentIrV1, catalog: FieldCatalogV1
+) -> tuple[_CompiledPredicate, ...]:
+    """Compiles leaf predicates while preserving their stable AST paths."""
+    return tuple(
+        (
+            path,
+            predicate,
+            compile_intent(IntentIrV1(expression=predicate), catalog),
+        )
+        for path, predicate in walk_predicates(intent.expression)
+    )
+
+
+def _counterexample_frames(probe: ProbeResultV1) -> tuple[int, ...]:
+    return tuple(sorted((*probe.reference_only, *probe.candidate_only)))
+
+
+def _check_trace_budget(
+    probes: tuple[ProbeResultV1, ...],
+    candidate: tuple[_CompiledPredicate, ...],
+    canonical: tuple[_CompiledPredicate, ...],
+    candidate_filter: str,
+    reference_filter: str,
+) -> None:
+    """Rejects trace work that could amplify an untrusted intent."""
+    predicate_paths = len(candidate) + len(canonical)
+    counterexample_count = sum(
+        len(_counterexample_frames(probe)) for probe in probes
+    )
+    if predicate_paths > _MAX_TRACE_PREDICATE_PATHS:
+        raise LiveError("trace_limit", "Predicate trace exceeds its node limit")
+    if counterexample_count > _MAX_TRACE_COUNTEREXAMPLES:
+        raise LiveError(
+            "trace_limit", "Predicate trace exceeds its frame limit"
+        )
+    if predicate_paths * counterexample_count > _MAX_TRACE_CELLS:
+        raise LiveError("trace_limit", "Predicate trace exceeds its cell limit")
+    leaf_filters = {
+        display_filter for _, _, display_filter in (*candidate, *canonical)
+    }
+    reusable = {candidate_filter, reference_filter}
+    mismatched_probes = sum(not probe.exact for probe in probes)
+    trace_calls = len(leaf_filters - reusable) * mismatched_probes
+    if trace_calls > _MAX_TRACE_CALLS:
+        raise LiveError("trace_limit", "Predicate trace exceeds its call limit")
+
+
+def _expression_match(
+    expression: Expression,
+    matches: dict[tuple[int, ...], frozenset[int]],
+    frame: int,
+    path: tuple[int, ...] = (),
+) -> bool:
+    """Recomposes one frame from tshark-grounded raw predicate matches."""
+    if isinstance(expression, Predicate):
+        return frame in matches[path]
+    if isinstance(expression, All):
+        return all(
+            _expression_match(child, matches, frame, (*path, index))
+            for index, child in enumerate(expression.children)
+        )
+    if isinstance(expression, AnyOf):
+        return any(
+            _expression_match(child, matches, frame, (*path, index))
+            for index, child in enumerate(expression.children)
+        )
+    assert isinstance(expression, Not)
+    return not _expression_match(expression.child, matches, frame, (*path, 0))
+
+
+def _trace_entries(
+    plans: tuple[_CompiledPredicate, ...],
+    frames_by_filter: dict[str, frozenset[int]],
+    counterexamples: tuple[int, ...],
+) -> tuple[PredicateTraceV1, ...]:
+    return tuple(
+        PredicateTraceV1(
+            node_path=path,
+            predicate=predicate,
+            display_filter=display_filter,
+            matched_frames=tuple(
+                frame
+                for frame in counterexamples
+                if frame in frames_by_filter[display_filter]
+            ),
+        )
+        for path, predicate, display_filter in plans
+    )
+
+
+def _verify_trace_composition(
+    expression: Expression,
+    entries: tuple[PredicateTraceV1, ...],
+    counterexamples: tuple[int, ...],
+    root_frames: tuple[int, ...],
+) -> None:
+    matches = {
+        entry.node_path: frozenset(entry.matched_frames) for entry in entries
+    }
+    root = frozenset(root_frames)
+    if any(
+        _expression_match(expression, matches, frame) != (frame in root)
+        for frame in counterexamples
+    ):
+        raise LiveError(
+            "trace_inconsistent",
+            "Predicate trace disagrees with root filter execution",
+        )
+
+
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
+def _trace_probe(
+    spec: SemanticSpecV1,
+    candidate_ir: IntentIrV1,
+    capture_root: Path,
+    probe: ProbeResultV1,
+    expected_hash: str,
+    candidate: tuple[_CompiledPredicate, ...],
+    canonical: tuple[_CompiledPredicate, ...],
+    runner: TsharkRunner,
+    candidate_filter: str,
+) -> ProbeTraceV1:
+    """Executes and records both sides of one counterexample trace."""
+    counterexamples = _counterexample_frames(probe)
+    if not counterexamples:
+        return ProbeTraceV1(
+            probe_id=probe.probe_id,
+            counterexample_frames=(),
+            candidate_predicates=(),
+            canonical_predicates=(),
+        )
+    candidate_frames = frozenset(probe.candidate_frames)
+    reference_frames = frozenset(probe.expected_frames)
+    frames_by_filter = {candidate_filter: candidate_frames}
+    if (
+        spec.reference_filter in frames_by_filter
+        and frames_by_filter[spec.reference_filter] != reference_frames
+    ):
+        raise LiveError(
+            "trace_inconsistent",
+            "Root filter executions disagree for the same filter",
+        )
+    frames_by_filter[spec.reference_filter] = reference_frames
+    capture = _capture_path(capture_root, probe.probe_id)
+    for _, _, display_filter in (*candidate, *canonical):
+        if display_filter in frames_by_filter:
+            continue
+        result = runner.run(capture, display_filter)
+        _check_capture_hash(result.capture_sha256, expected_hash)
+        frames_by_filter[display_filter] = frozenset(result.frames)
+    candidate_entries = _trace_entries(
+        candidate, frames_by_filter, counterexamples
+    )
+    canonical_entries = _trace_entries(
+        canonical, frames_by_filter, counterexamples
+    )
+    _verify_trace_composition(
+        candidate_ir.expression,
+        candidate_entries,
+        counterexamples,
+        probe.candidate_frames,
+    )
+    _verify_trace_composition(
+        spec.canonical_ir.expression,
+        canonical_entries,
+        counterexamples,
+        probe.expected_frames,
+    )
+    return ProbeTraceV1(
+        probe_id=probe.probe_id,
+        counterexample_frames=counterexamples,
+        candidate_predicates=candidate_entries,
+        canonical_predicates=canonical_entries,
+    )
+
+
+# pylint: disable-next=too-many-arguments,too-many-locals
+def evaluate_live_with_trace(
+    spec: SemanticSpecV1,
+    candidate_ir: IntentIrV1,
+    capture_root: Path,
+    *,
+    run_id: str,
+    created_at: datetime,
+    code_revision: str,
+    catalog: FieldCatalogV1 | None = None,
+    runner: TsharkRunner | None = None,
+) -> tuple[EvaluationReceiptV1, LiveEnvironmentV1, EvaluationTraceV1]:
+    """Executes a live evaluation and traces actual counterexample predicates."""
+    active_runner = runner if runner is not None else TsharkRunner()
+    receipt, environment = evaluate_live(
+        spec,
+        candidate_ir,
+        capture_root,
+        run_id=run_id,
+        created_at=created_at,
+        code_revision=code_revision,
+        catalog=catalog,
+        runner=active_runner,
+    )
+    bound_catalog = bind_catalog(
+        active_runner, (candidate_ir, spec.canonical_ir), catalog
+    )
+    candidate = _compiled_predicates(candidate_ir, bound_catalog)
+    canonical = _compiled_predicates(spec.canonical_ir, bound_catalog)
+    _check_trace_budget(
+        receipt.probes,
+        candidate,
+        canonical,
+        receipt.candidate_filter,
+        receipt.reference_filter,
+    )
+    expected_by_id = {expected.probe_id: expected for expected in spec.probes}
+    traces = tuple(
+        _trace_probe(
+            spec,
+            candidate_ir,
+            capture_root,
+            probe,
+            expected_by_id[probe.probe_id].capture_sha256,
+            candidate,
+            canonical,
+            active_runner,
+            receipt.candidate_filter,
+        )
+        for probe in receipt.probes
+    )
+    return (
+        receipt,
+        environment,
+        EvaluationTraceV1(run_id=run_id, probes=traces),
     )
 
 

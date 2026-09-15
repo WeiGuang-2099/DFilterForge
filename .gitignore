@@ -45,6 +45,8 @@ results/
 Thumbs.db
 
 # Local agent context and non-release planning material
+tasks/
+docs/v2-plan.md
 AGENTS.md
 **/AGENTS.md
 CLAUDE.md

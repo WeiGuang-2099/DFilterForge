@@ -10,8 +10,11 @@ from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import EnvironmentManifestV1
 from dfilterforge.evaluation import evaluate_probe
 from dfilterforge.evaluation import EvaluationReceiptV1
+from dfilterforge.evaluation import EvaluationTraceV1
+from dfilterforge.evaluation import PredicateTraceV1
 from dfilterforge.evaluation import ProbeExpectationV1
 from dfilterforge.evaluation import ProbeResultV1
+from dfilterforge.evaluation import ProbeTraceV1
 from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.intent_ir import Operator
@@ -165,3 +168,92 @@ def test_receipt_requires_aware_timestamp() -> None:
             probes=(probe,),
             metrics=aggregate_metrics((probe,)),
         )
+
+
+def _predicate_trace(
+    path: tuple[int, ...] = (), frames: tuple[int, ...] = (3,)
+) -> PredicateTraceV1:
+    predicate = Predicate(field="tcp", operator=Operator.EXISTS)
+    return PredicateTraceV1(
+        node_path=path,
+        predicate=predicate,
+        display_filter="tcp",
+        matched_frames=frames,
+    )
+
+
+def test_trace_contract_normalizes_frames_and_keeps_both_sides() -> None:
+    trace = ProbeTraceV1(
+        probe_id="probe",
+        counterexample_frames=(3, 1),
+        candidate_predicates=(_predicate_trace(frames=(3, 1)),),
+        canonical_predicates=(_predicate_trace(frames=(1,)),),
+    )
+    evaluation = EvaluationTraceV1(run_id="run", probes=(trace,))
+
+    assert evaluation.schema_version == "predicate-trace/1.0"
+    assert trace.counterexample_frames == (1, 3)
+    assert trace.candidate_predicates[0].matched_frames == (1, 3)
+
+
+@pytest.mark.parametrize("frames", [(0,), (1, 1)])
+def test_trace_rejects_invalid_frame_numbers(frames: tuple[int, ...]) -> None:
+    with pytest.raises(ValidationError):
+        _predicate_trace(frames=frames)
+
+
+def test_trace_rejects_matches_outside_counterexamples() -> None:
+    with pytest.raises(ValidationError, match="must be counterexample frames"):
+        ProbeTraceV1(
+            probe_id="probe",
+            counterexample_frames=(1,),
+            candidate_predicates=(_predicate_trace(frames=(2,)),),
+            canonical_predicates=(_predicate_trace(frames=(1,)),),
+        )
+
+
+def test_trace_rejects_duplicate_paths_per_side() -> None:
+    duplicate = (_predicate_trace(), _predicate_trace())
+
+    with pytest.raises(ValidationError, match="paths must be unique"):
+        ProbeTraceV1(
+            probe_id="probe",
+            counterexample_frames=(3,),
+            candidate_predicates=duplicate,
+            canonical_predicates=(_predicate_trace(),),
+        )
+
+
+def test_exact_trace_requires_empty_predicate_sides() -> None:
+    exact = ProbeTraceV1(probe_id="exact", counterexample_frames=())
+
+    assert not exact.candidate_predicates
+    assert not exact.canonical_predicates
+    with pytest.raises(ValidationError, match="exact probes"):
+        ProbeTraceV1(
+            probe_id="invalid",
+            counterexample_frames=(),
+            candidate_predicates=(_predicate_trace(frames=()),),
+        )
+
+
+@pytest.mark.parametrize("missing_side", ["candidate", "canonical"])
+def test_counterexample_trace_requires_both_sides(missing_side: str) -> None:
+    traces = (_predicate_trace(),)
+
+    with pytest.raises(
+        ValidationError, match="require candidate and canonical"
+    ):
+        ProbeTraceV1(
+            probe_id="probe",
+            counterexample_frames=(3,),
+            candidate_predicates=() if missing_side == "candidate" else traces,
+            canonical_predicates=() if missing_side == "canonical" else traces,
+        )
+
+
+def test_evaluation_trace_rejects_duplicate_probe_ids() -> None:
+    probe = ProbeTraceV1(probe_id="same", counterexample_frames=())
+
+    with pytest.raises(ValidationError, match="trace probe IDs must be unique"):
+        EvaluationTraceV1(run_id="run", probes=(probe, probe))
