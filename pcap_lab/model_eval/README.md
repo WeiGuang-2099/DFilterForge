@@ -1,0 +1,40 @@
+# Model Evaluation Split
+
+`dfilterforge.model_split.generate_model_split` creates the model-facing
+evaluation data. Generated PCAPs and JSON artifacts are local outputs and must
+not be committed here.
+
+The output layout is:
+
+```text
+model_inputs.jsonl
+evaluator_gold.json
+captures/
+  semantic-11.pcap
+  semantic-17.pcap
+  semantic-23.pcap
+  semantic-31.pcap
+  semantic-37.pcap
+  semantic-43.pcap
+```
+
+The model receives `model_inputs.jsonl` only. Every line contains exactly
+`item_id`, `intent`, `user_assumptions`, and `split`. Item IDs are opaque, and
+each of the 24 canonical cases has two independently worded model items.
+Descriptive case IDs, typed IR, reference and mutation filters, probe metadata,
+and expected frames are confined to `evaluator_gold.json`.
+
+The dev split has 8 canonical cases and uses capture instances
+`semantic-11`, `semantic-17`, and `semantic-23`. The test split has 16
+canonical cases and uses `semantic-31`, `semantic-37`, and `semantic-43`.
+
+This is strictly an **unseen-composition plus unseen-capture-instance** split
+relative to the original 36 semantic specifications and their primary probes.
+It deliberately reuses the same packet recipes and protocol families. It is
+not an unseen-recipe split and not an unseen-protocol split. Results must not
+be presented as evidence of generalization to new traffic recipes or protocol
+families.
+
+Run generation in the project Docker environment and point the output at an
+ignored local artifact directory. Do not expose `evaluator_gold.json` to a
+model or retrieval system.

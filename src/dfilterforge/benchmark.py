@@ -46,7 +46,7 @@ RECIPES = (
     "udp-private-destination",
     "tcp-reverse",
 )
-_TCP = frozenset(
+TCP_RECIPES = frozenset(
     (
         "syn",
         "syn-ack",
@@ -60,8 +60,8 @@ _TCP = frozenset(
         "tcp-reverse",
     )
 )
-_UDP = frozenset(RECIPES) - _TCP
-_DNS = frozenset(
+UDP_RECIPES = frozenset(RECIPES) - TCP_RECIPES
+DNS_RECIPES = frozenset(
     (
         "tcp-query",
         "udp-query",
@@ -71,9 +71,19 @@ _DNS = frozenset(
         "udp-nxdomain",
     )
 )
-_QUERY = (_DNS | {"udp-mdns"}) - {"udp-response", "udp-nxdomain"}
-_SYN = frozenset(("syn", "syn-ack", "ecn-syn", "tcp-http"))
-_ACK = frozenset(
+HIGH_UDP_PORT_RECIPES = frozenset(
+    (
+        "udp-response",
+        "udp-nxdomain",
+        "udp-other",
+        "udp-lowttl",
+        "udp-private",
+        "udp-private-destination",
+    )
+)
+_QUERY = (DNS_RECIPES | {"udp-mdns"}) - {"udp-response", "udp-nxdomain"}
+SYN_RECIPES = frozenset(("syn", "syn-ack", "ecn-syn", "tcp-http"))
+ACK_RECIPES = frozenset(
     (
         "syn-ack",
         "ack",
@@ -152,7 +162,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             tcp,
             "tcp",
             "tcp && !dns",
-            _TCP,
+            TCP_RECIPES,
         ),
         (
             "udp-presence",
@@ -160,7 +170,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             udp,
             "udp",
             "udp && dns",
-            _UDP,
+            UDP_RECIPES,
         ),
         (
             "dns-presence",
@@ -168,7 +178,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("dns"),
             "dns",
             "udp && dns",
-            _DNS,
+            DNS_RECIPES,
         ),
         (
             "tcp-absence",
@@ -176,7 +186,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             Not(child=tcp),
             "!tcp",
             "dns",
-            _UDP,
+            UDP_RECIPES,
         ),
         (
             "syn-bit",
@@ -184,7 +194,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             syn,
             "tcp.flags.syn == 1",
             "tcp.flags == 2",
-            _SYN,
+            SYN_RECIPES,
         ),
         (
             "ack-bit",
@@ -192,7 +202,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             ack,
             "tcp.flags.ack == 1",
             "tcp.flags == 16",
-            _ACK,
+            ACK_RECIPES,
         ),
         (
             "syn-no-ack",
@@ -200,7 +210,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             All(children=(syn, _p("tcp.flags.ack", eq, False))),
             "tcp.flags.syn == 1 && tcp.flags.ack == 0",
             "tcp.flags.syn == 1",
-            _SYN - {"syn-ack"},
+            SYN_RECIPES - {"syn-ack"},
         ),
         (
             "syn-and-ack",
@@ -216,7 +226,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             AnyOf(children=(syn, _p("tcp.flags.fin", eq, True))),
             "tcp.flags.syn == 1 || tcp.flags.fin == 1",
             "tcp.flags.syn == 1 && tcp.flags.fin == 1",
-            _SYN | {"fin"},
+            SYN_RECIPES | {"fin"},
         ),
         (
             "tcp-no-syn",
@@ -224,7 +234,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("tcp.flags.syn", eq, False),
             "tcp.flags.syn == 0",
             "!(tcp.flags.syn == 1)",
-            _TCP - _SYN,
+            TCP_RECIPES - SYN_RECIPES,
         ),
         (
             "reset-bit",
@@ -304,7 +314,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("udp.port", eq, 53),
             "udp.port == 53",
             "udp.dstport == 53",
-            _DNS - {"tcp-query", "udp-mdns"},
+            DNS_RECIPES - {"tcp-query", "udp-mdns"},
         ),
         (
             "udp-both-dns",
@@ -322,7 +332,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("tcp.dstport", Operator.IN, (80, 443)),
             "tcp.dstport in {80,443}",
             "tcp.dstport == 443",
-            _TCP - {"tcp-query"},
+            TCP_RECIPES - {"tcp-query"},
         ),
         (
             "tcp-http",
@@ -338,16 +348,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("udp.dstport", Operator.GT, 5353),
             "udp.dstport > 5353",
             "udp.dstport >= 5353",
-            frozenset(
-                (
-                    "udp-response",
-                    "udp-nxdomain",
-                    "udp-other",
-                    "udp-lowttl",
-                    "udp-private",
-                    "udp-private-destination",
-                )
-            ),
+            HIGH_UDP_PORT_RECIPES,
         ),
         (
             "udp-low-port",
@@ -363,7 +364,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             All(children=(udp, Not(child=_p("dns")))),
             "udp && !dns",
             "!dns",
-            _UDP - _DNS,
+            UDP_RECIPES - DNS_RECIPES,
         ),
         (
             "dns-aaaa",
@@ -379,7 +380,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("dns.qry.type", eq, 1),
             "dns.qry.type == 1",
             "dns.qry.type == 1 && dns.flags.response == 0",
-            (_DNS | {"udp-mdns"}) - {"udp-aaaa"},
+            (DNS_RECIPES | {"udp-mdns"}) - {"udp-aaaa"},
         ),
         (
             "dns-nxdomain",
@@ -395,7 +396,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             _p("dns.qry.name", Operator.CONTAINS, "example"),
             'dns.qry.name contains "example"',
             'dns.qry.name == "example"',
-            _DNS | {"udp-mdns"},
+            DNS_RECIPES | {"udp-mdns"},
         ),
         (
             "ttl-expiring",
@@ -440,7 +441,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             ),
             "(tcp && tcp.flags.syn == 1) || dns.flags.response == 1",
             "tcp && (tcp.flags.syn == 1 || dns.flags.response == 1)",
-            _SYN | {"udp-response", "udp-nxdomain"},
+            SYN_RECIPES | {"udp-response", "udp-nxdomain"},
         ),
         (
             "exclude-syn-reset",
@@ -457,7 +458,7 @@ def semantic_cases() -> tuple[SemanticCase, ...]:
             ),
             "tcp && !(tcp.flags.syn == 1 || tcp.flags.reset == 1)",
             "!(tcp.flags.syn == 1 || tcp.flags.reset == 1)",
-            _TCP - _SYN - {"reset"},
+            TCP_RECIPES - SYN_RECIPES - {"reset"},
         ),
     )
     return tuple(SemanticCase(*row) for row in rows)
