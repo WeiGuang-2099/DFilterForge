@@ -1,26 +1,39 @@
 """Tests for CLI JSON contracts."""
 
+from collections.abc import Callable
+from datetime import datetime
+from datetime import timezone
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 from dfilterforge import cli as cli_module
+from dfilterforge.cli import build_parser
 from dfilterforge.cli import CliError
 from dfilterforge.cli import main
 from dfilterforge.compiler import compile_intent
 from dfilterforge.compiler import CompileError
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.evaluation import aggregate_metrics
+from dfilterforge.evaluation import evaluate_probe
 from dfilterforge.evaluation import EvaluationReceiptV1
+from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.field_catalog import CatalogError
 from dfilterforge.field_catalog import FieldCatalogV1
 from dfilterforge.field_catalog import FieldDefinition
 from dfilterforge.field_catalog import FieldType
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.live import LiveError
+from dfilterforge.replay import ExecutableReplayResultV1
 from dfilterforge.replay import ReplayError
+from dfilterforge.replay import ReplayProbeResultV1
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
+from dfilterforge.scoring import ScoreReportV1
+from dfilterforge.scoring import ScoringError
 
 _TCP = FieldDefinition(
     abbreviation="tcp",
@@ -163,18 +176,6 @@ def test_compile_command_prints_machine_readable_json(
     assert exit_code == 0
     assert output["display_filter"] == "tcp"
     assert len(output["intent_hash"]) == 64
-
-
-def test_generate_fails_closed_without_model_backend(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    exit_code = main(
-        ["generate", "--intent", "show tcp", "--pipeline", "prompt"]
-    )
-
-    error = json.loads(capsys.readouterr().err)
-    assert exit_code == 2
-    assert error["error"]["code"] == "model_backend_unavailable"
 
 
 def test_invalid_intent_reports_schema_error(
@@ -405,3 +406,250 @@ def test_boundary_errors_share_one_base_and_keep_builtin_bases(
     assert isinstance(error, builtin_base)
     assert error.code == "some_code"
     assert str(error) == "safe message"
+
+
+def _replay_receipt(tmp_path: Path) -> Path:
+    """Writes a receipt whose candidate filter is the only model text."""
+    probe = evaluate_probe("probe-a", (1, 3), (1, 3), 12.5)
+    receipt = EvaluationReceiptV1(
+        run_id="run-1",
+        created_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
+        code_revision="abc123",
+        environment_hash="recorded-environment",
+        data_hash="recorded-data",
+        candidate_filter="tcp.flags.syn == 1",
+        reference_filter="tcp",
+        probes=(probe,),
+        metrics=aggregate_metrics((probe,)),
+    )
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(receipt.model_dump_json(), encoding="utf-8")
+    return receipt_path
+
+
+def _replay_args(tmp_path: Path, *candidate: str) -> list[str]:
+    return [
+        "replay-run",
+        "--receipt",
+        str(tmp_path / "receipt.json"),
+        "--spec",
+        str(tmp_path / "spec.json"),
+        "--capture-root",
+        str(tmp_path / "captures"),
+        *candidate,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("candidate_arguments", "parses"),
+    [
+        (["--candidate-ir", "candidate.json", "--receipt-filter"], False),
+        ([], False),
+        (["--receipt-filter"], True),
+    ],
+)
+def test_replay_run_requires_exactly_one_candidate_source(
+    tmp_path: Path, candidate_arguments: list[str], parses: bool
+) -> None:
+    argv = _replay_args(tmp_path, *candidate_arguments)
+
+    if parses:
+        arguments = build_parser().parse_args(argv)
+        assert arguments.receipt_filter is True
+        assert arguments.candidate_ir is None
+        return
+    with pytest.raises(SystemExit) as caught:
+        build_parser().parse_args(argv)
+    assert caught.value.code == 2
+
+
+def test_replay_run_receipt_filter_passes_the_recorded_string(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The model's text is read from the receipt, never from the argv."""
+    _evaluation_inputs(tmp_path)
+    receipt_path = _replay_receipt(tmp_path)
+    receipt = EvaluationReceiptV1.model_validate_json(
+        receipt_path.read_text(encoding="utf-8")
+    )
+    loaded: list[Path] = []
+    load_model = cast(
+        Callable[[Path, type[Any]], Any],
+        getattr(cli_module, "_load_model"),
+    )
+
+    def counting_load(path: Path, model_type: type[Any]) -> Any:
+        loaded.append(path)
+        return load_model(path, model_type)
+
+    monkeypatch.setattr(cli_module, "_load_model", counting_load)
+    recorded: list[IntentIrV1 | str] = []
+    replay_probe = ReplayProbeResultV1(
+        probe_id="probe-a",
+        recorded_frames=(1, 3),
+        replayed_frames=(1, 3),
+        runtime_ms=9,
+        exact=True,
+    )
+    replay_result = ExecutableReplayResultV1(
+        run_id="run-1", exact=True, probes=(replay_probe,)
+    )
+    environment = LiveEnvironmentV1(
+        tshark_version="4.6.8",
+        executable_sha256="measured",
+        runner_source_sha256="measured",
+        runner_limits_hash="measured",
+        catalog_hash="measured",
+        python_version="3.12.3",
+        platform_machine="x86_64",
+    )
+
+    def fake_replay_live(
+        receipt: EvaluationReceiptV1,
+        spec: SemanticSpecV1,
+        candidate: IntentIrV1 | str,
+        capture_root: Path,
+        *,
+        catalog: FieldCatalogV1 | None = None,
+        runner: TsharkRunner | None = None,
+    ) -> tuple[ExecutableReplayResultV1, LiveEnvironmentV1]:
+        del receipt, spec, capture_root, catalog, runner
+        recorded.append(candidate)
+        return replay_result, environment
+
+    monkeypatch.setattr(cli_module, "replay_live", fake_replay_live)
+
+    exit_code = main(_replay_args(tmp_path, "--receipt-filter"))
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert recorded == [receipt.candidate_filter]
+    assert recorded == ["tcp.flags.syn == 1"]
+    assert loaded == [receipt_path, tmp_path / "spec.json"]
+    assert output["replay"]["trace"] is None
+
+
+def _score_args(tmp_path: Path, *extra: str) -> list[str]:
+    return [
+        "score",
+        "--run-dir",
+        str(tmp_path / "dev-0001"),
+        "--code-revision",
+        "test",
+        *extra,
+    ]
+
+
+def _score_report(
+    tmp_path: Path, differences: tuple[str, ...] = ()
+) -> ScoreReportV1:
+    """Builds the report one scoring pass would have returned."""
+    return ScoreReportV1(
+        output_dir=tmp_path / "scored",
+        checked=True,
+        items=16,
+        outcomes={"strong_exact": 16},
+        summary_sha256="0" * 64,
+        differences=differences,
+    )
+
+
+def test_score_exit_code_follows_check_differences(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A clean check exits 0; a named difference exits 1 and is printed."""
+    reports = [
+        _score_report(tmp_path),
+        _score_report(tmp_path, ("outcomes:C1/mei-0003",)),
+    ]
+
+    def fake_score_run(run_dir: Path, **keywords: Any) -> ScoreReportV1:
+        del run_dir, keywords
+        return reports.pop(0)
+
+    monkeypatch.setattr(cli_module, "score_run", fake_score_run)
+
+    clean = main(_score_args(tmp_path, "--check"))
+    first = json.loads(capsys.readouterr().out)
+    drifted = main(_score_args(tmp_path, "--check"))
+    second = json.loads(capsys.readouterr().out)
+
+    assert clean == 0
+    assert first["checked"] is True
+    assert first["items"] == 16
+    assert first["differences"] == []
+    assert drifted == 1
+    assert second["differences"] == ["outcomes:C1/mei-0003"]
+
+
+def test_score_errors_use_the_json_error_envelope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A scoring failure exits 2 behind the shared error envelope."""
+
+    def fake_score_run(run_dir: Path, **keywords: Any) -> ScoreReportV1:
+        del run_dir, keywords
+        raise ScoringError("prompt_mismatch", "C1 mei-0003")
+
+    monkeypatch.setattr(cli_module, "score_run", fake_score_run)
+
+    exit_code = main(_score_args(tmp_path))
+
+    streams = capsys.readouterr()
+    error = json.loads(streams.err)["error"]
+    assert exit_code == 2
+    assert error["code"] == "prompt_mismatch"
+    assert error["message"] == "C1 mei-0003"
+    assert streams.out == ""
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [[], ["--run-dir", "run"], ["--code-revision", "test"]],
+)
+def test_score_requires_run_dir_and_code_revision(
+    arguments: list[str],
+) -> None:
+    """Both identity arguments are required by the parser itself."""
+    with pytest.raises(SystemExit) as caught:
+        main(["score", *arguments])
+
+    assert caught.value.code == 2
+
+
+def test_score_passes_the_tshark_path_through(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The requested executable reaches the runner the whole pass shares."""
+    built: list[str] = []
+    shared: list[object] = []
+
+    def fake_tshark_runner(*, tshark: str) -> TsharkRunner:
+        built.append(tshark)
+        return TsharkRunner(tshark=tshark)
+
+    def fake_score_run(
+        run_dir: Path, *, runner: TsharkRunner, **keywords: Any
+    ) -> ScoreReportV1:
+        del run_dir, keywords
+        shared.append(runner)
+        return _score_report(tmp_path)
+
+    monkeypatch.setattr(cli_module, "TsharkRunner", fake_tshark_runner)
+    monkeypatch.setattr(cli_module, "score_run", fake_score_run)
+
+    exit_code = main(_score_args(tmp_path, "--tshark", "/usr/bin/true"))
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert built == ["/usr/bin/true"]
+    assert len(shared) == 1
+    assert isinstance(shared[0], TsharkRunner)

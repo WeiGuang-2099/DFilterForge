@@ -39,6 +39,7 @@ from dfilterforge.live import packet_set_hash
 from dfilterforge.replay import replay_live
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
+from dfilterforge.scoring import score_run
 
 JsonObject = dict[str, object]
 Command = Callable[[argparse.Namespace], object]
@@ -179,15 +180,6 @@ def _spec_validate(arguments: argparse.Namespace) -> object:
         "schema_version": spec.schema_version,
         "spec_hash": content_sha256(spec),
     }
-
-
-def _generate(arguments: argparse.Namespace) -> object:
-    del arguments
-    raise CliError(
-        "model_backend_unavailable",
-        "No model backend is configured. Use a versioned backend that emits "
-        "GenerationResultV1; free-text filter fallback is disabled.",
-    )
 
 
 def _parse_observation(
@@ -333,11 +325,15 @@ def _benchmark_run(arguments: argparse.Namespace) -> object:
 def _replay(arguments: argparse.Namespace) -> object:
     receipt = _load_model(arguments.receipt, EvaluationReceiptV1)
     spec = _load_model(arguments.spec, SemanticSpecV1)
-    candidate_ir = _load_model(arguments.candidate_ir, IntentIrV1)
+    candidate: IntentIrV1 | str = (
+        receipt.candidate_filter
+        if arguments.receipt_filter
+        else _load_model(arguments.candidate_ir, IntentIrV1)
+    )
     replay, environment = replay_live(
         receipt,
         spec,
-        candidate_ir,
+        candidate,
         arguments.capture_root,
         catalog=_optional_catalog(arguments),
         runner=TsharkRunner(tshark=arguments.tshark),
@@ -352,6 +348,21 @@ def _replay(arguments: argparse.Namespace) -> object:
         "exact": replay.exact,
         "output_path": arguments.output.as_posix(),
     }
+
+
+def _score(arguments: argparse.Namespace) -> object:
+    """Scores stored completions offline and reports the scored directory."""
+    report = score_run(
+        arguments.run_dir,
+        code_revision=arguments.code_revision,
+        check=arguments.check,
+        control=arguments.control,
+        split_dir=arguments.split_dir,
+        runner=TsharkRunner(tshark=arguments.tshark),
+    )
+    if report.differences:
+        arguments.exit_code = 1
+    return report
 
 
 def _ablation_run(arguments: argparse.Namespace) -> object:
@@ -379,6 +390,15 @@ _SPEC_VALIDATE_HELP = (
 )
 _BENCHMARK_RUN_HELP = (
     "Summarize recorded evaluation receipts; no capture is executed."
+)
+_RECEIPT_FILTER_HELP = (
+    "Replay the receipt's own display filter as a display-filter candidate."
+)
+_SCORE_HELP = (
+    "Score stored completions offline against regenerated gold; --check "
+    "re-executes and compares without writing; --control scores "
+    "gold-derived reference or mutation answers instead of stored "
+    "completions."
 )
 _ABLATION_RUN_HELP = (
     "Validate a recorded ablation receipt and print its hash, identifier, "
@@ -428,13 +448,6 @@ def build_parser() -> argparse.ArgumentParser:
     compile_command.add_argument("--catalog", type=_path)
     compile_command.add_argument("--tshark", default="tshark")
     compile_command.set_defaults(handler=_compile)
-
-    generate = commands.add_parser("generate")
-    generate.add_argument("--intent", required=True)
-    generate.add_argument(
-        "--pipeline", choices=("prompt", "rag-ir"), required=True
-    )
-    generate.set_defaults(handler=_generate)
 
     evaluate = commands.add_parser("evaluate")
     evaluate.add_argument("--spec", type=_path, required=True)
@@ -488,12 +501,27 @@ def build_parser() -> argparse.ArgumentParser:
     replay = commands.add_parser("replay-run")
     replay.add_argument("--receipt", type=_path, required=True)
     replay.add_argument("--spec", type=_path, required=True)
-    replay.add_argument("--candidate-ir", type=_path, required=True)
+    candidate_source = replay.add_mutually_exclusive_group(required=True)
+    candidate_source.add_argument("--candidate-ir", type=_path)
+    candidate_source.add_argument(
+        "--receipt-filter", action="store_true", help=_RECEIPT_FILTER_HELP
+    )
     replay.add_argument("--capture-root", type=_path, required=True)
     replay.add_argument("--catalog", type=_path)
     replay.add_argument("--tshark", default="tshark")
     replay.add_argument("--output", type=_path)
     replay.set_defaults(handler=_replay)
+
+    score = commands.add_parser(
+        "score", help=_SCORE_HELP, description=_SCORE_HELP
+    )
+    score.add_argument("--run-dir", type=_path, required=True)
+    score.add_argument("--code-revision", required=True)
+    score.add_argument("--check", action="store_true")
+    score.add_argument("--split-dir", type=_path)
+    score.add_argument("--control", choices=("reference", "mutation"))
+    score.add_argument("--tshark", default="tshark")
+    score.set_defaults(handler=_score)
 
     ablation = commands.add_parser("ablation")
     ablation_commands = ablation.add_subparsers(
