@@ -15,7 +15,11 @@ synthetic multi-probe captures, packet diffs, predicate traces, executable
 replay, and measured receipts. No language model has been evaluated or
 trained yet; the Web Evaluation Lab shows a hand-written illustrative example
 until the first model run replaces it. See `docs/progress.md` for verified
-results and `docs/protocol.md` for the model evaluation protocol.
+results and `docs/protocol.md` for the model evaluation protocol. The
+evaluation path is complete and measured without a model: the dev prompts for
+all four conditions and the receipt that records which catalog and code built
+them are frozen under `docs/results/`, and gold-derived reference and mutation
+controls score there end to end in the no-network container.
 
 ## Development
 
@@ -28,8 +32,11 @@ docker compose --profile dev run --rm test
 docker compose --profile web-local up --build
 ```
 
-The Docker daemon must be running in Linux container mode. Host Python and
-tshark installations are not part of the supported execution environment.
+The Docker daemon must be running in Linux container mode. tshark execution,
+the catalog freeze and scoring all run in containers. Split generation, field
+retrieval and prompt preparation are pure Python and also run on the host with
+`uv run --frozen`. The hosted model call must run on the host, because the
+lab, test and dev containers all run with `network_mode: none`.
 
 The `Dockerfile` verifies the official Wireshark 4.6.8 source archive against
 its published SHA-256 before building a tshark-only runtime. The CLI container
@@ -62,9 +69,11 @@ The summary includes a packet-set hash that excludes runtime measurements.
 For a packet diff, the trace sidecar records actual tshark matches for every
 candidate and canonical leaf predicate on counterexample frames. It does not
 record packet payloads or inferred field values. `replay-run` requires the
-specification, candidate IR, and curated capture root, then re-executes the
-reference, candidate, and any needed predicate filters. Its replay decision
-uses exact frame tuples and ignores runtime and stored hash claims.
+specification, the curated capture root, and either the candidate IR or
+`--receipt-filter`, which replays the receipt's own display filter. It
+re-executes the reference and the candidate, plus any needed predicate filters
+when given an IR. Its replay decision uses exact frame tuples and ignores
+runtime and stored hash claims.
 
 The runner snapshots at most 16 MiB per capture, allows at most five seconds
 per tshark process, limits output and frame count, and kills the process group
@@ -124,6 +133,48 @@ matrix is an explicit release measurement. Passing these synthetic gates does
 not measure model compile validity, silent-wrong rate, or the complete Pilot
 Go/No-Go decision. The Web stays illustrative until a measured run replaces
 its data.
+
+## Hosted model run
+
+`RUN` below is `dev-qwen3-32b-2026-09-21`: qwen/qwen3-32b on the dev split via
+deepinfra, fallbacks off; the date records when its prompts were frozen (UTC).
+The [protocol](docs/protocol.md) defines what is measured.
+
+1. Build the test image the prompts are prepared in.
+2. Prepare the prompts. Done for `RUN`: `publish` refuses a new `prepare.json`,
+   so restore a lost `artifacts/model-eval/RUN` by copying
+   `docs/results/RUN/prepare.json` and `prepared/` into it instead.
+3. Set `DFILTERFORGE_MODEL_API_KEY` in your shell only. It is never written to
+   a file, and `publish` refuses any file holding it or a token-shaped string.
+4. Save the third line below as `artifacts/call-config.json` (ignored) with
+   the provider's prices filled in; prices cannot be added after the run.
+5. Call on the host. On exit 1, read the printed `stop_reason`. `null`: re-run
+   with `--resume`. `fatal_http`: fix the key or credit, then resume. `budget`:
+   the 0.25 USD cap cannot cover the next request; the run cannot be published.
+   `thinking_not_honoured` (`--gate-first`, on by default) ends the run: move
+   `artifacts/model-eval/RUN/runs/RUN` out of `runs/`, change the provider or
+   model (a new model needs a new `RUN`) and call again without `--resume`.
+6. Publish the run beside the frozen prompts.
+7. Score offline in the lab container, then commit `docs/results/RUN`.
+
+```text
+docker compose --profile dev build test
+docker compose --profile dev run --rm --volume "${PWD}/artifacts:/workspace/artifacts" test python scripts/model_run.py prepare --catalog /opt/dfilterforge/catalog.sqlite3 --output-dir /workspace/artifacts/model-eval/RUN --source-revision YOUR_REVISION
+{"endpoint_url": "https://openrouter.ai/api/v1/chat/completions", "settings": {"model_id": "qwen/qwen3-32b", "openrouter": {"provider_order": ["deepinfra"], "allow_fallbacks": false, "reasoning": "enabled_false"}}, "prices": {"usd_per_million_input": INPUT_PRICE, "usd_per_million_output": OUTPUT_PRICE, "source": "PRICE_SOURCE"}}
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/RUN --run-id RUN --config artifacts/call-config.json --max-usd 0.25 --source-revision YOUR_REVISION
+uv run --frozen python scripts/model_run.py publish --run-dir artifacts/model-eval/RUN/runs/RUN --output docs/results/RUN
+docker compose --profile pilot build lab
+docker compose --profile pilot run --rm lab score --run-dir /workspace/results/RUN --code-revision YOUR_REVISION
+```
+
+Step 5 is the only command here that needs a key and spends money; every other
+command is exercised by the test suite or by CI. The
+[reference](docs/results/dev-qwen3-32b-2026-09-21/control-reference/summary.md)
+and [mutation](docs/results/dev-qwen3-32b-2026-09-21/control-mutation/summary.md)
+control scores are the scorer's measured baseline; the first model number will
+appear in `docs/results/RUN/scored/summary.md`, where C2 and C4 also print how
+often retrieval listed every gold field. `--check` (plus `--control reference`
+or `mutation`) reproduces any of them without a key.
 
 ## Safety boundary
 
