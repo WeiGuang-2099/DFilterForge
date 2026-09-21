@@ -20,7 +20,12 @@ from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
 from dfilterforge.compiler import compile_intent
 from dfilterforge.evaluation import SemanticSpecV1
+from dfilterforge.field_catalog import CatalogError
 from dfilterforge.field_catalog import FieldCatalogV1
+from dfilterforge.field_catalog import FieldType
+from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import Operator
+from dfilterforge.intent_ir import Predicate
 from dfilterforge.runner import RunResult
 from dfilterforge.runner import TsharkRunner
 
@@ -277,6 +282,26 @@ def test_real_catalog_compilation_and_mutation_witness(
     assert (
         runner.run(probe.capture_path, case.mutation_filter).frames != expected
     )
+
+
+def test_real_catalog_keeps_field_name_case(tmp_path: Path) -> None:
+    probe = generate_benchmark(tmp_path)[1]
+    runner = TsharkRunner()
+    intent = IntentIrV1(
+        expression=Predicate(field="bacapp.IPV4", operator=Operator.EXISTS)
+    )
+    wrong_case = IntentIrV1(
+        expression=Predicate(field="BACAPP.IPV4", operator=Operator.EXISTS)
+    )
+    catalog = bind_catalog(runner, (intent,), path=DEFAULT_CATALOG_PATH)
+
+    assert compile_intent(intent, catalog) == "bacapp.IPV4"
+    assert catalog.get("bacapp.IPV4").field_type is FieldType.IPV4
+    assert runner.run(probe.capture_path, "bacapp.IPV4").frames == ()
+    with pytest.raises(CatalogError) as caught:
+        bind_catalog(runner, (wrong_case,), path=DEFAULT_CATALOG_PATH)
+
+    assert caught.value.code == "unknown_field"
 
 
 def test_single_probe_misses_a_real_syn_ack_mutation(tmp_path: Path) -> None:

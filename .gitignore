@@ -32,7 +32,7 @@ artifacts/
 !artifacts/
 artifacts/*
 !artifacts/.gitkeep
-results/
+/results/
 *.pcap
 *.pcapng
 !pcap_lab/fixtures/*.pcap

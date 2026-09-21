@@ -118,6 +118,65 @@ def test_ranking_is_stable_across_record_order(tmp_path: Path) -> None:
     assert port.display_name == "A Port"
 
 
+_REAL_SHAPES = (
+    "F	IPV4	bacapp.IPV4	FT_IPv4	bacapp	BASE_NONE",
+    "F	TCP SYN	diameter.TCP-SYN	FT_UINT32	diameter	BASE_DEC",
+    "F	Message	_ws.expert.message	FT_STRING	_ws.expert	BASE_NONE",
+    "P	29West Protocol	29west",
+    "F	Classification	acp133.Classification	FT_UINT32	acp133	BASE_DEC",
+    "F	classification	acp133.classification	FT_UINT32	acp133	BASE_DEC",
+    "P	USB Device Firmware Upgrade 	usbdfu",
+)
+_UNPROJECTABLE = (
+    "F	X Y Z	x.y.z.	FT_STRING	xyz	BASE_NONE",
+    "F	   	x.y.blank	FT_STRING	xyz	BASE_NONE",
+    "F	X Only	x.only	FT_STRING	xyz	BASE_NONE",
+)
+
+
+def test_real_catalog_name_shapes_come_back_unchanged(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path, _REAL_SHAPES)
+    intent = (
+        "bacapp IPV4 diameter TCP-SYN _ws expert message 29west acp133 "
+        "classification usbdfu"
+    )
+
+    results = retrieve_fields(
+        path,
+        (FieldRetrievalItemV1(item_id="shapes", intent=intent),),
+        top_k=8,
+    )
+
+    assert {field.abbreviation for field in results[0].fields} == {
+        "bacapp.IPV4",
+        "diameter.TCP-SYN",
+        "_ws.expert.message",
+        "29west",
+        "acp133.Classification",
+        "acp133.classification",
+        "usbdfu",
+    }
+    upgrade = next(
+        field for field in results[0].fields if field.abbreviation == "usbdfu"
+    )
+    assert upgrade.display_name == "USB Device Firmware Upgrade "
+
+
+def test_fields_that_cannot_enter_a_prompt_are_skipped(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path, _UNPROJECTABLE)
+
+    results = retrieve_fields(
+        path,
+        (FieldRetrievalItemV1(item_id="skip", intent="x y z blank only xyz"),),
+        top_k=1,
+    )
+
+    assert len(results[0].fields) == 1
+    assert results[0].fields[0].abbreviation == "x.only"
+
+
 def test_batch_uses_one_constant_streaming_select(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

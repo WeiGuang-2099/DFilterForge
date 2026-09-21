@@ -12,7 +12,32 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import model_validator
 
-_FIELD_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
+# Only ever applied with fullmatch.
+FIELD_NAME_PATTERN = re.compile(r"[A-Za-z0-9_]+(?:[.-][A-Za-z0-9_]+)*")
+MAX_FIELD_NAME_BYTES = 256
+
+
+def validate_field_name(value: str) -> str:
+    """Returns one Wireshark-style field name, unchanged and bounded.
+
+    The length check rejects oversized input before the regular
+    expression sees it. The grammar admits only ASCII, so every name
+    that is returned occupies exactly one byte per character.
+
+    Args:
+        value: Untrusted name from a model reply or a catalog row.
+
+    Returns:
+        The name exactly as given, including its case.
+
+    Raises:
+        ValueError: If the name is too long or is not a field name.
+    """
+    if len(value) > MAX_FIELD_NAME_BYTES:
+        raise ValueError("field name exceeds 256 bytes")
+    if not FIELD_NAME_PATTERN.fullmatch(value):
+        raise ValueError("field must be a Wireshark-style field name")
+    return value
 
 
 class FrozenModel(BaseModel):
@@ -50,8 +75,7 @@ class Predicate(FrozenModel):
     @model_validator(mode="after")
     def validate_shape(self) -> "Predicate":
         """Validates operator-specific value shape."""
-        if not _FIELD_PATTERN.fullmatch(self.field):
-            raise ValueError("field must be a Wireshark-style abbreviation")
+        validate_field_name(self.field)
         if self.operator == Operator.EXISTS:
             if self.value is not None:
                 raise ValueError("exists does not accept a value")
@@ -152,6 +176,61 @@ class GenerationStatus(StrEnum):
     NOT_EXPRESSIBLE = "not_expressible"
 
 
+class MissingSlot(StrEnum):
+    """The closed set of request slots a model may report as open."""
+
+    ADDRESS = "address"
+    DIRECTION = "direction"
+    FIELD = "field"
+    PORT = "port"
+    PROTOCOL = "protocol"
+    VALUE = "value"
+
+
+def check_status_payload(
+    status: GenerationStatus,
+    *,
+    payload_name: str,
+    has_payload: bool,
+    clarifying_question: str | None,
+    missing_slots: tuple[MissingSlot, ...],
+) -> None:
+    """Applies one abstention rule set to every generation envelope.
+
+    Args:
+        status: Expressibility outcome the model returned.
+        payload_name: Name of the status-bearing payload field.
+        has_payload: Whether that payload is present.
+        clarifying_question: The single question, when one was asked.
+        missing_slots: Slots the request leaves open.
+
+    Raises:
+        ValueError: If the status and its payload cannot occur together.
+    """
+    if len(set(missing_slots)) != len(missing_slots):
+        raise ValueError("missing_slots must be unique")
+    if status != GenerationStatus.NEEDS_CLARIFICATION and missing_slots:
+        raise ValueError(
+            "missing_slots are allowed only for needs_clarification"
+        )
+    if status == GenerationStatus.READY:
+        if not has_payload:
+            raise ValueError(f"ready requires {payload_name}")
+        if clarifying_question is not None:
+            raise ValueError("ready cannot include a clarifying question")
+    elif status == GenerationStatus.NEEDS_CLARIFICATION:
+        if not clarifying_question:
+            raise ValueError("needs_clarification requires clarifying_question")
+        if has_payload:
+            raise ValueError(
+                f"needs_clarification cannot include {payload_name}"
+            )
+    elif has_payload or clarifying_question is not None:
+        raise ValueError(
+            f"not_expressible cannot include {payload_name} or a question"
+        )
+
+
 class GenerationResultV1(FrozenModel):
     """Structured output from an intent generation backend."""
 
@@ -159,27 +238,21 @@ class GenerationResultV1(FrozenModel):
     status: GenerationStatus
     assumptions: tuple[str, ...] = ()
     clarifying_question: str | None = None
+    missing_slots: tuple[MissingSlot, ...] = Field(
+        default=(), max_length=len(MissingSlot)
+    )
     intent_ir: IntentIrV1 | None = None
 
     @model_validator(mode="after")
     def validate_status_payload(self) -> "GenerationResultV1":
         """Ensures each status carries only the payload it can use."""
-        if self.status == GenerationStatus.READY:
-            if self.intent_ir is None:
-                raise ValueError("ready requires intent_ir")
-            if self.clarifying_question is not None:
-                raise ValueError("ready cannot include a clarifying question")
-        elif self.status == GenerationStatus.NEEDS_CLARIFICATION:
-            if not self.clarifying_question:
-                raise ValueError(
-                    "needs_clarification requires clarifying_question"
-                )
-            if self.intent_ir is not None:
-                raise ValueError("needs_clarification cannot include intent_ir")
-        elif self.intent_ir is not None or self.clarifying_question is not None:
-            raise ValueError(
-                "not_expressible cannot include intent_ir or a question"
-            )
+        check_status_payload(
+            self.status,
+            payload_name="intent_ir",
+            has_payload=self.intent_ir is not None,
+            clarifying_question=self.clarifying_question,
+            missing_slots=self.missing_slots,
+        )
         return self
 
 

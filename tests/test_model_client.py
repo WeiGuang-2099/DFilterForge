@@ -22,6 +22,7 @@ from dfilterforge.generation import parse_response
 from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import RetrievalV1
+from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.model_client import API_KEY_ENV
 from dfilterforge.model_client import CompletionBatchV1
 from dfilterforge.model_client import CompletionStatusV1
@@ -30,7 +31,10 @@ from dfilterforge.model_client import OpenAiCompatibleBackend
 from dfilterforge.model_client import RequestSettingsV1
 
 _API_KEY = "sk-test-SECRET-9f2c"
-_CONTENT = '{"schema_version":"direct-filter/1.0","display_filter":"tcp"}'
+_CONTENT = (
+    '{"schema_version":"direct-filter/1.0","status":"ready",'
+    '"display_filter":"tcp"}'
+)
 _OK_BODY = json.dumps(
     {
         "id": "chatcmpl-1",
@@ -193,7 +197,9 @@ def test_successful_completion_is_bounded_and_carries_the_bearer_key() -> None:
     assert completion.latency_ms >= 0
     assert parse_response(
         result.output_contract, _CONTENT
-    ) == DirectFilterResultV1(display_filter="tcp")
+    ) == DirectFilterResultV1(
+        status=GenerationStatus.READY, display_filter="tcp"
+    )
     assert CompletionBatchV1.model_validate_json(result.model_dump_json()) == (
         result
     )

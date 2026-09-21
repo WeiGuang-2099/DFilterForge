@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from contextlib import closing
 from dataclasses import dataclass
 import heapq
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Self
 
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import ValidationError
 
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.field_catalog import FieldDefinition
@@ -259,9 +261,15 @@ def _consider(state: _QueryState, field: FieldDefinition, top_k: int) -> None:
     if score <= 0:
         return
     candidate = _RankedCandidate(score=score, field=field)
+    admitted = (
+        len(state.candidates) < top_k
+        or candidate.order_key < state.candidates[0].order_key
+    )
+    if not admitted or not _projectable(field):
+        return
     if len(state.candidates) < top_k:
         heapq.heappush(state.candidates, candidate)
-    elif candidate.order_key < state.candidates[0].order_key:
+    else:
         heapq.heapreplace(state.candidates, candidate)
 
 
@@ -276,6 +284,15 @@ def _retrieved_field(field: FieldDefinition, rank: int) -> RetrievedFieldV1:
         enum_values=(),
         enum_values_truncated=False,
     )
+
+
+def _projectable(field: FieldDefinition) -> bool:
+    """Returns whether one catalog row can enter a prompt contract."""
+    try:
+        _retrieved_field(field, 1)
+    except ValidationError:
+        return False
+    return True
 
 
 def _bounded_context(
@@ -349,7 +366,7 @@ def retrieve_fields(
     ]
     try:
         uri = f"{path.resolve().as_uri()}?mode=ro&immutable=1"
-        with sqlite3.connect(uri, uri=True) as database:
+        with closing(sqlite3.connect(uri, uri=True)) as database:
             database.execute("PRAGMA trusted_schema = OFF")
             for field in _stream_fields(database):
                 for state in states:
