@@ -35,6 +35,9 @@ not an unseen-recipe split and not an unseen-protocol split. Results must not
 be presented as evidence of generalization to new traffic recipes or protocol
 families.
 
-Run generation in the project Docker environment and point the output at an
-ignored local artifact directory. Do not expose `evaluator_gold.json` to a
-model or retrieval system.
+Split generation is pure Python and runs on the host or in the project Docker
+environment; point the output at an ignored local artifact directory.
+`scripts/model_run.py prepare` runs it inside a temporary directory, reads only
+`model_inputs.jsonl`, and deletes the gold and the captures before it writes
+any prompt file. Never expose `evaluator_gold.json` to a model or to a
+retrieval system.

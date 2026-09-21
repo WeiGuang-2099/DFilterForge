@@ -2,7 +2,7 @@
 
 Status: keep_protected
 
-Measured: 2026-09-04
+Measured: 2026-09-04; addendum measured 2026-09-19
 
 ## Hypothesis
 
@@ -127,5 +127,49 @@ separate packet-set hashes. `replay-run` validates receipts and optional
 environment identity without re-executing tshark. The Web remains a recorded
 demo, and the earlier core/Web runtime ablations are still outstanding.
 
+## Addendum: exit-status classification
+
+Measured: 2026-09-19. Scope: the runner's failure codes only; the decision
+above is unchanged.
+
+Full is the classified runner: exit 4 becomes `filter_rejected`, or
+`filter_unknown_field` when tshark's own first stderr line is its "is not a
+valid protocol or protocol field" sentence; exit 3 or 14 becomes
+`capture_unreadable`; every other non-zero status stays `tshark_failed`.
+Simplified is the mapping at revision `1c64140`, where any non-zero status is
+`tshark_failed`. The valid capture is the first pilot probe,
+`tcp-syn-no-ack-17.pcap`; the truncated and garbage captures are derived from
+it during the run and are not retained. Each row below is a row of the
+measurements file, which names every capture in its `capture` column.
+
+| Kind | Filter | Capture | Exit | Full | Simplified |
+| --- | --- | --- | ---: | --- | --- |
+| filter | `ip.ttll` | valid | 4 | filter_unknown_field | tshark_failed |
+| filter | `tcp &&` | valid | 4 | filter_rejected | tshark_failed |
+| filter | `ip.ttl <= "abc"` | valid | 4 | filter_rejected | tshark_failed |
+| capture | `tcp` | truncated | 14 | capture_unreadable | tshark_failed |
+| capture | `tcp` | garbage | 3 | capture_unreadable | tshark_failed |
+| filter | `ip.ttll` | garbage | 4 | filter_unknown_field | tshark_failed |
+
+Full separates filter failures from capture failures on all six witnesses;
+Simplified separates none. The classification adds 66 lines to
+`src/dfilterforge/runner.py` and removes 9, and it keeps stderr out of every
+message: only the exit status and a 256-byte first-line match choose the code.
+The truncated capture prints two frames before tshark fails, the
+`stdout_frames` column of the same row, and Full discards them rather than
+returning a short result.
+
+Decision: keep Full. A scorer that cannot tell a rejected model filter from an
+unreadable probe capture charges a harness failure to the model. The typed
+receipt still records `keep_protected` from the output-cap witness above; this
+addendum adds no new ablation number.
+
+```text
+docker compose --profile dev run --rm --volume "${PWD}/src:/workspace/src:ro" --volume "${PWD}/scripts:/workspace/scripts:ro" --volume "${PWD}/artifacts:/workspace/artifacts" test python scripts/runner_ablation.py --fixtures /workspace/artifacts/pilot --output /workspace/artifacts/runner-exit-status.json --code-revision 1c64140+working-tree
+docker compose --profile pilot run --rm lab ablation run --manifest /workspace/artifacts/runner-exit-status.receipt.json
+```
+
 Raw measurements: `evidence/001-runner-measurements.json`.
 Typed ablation receipt: `evidence/001-runner-receipt.json`.
+Exit-status measurements: `evidence/001-exit-status-measurements.json`.
+Exit-status receipt: `evidence/001-exit-status-measurements.receipt.json`.

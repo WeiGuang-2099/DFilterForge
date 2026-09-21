@@ -36,6 +36,11 @@ services:
       - type: bind
         source: ./artifacts
         target: /workspace/artifacts
+      # Committed scoring output; writable because control scores are
+      # produced in this container, while score --check only reads.
+      - type: bind
+        source: ./docs/results
+        target: /workspace/results
 
   test:
     <<: *runtime-hardening

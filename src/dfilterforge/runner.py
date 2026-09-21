@@ -24,6 +24,10 @@ from dfilterforge.errors import DFilterForgeError
 
 PINNED_TSHARK_VERSION = "4.6.8"
 _SEARCH_PATH = "/opt/wireshark/bin:/usr/bin:/bin"
+_STDERR_HEAD_BYTES = 256
+_UNKNOWN_FIELD_LINE = re.compile(
+    rb'tshark: "[^"\n]+" is not a valid protocol or protocol field\.'
+)
 
 
 class RunnerError(DFilterForgeError, RuntimeError):
@@ -146,6 +150,33 @@ def _kill_process_group(process: subprocess.Popen[bytes]) -> None:
     process.wait()
 
 
+def _exit_failure(returncode: int, stderr_head: bytes) -> RunnerError:
+    """Maps a tshark exit status to a stable runner code.
+
+    Wireshark 4.6.8 uses WS_EXIT_INVALID_FILE=3, WS_EXIT_INVALID_FILTER=4 and
+    WS_EXIT_READ_ERROR=14. The display filter given to -Y is compiled before
+    the capture is opened, so status 4 does not depend on the capture bytes.
+    Only the first stderr line is consulted, and only to match tshark's own
+    fixed unresolvable-name sentence; the head is discarded once a code is
+    chosen.
+    """
+    if returncode == 4:
+        first_line = stderr_head.split(b"\n", 1)[0]
+        if _UNKNOWN_FIELD_LINE.fullmatch(first_line):
+            return RunnerError(
+                "filter_unknown_field",
+                "tshark does not know a field in the display filter",
+            )
+        return RunnerError(
+            "filter_rejected", "tshark rejected the display filter"
+        )
+    if returncode in (3, 14):
+        return RunnerError(
+            "capture_unreadable", "tshark could not read the capture"
+        )
+    return RunnerError("tshark_failed", "tshark exited with a failure status")
+
+
 class TsharkRunner:
     """Execute captures using a fixed profile in a hardened Linux container.
 
@@ -204,7 +235,21 @@ class TsharkRunner:
         return self._version
 
     def run(self, capture: Path, display_filter: str) -> RunResult:
-        """Return validated frame numbers with sanitized failure messages."""
+        """Return validated frame numbers with sanitized failure messages.
+
+        ``filter_rejected`` and ``filter_unknown_field`` mean the display
+        filter is wrong, while ``capture_unreadable`` and ``capture_invalid``
+        mean the harness handed tshark a capture it cannot use.
+
+        Raises:
+            RunnerError: With code ``filter_invalid``, ``filter_too_large``,
+                ``filter_rejected``, ``filter_unknown_field``,
+                ``capture_invalid``, ``capture_too_large``,
+                ``capture_unreadable``, ``timeout``, ``output_limit``,
+                ``frame_limit``, ``output_invalid`` or ``tshark_failed``, or
+                with ``platform_unsupported``, ``tshark_unavailable`` or
+                ``tshark_version_mismatch`` from the cached version check.
+        """
         try:
             filter_bytes = display_filter.encode("utf-8")
         except UnicodeEncodeError:
@@ -239,6 +284,7 @@ class TsharkRunner:
                 ],
                 pass_fds=(snapshot.fileno(),),
                 frame_limit=self._limits.max_frames,
+                classify_exit=True,
             )
         return RunResult(
             frames=_parse_frames(output, self._limits.max_frames),
@@ -262,12 +308,15 @@ class TsharkRunner:
         output, _ = self._execute(arguments, max_stdout_bytes=192 * 1024 * 1024)
         return output
 
+    # pylint: disable-next=too-many-arguments
     def _execute(
         self,
         arguments: list[str],
         pass_fds: tuple[int, ...] = (),
         frame_limit: int | None = None,
         max_stdout_bytes: int | None = None,
+        *,
+        classify_exit: bool = False,
     ) -> tuple[bytes, float]:
         environment = {
             "PATH": _SEARCH_PATH,
@@ -300,7 +349,7 @@ class TsharkRunner:
                 "tshark_unavailable", "tshark cannot be started"
             ) from None
         try:
-            output = self._read_output(
+            output, stderr_head = self._read_output(
                 process, started, frame_limit, max_stdout_bytes
             )
             remaining = self._limits.timeout_seconds - (
@@ -310,11 +359,13 @@ class TsharkRunner:
                 raise subprocess.TimeoutExpired(
                     "tshark", self._limits.timeout_seconds
                 )
-            if process.wait(timeout=remaining) != 0:
-                raise RunnerError(
-                    "tshark_failed",
-                    "tshark rejected the capture or display filter",
-                )
+            returncode = process.wait(timeout=remaining)
+            if returncode != 0:
+                if not classify_exit:
+                    raise RunnerError(
+                        "tshark_failed", "tshark exited with a failure status"
+                    )
+                raise _exit_failure(returncode, stderr_head)
             return output, (time.monotonic() - started) * 1000
         except subprocess.TimeoutExpired:
             raise RunnerError(
@@ -331,15 +382,17 @@ class TsharkRunner:
             if process.stderr is not None:
                 process.stderr.close()
 
+    # pylint: disable-next=too-many-locals
     def _read_output(
         self,
         process: subprocess.Popen[bytes],
         started: float,
         frame_limit: int | None,
         max_stdout_bytes: int | None = None,
-    ) -> bytes:
+    ) -> tuple[bytes, bytes]:
         assert process.stdout is not None and process.stderr is not None
         stdout = bytearray()
+        stderr_head = bytearray()
         sizes = {"stdout": 0, "stderr": 0}
         maximums = {
             "stdout": max_stdout_bytes or self._limits.max_stdout_bytes,
@@ -381,4 +434,8 @@ class TsharkRunner:
                                 "frame_limit",
                                 "Result exceeds the configured frame limit",
                             )
-        return bytes(stdout)
+                    elif len(stderr_head) < _STDERR_HEAD_BYTES:
+                        stderr_head.extend(
+                            chunk[: _STDERR_HEAD_BYTES - len(stderr_head)]
+                        )
+        return bytes(stdout), bytes(stderr_head)

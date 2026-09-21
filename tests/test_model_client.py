@@ -5,14 +5,22 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
+import importlib.util
 import json
 import logging
+from pathlib import Path
+import sys
 import threading
 import time
-from typing import Any
+from typing import Any, cast, Protocol
 
 import pytest
 
+from dfilterforge import model_client
+from dfilterforge.completions import CompletionBatchV1
+from dfilterforge.completions import CompletionStatusV1
+from dfilterforge.completions import OpenRouterOptionsV1
+from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.generation import DirectFilterResultV1
 from dfilterforge.generation import GenerationInputV1
@@ -22,15 +30,17 @@ from dfilterforge.generation import parse_response
 from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import RetrievalV1
+from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.model_client import API_KEY_ENV
-from dfilterforge.model_client import CompletionBatchV1
-from dfilterforge.model_client import CompletionStatusV1
 from dfilterforge.model_client import ModelClientError
 from dfilterforge.model_client import OpenAiCompatibleBackend
-from dfilterforge.model_client import RequestSettingsV1
 
 _API_KEY = "sk-test-SECRET-9f2c"
-_CONTENT = '{"schema_version":"direct-filter/1.0","display_filter":"tcp"}'
+_PROVIDER_TEXT = "PROVIDER-PROSE"
+_CONTENT = (
+    '{"schema_version":"direct-filter/1.0","status":"ready",'
+    '"display_filter":"tcp"}'
+)
 _OK_BODY = json.dumps(
     {
         "id": "chatcmpl-1",
@@ -47,8 +57,26 @@ _OK_BODY = json.dumps(
 _HUGE_BODY = json.dumps(
     {"choices": [{"message": {"content": "x" * MAX_RESPONSE_BYTES}}]}
 ).encode("utf-8")
+_PADDED_ERROR = b'{"error":{"code":503},"pad":"' + b"x" * 16_000 + b'"}'
 
 Responder = Callable[[BaseHTTPRequestHandler], None]
+
+
+class _DocumentedReply(Protocol):
+    """The replay corpus entry this test compares records against."""
+
+    name: str
+    expected: tuple[str, int | None, str | None]
+
+
+class _ReplyReplay(Protocol):
+    """The part of the replay script this test drives."""
+
+    REPLIES: tuple[_DocumentedReply, ...]
+
+    def replay(self, settings_module: str) -> list[dict[str, Any]]:
+        """Runs every documented reply and returns the recorded rows."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -126,13 +154,75 @@ def _ok(handler: BaseHTTPRequestHandler) -> None:
     _reply(handler, 200, _OK_BODY)
 
 
-def _status(status: int, body: bytes, *, chunked: bool = False) -> Responder:
+def _status(
+    status: int,
+    body: bytes,
+    *,
+    headers: dict[str, str] | None = None,
+    chunked: bool = False,
+) -> Responder:
     """Returns a responder that always answers with one fixed reply."""
 
     def respond(handler: BaseHTTPRequestHandler) -> None:
-        _reply(handler, status, body, chunked=chunked)
+        _reply(handler, status, body, headers=headers, chunked=chunked)
 
     return respond
+
+
+def _json(status: int, value: object, **kwargs: Any) -> Responder:
+    """Returns a responder that serves one JSON document."""
+    return _status(status, json.dumps(value).encode("utf-8"), **kwargs)
+
+
+def _envelope(
+    message: dict[str, object],
+    *,
+    finish_reason: str | None = "stop",
+    native_finish_reason: str | None = "stop_native",
+    usage: dict[str, object] | None = None,
+    **top_level: object,
+) -> dict[str, object]:
+    """Returns the documented OpenRouter chat.completion reply body.
+
+    The native finish reason defaults to a value the normalized one never
+    takes, so a record that read the wrong key would be visible.
+    """
+    return {
+        "id": "gen-1726000000-abc",
+        "model": "qwen/qwen3-8b-04-28",
+        "provider": "Alibaba",
+        "system_fingerprint": None,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", **message},
+                "finish_reason": finish_reason,
+                "native_finish_reason": native_finish_reason,
+            }
+        ],
+        "usage": usage
+        or {
+            "prompt_tokens": 240,
+            "completion_tokens": 21,
+            "completion_tokens_details": {"reasoning_tokens": 0},
+            "cost": 0.0000376,
+            "is_byok": False,
+        },
+        **top_level,
+    }
+
+
+def _error(code: object, **extra: object) -> dict[str, object]:
+    """Returns a provider error body carrying prose beside its code."""
+    return {"error": {"code": code, "message": _PROVIDER_TEXT, **extra}}
+
+
+def _error_in_choice() -> dict[str, object]:
+    """Returns a 200 body whose only choice reports a provider failure."""
+    body = _envelope({"content": _PROVIDER_TEXT}, finish_reason="error")
+    choices = cast(list[dict[str, object]], body["choices"])
+    choices[0] |= _error(502)
+    return body
 
 
 def _slow(handler: BaseHTTPRequestHandler) -> None:
@@ -153,15 +243,48 @@ def _redirect(handler: BaseHTTPRequestHandler) -> None:
     )
 
 
+def _hang_up(handler: BaseHTTPRequestHandler) -> None:
+    handler.close_connection = True
+
+
+def _stall_after_headers(handler: BaseHTTPRequestHandler) -> None:
+    """Sends a status line and headers, then stops short of the body."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(_OK_BODY)))
+    handler.end_headers()
+    try:
+        handler.wfile.write(_OK_BODY[:1])
+        handler.wfile.flush()
+        time.sleep(1.5)
+    except OSError:
+        pass
+
+
+def _load_reply_replay() -> _ReplyReplay:
+    """Imports the replay script by path, as the evidence run does."""
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "provider_reply_replay.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "provider_reply_replay", script
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return cast(_ReplyReplay, module)
+
+
 def _backend(
     url: str,
     *,
     api_key: str | None = _API_KEY,
-    timeout_seconds: float = 30.0,
+    settings: RequestSettingsV1 | None = None,
 ) -> OpenAiCompatibleBackend:
-    settings = RequestSettingsV1(
-        model_id="test-model", timeout_seconds=timeout_seconds
-    )
+    settings = settings or RequestSettingsV1(model_id="test-model")
     return OpenAiCompatibleBackend(url, settings, api_key=api_key)
 
 
@@ -187,13 +310,21 @@ def test_successful_completion_is_bounded_and_carries_the_bearer_key() -> None:
     assert completion.status is CompletionStatusV1.COMPLETED
     assert completion.response_text == _CONTENT
     assert completion.error_code is None
+    assert completion.http_status == 200
     assert completion.finish_reason == "stop"
+    assert completion.native_finish_reason is None
+    assert completion.response_id == "chatcmpl-1"
     assert completion.prompt_tokens == 12
     assert completion.completion_tokens == 3
+    assert completion.reasoning_tokens is None
+    assert completion.reasoning_present is False
+    assert completion.cost_usd is None
     assert completion.latency_ms >= 0
     assert parse_response(
         result.output_contract, _CONTENT
-    ) == DirectFilterResultV1(display_filter="tcp")
+    ) == DirectFilterResultV1(
+        status=GenerationStatus.READY, display_filter="tcp"
+    )
     assert CompletionBatchV1.model_validate_json(result.model_dump_json()) == (
         result
     )
@@ -202,18 +333,93 @@ def test_successful_completion_is_bounded_and_carries_the_bearer_key() -> None:
     assert request.path == "/v1/chat/completions"
     assert request.headers["Authorization"] == f"Bearer {_API_KEY}"
     assert request.headers["Content-Type"].startswith("application/json")
-    body = json.loads(request.body)
+    assert request.headers["User-Agent"] == "dfilterforge-model-client"
     prompt = batch.prompts[0]
-    assert body["model"] == "test-model"
-    assert body["messages"] == [
-        {"role": message.role, "content": message.content}
-        for message in prompt.messages
-    ]
-    assert body["temperature"] == 0.0
-    assert body["max_tokens"] == 2048
-    assert body["n"] == 1
-    assert body["seed"] == 17
-    assert body["response_format"] == {"type": "json_object"}
+    assert json.loads(request.body) == {
+        "model": "test-model",
+        "messages": [
+            {"role": message.role, "content": message.content}
+            for message in prompt.messages
+        ],
+        "temperature": 0.0,
+        "max_tokens": 2048,
+        "seed": 17,
+        "response_format": {"type": "json_object"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("settings", "extra_keys"),
+    [
+        (RequestSettingsV1(model_id="m", seed=None, json_mode=False), {}),
+        (
+            RequestSettingsV1(
+                model_id="qwen/qwen3-8b",
+                openrouter=OpenRouterOptionsV1(provider_order=("alibaba",)),
+            ),
+            {
+                "seed": 17,
+                "response_format": {"type": "json_object"},
+                "reasoning": {"enabled": False},
+                "provider": {
+                    "order": ["alibaba"],
+                    "allow_fallbacks": False,
+                    "require_parameters": True,
+                },
+            },
+        ),
+        (
+            RequestSettingsV1(
+                model_id="m",
+                seed=None,
+                json_mode=False,
+                openrouter=OpenRouterOptionsV1(
+                    reasoning="effort_none",
+                    allow_fallbacks=True,
+                    data_collection="deny",
+                ),
+            ),
+            {
+                "reasoning": {"effort": "none"},
+                "provider": {
+                    "allow_fallbacks": True,
+                    "require_parameters": True,
+                    "data_collection": "deny",
+                },
+            },
+        ),
+        (
+            RequestSettingsV1(
+                model_id="m",
+                seed=None,
+                json_mode=False,
+                openrouter=OpenRouterOptionsV1(reasoning=None),
+            ),
+            {
+                "provider": {
+                    "allow_fallbacks": False,
+                    "require_parameters": True,
+                },
+            },
+        ),
+    ],
+)
+def test_request_controls_are_opt_in_and_recorded(
+    settings: RequestSettingsV1, extra_keys: dict[str, object]
+) -> None:
+    with _provider(_ok) as provider:
+        result = _backend(provider.url, settings=settings).complete(_prepared())
+
+    (request,) = provider.received
+    body = json.loads(request.body)
+    del body["messages"]
+    assert body == {
+        "model": settings.model_id,
+        "temperature": 0.0,
+        "max_tokens": 2048,
+        **extra_keys,
+    }
+    assert result.settings == settings
 
 
 def test_environment_credential_is_used_only_when_no_key_is_given(
@@ -232,25 +438,138 @@ def test_environment_credential_is_used_only_when_no_key_is_given(
         )
 
 
+def test_documented_provider_replies_are_recorded_as_expected() -> None:
+    replay = _load_reply_replay()
+
+    rows = replay.replay("dfilterforge.completions")
+
+    assert len(replay.REPLIES) == 14
+    for reply, row in zip(replay.REPLIES, rows, strict=True):
+        assert row["reply"] == reply.name
+        assert (
+            row["recorded_as"],
+            row["http_status"],
+            row["provider_error_code"],
+        ) == reply.expected
+        assert row["provider_text_recorded"] is False
+
+
 @pytest.mark.parametrize(
-    ("respond", "code"),
+    ("respond", "code", "http_status", "provider_code"),
     [
-        (_status(500, b'{"error":"boom"}'), "http_error"),
-        (_status(404, b"missing"), "http_error"),
-        (_status(200, b"{not json"), "response_invalid"),
-        (_status(200, b"\xff\xfe"), "response_invalid"),
-        (_status(200, b'{"choices":[]}'), "response_invalid"),
+        (_json(500, _error("two words")), "http_error", 500, None),
+        (_json(401, _error(_API_KEY)), "http_error", 401, None),
+        (
+            _status(500, _PROVIDER_TEXT.encode("utf-8")),
+            "http_error",
+            500,
+            None,
+        ),
+        (_status(503, _PADDED_ERROR), "http_error", 503, None),
+        (_json(200, _error_in_choice()), "provider_error", 200, "502"),
+        (_json(200, _envelope({"content": ""})), "empty_content", 200, None),
+        (
+            _json(
+                200,
+                _envelope(
+                    {"content": None},
+                    finish_reason=_API_KEY,
+                    native_finish_reason=_API_KEY,
+                ),
+            ),
+            "empty_content",
+            200,
+            None,
+        ),
+        (_status(200, b"{not json"), "response_invalid", 200, None),
+        (_status(200, b"\xff\xfe"), "response_invalid", 200, None),
+        (_status(200, b'{"choices":[]}'), "response_invalid", 200, None),
+        (_status(200, b'{"choices":[{}]}'), "response_invalid", 200, None),
         (
             _status(200, b'{"choices":[{"message":{"content":42}}]}'),
             "response_invalid",
+            200,
+            None,
         ),
-        (_status(200, _HUGE_BODY), "response_too_large"),
-        (_status(200, _HUGE_BODY, chunked=True), "response_too_large"),
-        (_redirect, "redirect_rejected"),
+        (
+            _json(
+                200,
+                _envelope({"content": _CONTENT}, usage={"prompt_tokens": "12"}),
+            ),
+            "response_invalid",
+            200,
+            None,
+        ),
+        (
+            _json(
+                200,
+                _envelope(
+                    {"content": _CONTENT}, finish_reason=_PROVIDER_TEXT * 40
+                ),
+            ),
+            "response_invalid",
+            200,
+            None,
+        ),
+        (
+            _json(200, _envelope({"content": _CONTENT}, model="m" * 257)),
+            "response_invalid",
+            200,
+            None,
+        ),
+        (
+            _json(
+                200,
+                _envelope({"content": _CONTENT}, provider=_PROVIDER_TEXT * 40),
+            ),
+            "response_invalid",
+            200,
+            None,
+        ),
+        (
+            _json(200, _envelope({"content": _CONTENT}, usage={"cost": -1})),
+            "response_invalid",
+            200,
+            None,
+        ),
+        (
+            _json(
+                200,
+                _envelope(
+                    {"content": None},
+                    finish_reason="length",
+                    id=_API_KEY,
+                    model=_API_KEY,
+                    provider=_API_KEY,
+                    system_fingerprint=_API_KEY,
+                ),
+            ),
+            "empty_content",
+            200,
+            None,
+        ),
+        (_status(200, _HUGE_BODY), "response_too_large", 200, None),
+        (
+            _status(200, _HUGE_BODY, chunked=True),
+            "response_too_large",
+            200,
+            None,
+        ),
+        (
+            _status(200, _OK_BODY, headers={"Content-Length": "many"}),
+            "response_invalid",
+            200,
+            None,
+        ),
+        (_redirect, "redirect_rejected", 302, None),
+        (_hang_up, "transport_error", None, None),
     ],
 )
 def test_failures_are_recorded_as_stable_codes_without_retries(
-    respond: Responder, code: str
+    respond: Responder,
+    code: str,
+    http_status: int | None,
+    provider_code: str | None,
 ) -> None:
     with _provider(respond) as provider:
         result = _backend(provider.url).complete(_prepared())
@@ -258,22 +577,199 @@ def test_failures_are_recorded_as_stable_codes_without_retries(
     (completion,) = result.completions
     assert completion.status is CompletionStatusV1.FAILED
     assert completion.error_code == code
+    assert completion.http_status == http_status
+    assert completion.provider_error_code == provider_code
     assert completion.response_text is None
     assert [request.path for request in provider.received] == [
         "/v1/chat/completions"
     ]
-    assert _API_KEY not in result.model_dump_json()
+    dumped = result.model_dump_json()
+    assert _API_KEY not in dumped
+    assert _PROVIDER_TEXT not in dumped
+
+
+def test_openrouter_provenance_is_recorded_without_reasoning_text() -> None:
+    respond = _json(
+        200,
+        _envelope(
+            {"content": _CONTENT, "reasoning": f"{_PROVIDER_TEXT} I think"},
+            system_fingerprint="fp_44709586",
+            usage={
+                "prompt_tokens": 240,
+                "completion_tokens": 171,
+                "completion_tokens_details": {"reasoning_tokens": 150},
+                "cost": 0.000106,
+            },
+        ),
+    )
+
+    with _provider(respond) as provider:
+        result = _backend(provider.url).complete(_prepared())
+
+    (completion,) = result.completions
+    assert completion.status is CompletionStatusV1.COMPLETED
+    assert completion.response_text == _CONTENT
+    assert completion.response_id == "gen-1726000000-abc"
+    assert completion.response_model == "qwen/qwen3-8b-04-28"
+    assert completion.provider == "Alibaba"
+    assert completion.system_fingerprint == "fp_44709586"
+    assert completion.finish_reason == "stop"
+    assert completion.native_finish_reason == "stop_native"
+    assert completion.reasoning_tokens == 150
+    assert completion.reasoning_present is True
+    assert completion.cost_usd == 0.000106
+    assert _PROVIDER_TEXT not in result.model_dump_json()
+
+
+def test_exhausted_output_budget_keeps_its_evidence() -> None:
+    respond = _json(
+        200,
+        _envelope(
+            {"content": None, "reasoning": _PROVIDER_TEXT * 50},
+            finish_reason="length",
+            native_finish_reason="length_native",
+            usage={
+                "prompt_tokens": 240,
+                "completion_tokens": 2048,
+                "completion_tokens_details": {"reasoning_tokens": 2048},
+                "cost": 0.00096,
+            },
+        ),
+    )
+
+    with _provider(respond) as provider:
+        result = _backend(provider.url).complete(_prepared())
+
+    (completion,) = result.completions
+    assert completion.status is CompletionStatusV1.FAILED
+    assert completion.error_code == "empty_content"
+    assert completion.http_status == 200
+    assert completion.finish_reason == "length"
+    assert completion.native_finish_reason == "length_native"
+    assert completion.completion_tokens == 2048
+    assert completion.reasoning_tokens == 2048
+    assert completion.reasoning_present is True
+    assert completion.cost_usd == 0.00096
+    assert _PROVIDER_TEXT not in result.model_dump_json()
+
+
+def test_an_envelope_level_error_keeps_the_provenance_it_arrived_with() -> None:
+    respond = _json(
+        200,
+        _envelope(
+            {"content": _CONTENT},
+            system_fingerprint="fp_44709586",
+            error={"code": 502, "message": _PROVIDER_TEXT},
+        ),
+    )
+
+    with _provider(respond) as provider:
+        result = _backend(provider.url).complete(_prepared())
+
+    (completion,) = result.completions
+    assert completion.status is CompletionStatusV1.FAILED
+    assert completion.error_code == "provider_error"
+    assert completion.provider_error_code == "502"
+    assert completion.http_status == 200
+    assert completion.response_id == "gen-1726000000-abc"
+    assert completion.response_model == "qwen/qwen3-8b-04-28"
+    assert completion.provider == "Alibaba"
+    assert completion.system_fingerprint == "fp_44709586"
+    assert completion.prompt_tokens == 240
+    assert completion.completion_tokens == 21
+    assert completion.reasoning_tokens == 0
+    assert completion.cost_usd == 0.0000376
+    assert completion.finish_reason is None
+    assert completion.native_finish_reason is None
+    assert completion.reasoning_present is None
+    assert _PROVIDER_TEXT not in result.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _envelope(
+            {"content": _CONTENT},
+            usage={
+                "prompt_tokens": 240,
+                "completion_tokens": 21,
+                "completion_tokens_details": None,
+            },
+        ),
+        _envelope({"content": _CONTENT}) | {"usage": None},
+    ],
+)
+def test_a_null_usage_breakdown_keeps_the_answer_it_paid_for(
+    body: dict[str, object],
+) -> None:
+    with _provider(_json(200, body)) as provider:
+        result = _backend(provider.url).complete(_prepared())
+
+    (completion,) = result.completions
+    assert completion.status is CompletionStatusV1.COMPLETED
+    assert completion.response_text == _CONTENT
+    assert completion.reasoning_tokens is None
+    assert completion.cost_usd is None
+    assert [request.path for request in provider.received] == [
+        "/v1/chat/completions"
+    ]
+
+
+def test_a_reply_that_fails_a_record_bound_cannot_leak_through_an_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def looser(
+        body: bytes, status: dict[str, object], secret: str | None
+    ) -> dict[str, object]:
+        del body, secret
+        return status | {
+            "finish_reason": _PROVIDER_TEXT * 40,
+            "response_text": _CONTENT,
+        }
+
+    monkeypatch.setattr(model_client, "_parse_reply", looser)
+    with _provider(_ok) as provider:
+        result = _backend(provider.url).complete(_prepared())
+
+    (completion,) = result.completions
+    assert completion.status is CompletionStatusV1.FAILED
+    assert completion.error_code == "client_error"
+    assert completion.http_status is None
+    assert completion.response_text is None
+    assert _PROVIDER_TEXT not in result.model_dump_json()
+    assert [request.path for request in provider.received] == [
+        "/v1/chat/completions"
+    ]
+
+
+def test_timeout_after_the_status_line_keeps_the_recorded_status() -> None:
+    with _provider(_stall_after_headers) as provider:
+        result = _backend(
+            provider.url,
+            settings=RequestSettingsV1(model_id="m", timeout_seconds=0.3),
+        ).complete(_prepared())
+
+    (completion,) = result.completions
+    assert completion.status is CompletionStatusV1.FAILED
+    assert completion.error_code == "timeout"
+    assert completion.http_status == 200
+    assert completion.response_text is None
+    assert [request.path for request in provider.received] == [
+        "/v1/chat/completions"
+    ]
 
 
 def test_timeout_is_bounded_and_reported_as_a_code() -> None:
     started = time.monotonic()
 
     with _provider(_slow) as provider:
-        result = _backend(provider.url, timeout_seconds=0.3).complete(
-            _prepared()
-        )
+        result = _backend(
+            provider.url,
+            settings=RequestSettingsV1(model_id="m", timeout_seconds=0.3),
+        ).complete(_prepared())
 
     assert result.completions[0].error_code == "timeout"
+    assert result.completions[0].http_status is None
     assert time.monotonic() - started < 3
 
 
@@ -342,23 +838,3 @@ def test_unsafe_endpoints_are_rejected_with_a_sanitized_error(
 
     assert caught.value.code == "configuration_invalid"
     assert "example.com" not in str(caught.value)
-
-
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"timeout_seconds": 0},
-        {"timeout_seconds": 301},
-        {"timeout_seconds": float("nan")},
-        {"temperature": 2.5},
-        {"temperature": float("inf")},
-        {"max_output_tokens": 0},
-        {"max_output_tokens": 65_537},
-        {"seed": True},
-        {"model_id": "   "},
-        {"api_key": "sk-must-not-live-here"},
-    ],
-)
-def test_request_settings_are_bounded(overrides: dict[str, object]) -> None:
-    with pytest.raises(ValueError):
-        RequestSettingsV1.model_validate({"model_id": "m", **overrides})

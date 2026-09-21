@@ -12,6 +12,17 @@ it is not silently substituted for a newly built environment's inventory.
 See [ablation 002](../../docs/ablations/002-frozen-field-catalog.md) for
 byte-for-byte reproducibility and runtime binding results.
 
+This archive predates the current image freeze. Its recorded `catalog_hash`
+and row counts differ from the catalog the Docker build freezes: `ce22f217`
+against `80dc639b`, and 1,709,597 value rows against 1,709,593, with
+`fields_records` holding the same 266,369 rows in a different order. Retrieval
+streams fields in name order and breaks ties on field metadata, and the dev
+prompts prepared from either inventory are byte-identical, so the archive is
+not re-exported; `prepare.json` records whichever inventory a preparation used.
+Open the archive on the host only: it expands to 299,319,296 bytes in the
+temporary directory, more than a container's `/tmp` holds, so containers read
+`/opt/dfilterforge/catalog.sqlite3`.
+
 Export without loading the whole catalog into memory:
 
 ```text

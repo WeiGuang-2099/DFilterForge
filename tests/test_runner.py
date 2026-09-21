@@ -4,12 +4,14 @@ from dataclasses import replace
 import hashlib
 import os
 from pathlib import Path
+import signal
 import sys
 import textwrap
 import time
 
 import pytest
 
+from dfilterforge.model_split import generate_model_split
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import RunnerLimits
 from dfilterforge.runner import TsharkRunner
@@ -17,6 +19,14 @@ from dfilterforge.runner import TsharkRunner
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="Runner requires a Linux container",
+)
+
+# The exact three-line, 85-byte stderr tshark 4.6.8 prints for an
+# unresolvable field name.
+_UNKNOWN_FIELD_STDERR = (
+    b'tshark: "ip.ttll" is not a valid protocol or protocol field.\n'
+    b"    ip.ttll\n"
+    b"    ^~~~~~~\n"
 )
 
 
@@ -52,6 +62,11 @@ def _capture(tmp_path: Path, data: bytes = b"private capture content") -> Path:
     capture = tmp_path / "capture with spaces.pcap"
     capture.write_bytes(data)
     return capture
+
+
+def _model_split_capture(tmp_path: Path) -> Path:
+    generate_model_split(tmp_path)
+    return tmp_path / "captures" / "semantic-11.pcap"
 
 
 def test_executes_argv_with_private_snapshot_and_minimal_environment(
@@ -244,10 +259,24 @@ def test_kills_descendants_on_failure_and_normal_exit(
         time.sleep(0.01)
 
 
-def test_nonzero_exit_reports_only_generic_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "returncode, expected",
+    [
+        (4, "filter_rejected"),
+        (3, "capture_unreadable"),
+        (14, "capture_unreadable"),
+        (1, "tshark_failed"),
+        (2, "tshark_failed"),
+    ],
+)
+def test_exit_status_maps_to_code_without_stderr(
+    tmp_path: Path, returncode: int, expected: str
+) -> None:
     executable = _fake_tshark(
         tmp_path,
-        "os.write(2, b'private capture and secret filter')\nsys.exit(2)",
+        "os.write(1, b'1\\n2\\n')\n"
+        "os.write(2, b'private capture and secret filter')\n"
+        f"sys.exit({returncode})",
     )
 
     with pytest.raises(RunnerError) as error:
@@ -255,8 +284,212 @@ def test_nonzero_exit_reports_only_generic_failure(tmp_path: Path) -> None:
             _capture(tmp_path), "invalid secret filter"
         )
 
+    assert error.value.code == expected
+    assert "secret" not in str(error.value)
+    assert "private" not in str(error.value)
+    assert "secret" not in repr(error.value.args)
+    assert "private" not in repr(error.value.args)
+
+
+def test_signal_termination_is_a_generic_failure(tmp_path: Path) -> None:
+    executable = _fake_tshark(
+        tmp_path, f"os.kill(os.getpid(), {int(signal.SIGTERM)})"
+    )
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner(executable).run(_capture(tmp_path), "tcp")
+
     assert error.value.code == "tshark_failed"
-    assert str(error.value) == "tshark rejected the capture or display filter"
+
+
+def test_rejected_filter_with_worst_measured_stderr_is_not_an_output_limit(
+    tmp_path: Path,
+) -> None:
+    executable = _fake_tshark(
+        tmp_path, "os.write(2, b'x' * 24648)\nsys.exit(4)"
+    )
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner(executable).run(_capture(tmp_path), 'ip.ttl <= "abc"')
+
+    assert RunnerLimits().max_stderr_bytes > 24648
+    assert error.value.code == "filter_rejected"
+
+
+def test_stderr_above_the_limit_is_still_an_output_limit(
+    tmp_path: Path,
+) -> None:
+    executable = _fake_tshark(tmp_path, "os.write(2, b'x' * 8192)\nsys.exit(4)")
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner(executable, RunnerLimits(max_stderr_bytes=128)).run(
+            _capture(tmp_path), "tcp"
+        )
+
+    assert error.value.code == "output_limit"
+
+
+def test_unknown_field_sentence_on_first_line_gives_filter_unknown_field(
+    tmp_path: Path,
+) -> None:
+    executable = _fake_tshark(
+        tmp_path, f"os.write(2, {_UNKNOWN_FIELD_STDERR!r})\nsys.exit(4)"
+    )
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner(executable).run(_capture(tmp_path), "ip.ttll")
+
+    assert error.value.code == "filter_unknown_field"
+    assert "ip.ttll" not in str(error.value)
+    assert "ip.ttll" not in repr(error.value.args)
+
+
+@pytest.mark.parametrize(
+    "stderr, returncode, expected",
+    [
+        (
+            b"tshark: Unexpected end of filter expression.\n"
+            + _UNKNOWN_FIELD_STDERR,
+            4,
+            "filter_rejected",
+        ),
+        (_UNKNOWN_FIELD_STDERR, 3, "capture_unreadable"),
+        (b"x" * 200 + _UNKNOWN_FIELD_STDERR, 4, "filter_rejected"),
+        (
+            b'tshark: "'
+            + b"a" * 300
+            + b'" is not a valid protocol or protocol field.\n',
+            4,
+            "filter_rejected",
+        ),
+    ],
+)
+def test_unknown_field_sentence_elsewhere_is_only_a_rejection(
+    tmp_path: Path, stderr: bytes, returncode: int, expected: str
+) -> None:
+    executable = _fake_tshark(
+        tmp_path, f"os.write(2, {stderr!r})\nsys.exit({returncode})"
+    )
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner(executable).run(_capture(tmp_path), "ip.ttll")
+
+    assert error.value.code == expected
+
+
+def test_stderr_head_stops_growing_after_the_first_bytes(
+    tmp_path: Path,
+) -> None:
+    executable = _fake_tshark(
+        tmp_path,
+        "os.write(2, b'x' * 300)\n"
+        "time.sleep(0.2)\n"
+        f"os.write(2, {_UNKNOWN_FIELD_STDERR!r})\n"
+        "sys.exit(4)",
+    )
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner(executable).run(_capture(tmp_path), "ip.ttll")
+
+    assert error.value.code == "filter_rejected"
+
+
+def test_version_and_report_failures_stay_generic(tmp_path: Path) -> None:
+    failure = f"os.write(2, {_UNKNOWN_FIELD_STDERR!r})\nsys.exit(4)"
+    report_directory = tmp_path / "report"
+    report_directory.mkdir()
+    version_directory = tmp_path / "version"
+    version_directory.mkdir()
+    report_executable = _fake_tshark(report_directory, failure)
+    version_executable = _fake_tshark(
+        version_directory,
+        "raise AssertionError('must not run')",
+        version_body=failure,
+    )
+
+    with pytest.raises(RunnerError) as report_error:
+        TsharkRunner(report_executable).report("fields")
+    with pytest.raises(RunnerError) as version_error:
+        TsharkRunner(version_executable).version()
+
+    assert report_error.value.code == "tshark_failed"
+    assert version_error.value.code == "tshark_failed"
+
+
+@pytest.mark.parametrize(
+    "display_filter, capture_kind, expected",
+    [
+        ("tcp &&", "valid", "filter_rejected"),
+        ('ip.ttl <= "abc"', "valid", "filter_rejected"),
+        ("tcp.port in {80 443}", "valid", "filter_rejected"),
+        ("foo(ip.ttl) == 1", "valid", "filter_rejected"),
+        ("tcp", "truncated", "capture_unreadable"),
+        ("tcp", "garbage", "capture_unreadable"),
+        ("ip.ttll", "garbage", "filter_unknown_field"),
+    ],
+)
+def test_real_tshark_separates_filter_rejection_from_capture_failure(
+    tmp_path: Path, display_filter: str, capture_kind: str, expected: str
+) -> None:
+    capture = _model_split_capture(tmp_path)
+    data = capture.read_bytes()
+    truncated = tmp_path / "truncated.pcap"
+    truncated.write_bytes(data[: len(data) // 2 + 7])
+    garbage = tmp_path / "garbage.pcap"
+    garbage.write_bytes(b"this is not a capture file\n" * 20)
+    captures = {"valid": capture, "truncated": truncated, "garbage": garbage}
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner().run(captures[capture_kind], display_filter)
+
+    assert error.value.code == expected
+    assert '"' not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "display_filter, expected_code, expected_frames",
+    [
+        ("ip.ttll == 64", "filter_unknown_field", 0),
+        ("ip.ttl-1 == 63", "filter_unknown_field", 0),
+        ("{ip.ttl-1} == 63", "filter_unknown_field", 0),
+        ("ssl", None, 0),
+        ("http.request.method == GET", None, 0),
+        ("diameter.TCP-SYN == 01:02", None, 0),
+        ("tcp", None, 10),
+    ],
+)
+def test_real_tshark_names_unknown_fields_and_accepts_aliases(
+    tmp_path: Path,
+    display_filter: str,
+    expected_code: str | None,
+    expected_frames: int,
+) -> None:
+    capture = _model_split_capture(tmp_path)
+
+    if expected_code is None:
+        frames = TsharkRunner().run(capture, display_filter).frames
+        assert len(frames) == expected_frames
+        return
+
+    with pytest.raises(RunnerError) as error:
+        TsharkRunner().run(capture, display_filter)
+
+    assert error.value.code == expected_code
+
+
+def test_real_tshark_accepted_filter_never_classifies(tmp_path: Path) -> None:
+    capture = _model_split_capture(tmp_path)
+
+    result = TsharkRunner().run(capture, "tcp")
+
+    assert result.frames == tuple(sorted(result.frames))
+    assert len(result.frames) == 10
+    assert (
+        result.capture_sha256
+        == hashlib.sha256(capture.read_bytes()).hexdigest()
+    )
+    narrowed = TsharkRunner().run(capture, "tcp && ip.ttl <= 1")
+    assert set(narrowed.frames) <= set(result.frames)
 
 
 @pytest.mark.parametrize("version", ["4.6.80", "4.6.7", "4.6.8-rc1", "garbage"])

@@ -419,7 +419,7 @@ def evaluate_live_with_trace(
 # pylint: disable-next=too-many-arguments,too-many-locals
 def evaluate_live(
     spec: SemanticSpecV1,
-    candidate_ir: IntentIrV1,
+    candidate: IntentIrV1 | str,
     capture_root: Path,
     *,
     run_id: str,
@@ -427,6 +427,8 @@ def evaluate_live(
     code_revision: str,
     catalog: FieldCatalogV1 | None = None,
     runner: TsharkRunner | None = None,
+    model_hash: str | None = None,
+    prompt_hash: str | None = None,
 ) -> tuple[EvaluationReceiptV1, LiveEnvironmentV1]:
     """Executes each reference and candidate against independent labels.
 
@@ -434,16 +436,28 @@ def evaluate_live(
     A mismatched candidate is a measured result and remains in the receipt.
     This local-only boundary accepts captures pinned by a specification hash;
     it is not a public upload or execution API.
+
+    A display-filter string is executed unchanged; tshark alone decides
+    whether it compiles. A rejection surfaces as RunnerError
+    ``filter_rejected`` or ``filter_unknown_field`` raised from the first
+    probe, after that probe's reference run and label check, and callers
+    decide how to count it.
     """
     if created_at.tzinfo is None:
         raise LiveError(
             "timestamp_invalid", "created_at must include a timezone"
         )
     active_runner = runner if runner is not None else TsharkRunner()
-    catalog = bind_catalog(
-        active_runner, (candidate_ir, spec.canonical_ir), catalog
+    intents: tuple[IntentIrV1, ...] = (
+        (spec.canonical_ir,)
+        if isinstance(candidate, str)
+        else (candidate, spec.canonical_ir)
     )
-    candidate_filter = compile_intent(candidate_ir, catalog)
+    catalog = bind_catalog(active_runner, intents, catalog)
+    if isinstance(candidate, str):
+        candidate_filter = candidate
+    else:
+        candidate_filter = compile_intent(candidate, catalog)
     compile_intent(spec.canonical_ir, catalog)
     environment = _environment(active_runner, catalog)
     probes: list[ProbeResultV1] = []
@@ -460,14 +474,16 @@ def evaluate_live(
                 "reference_label_mismatch",
                 "Reference execution disagrees with independent packet labels",
             )
-        candidate = active_runner.run(capture, candidate_filter)
-        _check_capture_hash(candidate.capture_sha256, expected.capture_sha256)
+        candidate_result = active_runner.run(capture, candidate_filter)
+        _check_capture_hash(
+            candidate_result.capture_sha256, expected.capture_sha256
+        )
         probes.append(
             evaluate_probe(
                 expected.probe_id,
                 expected.expected_frames,
-                candidate.frames,
-                candidate.runtime_ms,
+                candidate_result.frames,
+                candidate_result.runtime_ms,
             )
         )
     typed_probes = tuple(probes)
@@ -477,6 +493,8 @@ def evaluate_live(
         code_revision=code_revision,
         environment_hash=environment.environment_hash(),
         data_hash=content_sha256(spec),
+        model_hash=model_hash,
+        prompt_hash=prompt_hash,
         candidate_filter=candidate_filter,
         reference_filter=spec.reference_filter,
         probes=typed_probes,

@@ -1,183 +1,74 @@
 """Bounded OpenAI-compatible chat-completions boundary.
 
 The backend sends each prepared prompt exactly once, never follows redirects,
-caps response bytes, and records failures only as stable codes. The API
-credential is deliberately kept outside every pydantic model so it can never
-be serialized, compared, or echoed inside a validation error.
+caps response bytes, and records failures only as stable codes plus bounded
+provider metadata. The API credential is deliberately kept outside every
+pydantic model so it can never be serialized, compared, or echoed inside a
+validation error.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 import http.client
-import json
 import os
 import ssl
 import time
-from typing import cast, Literal, Protocol
+from typing import Annotated
 from urllib.parse import urlsplit
 
+from pydantic import AfterValidator
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import ValidationError
 
 from dfilterforge.canonical import canonical_json
+from dfilterforge.completions import CODE_PATTERN
+from dfilterforge.completions import CompletionBatchV1
+from dfilterforge.completions import CompletionStatusV1
+from dfilterforge.completions import CompletionV1
+from dfilterforge.completions import ENDPOINT_KIND
+from dfilterforge.completions import MAX_METADATA_BYTES
+from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.generation import MAX_RESPONSE_BYTES
-from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
-from dfilterforge.generation import RetrievalV1
-from dfilterforge.intent_ir import FrozenModel
-from dfilterforge.text_limits import validate_text
 from dfilterforge.text_limits import validate_utf8
 
-_ENDPOINT_KIND = "openai-compatible-chat-completions"
 API_KEY_ENV = "DFILTERFORGE_MODEL_API_KEY"
-_MAX_ITEM_ID_BYTES = 256
-_MAX_MODEL_ID_BYTES = 256
-_MAX_ERROR_CODE_BYTES = 64
-_MAX_FINISH_REASON_BYTES = 256
 _MAX_API_KEY_BYTES = 8 * 1024
-_MAX_OUTPUT_TOKENS = 65_536
-_MAX_TIMEOUT_SECONDS = 300.0
+_MAX_ERROR_BODY_BYTES = 8 * 1024
 _PLAIN_HTTP_HOSTS = frozenset(
     {"localhost", "127.0.0.1", "model-runner.docker.internal"}
 )
+_OPENROUTER_REASONING: dict[str, dict[str, object]] = {
+    "enabled_false": {"enabled": False},
+    "effort_none": {"effort": "none"},
+}
+
+
+def _bounded_metadata(value: str) -> str:
+    validate_utf8(value, MAX_METADATA_BYTES, "provider metadata")
+    return value
+
+
+_Metadata = Annotated[str, AfterValidator(_bounded_metadata)]
+_Count = Annotated[int, Field(ge=0)]
 
 
 class ModelClientError(DFilterForgeError):
     """A configuration failure containing only a stable code and safe text."""
 
 
-class CompletionStatusV1(StrEnum):
-    """Whether a provider returned a usable raw response envelope."""
-
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class CompletionV1(FrozenModel):
-    """One bounded raw completion or one sanitized failure."""
-
-    item_id: str
-    status: CompletionStatusV1
-    response_text: str | None = None
-    error_code: str | None = None
-    latency_ms: float = Field(ge=0, allow_inf_nan=False)
-    finish_reason: str | None = None
-    prompt_tokens: int | None = Field(default=None, ge=0)
-    completion_tokens: int | None = Field(default=None, ge=0)
-
-    @field_validator("item_id")
-    @classmethod
-    def validate_item_id(cls, value: str) -> str:
-        """Rejects empty or excessively large opaque item keys."""
-        return validate_text(value, _MAX_ITEM_ID_BYTES, "item_id")
-
-    @field_validator("response_text")
-    @classmethod
-    def validate_response_text(cls, value: str | None) -> str | None:
-        """Applies the model response byte ceiling to successful content."""
-        if value is not None:
-            validate_utf8(value, MAX_RESPONSE_BYTES, "response_text")
-        return value
-
-    @field_validator("error_code")
-    @classmethod
-    def validate_error_code(cls, value: str | None) -> str | None:
-        """Keeps recorded errors stable, short, and data-free."""
-        if value is None:
-            return None
-        if not value or not value.replace("_", "").isalnum():
-            raise ValueError("error_code must be a stable identifier")
-        validate_utf8(value, _MAX_ERROR_CODE_BYTES, "error_code")
-        return value
-
-    @field_validator("finish_reason")
-    @classmethod
-    def validate_finish_reason(cls, value: str | None) -> str | None:
-        """Bounds provider metadata independently of response content."""
-        if value is not None:
-            validate_utf8(value, _MAX_FINISH_REASON_BYTES, "finish_reason")
-        return value
-
-    @model_validator(mode="after")
-    def validate_status_payload(self) -> "CompletionV1":
-        """Makes successful content and sanitized errors mutually exclusive."""
-        if self.status == CompletionStatusV1.COMPLETED:
-            if self.response_text is None:
-                raise ValueError("completed requires response_text")
-            if self.error_code is not None:
-                raise ValueError("completed cannot include error_code")
-        else:
-            if self.response_text is not None:
-                raise ValueError("failed cannot include response_text")
-            if self.error_code is None:
-                raise ValueError("failed requires error_code")
-        return self
-
-
-class RequestSettingsV1(FrozenModel):
-    """Reproducibility-safe request configuration recorded with every batch.
-
-    Credentials and endpoint addresses never belong here: this model is
-    serialized into completion batches and may appear in reports.
-    """
-
-    model_id: str
-    temperature: float = Field(default=0.0, ge=0, le=2, allow_inf_nan=False)
-    seed: int | None = Field(default=17, strict=True)
-    max_output_tokens: int = Field(
-        default=2048, ge=1, le=_MAX_OUTPUT_TOKENS, strict=True
-    )
-    timeout_seconds: float = Field(
-        default=30.0, gt=0, le=_MAX_TIMEOUT_SECONDS, allow_inf_nan=False
-    )
-
-    @field_validator("model_id")
-    @classmethod
-    def validate_model_id(cls, value: str) -> str:
-        """Bounds the recorded provider model identifier."""
-        return validate_text(value, _MAX_MODEL_ID_BYTES, "model_id")
-
-
-class CompletionBatchV1(FrozenModel):
-    """Raw model results plus the reproducibility-safe request configuration."""
-
-    schema_version: Literal["completion-batch/1.0"] = "completion-batch/1.0"
-    output_contract: OutputContractV1
-    retrieval: RetrievalV1
-    endpoint_kind: Literal["openai-compatible-chat-completions"] = (
-        _ENDPOINT_KIND
-    )
-    settings: RequestSettingsV1
-    completions: tuple[CompletionV1, ...] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def validate_completion_ids(self) -> "CompletionBatchV1":
-        """Rejects ambiguous duplicate completion keys."""
-        item_ids = tuple(item.item_id for item in self.completions)
-        if len(set(item_ids)) != len(item_ids):
-            raise ValueError("completion item IDs must be unique")
-        return self
-
-
-class CompletionBackend(Protocol):
-    """The single external model-completion boundary used by orchestration."""
-
-    def complete(self, batch: PreparedBatchV1) -> CompletionBatchV1:
-        """Completes every prepared prompt exactly once."""
-        ...
-
-
 class _RequestFailure(RuntimeError):
-    """An internal provider failure represented only by a safe code."""
+    """A provider failure carrying a safe code and bounded metadata."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, recorded: dict[str, object]) -> None:
         super().__init__(code)
         self.code = code
+        self.recorded = recorded
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,14 +81,89 @@ class _Endpoint:
     tls: bool
 
 
-@dataclass(frozen=True, slots=True)
-class _Reply:
-    """The bounded fields kept from one provider response."""
+class _ReplyPart(BaseModel):
+    """Provider JSON: undeclared keys are ignored, declared keys are strict."""
 
-    content: str
-    finish_reason: str | None
-    prompt_tokens: int | None
-    completion_tokens: int | None
+    model_config = ConfigDict(extra="ignore", strict=True, frozen=True)
+
+
+class _ErrorBody(_ReplyPart):
+    """A provider error object, kept only for its short identifier."""
+
+    code: int | str | None = None
+
+    def recorded_code(self, secret: str | None) -> str | None:
+        """Keeps ``error.code`` only when it is a safe short identifier.
+
+        A bearer credential has the shape of a short identifier, so an
+        endpoint that echoes the Authorization it was sent back as the
+        error code would otherwise have it stored in a record.
+        """
+        code = None if self.code is None else str(self.code)
+        if not code or code == secret or not CODE_PATTERN.fullmatch(code):
+            return None
+        return code
+
+
+class _ErrorReply(_ReplyPart):
+    """A non-success body read for nothing but its error code."""
+
+    error: _ErrorBody = _ErrorBody()
+
+
+class _Message(_ReplyPart):
+    """One assistant message, read for its content and reasoning presence.
+
+    The three reasoning keys are typed as bare ``object`` because the three
+    documented dialects put a string, a list of blocks or null there, and
+    because their value is never read: only their truthiness is recorded.
+    """
+
+    content: str | None = None
+    reasoning: object = None
+    reasoning_content: object = None
+    reasoning_details: object = None
+
+
+class _Choice(_ReplyPart):
+    """One generated choice plus the provenance a record may keep."""
+
+    message: _Message
+    finish_reason: _Metadata | None = None
+    native_finish_reason: _Metadata | None = None
+    error: _ErrorBody | None = None
+
+
+class _TokenDetails(_ReplyPart):
+    """The provider-reported breakdown of the generated token count."""
+
+    reasoning_tokens: _Count | None = None
+
+
+class _Usage(_ReplyPart):
+    """Provider-reported token counts and the charge they incurred.
+
+    Providers that report no breakdown send the key as JSON null rather
+    than omitting it, so the sub-object is optional: an absent breakdown
+    must record a missing reasoning count, not discard a paid answer.
+    """
+
+    prompt_tokens: _Count | None = None
+    completion_tokens: _Count | None = None
+    completion_tokens_details: _TokenDetails | None = None
+    cost: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+
+
+class _Envelope(_ReplyPart):
+    """One chat-completions reply body, successful or in-band failed."""
+
+    id: _Metadata | None = None
+    model: _Metadata | None = None
+    provider: _Metadata | None = None
+    system_fingerprint: _Metadata | None = None
+    choices: list[_Choice] | None = None
+    usage: _Usage | None = None
+    error: _ErrorBody | None = None
 
 
 class OpenAiCompatibleBackend:
@@ -231,7 +197,7 @@ class OpenAiCompatibleBackend:
 
     def __repr__(self) -> str:
         """Returns a representation that omits endpoint and credentials."""
-        return f"OpenAiCompatibleBackend(endpoint_kind={_ENDPOINT_KIND!r})"
+        return f"OpenAiCompatibleBackend(endpoint_kind={ENDPOINT_KIND!r})"
 
     def complete(self, batch: PreparedBatchV1) -> CompletionBatchV1:
         """Executes each prompt once and records only bounded safe failures."""
@@ -246,47 +212,25 @@ class OpenAiCompatibleBackend:
 
     def _complete_prompt(self, prompt: PreparedPromptV1) -> CompletionV1:
         started = time.monotonic()
+        recorded: dict[str, object]
         try:
-            reply = self._request(prompt)
-        except _RequestFailure as error:
-            return _failed_completion(prompt.item_id, error.code, started)
+            recorded = self._request(prompt)
+        except _RequestFailure as failure:
+            recorded = failure.recorded | {"error_code": failure.code}
         except TimeoutError:
-            return _failed_completion(prompt.item_id, "timeout", started)
+            recorded = {"error_code": "timeout"}
         except (OSError, http.client.HTTPException):
-            return _failed_completion(
-                prompt.item_id, "transport_error", started
-            )
+            recorded = {"error_code": "transport_error"}
         except Exception:  # pylint: disable=broad-exception-caught
             # The provider boundary must never leak internals into a batch.
-            return _failed_completion(prompt.item_id, "client_error", started)
-        return CompletionV1(
-            item_id=prompt.item_id,
-            status=CompletionStatusV1.COMPLETED,
-            response_text=reply.content,
-            latency_ms=_elapsed_ms(started),
-            finish_reason=reply.finish_reason,
-            prompt_tokens=reply.prompt_tokens,
-            completion_tokens=reply.completion_tokens,
-        )
+            recorded = {"error_code": "client_error"}
+        return _record(prompt.item_id, recorded, _elapsed_ms(started))
 
-    def _request(self, prompt: PreparedPromptV1) -> _Reply:
-        settings = self._settings
-        body: dict[str, object] = {
-            "model": settings.model_id,
-            "messages": tuple(
-                {"role": message.role, "content": message.content}
-                for message in prompt.messages
-            ),
-            "temperature": settings.temperature,
-            "max_tokens": settings.max_output_tokens,
-            "n": 1,
-            "response_format": {"type": "json_object"},
-        }
-        if settings.seed is not None:
-            body["seed"] = settings.seed
+    def _request(self, prompt: PreparedPromptV1) -> dict[str, object]:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "dfilterforge-model-client",
         }
         if self._api_key is not None:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -295,25 +239,31 @@ class OpenAiCompatibleBackend:
             connection.request(
                 "POST",
                 self._endpoint.path,
-                body=canonical_json(body).encode("utf-8"),
+                body=canonical_json(
+                    _request_body(self._settings, prompt)
+                ).encode("utf-8"),
                 headers=headers,
             )
             response = connection.getresponse()
+            status: dict[str, object] = {"http_status": response.status}
             if 300 <= response.status < 400:
-                raise _RequestFailure("redirect_rejected")
+                raise _RequestFailure("redirect_rejected", status)
             if not 200 <= response.status < 300:
-                raise _RequestFailure("http_error")
-            _check_declared_length(response.getheader("Content-Length"))
-            response_bytes = response.read(MAX_RESPONSE_BYTES + 1)
+                code = _error_body_code(response, self._api_key)
+                raise _RequestFailure(
+                    "http_error", status | {"provider_error_code": code}
+                )
+            if _declared_length(response) > MAX_RESPONSE_BYTES:
+                raise _RequestFailure("response_too_large", status)
+            try:
+                response_bytes = response.read(MAX_RESPONSE_BYTES + 1)
+            except TimeoutError:
+                raise _RequestFailure("timeout", status) from None
         finally:
             connection.close()
         if len(response_bytes) > MAX_RESPONSE_BYTES:
-            raise _RequestFailure("response_too_large")
-        try:
-            payload = json.loads(response_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError, RecursionError):
-            raise _RequestFailure("response_invalid") from None
-        return _parse_reply(payload)
+            raise _RequestFailure("response_too_large", status)
+        return _parse_reply(response_bytes, status, self._api_key)
 
     def _connection(self) -> http.client.HTTPConnection:
         endpoint = self._endpoint
@@ -328,6 +278,40 @@ class OpenAiCompatibleBackend:
         return http.client.HTTPConnection(
             endpoint.host, endpoint.port, timeout=timeout
         )
+
+
+def _request_body(
+    settings: RequestSettingsV1, prompt: PreparedPromptV1
+) -> dict[str, object]:
+    """Builds the body; OpenRouter-only keys appear only when opted in."""
+    body: dict[str, object] = {
+        "model": settings.model_id,
+        "messages": [
+            {"role": message.role, "content": message.content}
+            for message in prompt.messages
+        ],
+        "temperature": settings.temperature,
+        "max_tokens": settings.max_output_tokens,
+    }
+    if settings.seed is not None:
+        body["seed"] = settings.seed
+    if settings.json_mode:
+        body["response_format"] = {"type": "json_object"}
+    options = settings.openrouter
+    if options is None:
+        return body
+    if options.reasoning is not None:
+        body["reasoning"] = _OPENROUTER_REASONING[options.reasoning]
+    provider: dict[str, object] = {
+        "allow_fallbacks": options.allow_fallbacks,
+        "require_parameters": options.require_parameters,
+    }
+    if options.provider_order:
+        provider["order"] = options.provider_order
+    if options.data_collection is not None:
+        provider["data_collection"] = options.data_collection
+    body["provider"] = provider
+    return body
 
 
 def _parse_endpoint(endpoint_url: str) -> _Endpoint:
@@ -377,75 +361,126 @@ def _elapsed_ms(started: float) -> float:
     return max(0.0, (time.monotonic() - started) * 1000)
 
 
-def _failed_completion(item_id: str, code: str, started: float) -> CompletionV1:
-    return CompletionV1(
-        item_id=item_id,
-        status=CompletionStatusV1.FAILED,
-        error_code=code,
-        latency_ms=_elapsed_ms(started),
+def _record(
+    item_id: str, recorded: dict[str, object], latency_ms: float
+) -> CompletionV1:
+    """Builds one record, falling back when a value fails a record bound.
+
+    Each wire model is bounded exactly like the record field it feeds, but
+    a future mismatch must not raise a validation error carrying provider
+    bytes out of this boundary, so an unexpected rejection is recorded as
+    a client failure instead.
+    """
+    status = (
+        CompletionStatusV1.FAILED
+        if "error_code" in recorded
+        else CompletionStatusV1.COMPLETED
     )
-
-
-def _check_declared_length(declared: str | None) -> None:
-    if declared is None:
-        return
     try:
-        length = int(declared)
-    except ValueError:
-        raise _RequestFailure("response_invalid") from None
-    if length > MAX_RESPONSE_BYTES:
-        raise _RequestFailure("response_too_large")
-
-
-def _mapping(value: object) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise _RequestFailure("response_invalid")
-    return cast(dict[str, object], value)
-
-
-def _check_bytes(value: str, maximum: int, code: str) -> None:
-    try:
-        validate_utf8(value, maximum, "response")
-    except ValueError:
-        raise _RequestFailure(code) from None
-
-
-def _parse_reply(payload: object) -> _Reply:
-    envelope = _mapping(payload)
-    choices = envelope.get("choices")
-    if not isinstance(choices, list):
-        raise _RequestFailure("response_invalid")
-    choice_list = cast(list[object], choices)
-    if len(choice_list) != 1:
-        raise _RequestFailure("response_invalid")
-    choice = _mapping(choice_list[0])
-    content = _mapping(choice.get("message")).get("content")
-    if not isinstance(content, str):
-        raise _RequestFailure("response_invalid")
-    _check_bytes(content, MAX_RESPONSE_BYTES, "response_too_large")
-    finish_reason = choice.get("finish_reason")
-    if finish_reason is not None:
-        if not isinstance(finish_reason, str):
-            raise _RequestFailure("response_invalid")
-        _check_bytes(
-            finish_reason, _MAX_FINISH_REASON_BYTES, "response_invalid"
+        return CompletionV1.model_validate(
+            recorded
+            | {"item_id": item_id, "status": status, "latency_ms": latency_ms}
         )
-    usage = envelope.get("usage")
-    if usage is None:
-        return _Reply(content, finish_reason, None, None)
-    usage_map = _mapping(usage)
-    return _Reply(
-        content,
-        finish_reason,
-        _optional_token_count(usage_map, "prompt_tokens"),
-        _optional_token_count(usage_map, "completion_tokens"),
-    )
+    except ValidationError:
+        return CompletionV1(
+            item_id=item_id,
+            status=CompletionStatusV1.FAILED,
+            error_code="client_error",
+            latency_ms=latency_ms,
+        )
 
 
-def _optional_token_count(usage: dict[str, object], name: str) -> int | None:
-    value = usage.get(name)
-    if value is None:
+def _declared_length(response: http.client.HTTPResponse) -> int:
+    declared = response.getheader("Content-Length")
+    if declared is None:
+        return 0
+    try:
+        return int(declared)
+    except ValueError:
+        raise _RequestFailure(
+            "response_invalid", {"http_status": response.status}
+        ) from None
+
+
+def _error_body_code(
+    response: http.client.HTTPResponse, secret: str | None
+) -> str | None:
+    """Reads a bounded error body and keeps only its ``error.code``."""
+    try:
+        prefix = response.read(_MAX_ERROR_BODY_BYTES)
+        error = _ErrorReply.model_validate_json(prefix).error
+        return error.recorded_code(secret)
+    except (OSError, http.client.HTTPException, ValidationError):
         return None
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise _RequestFailure("response_invalid")
-    return value
+
+
+def _recorded_metadata(value: str | None, secret: str | None) -> str | None:
+    """Drops provider metadata that merely echoes the sent credential.
+
+    Every metadata field is provider-chosen and roomy enough to hold a
+    bearer token, so an endpoint that reflected the Authorization it was
+    sent would otherwise have it stored in a record.
+    """
+    return None if value == secret else value
+
+
+def _parse_reply(
+    body: bytes, status: dict[str, object], secret: str | None
+) -> dict[str, object]:
+    """Keeps content plus bounded provenance; in-band errors become failures.
+
+    The credential is passed in so that no provider-chosen metadata string
+    equal to it is recorded, however short and identifier-shaped it looks.
+    Response content is kept verbatim and is not filtered that way.
+    """
+    try:
+        envelope = _Envelope.model_validate_json(body)
+    except ValidationError:
+        raise _RequestFailure("response_invalid", status) from None
+    usage = envelope.usage or _Usage()
+    details = usage.completion_tokens_details or _TokenDetails()
+    recorded: dict[str, object] = status | {
+        "response_id": _recorded_metadata(envelope.id, secret),
+        "response_model": _recorded_metadata(envelope.model, secret),
+        "provider": _recorded_metadata(envelope.provider, secret),
+        "system_fingerprint": _recorded_metadata(
+            envelope.system_fingerprint, secret
+        ),
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "reasoning_tokens": details.reasoning_tokens,
+        "cost_usd": usage.cost,
+    }
+    if envelope.error is not None:
+        code = envelope.error.recorded_code(secret)
+        raise _RequestFailure(
+            "provider_error", recorded | {"provider_error_code": code}
+        )
+    if envelope.choices is None or len(envelope.choices) != 1:
+        raise _RequestFailure("response_invalid", recorded)
+    choice = envelope.choices[0]
+    message = choice.message
+    recorded |= {
+        "finish_reason": _recorded_metadata(choice.finish_reason, secret),
+        "native_finish_reason": _recorded_metadata(
+            choice.native_finish_reason, secret
+        ),
+        "reasoning_present": any(
+            bool(value)
+            for value in (
+                message.reasoning,
+                message.reasoning_content,
+                message.reasoning_details,
+            )
+        ),
+    }
+    if choice.error is not None or choice.finish_reason == "error":
+        code = (
+            None if choice.error is None else choice.error.recorded_code(secret)
+        )
+        raise _RequestFailure(
+            "provider_error", recorded | {"provider_error_code": code}
+        )
+    if not message.content:
+        raise _RequestFailure("empty_content", recorded)
+    return recorded | {"response_text": message.content}

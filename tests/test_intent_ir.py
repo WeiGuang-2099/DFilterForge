@@ -8,6 +8,7 @@ from dfilterforge.intent_ir import AnyOf
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import MissingSlot
 from dfilterforge.intent_ir import Not
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
@@ -100,6 +101,45 @@ def test_ir_is_frozen_and_rejects_unknown_fields() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("value", "accepted"),
+    [
+        ("bacapp.IPV4", True),
+        ("diameter.TCP-SYN", True),
+        ("_ws.expert.message", True),
+        ("29west", True),
+        ("2dparityfec", True),
+        ("acp133.Classification", True),
+        ("5co_legacy.udp", True),
+        ("tcp", True),
+        ("a" * 256, True),
+        ("tcp.", False),
+        ("tcp..port", False),
+        (".tcp", False),
+        ("-a", False),
+        ("a-", False),
+        ("a b", False),
+        ("tcp&&udp", False),
+        ("(tcp)", False),
+        ("tcp==1", False),
+        ("", False),
+        ("a" * 257, False),
+        ("tcp\n", False),
+        ("\u0131", False),
+        ("\uff54\uff43\uff50", False),
+    ],
+)
+def test_field_names_follow_the_catalog_grammar(
+    value: str, accepted: bool
+) -> None:
+    if not accepted:
+        with pytest.raises(ValidationError):
+            Predicate(field=value, operator=Operator.EXISTS)
+        return
+
+    assert Predicate(field=value, operator=Operator.EXISTS).field == value
+
+
 def test_ir_rejects_bad_field_and_single_child_boolean_group() -> None:
     with pytest.raises(ValidationError, match="Wireshark-style"):
         Predicate(field="Invalid Field", operator=Operator.EXISTS)
@@ -118,6 +158,74 @@ def test_ir_rejects_bad_field_and_single_child_boolean_group() -> None:
                 }
             }
         )
+
+
+_SLOT_IR = {
+    "ir_schema_version": "1.0",
+    "scope": "packet",
+    "expression": {
+        "kind": "predicate",
+        "field": "tcp.port",
+        "operator": "exists",
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            {
+                "status": "needs_clarification",
+                "clarifying_question": "Which port?",
+                "missing_slots": ["port"],
+            },
+            "",
+        ),
+        (
+            {
+                "status": "ready",
+                "intent_ir": _SLOT_IR,
+                "missing_slots": ["port"],
+            },
+            "only for needs_clarification",
+        ),
+        (
+            {"status": "not_expressible", "missing_slots": ["port"]},
+            "only for needs_clarification",
+        ),
+        (
+            {
+                "status": "needs_clarification",
+                "clarifying_question": "Which port?",
+                "missing_slots": ["port", "port"],
+            },
+            "must be unique",
+        ),
+        (
+            {
+                "status": "needs_clarification",
+                "clarifying_question": "Which port?",
+                "missing_slots": ["port number"],
+            },
+            "Input should be",
+        ),
+    ],
+)
+def test_missing_slots_only_accompany_clarification(
+    payload: dict[str, object], message: str
+) -> None:
+    if not message:
+        result = GenerationResultV1.model_validate(payload)
+
+        assert result.missing_slots == (MissingSlot.PORT,)
+        assert (
+            GenerationResultV1.model_validate_json(result.model_dump_json())
+            == result
+        )
+        return
+    with pytest.raises(ValidationError, match=message):
+        GenerationResultV1.model_validate(payload)
 
 
 def test_not_expressible_rejects_question_payload() -> None:

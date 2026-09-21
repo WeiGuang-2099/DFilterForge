@@ -2,6 +2,7 @@
 
 import json
 
+from pydantic import ValidationError
 import pytest
 
 from dfilterforge.errors import DFilterForgeError
@@ -20,6 +21,7 @@ from dfilterforge.generation import RetrievalV1
 from dfilterforge.generation import RetrievedFieldV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
+from dfilterforge.intent_ir import MissingSlot
 
 _CONDITIONS = (
     (OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE, "C1"),
@@ -54,7 +56,10 @@ _READY_IR = {
         "value": 443,
     },
 }
-_DISPLAY_OK = '{"schema_version":"direct-filter/1.0","display_filter":"tcp.dstport == 443"}'
+_DISPLAY_OK = (
+    '{"schema_version":"direct-filter/1.0","status":"ready",'
+    '"display_filter":"tcp.dstport == 443"}'
+)
 _TYPED_OK = json.dumps(
     {
         "schema_version": "1.0",
@@ -74,27 +79,67 @@ _MALFORMED = (
     "[]",
     "null",
     "{}",
-    '{"schema_version":"direct-filter/1.0","display_filter":"tcp","x":1}',
-    '{"schema_version":"direct-filter/2.0","display_filter":"tcp"}',
+    '{"schema_version":"direct-filter/1.0","status":"ready",'
+    '"display_filter":"tcp","x":1}',
+    '{"schema_version":"direct-filter/2.0","status":"ready",'
+    '"display_filter":"tcp"}',
     "[" * 5000,
-    '{"schema_version":"direct-filter/1.0","display_filter":"'
-    + "a" * MAX_RESPONSE_BYTES
-    + '"}',
+    '{"schema_version":"direct-filter/1.0","status":"ready",'
+    '"display_filter":"' + "a" * MAX_RESPONSE_BYTES + '"}',
 )
+_STATUS_ROWS = (
+    ("ready", True, None, True),
+    ("ready", False, None, False),
+    ("ready", True, "Which port?", False),
+    ("needs_clarification", False, "Which port?", True),
+    ("needs_clarification", False, None, False),
+    ("needs_clarification", True, "Which port?", False),
+    ("not_expressible", False, None, True),
+    ("not_expressible", True, None, False),
+    ("not_expressible", False, "Which port?", False),
+)
+
+
+def _fields_for(
+    retrieval: RetrievalV1,
+) -> tuple[RetrievedFieldV1, ...] | None:
+    return _FIELDS if retrieval is RetrievalV1.LEXICAL else None
 
 
 def _item(
     item_id: str = "item-1",
     *,
-    retrieval: RetrievalV1 = RetrievalV1.NONE,
+    retrieved_fields: tuple[RetrievedFieldV1, ...] | None = None,
     intent: str = "Show TCP SYN packets sent to port 443",
 ) -> GenerationInputV1:
     return GenerationInputV1(
         item_id=item_id,
         intent=intent,
         user_assumptions=("Packet scope.",),
-        retrieved_fields=_FIELDS if retrieval is RetrievalV1.LEXICAL else (),
+        retrieved_fields=retrieved_fields,
         split="dev",
+    )
+
+
+def _status_envelope(
+    output_contract: OutputContractV1,
+    status: str,
+    payload: bool,
+    question: str | None,
+    slots: tuple[str, ...] = (),
+) -> str:
+    typed = output_contract is OutputContractV1.TYPED_IR
+    key = "intent_ir" if typed else "display_filter"
+    value: object = _READY_IR if typed else "tcp.dstport == 443"
+    return json.dumps(
+        {
+            "schema_version": "1.0" if typed else "direct-filter/1.0",
+            "status": status,
+            "assumptions": [],
+            "clarifying_question": question,
+            "missing_slots": list(slots),
+            key: value if payload else None,
+        }
     )
 
 
@@ -104,10 +149,23 @@ def _batch(
     *items: GenerationInputV1,
 ) -> PreparedBatchV1:
     return prepare_batch(
-        items or (_item(retrieval=retrieval),),
+        items or (_item(retrieved_fields=_fields_for(retrieval)),),
         output_contract=output_contract,
         retrieval=retrieval,
     )
+
+
+def _system(output_contract: OutputContractV1, retrieval: RetrievalV1) -> str:
+    return _batch(output_contract, retrieval).prompts[0].messages[0].content
+
+
+def _rule_line(system: str) -> str:
+    (line,) = [
+        text
+        for text in system.splitlines()
+        if text.startswith("status is ready, needs_clarification,")
+    ]
+    return line
 
 
 def _user_payload(prompt: PreparedPromptV1) -> dict[str, object]:
@@ -163,8 +221,12 @@ def test_prepared_batches_round_trip_through_json(
     batch = _batch(
         output_contract,
         retrieval,
-        _item("first", retrieval=retrieval),
-        _item("second", retrieval=retrieval, intent="Show DNS responses"),
+        _item("first", retrieved_fields=_fields_for(retrieval)),
+        _item(
+            "second",
+            retrieved_fields=_fields_for(retrieval),
+            intent="Show DNS responses",
+        ),
     )
 
     encoded = batch.model_dump_json()
@@ -183,8 +245,8 @@ def test_prepared_batches_round_trip_through_json(
 
 def test_prompt_preparation_is_deterministic() -> None:
     items = (
-        _item("a", retrieval=RetrievalV1.LEXICAL),
-        _item("b", retrieval=RetrievalV1.LEXICAL, intent="Match DNS"),
+        _item("a", retrieved_fields=_FIELDS),
+        _item("b", retrieved_fields=_FIELDS, intent="Match DNS"),
     )
 
     first = _batch(OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL, *items)
@@ -199,22 +261,149 @@ def test_prompt_preparation_is_deterministic() -> None:
     [OutputContractV1.DISPLAY_FILTER, OutputContractV1.TYPED_IR],
 )
 @pytest.mark.parametrize(
-    ("retrieval", "item_retrieval", "code"),
+    ("retrieval", "retrieved_fields", "code"),
     [
-        (RetrievalV1.LEXICAL, RetrievalV1.NONE, "retrieval_required"),
-        (RetrievalV1.NONE, RetrievalV1.LEXICAL, "retrieval_forbidden"),
+        (RetrievalV1.LEXICAL, None, "retrieval_required"),
+        (RetrievalV1.NONE, (), "retrieval_forbidden"),
+        (RetrievalV1.NONE, _FIELDS, "retrieval_forbidden"),
     ],
 )
 def test_retrieval_treatment_must_match_the_supplied_context(
     output_contract: OutputContractV1,
     retrieval: RetrievalV1,
-    item_retrieval: RetrievalV1,
+    retrieved_fields: tuple[RetrievedFieldV1, ...] | None,
     code: str,
 ) -> None:
     with pytest.raises(GenerationError) as caught:
-        _batch(output_contract, retrieval, _item(retrieval=item_retrieval))
+        _batch(
+            output_contract,
+            retrieval,
+            _item(retrieved_fields=retrieved_fields),
+        )
 
     assert caught.value.code == code
+
+
+@pytest.mark.parametrize(
+    "output_contract",
+    [OutputContractV1.DISPLAY_FILTER, OutputContractV1.TYPED_IR],
+)
+def test_lexical_prompt_may_carry_an_empty_field_list(
+    output_contract: OutputContractV1,
+) -> None:
+    batch = _batch(
+        output_contract, RetrievalV1.LEXICAL, _item(retrieved_fields=())
+    )
+
+    prompt = batch.prompts[0]
+    system = prompt.messages[0].content
+    assert _user_payload(prompt)["retrieved_fields"] == []
+    assert prompt.retrieved_fields == ()
+    assert "use only those field names" in system
+    assert "use standard Wireshark field names" in system
+    assert PreparedBatchV1.model_validate_json(batch.model_dump_json()) == batch
+    document = prompt.model_dump(mode="json")
+    payload = _user_payload(prompt)
+    del payload["retrieved_fields"]
+    document["messages"][1]["content"] = "INPUT_JSON\n" + json.dumps(payload)
+    with pytest.raises(ValueError, match="differ from prompt field context"):
+        PreparedPromptV1.model_validate(document)
+
+
+def test_system_prompts_state_identical_abstention_rules() -> None:
+    direct = _system(OutputContractV1.DISPLAY_FILTER, RetrievalV1.LEXICAL)
+    typed = _system(OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL)
+    clause = direct.splitlines()[-1]
+
+    # The two contracts must state one rule set, differing only in the name
+    # of the payload each of them carries.
+    assert _rule_line(direct).replace("display_filter", "intent_ir") == (
+        _rule_line(typed)
+    )
+    for system in (direct, typed):
+        assert "missing_slots is [] unless status is needs_clarification" in (
+            system
+        )
+        assert all(slot.value in system for slot in MissingSlot)
+        assert system.endswith("\n" + clause)
+    assert "use only those field names" in clause
+    assert (
+        "When that list is empty, no catalog field matched; use standard "
+        "Wireshark field names." in clause
+    )
+    assert clause not in _system(
+        OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE
+    )
+
+
+@pytest.mark.parametrize(
+    "output_contract",
+    [OutputContractV1.DISPLAY_FILTER, OutputContractV1.TYPED_IR],
+)
+@pytest.mark.parametrize(
+    ("status", "payload", "question", "accepted"), _STATUS_ROWS
+)
+def test_both_contracts_share_one_status_channel(
+    output_contract: OutputContractV1,
+    status: str,
+    payload: bool,
+    question: str | None,
+    accepted: bool,
+) -> None:
+    text = _status_envelope(output_contract, status, payload, question)
+    ready_with_slots = _status_envelope(
+        output_contract, "ready", True, None, ("port",)
+    )
+
+    if accepted:
+        result = parse_response(output_contract, text)
+        assert result.status == GenerationStatus(status)
+        assert result.clarifying_question == question
+        assert result.missing_slots == ()
+    else:
+        with pytest.raises(GenerationError) as caught:
+            parse_response(output_contract, text)
+        assert caught.value.code == "response_invalid"
+    with pytest.raises(GenerationError) as slotted:
+        parse_response(output_contract, ready_with_slots)
+
+    assert slotted.value.code == "response_invalid"
+
+
+def test_retrieved_fields_keep_catalog_text_verbatim() -> None:
+    protocol = RetrievedFieldV1(
+        rank=1,
+        abbreviation="usbdfu",
+        field_type=FieldType.PROTOCOL,
+        protocol="usbdfu",
+        display_name="USB Device Firmware Upgrade ",
+    )
+    mixed_case = RetrievedFieldV1(
+        rank=1,
+        abbreviation="bacapp.IPV4",
+        field_type=FieldType.IPV4,
+        protocol="bacapp",
+        display_name="IPV4",
+    )
+
+    assert protocol.display_name == "USB Device Firmware Upgrade "
+    assert mixed_case.abbreviation == "bacapp.IPV4"
+    with pytest.raises(ValidationError):
+        RetrievedFieldV1(
+            rank=1,
+            abbreviation="usbdfu",
+            field_type=FieldType.PROTOCOL,
+            protocol="usbdfu",
+            display_name="   ",
+        )
+    with pytest.raises(ValidationError):
+        RetrievedFieldV1(
+            rank=1,
+            abbreviation="tcp.",
+            field_type=FieldType.PROTOCOL,
+            protocol="tcp",
+            display_name="Transmission Control Protocol",
+        )
 
 
 def test_batches_reject_empty_input_and_duplicate_ids() -> None:
@@ -287,7 +476,9 @@ def test_parse_response_accepts_only_its_own_exact_envelope() -> None:
     direct = parse_response(OutputContractV1.DISPLAY_FILTER, _DISPLAY_OK)
     typed = parse_response(OutputContractV1.TYPED_IR, _TYPED_OK)
 
-    assert direct == DirectFilterResultV1(display_filter="tcp.dstport == 443")
+    assert direct == DirectFilterResultV1(
+        status=GenerationStatus.READY, display_filter="tcp.dstport == 443"
+    )
     assert isinstance(typed, GenerationResultV1)
     assert typed.status is GenerationStatus.READY
     assert typed.intent_ir is not None
@@ -307,6 +498,7 @@ def test_display_filter_envelope_rejects_unsafe_filters(
     text = json.dumps(
         {
             "schema_version": "direct-filter/1.0",
+            "status": "ready",
             "display_filter": display_filter,
         }
     )
@@ -364,9 +556,9 @@ def test_blanket_clarification_is_representable_but_never_ready() -> None:
     batch = _batch(
         OutputContractV1.TYPED_IR,
         RetrievalV1.LEXICAL,
-        _item("one", retrieval=RetrievalV1.LEXICAL, intent="Show TCP SYN"),
-        _item("two", retrieval=RetrievalV1.LEXICAL, intent="Show DNS queries"),
-        _item("three", retrieval=RetrievalV1.LEXICAL, intent="Show port 443"),
+        _item("one", retrieved_fields=_FIELDS, intent="Show TCP SYN"),
+        _item("two", retrieved_fields=_FIELDS, intent="Show DNS queries"),
+        _item("three", retrieved_fields=_FIELDS, intent="Show port 443"),
     )
     blanket = json.dumps(
         {
@@ -393,3 +585,21 @@ def test_blanket_clarification_is_representable_but_never_ready() -> None:
         GenerationStatus.NEEDS_CLARIFICATION
     }
     assert all(result.intent_ir is None for result in typed)
+
+    direct = parse_response(
+        OutputContractV1.DISPLAY_FILTER,
+        json.dumps(
+            {
+                "schema_version": "direct-filter/1.0",
+                "status": "needs_clarification",
+                "assumptions": [],
+                "clarifying_question": "Can you clarify what you want?",
+                "missing_slots": [],
+                "display_filter": None,
+            }
+        ),
+    )
+
+    assert isinstance(direct, DirectFilterResultV1)
+    assert direct.status is GenerationStatus.NEEDS_CLARIFICATION
+    assert direct.display_filter is None

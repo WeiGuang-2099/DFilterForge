@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "ablation_id": "004-addendum-raw-filter-oracle",
+  "hypothesis": "Scoring a raw display-filter candidate through the shared oracle preserves the per-probe reference run and independent label check that a candidate-only scorer loop drops.",
+  "full_revision": "1c64140+working-tree",
+  "simplified_patch_hash": "475fb787f6399108f7805d5608b02ba1279a1319d692c77744c572f9ff2e6403",
+  "input_hashes": [
+    "0c1fe7cf432e81284de9f2b7e5ea109ccaafe4e8f8a2f68eadb7bd24885b990c",
+    "7fccd849184c6d0cd463527e2d783daca84c887208d26b765abd7eea635a93fe",
+    "adb8d1e9e573055da843eb533c07a44ef13eece70541ecd6dec2e318f4db4aa9",
+    "f849519f7813b9a20a467c5a61f41bb346e1a61097697220b175b9b1d94a64ec"
+  ],
+  "seeds": [
+    17,
+    42,
+    2026
+  ],
+  "full_metrics": {
+    "probe_count": 3,
+    "strong_exact_count": 3,
+    "empty_set_coincidence_count": 0,
+    "macro_precision": 1.0,
+    "macro_recall": 1.0,
+    "macro_f1": 1.0,
+    "macro_jaccard": 1.0,
+    "p50_runtime_ms": 59.93407899995873,
+    "p95_runtime_ms": 65.13541999993322
+  },
+  "simplified_metrics": {
+    "probe_count": 3,
+    "strong_exact_count": 3,
+    "empty_set_coincidence_count": 0,
+    "macro_precision": 1.0,
+    "macro_recall": 1.0,
+    "macro_f1": 1.0,
+    "macro_jaccard": 1.0,
+    "p50_runtime_ms": 60.47390699995958,
+    "p95_runtime_ms": 61.5821630000255
+  },
+  "full_complexity": {
+    "module_count": 1,
+    "dependency_count": 0,
+    "public_symbol_count": 5
+  },
+  "simplified_complexity": {
+    "module_count": 1,
+    "dependency_count": 0,
+    "public_symbol_count": 0
+  },
+  "decision": "keep_full",
+  "rationale": "The candidate-only loop charges a corrupted probe label to the model and never verifies a reference, so the shared oracle keeps its one extra tshark call per probe."
+}

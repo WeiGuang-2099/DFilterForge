@@ -21,6 +21,7 @@ from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.field_catalog import FieldCatalogV1
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.live import evaluate_live
 from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.runner import TsharkRunner
@@ -81,7 +82,7 @@ class ExecutableReplayResultV1(FrozenModel):
     reference_verified: Literal[True] = True
     exact: bool
     probes: tuple[ReplayProbeResultV1, ...] = Field(min_length=1)
-    trace: EvaluationTraceV1
+    trace: EvaluationTraceV1 | None = None
 
     @model_validator(mode="after")
     def validate_result(self) -> "ExecutableReplayResultV1":
@@ -91,10 +92,12 @@ class ExecutableReplayResultV1(FrozenModel):
             raise ValueError("replay probe IDs must be unique")
         if self.exact != all(probe.exact for probe in self.probes):
             raise ValueError("exact does not match replay probes")
-        if self.trace.run_id != self.run_id:
-            raise ValueError("trace run ID does not match replay")
-        if tuple(probe.probe_id for probe in self.trace.probes) != probe_ids:
-            raise ValueError("trace probes do not match replay probes")
+        if self.trace is not None:
+            if self.trace.run_id != self.run_id:
+                raise ValueError("trace run ID does not match replay")
+            trace_ids = tuple(probe.probe_id for probe in self.trace.probes)
+            if trace_ids != probe_ids:
+                raise ValueError("trace probes do not match replay probes")
         return self
 
 
@@ -154,7 +157,7 @@ def _replay_probe(
 def replay_live(
     receipt: EvaluationReceiptV1,
     spec: SemanticSpecV1,
-    candidate_ir: IntentIrV1,
+    candidate: IntentIrV1 | str,
     capture_root: Path,
     *,
     catalog: FieldCatalogV1 | None = None,
@@ -164,30 +167,52 @@ def replay_live(
 
     The receipt and specification must agree structurally. The candidate IR is
     rebound to the current frozen catalog and must compile to the exact filter
-    stored in the receipt. Data, receipt, packet-set, and recorded environment
-    hashes are intentionally not compared here.
+    stored in the receipt. A string candidate is re-executed only when it is
+    byte-identical to the receipt's recorded candidate_filter, and produces no
+    predicate trace because there is no typed expression to decompose. Data,
+    receipt, packet-set, and recorded environment hashes are intentionally not
+    compared here.
     """
     _validate_receipt_spec(receipt, spec)
     active_runner = runner if runner is not None else TsharkRunner()
-    bound_catalog = bind_catalog(
-        active_runner, (candidate_ir, spec.canonical_ir), catalog
-    )
-    if compile_intent(candidate_ir, bound_catalog) != receipt.candidate_filter:
-        raise ReplayError(
-            "candidate_filter_mismatch",
-            "Candidate IR does not compile to the recorded filter",
+    trace: EvaluationTraceV1 | None
+    if isinstance(candidate, str):
+        if candidate != receipt.candidate_filter:
+            raise ReplayError(
+                "candidate_filter_mismatch",
+                "Candidate filter differs from the recorded filter",
+            )
+        replayed_receipt, environment = evaluate_live(
+            spec,
+            candidate,
+            capture_root,
+            run_id=receipt.run_id,
+            created_at=receipt.created_at,
+            code_revision=receipt.code_revision,
+            catalog=catalog,
+            runner=active_runner,
         )
-
-    replayed_receipt, environment, trace = evaluate_live_with_trace(
-        spec,
-        candidate_ir,
-        capture_root,
-        run_id=receipt.run_id,
-        created_at=receipt.created_at,
-        code_revision=receipt.code_revision,
-        catalog=bound_catalog,
-        runner=active_runner,
-    )
+        trace = None
+    else:
+        bound_catalog = bind_catalog(
+            active_runner, (candidate, spec.canonical_ir), catalog
+        )
+        recompiled = compile_intent(candidate, bound_catalog)
+        if recompiled != receipt.candidate_filter:
+            raise ReplayError(
+                "candidate_filter_mismatch",
+                "Candidate IR does not compile to the recorded filter",
+            )
+        replayed_receipt, environment, trace = evaluate_live_with_trace(
+            spec,
+            candidate,
+            capture_root,
+            run_id=receipt.run_id,
+            created_at=receipt.created_at,
+            code_revision=receipt.code_revision,
+            catalog=bound_catalog,
+            runner=active_runner,
+        )
     if replayed_receipt.run_id != receipt.run_id or len(
         replayed_receipt.probes
     ) != len(receipt.probes):

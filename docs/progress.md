@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-09-15
+Last updated: 2026-09-21
 
 ## Current slice
 
@@ -94,11 +94,46 @@ directory and are not part of the uploadable project evidence.
 - No model inference or training has run yet. Nothing in this entry is a
   measured result.
 
+## Model evaluation path: 2026-09-21
+
+- The field-name grammar accepts all 266,363 distinct names in the image
+  catalog. The 1c64140 grammar accepted 149,890 of them, and retrieval raised
+  on 10 of the 16 dev items at top_k 16.
+- Retrieval ranking at k=16: dev items with every gold field in context went
+  from 1/16 to 10/16, and gold fields found from 4/36 to 27/36. The test split
+  was measured once, after the rules were frozen on dev, and is reported as
+  aggregates only: 2/32 to 12/32 and 10/68 to 44/68. The receipts are under
+  `docs/decisions/evidence/`.
+- The runner classifies tshark exit status and reports an unknown field from
+  tshark's own diagnosis; all six exit-status witnesses were `tshark_failed`
+  before (ablation 001 addendum).
+- `dfilterforge score` classifies stored completions into the six outcomes,
+  verifies gold before it reads any answer, and reproduces its output with
+  `--check` without writing (`docs/decisions/offline-scoring.md`).
+- The gold-derived reference control is strong exact on 16/16 items in each
+  of C1 to C4, and the authored mutations are silent-wrong on 16/16 in C1 and
+  C2. `--check` reproduces both with no differences.
+- The dev prompts for C1 to C4 and their prepare receipt are frozen under
+  `docs/results/dev-qwen3-32b-2026-09-21/`, prepared against the image
+  catalog; the gzip archive on the host gives the same four prompt files byte
+  for byte. A later docstring edit to `scripts/model_run.py` made the call
+  refuse the receipt (`prepare_code_mismatch`), so it was re-frozen the same
+  UTC day with identical prompt bytes and both controls re-scored; a host
+  test now fails whenever a file such a receipt hashes changes before its call.
+- The Docker Python suite passed 796 tests with 96.07 percent total
+  branch-aware coverage; the freeze guard skips there, as the image carries
+  no `docs/` tree, and passes on the host.
+- CI has a step that re-scores every committed output directory offline with
+  `--check`; it has not yet run on a hosted runner.
+- No model has run. Nothing here is a model result, and with 8 ready cases
+  every protocol comparison will be inconclusive.
+
 ## Planned next
 
-1. By 2026-09-21: one hosted model on the dev split under all four conditions,
-   scored offline in the lab container, with the table committed and one real
-   number in the README.
+1. Run qwen/qwen3-32b, hosted and pinned to deepinfra, on the dev split under
+   all four conditions, score it offline in the lab container, and commit the
+   table. The prompts and controls are frozen; the README's Hosted model run
+   section lists the remaining steps.
 2. Boundary witnesses, shortcut policy, non-ready gold, frozen test set
    (`docs/protocol.md` splits table).
 3. Counterexample repair with three feedback arms; four hosted models on the
@@ -114,6 +149,8 @@ directory and are not part of the uploadable project evidence.
 - Model compile validity, silent-wrong rate, prompt and retrieval baselines,
   SFT, DPO, and GRPO remain unmeasured. The complete Pilot Go/No-Go decision is
   still unverified.
+- The 12+4+4 dev split (8+0+0 built) and the frozen test hashes do not exist
+  yet, so false-ready rate and slot match are unmeasurable.
 - The complete 50-capture by 150-filter stability gate remains unverified, and
   the standalone hash-validation phase was intentionally not run.
 - The Web remains recorded-only. Linux CI teardown and the current production

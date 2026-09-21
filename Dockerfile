@@ -187,7 +187,7 @@ RUN uv sync --frozen --extra dev
 
 USER 10001:10001
 ENTRYPOINT ["uv", "run", "--frozen", "--no-sync", "--extra", "dev"]
-CMD ["pytest", "--cov=dfilterforge", "--cov-branch", "-o", "cache_dir=/tmp/pytest-cache"]
+CMD ["pytest", "--cov", "--cov-branch", "-o", "cache_dir=/tmp/pytest-cache"]
 
 FROM test AS dev
 

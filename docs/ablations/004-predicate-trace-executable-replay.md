@@ -60,3 +60,60 @@ reference.
 `keep_full`. The variants are not behaviorally equivalent: Full detects real
 reference drift and supplies complete dual-sided diagnosis. The measured
 stability gate and standalone hash validation remain intentionally unverified.
+
+## Extension 2026-09: raw display-filter candidates
+
+`evaluate_live` now also scores a candidate that is a display-filter string,
+so the rule applies to it. The rejected alternative is
+`_simplified_filter_eval` in `scripts/raw_filter_ablation.py`: a scorer-side
+loop that runs only the candidate against the recorded labels. Its measured
+cost, from `evidence/004-raw-filter-oracle.json` (measured 2026-09-19 at
+revision `1c64140+working-tree`, five witnesses, one run each): it charged the
+altered `semantic-11` label to the model where Full stopped with
+`reference_label_mismatch` after one call, and it verified no reference on any
+witness. Both variants agreed on the two honest specifications, and Full paid
+16 tshark calls against 10. A catalog-binding variant rejects `ssl` with
+`unknown_field`; tshark executes it with 0 frames. `keep_full`.
+
+## Extension 2026-09: replaying a recorded filter string
+
+Scope: replay for receipts that carry no typed IR, so `replay-run` has
+nothing to recompile. The decision above is unchanged; this only adds the
+string path to it.
+
+Full is `replay_live` given a display-filter string: it compares that string
+byte for byte with the receipt's recorded `candidate_filter` before anything
+runs, then re-executes reference and candidate through the shared oracle.
+The rejected alternative is `_simplified_string_replay` in
+`scripts/raw_filter_ablation.py`, which re-runs only the supplied string and
+compares its frames with the recorded candidate frames.
+
+Measured 2026-09-19 at revision `1c64140+working-tree`, tshark 4.6.8, case
+`tcp-expiring-ttl` with three probes, one run each, from
+`evidence/004-raw-filter-replay.json`.
+
+| Witness | Full | Simplified | Calls (F/S) |
+| --- | --- | --- | ---: |
+| Honest receipt | exact 3/3, reference run | exact 3/3, no reference | 6/3 |
+| Corrupted label | `reference_label_mismatch` | candidate exact 3/3 | 1/3 |
+| Tampered `udp` | `candidate_filter_mismatch` | 3 probes wrong | 0/3 |
+
+The corrupted-label witness added one frame to the first probe's independent
+label on both the specification and the receipt, and changed nothing else, so
+the manifest check still passed and the corrupted label is the only drift the
+witness carries.
+
+Predicate traces are outside that table because the string path has none to
+compare. Full replayed the same case once through the typed-IR path in the
+same run, against a receipt recorded from the canonical IR, because the
+compiler parenthesises that expression and the recorded string does not.
+`typed_ir_replay` in the evidence file records `trace_present`, reference
+verified, 3/3 exact in 6 tshark calls. On the string path Full recorded
+`full_trace_present` false, and the simplified loop returns rows with no
+trace field at all, so it has none by construction.
+
+Full is the only variant that refuses a string the receipt does not vouch
+for, and it refuses it before any capture is opened. The measured cost is
+one extra tshark call per probe, 6 against 3 on the honest witness, plus the
+loss of the predicate trace, which a raw filter has no expression to
+produce. `keep_full`; no new ablation number.

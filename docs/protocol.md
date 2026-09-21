@@ -1,17 +1,16 @@
 # Model evaluation protocol (v1, draft)
 
-This page is the whole protocol. It replaces the earlier pilot PRD. Anything
-not written here is not part of the protocol. Frozen items are marked; the
-rest is filled in as the corresponding step lands.
+This page is the whole protocol. It replaces the earlier pilot PRD. Anything not
+written here is not part of it; the rest is filled in as each step lands.
 
 ## Task
 
-Given a natural-language request about packets, produce either a Wireshark
-display filter (direct-filter conditions) or a typed intent IR that the
-deterministic compiler turns into one (typed-IR conditions), or a
-`needs_clarification` / `not_expressible` response. Every ready answer is
-executed by pinned tshark 4.6.8 on three probe captures whose expected frames
-were labelled from packet recipes, never from a filter string.
+Turn a natural-language packet request into one JSON envelope; the two contracts
+share every key but the ready payload. `ready` carries a display filter (C1/C2)
+or a typed IR the compiler turns into one (C3/C4); `needs_clarification` carries
+one question and `missing_slots` from the closed list address, direction, field,
+port, protocol, value; `not_expressible` neither. Ready answers run on pinned
+tshark 4.6.8 over three probes labelled by packet recipes, not filter strings.
 
 ## Conditions
 
@@ -23,81 +22,99 @@ were labelled from packet recipes, never from a filter string.
 | C4 | typed IR | lexical top-k over the frozen field catalog |
 
 Primary comparison: C4 versus C2 (does a typed contract help when both have
-field context). Secondary: C2 versus C1 and C4 versus C3 (does retrieval
-help). Repair (one round of structured counterexample feedback) is an
-additional column on top of C4, with two control arms: a bare "your filter
-was incorrect" message and a plain resample at the same temperature.
+field context); secondary, C2 versus C1 and C4 versus C3 (does retrieval help).
+C2 and C4 see one [ranked list](decisions/field-retrieval-ranking.md) per item,
+built from model inputs, never evaluator gold; an unmatched item is kept with an
+empty list. Repair adds one C4 counterexample round against a bare "your filter
+was incorrect" arm and a same-temperature resample.
 
 ## Splits
 
-| Split | Ready cases | needs_clarification | not_expressible | Paraphrases per case |
+| Split | Ready cases (built / target) | needs_clarification | not_expressible | Paraphrases |
 | --- | ---: | ---: | ---: | ---: |
-| dev | 12 | 4 | 4 | 2 |
-| test (frozen) | 40 | 8 | 8 | 2 |
+| dev | 8 / 12 | 0 / 4 | 0 / 4 | 2 |
+| test (freeze pending) | 16 / 40 | 0 / 8 | 0 / 8 | 2 |
 | train (synthetic, models only) | about 1,000 to 1,500 | about 15 percent non-ready | | 3 |
 
-Test captures use seeds that never appear in dev or train. Canonical IR
-hashes, paraphrase families, capture seeds and capture bytes are disjoint
-across splits; a test asserts this. Test input hashes are recorded below once
-frozen and no test item is sent to any model before that commit.
-
-Frozen test hashes: not yet frozen.
+Canonical IR hashes, paraphrase families, capture seeds and bytes are disjoint
+across splits; a test asserts it for probes only. Test input hashes land here
+when frozen, before any test item is sent. The first dev run, on qwen/qwen3-32b,
+is 8 cases x 2 paraphrases x 4 conditions = 64 completions: false-ready rate,
+slot match and repair@1 are not yet measurable, over-abstention is.
 
 ## Metrics (per condition, per model)
 
-- compile validity: the output parses, every field exists in the frozen
-  catalog with a compatible type and operator, and tshark accepts the filter.
-- strong exact: the candidate frame set equals the labelled set on all three
-  probes, with at least one non-empty expected set (empty-equals-empty is
-  excluded).
-- silent-wrong: compiles and runs, but at least one probe disagrees. Reported
-  both as a share of all outputs and as a share of executable outputs.
-- repair@1: share of silent-wrong or invalid items that become strong exact
-  after one feedback round; feedback comes from a fourth probe that is never
-  used for scoring.
-- abstention: false-ready rate on non-ready gold, over-abstention rate on
-  ready gold, and slot match (the model's missing_slots intersects the gold
-  slot set) for clarification cases. No human rubric.
-- cost and latency per item from provider usage fields.
+Every item has exactly one outcome: `provider_failed` (including a provider
+error or empty content inside an HTTP 200 response), `malformed`, `abstained`,
+`invalid`, `silent_wrong` or `strong_exact`. All items are denominators.
 
-The unit of analysis is the canonical case; paraphrases are averaged inside a
-case. Intervals are case-level bootstrap (1,000 resamples). A comparison with
-fewer than 10 discordant cases is reported as inconclusive. Provider failures
-and malformed outputs are counted, never dropped.
+- compile validity: the output parses under its contract and pinned tshark
+  accepts and runs it; a rejected filter exits 4 ([ablation
+  001](ablations/001-bounded-tshark-runner.md)). A typed IR must bind every
+  field in the frozen catalog with exact case and pass type, operator and value
+  checks; a wrong-case field is invalid, not malformed. A display filter reaches
+  tshark unchanged with no catalog, type or operator check, so non-catalog names
+  it accepts (`ssl`) are valid; one over 4 KiB or with a C0 control character is
+  malformed, a compiled filter over 8 KiB invalid.
+- strong exact: the candidate frame set equals the labelled set on all three
+  probes, with at least one non-empty expected set.
+- silent-wrong: compiles and runs, but at least one probe disagrees. Reported
+  over all items and over compile-valid items.
+- repair@1: share of silent-wrong or invalid items that become strong exact
+  after one feedback round, fed by a fourth unscored probe.
+- abstention (both contracts, no human rubric): over-abstention on ready gold;
+  false-ready, slot match (missing_slots meets gold slots) need non-ready gold.
+- field context (C2 and C4): share of cases, paraphrases averaged, with every
+  gold field in the retrieved list, beside that condition's scores; a non-empty
+  list limits the prompt to its names, so C2-C1 and C4-C3 are read against it.
+- cost per item from provider usage fields and the per-token prices recorded
+  with the run, a lower bound when usage is missing or an item was retried, kept
+  beside the provider-reported charge; latency over completed items only.
+
+The unit of analysis is the canonical case, paraphrases averaged inside it.
+Intervals are the 2.5 and 97.5 percent nearest-rank percentiles of 1,000
+case-level bootstrap resamples (seed 17). Discordant cases are counted on strong
+exact for C4-C2, C2-C1 and C4-C3; fewer than 10 is inconclusive. A reference
+disagreeing with its labels, a gold case with no non-empty expected set, or any
+capture, catalog or harness failure stops scoring; a candidate timeout or output
+or frame limit counts as invalid, not as a stop, if its gold case reruns clean.
 
 ## Decoding and provenance
 
-Temperature 0, one greedy pass, fixed max output tokens, thinking disabled
-where the provider exposes a switch. Every run records the requested and the
-effective settings (returned model id, provider, finish reason, usage, whether
-seed and thinking controls were honoured). A factor the endpoint did not
-honour is reported as uncontrolled, not claimed.
-
-Every completion is stored raw. Scoring runs offline inside the no-network
-lab container and can be replayed from a clean checkout without an API key.
+Temperature 0, one greedy pass, fixed max output tokens, thinking disabled where
+the provider offers a switch. Every run records the requested settings, prices,
+endpoint host and spend, and each answer's served model id, provider, finish
+reason, usage and reasoning tokens. Answers are stored verbatim up to 64 KiB,
+reasoning and refusal text never, only whether reasoning was present. Requests
+are paced; a timeout, a transport error or HTTP 408, 429 or 5xx is retried and
+HTTP 401, 402 or 403 stops the pass until a resume, up to the recorded
+`max_attempts` (at most three), every attempt kept, the last counted. A control
+counts as honoured only where a response reports it: thinking is honoured, not
+honoured or uncontrolled; the seed stays uncontrolled (no reply echoes it). If
+the first answer shows thinking not honoured, the run stops and the provider or
+model is changed ([note](decisions/model-client-replies.md)). Scoring is offline
+in the no-network lab container: `dfilterforge score --check` must reproduce the
+committed outcomes and summary byte for byte from a clean checkout, no API key.
 
 ## Models
 
 Hosted open-weight models via an OpenAI-compatible endpoint (exact ids and
-prices recorded at run time): one 8B-class, one 27B to 32B-class, one
-70B-class, one DeepSeek-V3-class. Optionally one closed model on C2 and C4
-only as a ceiling, capped at 5 USD. Local: Qwen3-1.7B base, QLoRA-SFT (3
-seeds), SFT plus verifier-labelled DPO (3 seeds), continued-SFT control (3
-seeds, matched optimizer steps and tokens).
+prices recorded at run time): one 8B-class, one 27B to 32B-class, one 70B-class,
+one DeepSeek-V3-class, plus an optional closed ceiling on C2 and C4 only, capped
+at 5 USD. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and
+a continued-SFT control matched on optimizer steps and tokens, three seeds each.
 
 ## Training rules
 
-Training data is generated from an IR grammar on train-only capture seeds and
-paraphrased by a hosted model; dev and test text never enters training.
-Preference pairs are labelled by the same execution verifier on train probes
-only. Checkpoints are chosen on dev, never on test. GRPO is gated on a
-pre-registered measurement: the share of G=8 groups with non-zero reward
-variance on train prompts must exceed 30 percent; the histogram is published
-either way and GRPO is not funded in this plan.
+Training data comes from an IR grammar on train-only capture seeds, paraphrased
+by a hosted model; dev and test text never enters training. Preference pairs are
+labelled by the same verifier on train probes only. Checkpoints are chosen on
+dev, never on test. GRPO is gated on a pre-registered measurement: the share of
+G=8 groups with non-zero reward variance on train prompts must exceed 30
+percent; the histogram is published anyway and GRPO is unfunded here.
 
 ## Claim boundary
 
-Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic
-IPv4 TCP/UDP/DNS captures. They say nothing about other versions, real
-traffic, or protocols outside the recipe world. Negative results are
-published unchanged.
+Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
+TCP/UDP/DNS captures. They say nothing about other versions, real traffic, or
+protocols outside the recipe world. Negative results are published unchanged.

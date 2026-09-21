@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
+from contextlib import closing
+from contextlib import contextmanager
+from contextlib import ExitStack
+from dataclasses import dataclass
 from functools import lru_cache
+import gzip
 import hashlib
 import io
 import json
 from pathlib import Path
 import sqlite3
+from tempfile import TemporaryDirectory
 from typing import cast
+import zlib
 
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
+from dfilterforge.canonical import file_sha256
 from dfilterforge.field_catalog import apply_enum_values
 from dfilterforge.field_catalog import CatalogError
 from dfilterforge.field_catalog import FieldCatalogV1
@@ -27,6 +35,10 @@ from dfilterforge.intent_ir import Predicate
 from dfilterforge.runner import TsharkRunner
 
 DEFAULT_CATALOG_PATH = Path("/opt/dfilterforge/catalog.sqlite3")
+# The cap sits above the measured 299,327,488-byte frozen inventory and is
+# read from this global inside the decompressor so a test can lower it.
+_MAX_CATALOG_BYTES = 1 << 30
+_CATALOG_CHUNK_BYTES = 1 << 20
 _CATALOG_REPORTS = ("fields", "values")
 _PROFILE_REPORTS = ("currentprefs", "decodes", "heuristic-decodes")
 _PROFILE_KEYS = frozenset(
@@ -210,6 +222,14 @@ def _invalid_metadata() -> CatalogError:
     )
 
 
+def _unavailable() -> CatalogError:
+    """Build the one sanitized error raised for an unreadable inventory."""
+    return CatalogError(
+        "catalog_unavailable",
+        "Frozen catalog cannot be opened; build the pinned Docker image",
+    )
+
+
 def _profile_metadata(value: object) -> dict[str, str]:
     """Validate and narrow a decoded runtime profile."""
     if not isinstance(value, dict):
@@ -287,6 +307,102 @@ def _catalog_metadata(
     return profile, identity
 
 
+@dataclass(frozen=True)
+class FrozenCatalogFile:
+    """One opened frozen inventory and the identity that names it.
+
+    ``sqlite_path`` is a live handle for this context only and must not be
+    recorded, because an absolute path would leak the host layout. The
+    remaining fields are what a committed run manifest carries.
+    """
+
+    sqlite_path: Path
+    file_name: str
+    file_sha256: str
+    sqlite_sha256: str
+    catalog_hash: str
+    tshark_version: str
+
+
+def _decompress_catalog(archive: Path, target: Path) -> str:
+    """Streams a gzip archive to ``target`` and returns its SHA-256 digest."""
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with gzip.open(archive, "rb") as source, target.open("wb") as output:
+            while chunk := source.read(_CATALOG_CHUNK_BYTES):
+                total += len(chunk)
+                if total > _MAX_CATALOG_BYTES:
+                    raise CatalogError(
+                        "catalog_too_large",
+                        "Frozen catalog archive exceeds its size limit",
+                    )
+                digest.update(chunk)
+                output.write(chunk)
+    except (EOFError, OSError, zlib.error):
+        raise _unavailable() from None
+    return digest.hexdigest()
+
+
+def _frozen_metadata(path: Path) -> tuple[dict[str, str], str]:
+    """Reads profile and identity from a plain frozen SQLite inventory."""
+    try:
+        connection = sqlite3.connect(
+            f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True
+        )
+    except (OSError, sqlite3.Error):
+        raise _unavailable() from None
+    try:
+        with closing(connection) as database:
+            database.execute("PRAGMA trusted_schema = OFF")
+            return _catalog_metadata(database)
+    except CatalogError:
+        raise
+    except (sqlite3.Error, ValueError, TypeError, KeyError, UnicodeError):
+        raise _invalid_metadata() from None
+
+
+@contextmanager
+def open_frozen_catalog(path: Path) -> Generator[FrozenCatalogFile]:
+    """Opens a plain or gzipped frozen inventory and records its identity.
+
+    Args:
+        path: A ``.sqlite3`` inventory or a ``.gz`` archive of one. An archive
+            is decompressed into a private temporary directory that is removed
+            when the context exits.
+
+    Yields:
+        The readable inventory path and the identity that names it.
+
+    Raises:
+        CatalogError: If the file cannot be read, the decompressed inventory
+            exceeds the size cap, or its frozen metadata is invalid.
+    """
+    with ExitStack() as stack:
+        try:
+            archive_digest = file_sha256(path)
+        except OSError:
+            raise _unavailable() from None
+        if path.suffix == ".gz":
+            directory = stack.enter_context(
+                TemporaryDirectory(prefix="dfilterforge-catalog-")
+            )
+            sqlite_path = Path(directory) / "catalog.sqlite3"
+            sqlite_digest = _decompress_catalog(path, sqlite_path)
+        else:
+            sqlite_path = path
+            sqlite_digest = archive_digest
+        profile, identity = _frozen_metadata(sqlite_path)
+        yield FrozenCatalogFile(
+            sqlite_path=sqlite_path,
+            file_name=path.name,
+            file_sha256=archive_digest,
+            sqlite_sha256=sqlite_digest,
+            catalog_hash=identity,
+            tshark_version=profile["tshark_version"],
+        )
+
+
 def _runtime_binding(
     runner: TsharkRunner,
     profile: dict[str, str],
@@ -352,8 +468,12 @@ def bind_catalog(
     immutable Docker inventory is the trust anchor; no full rehash is needed.
     """
     try:
-        with sqlite3.connect(
-            f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True
+        # closing(), not the connection's own context manager: the queries are
+        # read-only, and an open handle blocks removal of a decompressed copy.
+        with closing(
+            sqlite3.connect(
+                f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True
+            )
         ) as database:
             database.execute("PRAGMA trusted_schema = OFF")
             profile, identity = _catalog_metadata(database)
@@ -376,9 +496,6 @@ def bind_catalog(
     except CatalogError:
         raise
     except (sqlite3.Error, OSError):
-        raise CatalogError(
-            "catalog_unavailable",
-            "Frozen catalog cannot be opened; build the pinned Docker image",
-        ) from None
+        raise _unavailable() from None
     except (ValueError, TypeError, KeyError, UnicodeError):
         raise _invalid_metadata() from None

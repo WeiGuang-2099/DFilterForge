@@ -1,0 +1,160 @@
+{
+  "revision": "1c64140+A1-A9",
+  "package_src": "src",
+  "rows": [
+    {
+      "reply": "openrouter_completed",
+      "source": "https://openrouter.ai/docs/api-reference/overview",
+      "recorded_as": "completed",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": false,
+      "provenance_fields": 7,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "reasoning_not_disabled",
+      "source": "https://openrouter.ai/docs/use-cases/reasoning-tokens",
+      "recorded_as": "completed",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": true,
+      "provenance_fields": 7,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "credits_exhausted",
+      "source": "https://openrouter.ai/docs/api-reference/errors",
+      "recorded_as": "http_error",
+      "http_status": 402,
+      "provider_error_code": "402",
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "rate_limited",
+      "source": "https://openrouter.ai/docs/api-reference/limits",
+      "recorded_as": "http_error",
+      "http_status": 429,
+      "provider_error_code": "429",
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "no_provider",
+      "source": "https://openrouter.ai/docs/api-reference/errors",
+      "recorded_as": "http_error",
+      "http_status": 503,
+      "provider_error_code": "503",
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "no_allowed_provider",
+      "source": "https://openrouter.ai/docs/api-reference/errors",
+      "recorded_as": "http_error",
+      "http_status": 404,
+      "provider_error_code": "404",
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "invalid_api_key_openai",
+      "source": "https://platform.openai.com/docs/guides/error-codes",
+      "recorded_as": "http_error",
+      "http_status": 401,
+      "provider_error_code": "invalid_api_key",
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "unknown_argument_openai",
+      "source": "https://platform.openai.com/docs/guides/error-codes",
+      "recorded_as": "http_error",
+      "http_status": 400,
+      "provider_error_code": null,
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "error_inside_http_200",
+      "source": "https://openrouter.ai/docs/api-reference/errors",
+      "recorded_as": "provider_error",
+      "http_status": 200,
+      "provider_error_code": "502",
+      "reasoning_present": null,
+      "provenance_fields": 1,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "choice_finished_with_error",
+      "source": "https://openrouter.ai/docs/api-reference/errors",
+      "recorded_as": "provider_error",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": false,
+      "provenance_fields": 7,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "reasoning_used_the_output_budget",
+      "source": "https://openrouter.ai/docs/use-cases/reasoning-tokens",
+      "recorded_as": "empty_content",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": true,
+      "provenance_fields": 7,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "refusal",
+      "source": "https://platform.openai.com/docs/api-reference/chat/object",
+      "recorded_as": "empty_content",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": false,
+      "provenance_fields": 7,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "metadata_prose_is_bounded",
+      "source": "https://openrouter.ai/docs/api-reference/overview",
+      "recorded_as": "response_invalid",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    },
+    {
+      "reply": "provider_prose_is_bounded",
+      "source": "https://openrouter.ai/docs/api-reference/overview",
+      "recorded_as": "response_invalid",
+      "http_status": 200,
+      "provider_error_code": null,
+      "reasoning_present": null,
+      "provenance_fields": 0,
+      "provider_text_recorded": false,
+      "request_body_bytes": 225
+    }
+  ]
+}

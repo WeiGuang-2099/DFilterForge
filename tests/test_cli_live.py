@@ -1,5 +1,7 @@
 """End-to-end CLI tests using the pinned Docker tshark executable."""
 
+from datetime import datetime
+from datetime import timezone
 import hashlib
 import json
 from pathlib import Path
@@ -9,7 +11,9 @@ import pytest
 from dfilterforge.canonical import content_sha256
 from dfilterforge.cli import main
 from dfilterforge.evaluation import EvaluationReceiptV1
+from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.fixtures import generate_fixtures
+from dfilterforge.live import evaluate_live
 from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.runner import TsharkRunner
 
@@ -207,3 +211,98 @@ def test_nul_json_path_returns_sanitized_error(
     stderr = capsys.readouterr().err
     assert "private" not in stderr
     assert json.loads(stderr)["error"]["code"] == "input_invalid"
+
+
+def _filter_receipt(root: Path) -> Path:
+    """Records a receipt whose candidate is a display-filter string."""
+    generate_fixtures(root)
+    spec = SemanticSpecV1.model_validate_json(
+        (root / "specs" / f"{_CASES[0]}.json").read_text(encoding="utf-8")
+    )
+    receipt, _ = evaluate_live(
+        spec,
+        spec.reference_filter,
+        root / "captures",
+        run_id="integration",
+        created_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        code_revision="integration-test",
+    )
+    receipt_path = root / "filter-receipt.json"
+    receipt_path.write_text(receipt.model_dump_json(indent=2), encoding="utf-8")
+    return receipt_path
+
+
+def _receipt_filter_args(root: Path, receipt_path: Path) -> list[str]:
+    return [
+        "replay-run",
+        "--receipt",
+        str(receipt_path),
+        "--spec",
+        str(root / "specs" / f"{_CASES[0]}.json"),
+        "--capture-root",
+        str(root / "captures"),
+        "--receipt-filter",
+    ]
+
+
+def _rewrite_receipt(receipt_path: Path, field: str, value: str) -> None:
+    """Rewrites one recorded string while leaving the probes intact."""
+    payload: dict[str, object] = json.loads(
+        receipt_path.read_text(encoding="utf-8")
+    )
+    payload[field] = value
+    receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_replay_run_reexecutes_a_display_filter_receipt(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    receipt_path = _filter_receipt(tmp_path)
+
+    exit_code = main(_receipt_filter_args(tmp_path, receipt_path))
+
+    replay = json.loads(capsys.readouterr().out)["replay"]
+    assert exit_code == 0
+    assert replay["trace"] is None
+    assert replay["exact"] is True
+    assert replay["executed"] is True
+    assert replay["reference_verified"] is True
+
+
+def test_replay_run_receipt_filter_reports_a_rewritten_filter_as_drift(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With --receipt-filter the candidate is the receipt's own text.
+
+    A rewritten candidate can therefore never mismatch itself; it surfaces
+    as a non-exact replay, not as a rejected candidate.
+    """
+    receipt_path = _filter_receipt(tmp_path)
+    _rewrite_receipt(receipt_path, "candidate_filter", "udp")
+
+    exit_code = main(_receipt_filter_args(tmp_path, receipt_path))
+
+    replay = json.loads(capsys.readouterr().out)["replay"]
+    assert exit_code == 1
+    assert replay["exact"] is False
+    assert any(
+        probe["recorded_only"] or probe["replayed_only"]
+        for probe in replay["probes"]
+    )
+
+
+def test_replay_run_receipt_filter_rejects_a_tampered_reference(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    receipt_path = _filter_receipt(tmp_path)
+    _rewrite_receipt(receipt_path, "reference_filter", "udp")
+
+    exit_code = main(_receipt_filter_args(tmp_path, receipt_path))
+
+    stderr = capsys.readouterr().err
+    assert exit_code == 2
+    assert json.loads(stderr)["error"]["code"] == "reference_filter_mismatch"
+    assert "udp" not in stderr
