@@ -42,7 +42,13 @@ line_length = 80
 src_paths = ["src", "tests"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = [
+  "src",
+  "tests",
+  "scripts/model_run.py",
+  "scripts/provider_reply_replay.py",
+  "scripts/retrieval_recall.py",
+]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 
@@ -52,10 +58,21 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["dfilterforge"]
+source = ["dfilterforge", "scripts"]
+# Ablation and export drivers plus the benchmark gate; their receipts
+# are the evidence.
+omit = [
+  "scripts/benchmark_gate.py",
+  "scripts/catalog_ablation.py",
+  "scripts/catalog_open_ablation.py",
+  "scripts/export_catalog.py",
+  "scripts/raw_filter_ablation.py",
+  "scripts/runner_ablation.py",
+  "scripts/trace_replay_ablation.py",
+]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 90
 show_missing = true
 
 [tool.pylint.main]
@@ -72,6 +89,7 @@ disable = [
 
 [tool.importlinter]
 root_packages = ["dfilterforge"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Core is independent of interfaces"
@@ -82,6 +100,8 @@ source_modules = [
   "dfilterforge.field_catalog",
   "dfilterforge.compiler",
   "dfilterforge.evaluation",
+  "dfilterforge.score_summary",
+  "dfilterforge.score_report",
 ]
 forbidden_modules = [
   "dfilterforge.cli",
@@ -90,4 +110,38 @@ forbidden_modules = [
   "dfilterforge.runner",
   "dfilterforge.live",
   "dfilterforge.fixtures",
+  "dfilterforge.run_store",
+  "dfilterforge.scoring",
+]
+
+[[tool.importlinter.contracts]]
+name = "Nothing in the package imports the network client"
+type = "forbidden"
+source_modules = ["dfilterforge.*"]
+forbidden_modules = ["dfilterforge.model_client"]
+
+[[tool.importlinter.contracts]]
+name = "Only the model client reaches the network stack"
+type = "forbidden"
+source_modules = ["dfilterforge.*"]
+forbidden_modules = ["http", "socket", "ssl"]
+ignore_imports = [
+  "dfilterforge.model_client -> http",
+  "dfilterforge.model_client -> ssl",
+]
+
+[[tool.importlinter.contracts]]
+name = "Prompts and model completions never see gold"
+type = "forbidden"
+source_modules = [
+  "dfilterforge.completions",
+  "dfilterforge.field_retrieval",
+  "dfilterforge.generation",
+  "dfilterforge.model_client",
+]
+forbidden_modules = [
+  "dfilterforge.benchmark",
+  "dfilterforge.evaluation",
+  "dfilterforge.fixtures",
+  "dfilterforge.model_split",
 ]
