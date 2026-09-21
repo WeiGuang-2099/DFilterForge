@@ -1,15 +1,22 @@
 """Tests for complete frozen inventories and fail-closed runtime binding."""
 
+import gzip
 from pathlib import Path
 import sqlite3
+import tempfile
 
 import pytest
 
+from dfilterforge import catalog_runtime
+from dfilterforge.canonical import file_sha256
 from dfilterforge.catalog_runtime import bind_catalog
 from dfilterforge.catalog_runtime import freeze_catalog
+from dfilterforge.catalog_runtime import open_frozen_catalog
 from dfilterforge.compiler import compile_intent
 from dfilterforge.field_catalog import CatalogError
 from dfilterforge.field_catalog import FieldType
+from dfilterforge.field_retrieval import FieldRetrievalItemV1
+from dfilterforge.field_retrieval import retrieve_fields
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -64,6 +71,16 @@ def _intent(
     if operator != "exists":
         expression["value"] = value
     return IntentIrV1.model_validate({"expression": expression})
+
+
+def _gzip_copy(source: Path, target: Path) -> Path:
+    """Write the deterministic archive form scripts/export_catalog.py writes."""
+    with target.open("xb") as stream:
+        with gzip.GzipFile(
+            filename="", fileobj=stream, mode="wb", mtime=0
+        ) as archive:
+            archive.write(source.read_bytes())
+    return target
 
 
 def test_freeze_is_byte_stable_and_retains_all_records(tmp_path: Path) -> None:
@@ -229,6 +246,108 @@ def test_corrupted_inventory_is_sanitized(tmp_path: Path, state: str) -> None:
         "ambiguous_field",
     }
     assert "private" not in str(caught.value)
+
+
+def test_open_frozen_catalog_identifies_plain_and_gzip_inventories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plain = tmp_path / "catalog.sqlite3"
+    metadata = freeze_catalog(plain, _MetadataRunner())
+    archive = _gzip_copy(plain, tmp_path / "catalog.sqlite3.gz")
+    plain_digest = file_sha256(plain)
+    with open_frozen_catalog(plain) as frozen:
+        assert frozen.catalog_hash == metadata["catalog_hash"]
+        assert frozen.tshark_version == "4.6.8"
+        assert frozen.file_name == "catalog.sqlite3"
+        assert frozen.file_sha256 == plain_digest
+        assert frozen.sqlite_sha256 == plain_digest
+        assert frozen.sqlite_path == plain
+    opened: list[sqlite3.Connection] = []
+    real_connect = sqlite3.connect
+
+    def _record(database: str, *, uri: bool = False) -> sqlite3.Connection:
+        connection = real_connect(database, uri=uri)
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", _record)
+    with open_frozen_catalog(archive) as frozen:
+        assert frozen.catalog_hash == metadata["catalog_hash"]
+        assert frozen.tshark_version == "4.6.8"
+        assert frozen.file_name == "catalog.sqlite3.gz"
+        assert frozen.sqlite_sha256 == plain_digest
+        assert frozen.file_sha256 != plain_digest
+        catalog = bind_catalog(
+            _MetadataRunner(), (_intent(),), path=frozen.sqlite_path
+        )
+        assert catalog.get("tcp.port").enum_values[0].label == "HTTPS"
+        results = retrieve_fields(
+            frozen.sqlite_path,
+            (FieldRetrievalItemV1(item_id="port", intent="TCP port"),),
+            top_k=1,
+        )
+        assert results[0].fields[0].abbreviation == "tcp.port"
+        decompressed = frozen.sqlite_path
+    assert not decompressed.exists()
+    assert plain.exists()
+    # Both call sites inside the context must close their handle. On Windows
+    # an open handle makes TemporaryDirectory.cleanup raise, so the removal
+    # assertion above guards it only off CI; this one holds everywhere.
+    assert len(opened) == 3
+    for connection in opened:
+        with pytest.raises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
+
+
+@pytest.mark.parametrize(
+    ("case", "code"),
+    [
+        ("truncated", "catalog_unavailable"),
+        ("corrupt_body", "catalog_unavailable"),
+        ("oversize", "catalog_too_large"),
+        ("missing_plain", "catalog_unavailable"),
+        ("missing_archive", "catalog_unavailable"),
+        ("no_metadata", "catalog_invalid"),
+    ],
+)
+def test_open_frozen_catalog_fails_closed_on_bad_archives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str, code: str
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    target = tmp_path / "missing.sqlite3"
+    if case == "missing_archive":
+        target = tmp_path / "missing.gz"
+    elif case != "missing_plain":
+        plain = tmp_path / "catalog.sqlite3"
+        freeze_catalog(plain, _MetadataRunner())
+        if case == "no_metadata":
+            with sqlite3.connect(plain) as database:
+                database.execute("DROP TABLE metadata")
+            target = plain
+        else:
+            target = _gzip_copy(plain, tmp_path / "catalog.sqlite3.gz")
+            if case == "truncated":
+                target.write_bytes(target.read_bytes()[:512])
+            elif case == "corrupt_body":
+                # The first deflate byte, past the ten-byte gzip header: a
+                # corrupted compressed stream raises zlib.error, which is not
+                # an OSError and would otherwise escape unsanitized.
+                raw = bytearray(target.read_bytes())
+                raw[10] ^= 0x5A
+                target.write_bytes(bytes(raw))
+            else:
+                monkeypatch.setattr(catalog_runtime, "_MAX_CATALOG_BYTES", 1024)
+    with pytest.raises(CatalogError) as caught:
+        with open_frozen_catalog(target):
+            pass
+    assert caught.value.code == code
+    assert "private" not in str(caught.value)
+    assert str(tmp_path) not in str(caught.value)
+    assert not [
+        entry
+        for entry in tmp_path.iterdir()
+        if entry.name.startswith("dfilterforge-catalog-")
+    ]
 
 
 def test_metadata_report_allowlist() -> None:

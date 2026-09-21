@@ -1,0 +1,146 @@
+{
+  "code_revision": "1c64140+working-tree",
+  "catalog": {
+    "path_name": "catalog.sqlite3",
+    "bytes": 299327488,
+    "sha256": "8be7163808fe356cb253ff6fd2006d7651297b62b1b6392d0c5d8428f65523f4",
+    "archive_bytes": 47161429,
+    "archive_sha256": "ba30d490a039423ab3ed83073a2b095232084ee048f407006cf37000d126d04e"
+  },
+  "compared_nonblank_source_lines": {
+    "full": 102,
+    "simplified": 6
+  },
+  "rows": [
+    {
+      "case": "intact",
+      "variant": "full",
+      "outcome": "opened",
+      "sanitized_code": true,
+      "catalog_hash": "80dc639bf1cca9d191df79a1fbaedeab90ac46adda8172ced739f9244f5ebda4",
+      "tshark_version": "4.6.8",
+      "message_has_absolute_path": false,
+      "leftover_entries": 0,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37824,
+      "wall_ms": 4247.593
+    },
+    {
+      "case": "intact",
+      "variant": "simplified",
+      "outcome": "opened",
+      "sanitized_code": true,
+      "catalog_hash": "80dc639bf1cca9d191df79a1fbaedeab90ac46adda8172ced739f9244f5ebda4",
+      "tshark_version": "4.6.8",
+      "message_has_absolute_path": false,
+      "leftover_entries": 1,
+      "leftover_bytes": 299327488,
+      "peak_rss_kib": 711412,
+      "wall_ms": 4176.524
+    },
+    {
+      "case": "truncated",
+      "variant": "full",
+      "outcome": "catalog_unavailable",
+      "sanitized_code": true,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": false,
+      "leftover_entries": 0,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37664,
+      "wall_ms": 16.638
+    },
+    {
+      "case": "truncated",
+      "variant": "simplified",
+      "outcome": "EOFError",
+      "sanitized_code": false,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": false,
+      "leftover_entries": 1,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37664,
+      "wall_ms": 2.674
+    },
+    {
+      "case": "no_metadata",
+      "variant": "full",
+      "outcome": "catalog_invalid",
+      "sanitized_code": true,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": false,
+      "leftover_entries": 0,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 38092,
+      "wall_ms": 2390.4
+    },
+    {
+      "case": "no_metadata",
+      "variant": "simplified",
+      "outcome": "OperationalError",
+      "sanitized_code": false,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": false,
+      "leftover_entries": 1,
+      "leftover_bytes": 299327488,
+      "peak_rss_kib": 711432,
+      "wall_ms": 1771.474
+    },
+    {
+      "case": "missing_archive",
+      "variant": "full",
+      "outcome": "catalog_unavailable",
+      "sanitized_code": true,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": false,
+      "leftover_entries": 0,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37664,
+      "wall_ms": 0.5
+    },
+    {
+      "case": "missing_archive",
+      "variant": "simplified",
+      "outcome": "FileNotFoundError",
+      "sanitized_code": false,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": true,
+      "leftover_entries": 1,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37664,
+      "wall_ms": 1.804
+    },
+    {
+      "case": "missing_plain",
+      "variant": "full",
+      "outcome": "catalog_unavailable",
+      "sanitized_code": true,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": false,
+      "leftover_entries": 0,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37664,
+      "wall_ms": 0.354
+    },
+    {
+      "case": "missing_plain",
+      "variant": "simplified",
+      "outcome": "FileNotFoundError",
+      "sanitized_code": false,
+      "catalog_hash": null,
+      "tshark_version": null,
+      "message_has_absolute_path": true,
+      "leftover_entries": 1,
+      "leftover_bytes": 0,
+      "peak_rss_kib": 37664,
+      "wall_ms": 2.419
+    }
+  ]
+}

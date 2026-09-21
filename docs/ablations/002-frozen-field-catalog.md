@@ -1,6 +1,6 @@
 # Ablation 002: Frozen tshark Field Catalog
 
-Status: complete on 2026-09-09
+Status: complete on 2026-09-09; extended 2026-09-18
 
 ## Hypothesis
 
@@ -102,3 +102,18 @@ criterion in eight of ten witnesses. The frozen inventory, runtime binding,
 and typed validation therefore remain in the production path. This
 nine-capture experiment does not verify the separate 50-capture and 150-filter
 Pilot stability gate.
+
+## Extension 2026-09: opening the archived inventory
+
+`open_frozen_catalog` joins the catalog path, so the rule applies to it. The
+rejected alternative is `_simplified_open` in
+`scripts/catalog_open_ablation.py`: decompress the whole archive in memory,
+write it out, connect. Its measured cost, from
+`evidence/002-open-ablation.json` (revision `1c64140+working-tree`, five
+inputs, one run each in a fresh child): 0 of 4 failure inputs answered with a
+sanitized code against Full's 4 of 4, an absolute path in 2 of those messages,
+a temporary entry left behind after every case and 598,654,976 bytes of
+decompressed inventory after 2 of them, a peak resident set of 711,412 KiB
+against 37,824 KiB, and 96 fewer nonblank source lines. Wall time was
+4176.524 ms against 4247.593 ms, a single sample that supports only "no
+regression beyond five percent" and no direction. `keep_protected`.

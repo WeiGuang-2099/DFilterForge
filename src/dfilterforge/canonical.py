@@ -11,6 +11,8 @@ from typing import cast
 
 from pydantic import BaseModel
 
+_HASH_CHUNK_BYTES = 1 << 20
+
 
 def _json_value(value: object) -> object:
     """Converts supported objects to deterministic JSON values.
@@ -73,3 +75,22 @@ def content_sha256(value: object) -> str:
     """Returns the SHA-256 digest of a value's canonical JSON encoding."""
     encoded = canonical_json(value).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    """Returns the SHA-256 digest of a file's bytes without loading it.
+
+    Args:
+        path: File to hash.
+
+    Returns:
+        The lowercase hexadecimal digest of the file's contents.
+
+    Raises:
+        OSError: If the file cannot be opened or read.
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(_HASH_CHUNK_BYTES):
+            digest.update(chunk)
+    return digest.hexdigest()

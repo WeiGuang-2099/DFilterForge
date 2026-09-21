@@ -76,6 +76,56 @@ def _simplified_run(
     )
 
 
+def _simplified_exit_outcome(
+    executable: Path, capture: Path, display_filter: str
+) -> tuple[int, str, int]:
+    """Reproduces the exit-status mapping at revision 1c64140.
+
+    That revision reported one code for every non-zero status, so it could not
+    tell a rejected display filter from an unreadable capture. The call is
+    identical to the one in _simplified_run except that it does not raise on a
+    failure status, because the status is what this witness measures. The third
+    returned value counts the frame lines printed before the failure.
+    """
+    completed = subprocess.run(
+        [
+            str(executable),
+            "-n",
+            "-r",
+            str(capture),
+            "-Y",
+            display_filter,
+            "-T",
+            "fields",
+            "-e",
+            "frame.number",
+        ],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=False,
+        timeout=5,
+        shell=False,
+        close_fds=True,
+        start_new_session=True,
+        cwd="/",
+        env={
+            "PATH": "/opt/wireshark/bin:/usr/bin:/bin",
+            "HOME": "/nonexistent",
+            "XDG_CONFIG_HOME": "/nonexistent",
+            "WIRESHARK_CONFIG_DIR": "/nonexistent",
+            "WIRESHARK_PLUGIN_DIR": "/nonexistent",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "TZ": "UTC",
+        },
+    )
+    return (
+        completed.returncode,
+        "accepted" if completed.returncode == 0 else "tshark_failed",
+        len(completed.stdout.splitlines()),
+    )
+
+
 @dataclass(frozen=True)
 class _Input:
     probe_id: str
@@ -241,6 +291,61 @@ def _safety_witness(scratch_parent: Path, capture: Path) -> dict[str, object]:
         }
 
 
+def _exit_status_witnesses(
+    runner: TsharkRunner, capture: Path, scratch_parent: Path
+) -> list[dict[str, object]]:
+    """Measures how each variant classifies real tshark failure statuses.
+
+    Every witness must fail, so a row that returns zero raises rather than
+    quietly weakening the evidence. Each row also records how many frame lines
+    tshark printed before failing, which is what the bounded runner discards
+    instead of returning a short result. Only the capture basename is recorded;
+    the derived captures live in a temporary directory that this call removes.
+    """
+    with tempfile.TemporaryDirectory(
+        prefix="runner-exit-status-", dir=scratch_parent
+    ) as temporary:
+        data = capture.read_bytes()
+        truncated = Path(temporary) / "truncated.pcap"
+        truncated.write_bytes(data[: len(data) // 2 + 7])
+        garbage = Path(temporary) / "garbage.pcap"
+        garbage.write_bytes(b"this is not a capture file\n" * 20)
+        witnesses = (
+            ("filter", "ip.ttll", capture),
+            ("filter", "tcp &&", capture),
+            ("filter", 'ip.ttl <= "abc"', capture),
+            ("capture", "tcp", truncated),
+            ("capture", "tcp", garbage),
+            ("filter", "ip.ttll", garbage),
+        )
+        rows: list[dict[str, object]] = []
+        for kind, display_filter, path in witnesses:
+            full = "accepted"
+            try:
+                runner.run(path, display_filter)
+            except RunnerError as error:
+                full = error.code
+            returncode, simplified, stdout_frames = _simplified_exit_outcome(
+                runner.executable_path, path, display_filter
+            )
+            if returncode == 0:
+                raise ValueError(
+                    "An exit-status witness unexpectedly succeeded"
+                )
+            rows.append(
+                {
+                    "kind": kind,
+                    "display_filter": display_filter,
+                    "capture": path.name,
+                    "returncode": returncode,
+                    "stdout_frames": stdout_frames,
+                    "full": full,
+                    "simplified": simplified,
+                }
+            )
+        return rows
+
+
 def _complexity(source: str) -> dict[str, int]:
     tree = ast.parse(source)
     public_symbols = sum(
@@ -303,6 +408,9 @@ def main() -> int:
     )
     full, simplified, rows = _measure_pairs(runner, inputs, args.repetitions)
     safety = _safety_witness(args.output.parent, inputs[0].capture)
+    exit_status = _exit_status_witnesses(
+        runner, inputs[0].capture, args.output.parent
+    )
     full_source = inspect.getsource(runner_module)
     simplified_source = inspect.getsource(_simplified_run)
     full_source_hash = hashlib.sha256(full_source.encode()).hexdigest()
@@ -396,6 +504,11 @@ def main() -> int:
             "pilot_scale_gate_verified": False,
         },
         "safety_witness": safety,
+        "exit_status_witnesses": exit_status,
+        "full_separates_filter_from_capture": not (
+            {row["full"] for row in exit_status if row["kind"] == "filter"}
+            & {row["full"] for row in exit_status if row["kind"] == "capture"}
+        ),
         "paired_samples": rows,
     }
     args.output.write_text(
