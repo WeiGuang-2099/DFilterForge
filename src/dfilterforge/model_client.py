@@ -15,7 +15,7 @@ import json
 import os
 import ssl
 import time
-from typing import cast, Literal, Protocol
+from typing import cast, Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field
@@ -162,14 +162,6 @@ class CompletionBatchV1(FrozenModel):
         if len(set(item_ids)) != len(item_ids):
             raise ValueError("completion item IDs must be unique")
         return self
-
-
-class CompletionBackend(Protocol):
-    """The single external model-completion boundary used by orchestration."""
-
-    def complete(self, batch: PreparedBatchV1) -> CompletionBatchV1:
-        """Completes every prepared prompt exactly once."""
-        ...
 
 
 class _RequestFailure(RuntimeError):
