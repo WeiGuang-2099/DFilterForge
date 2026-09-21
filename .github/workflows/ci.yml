@@ -22,7 +22,7 @@ jobs:
       - run: docker compose --profile dev build test
       - run: docker compose --profile dev run --rm test pyink --check src tests scripts
       - run: docker compose --profile dev run --rm test isort --check-only src tests scripts
-      - run: docker compose --profile dev run --rm test pylint src
+      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
@@ -32,6 +32,40 @@ jobs:
           python scripts/benchmark_gate.py --phase suite
           --output-dir /tmp/benchmark
           --source-revision "${{ github.sha }}"
+      - name: Prepare dev prompts from the frozen catalog
+        run: >-
+          docker compose --profile dev run --rm test
+          python scripts/model_run.py prepare
+          --catalog /opt/dfilterforge/catalog.sqlite3
+          --output-dir /tmp/model-eval/ci-prepare
+          --source-revision "${{ github.sha }}"
+      - name: Measure retrieval recall on the dev split
+        run: >-
+          docker compose --profile dev run --rm test
+          python scripts/retrieval_recall.py
+          --output /tmp/retrieval/recall.json
+          --source-revision "${{ github.sha }}"
+      - name: Re-score committed model runs offline
+        run: |
+          docker compose --profile pilot build lab
+          checked=0
+          for output in docs/results/*/scored \
+              docs/results/*/control-reference \
+              docs/results/*/control-mutation; do
+            [ -d "$output" ] || continue
+            run="$(basename "$(dirname "$output")")"
+            name="$(basename "$output")"
+            control=()
+            if [ "$name" != scored ]; then
+              control=(--control "${name#control-}")
+            fi
+            docker compose --profile pilot run --rm lab score \
+              --run-dir "/workspace/results/$run" "${control[@]}" \
+              --check --code-revision "${{ github.sha }}"
+            checked=$((checked + 1))
+          done
+          echo "re-scored $checked committed output directories"
+          test "$checked" -gt 0
 
   web:
     name: Web quality gates
