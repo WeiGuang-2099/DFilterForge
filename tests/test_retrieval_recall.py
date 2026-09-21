@@ -556,6 +556,10 @@ def test_every_dev_intent_retrieves_over_the_real_catalog() -> None:
     dev = _mapping(_mapping(receipt["splits"])["dev"])
     assert dev["items"] == 16
     at_16 = _at(receipt, "dev", 16)
+    # Pins the protocol and name-coverage ranking; the ranker it replaced
+    # reached all_in 1 and micro_found 4 here.
+    assert at_16["all_in"] == 10
+    assert at_16["micro_found"] == 27
     assert at_16["micro_total"] == 36
     assert at_16["nonprotocol_total"] == 28
     assert at_16["empty_contexts"] == 0

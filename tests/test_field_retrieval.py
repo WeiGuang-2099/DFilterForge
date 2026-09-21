@@ -1,10 +1,12 @@
 """Tests for bounded streaming retrieval from frozen field records."""
 
+from collections.abc import Callable
 from pathlib import Path
 import sqlite3
 
 import pytest
 
+from dfilterforge.field_catalog import FieldDefinition
 from dfilterforge.field_catalog import FieldType
 from dfilterforge.field_retrieval import FieldRetrievalError
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
@@ -24,6 +26,15 @@ _FIELD_RECORDS = (
     "F\tInteger Clash\tbad.clash\tFT_UINT16\tbad\tBASE_DEC",
     "F\tString Clash\tbad.clash\tFT_STRING\tbad\tBASE_NONE",
     "F\tWrong Indexed Name\tactual.name\tFT_STRING\tactual\tBASE_NONE",
+    "P\tInternet Protocol Version 4\tip",
+    "F\tTime to Live\tip.ttl\tFT_UINT8\tip\tBASE_DEC",
+    "F\tDestination Address\tip.dst\tFT_IPv4\tip\tBASE_NONE",
+    "F\tAcknowledgment\ttcp.flags.ack\tFT_BOOLEAN\ttcp\t12",
+    "F\tTTL\tmpls_echo.tlv.ilso_ipv4.ttl\tFT_UINT8\tmpls_echo\tBASE_DEC",
+    "F\tTTL\taeron.setup.ttl\tFT_UINT32\taeron\tBASE_DEC",
+    "F\tIPV4\tbacapp.IPV4\tFT_IPv4\tbacapp\tBASE_NONE",
+    "P\tFind Protocol\tfind",
+    "F\tDestination\teigrp.ipv4.destination\tFT_IPv4\teigrp\tBASE_NONE",
 )
 
 
@@ -177,6 +188,119 @@ def test_fields_that_cannot_enter_a_prompt_are_skipped(tmp_path: Path) -> None:
     assert results[0].fields[0].abbreviation == "x.only"
 
 
+def _ranked(path: Path, intent: str, top_k: int = 16) -> list[str]:
+    results = retrieve_fields(
+        path,
+        (FieldRetrievalItemV1(item_id="item", intent=intent),),
+        top_k=top_k,
+    )
+    return [field.abbreviation for field in results[0].fields]
+
+
+def test_named_protocols_rank_their_own_short_fields_first(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path)
+
+    names = _ranked(
+        path, "Keep only TCP packets whose IPv4 TTL is 1 or lower.", top_k=4
+    )
+
+    # IPv4 selects ip through the acronym of "Internet Protocol Version 4".
+    assert names[:2] == ["ip.ttl", "tcp"]
+    assert "mpls_echo.tlv.ilso_ipv4.ttl" not in names[:2]
+    assert "aeron.setup.ttl" not in names[:2]
+
+
+def test_abbreviated_catalog_tokens_match_full_words(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path)
+
+    names = _ranked(
+        path, "Find acknowledged TCP segments on destination port 443"
+    )
+
+    assert names[0] == "tcp.dstport"
+    # The catalog token "ack" abbreviates the request word "acknowledged".
+    assert "tcp.flags.ack" in names
+
+
+def test_only_acronym_shaped_words_select_protocols_in_cased_text(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path)
+
+    cased = _ranked(path, "Find IPv4 destination traffic")
+    lowered = _ranked(path, "find ipv4 destination traffic")
+
+    # Cased text: only IPv4 has two capitals, so "Find" names no protocol.
+    assert cased.index("ip.dst") < cased.index("eigrp.ipv4.destination")
+    assert cased.index("eigrp.ipv4.destination") < cased.index("find")
+    assert "find" not in cased[:2]
+    # Text without capitals: every word may name a protocol.
+    assert lowered.index("find") < lowered.index("eigrp.ipv4.destination")
+
+
+def test_query_without_matching_words_returns_an_empty_context(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path)
+
+    results = retrieve_fields(
+        path, (FieldRetrievalItemV1(item_id="none", intent="xyzzy"),)
+    )
+
+    assert results[0].item_id == "none"
+    assert results[0].fields == ()
+
+
+def test_unprojectable_rows_are_skipped_without_projecting_every_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    top_k = 4
+    ports = tuple(
+        f"F\tPort {index}\tport{index:02d}.port\tFT_UINT16\t"
+        f"port{index:02d}\tBASE_DEC"
+        for index in range(40)
+    )
+    # Best-scored row (it names the requested protocol) with a blank display
+    # name, which the prompt contract rejects.
+    blank = "F\t   \tport.blank\tFT_UINT16\tport\tBASE_DEC"
+    path = tmp_path / "catalog.sqlite3"
+    _catalog(path, (*_FIELD_RECORDS, *ports, blank))
+    projectable: Callable[[FieldDefinition], bool] = getattr(
+        field_retrieval, "_projectable"
+    )
+    score: Callable[..., int] = getattr(field_retrieval, "_score")
+    projections: list[bool] = []
+    positive_scores: list[int] = []
+
+    def counting_projectable(field: FieldDefinition) -> bool:
+        outcome = projectable(field)
+        projections.append(outcome)
+        return outcome
+
+    def counting_score(*arguments: object) -> int:
+        value = score(*arguments)
+        if value > 0:
+            positive_scores.append(value)
+        return value
+
+    monkeypatch.setattr(field_retrieval, "_projectable", counting_projectable)
+    monkeypatch.setattr(field_retrieval, "_score", counting_score)
+
+    names = _ranked(path, "port", top_k=top_k)
+
+    assert len(positive_scores) > 3 * top_k
+    assert len(projections) <= 3 * top_k
+    assert False in projections
+    assert "port.blank" not in names
+    assert names == ["port00.port", "port01.port", "port02.port", "port03.port"]
+
+
 def test_batch_uses_one_constant_streaming_select(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -209,6 +333,12 @@ def test_batch_uses_one_constant_streaming_select(
         if statement.startswith("SELECT name, record FROM fields_records")
     ]
     assert len(field_selects) == 1
+    protocol_selects = [
+        statement
+        for statement in statements
+        if statement.startswith("SELECT record FROM fields_records")
+    ]
+    assert len(protocol_selects) == 1
     assert all(intent not in statement for statement in statements)
 
 

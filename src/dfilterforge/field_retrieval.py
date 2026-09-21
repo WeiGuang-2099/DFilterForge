@@ -26,10 +26,21 @@ from dfilterforge.text_limits import utf8_size
 _FIELD_STREAM_SQL = (
     "SELECT name, record FROM fields_records ORDER BY name COLLATE BINARY"
 )
+_PROTOCOL_ROWS_SQL = (
+    "SELECT record FROM fields_records "
+    "WHERE substr(record, 1, 2) = 'P' || char(9)"
+)
 _TOKEN_PATTERN = re.compile(r"[^\W_]+")
 _LEXEME_PATTERN = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*")
 _MAX_FIELD_RECORD_BYTES = 16 * 1024
 _MAX_REGISTRATIONS_PER_FIELD = 64
+_EXACT_WEIGHT = 4
+_ABBREVIATION_WEIGHT = 2
+_PROTOCOL_WEIGHT = 4
+_COVERAGE_SLACK = 2
+_MIN_ABBREVIATION_CHARS = 3
+_MAX_ABBREVIATED_WORD_CHARS = 32
+_VERBATIM_BONUS = 10**9
 
 
 class FieldRetrievalError(DFilterForgeError):
@@ -74,9 +85,20 @@ class FieldRetrievalResultV1(FrozenModel):
 class _PreparedQuery:
     """Bounded lexical state used while streaming catalog fields."""
 
-    tokens: frozenset[str]
-    token_sequence: tuple[str, ...]
+    words: frozenset[str]
+    protocol_words: frozenset[str]
     lexemes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _FieldTokens:
+    """Lexical view of one catalog field, computed once per streamed row."""
+
+    abbreviation: frozenset[str]
+    display: frozenset[str]
+    protocol: str
+    protocol_tokens: frozenset[str]
+    folded: str
 
 
 @dataclass(frozen=True)
@@ -108,6 +130,7 @@ class _QueryState:
 
     query: _PreparedQuery
     candidates: list[_RankedCandidate]
+    protocols: frozenset[str] = frozenset()
 
 
 def _tokens(value: str) -> tuple[str, ...]:
@@ -144,40 +167,72 @@ def _prepare_query(
             "query_empty", "Retrieval query has no searchable tokens"
         )
     folded = item.intent.casefold()
+    words = frozenset(
+        word[:-3] + "y" if len(word) > 4 and word.endswith("ies") else word
+        for word in token_sequence
+    )
+    any_upper = any(character.isupper() for character in item.intent)
+    protocol_words = frozenset(
+        token.casefold()
+        for token in _TOKEN_PATTERN.findall(item.intent)
+        if not any_upper or sum(c.isupper() for c in token) >= 2
+    )
     return _PreparedQuery(
-        tokens=frozenset(token_sequence),
-        token_sequence=token_sequence,
+        words=words,
+        protocol_words=protocol_words,
         lexemes=frozenset(_LEXEME_PATTERN.findall(folded)),
     )
 
 
-def _contains_sequence(
-    haystack: tuple[str, ...], needle: tuple[str, ...]
-) -> bool:
-    """Return whether one short token sequence occurs contiguously."""
-    if not needle or len(needle) > len(haystack):
-        return False
-    width = len(needle)
-    return any(
-        haystack[index : index + width] == needle
-        for index in range(len(haystack) - width + 1)
+def _initials(text: str) -> str:
+    """Return the acronym of a display name, keeping numeric words whole."""
+    return "".join(
+        word if word.isdigit() else word[0] for word in _tokens(text)
     )
 
 
-def _score(field: FieldDefinition, query: _PreparedQuery) -> int:
+def _is_abbreviation(token: str, word: str) -> bool:
+    """Return whether token abbreviates word by dropping letters in order."""
+    if not _MIN_ABBREVIATION_CHARS <= len(token) < len(word):
+        return False
+    if token[0] != word[0]:
+        return False
+    remaining = iter(word)
+    return all(character in remaining for character in token)
+
+
+def _field_tokens(field: FieldDefinition) -> _FieldTokens:
+    """Tokenize one field once for every query in the batch."""
+    return _FieldTokens(
+        abbreviation=frozenset(_tokens(field.abbreviation)),
+        display=frozenset(_tokens(field.display_name)),
+        protocol=field.protocol.casefold(),
+        protocol_tokens=frozenset(_tokens(field.protocol)),
+        folded=field.abbreviation.casefold(),
+    )
+
+
+def _score(
+    state: _QueryState,
+    tokens: _FieldTokens,
+    weights: dict[str, int],
+    covered: dict[str, set[str]],
+) -> int:
     """Compute a deterministic integer lexical relevance score."""
-    abbreviation = field.abbreviation.casefold()
-    abbreviation_tokens = frozenset(_tokens(field.abbreviation))
-    display_tokens = _tokens(field.display_name)
-    protocol_tokens = frozenset(_tokens(field.protocol))
-    score = 0
-    if abbreviation in query.lexemes:
-        score += 1000 if "." in abbreviation else 80
-    if _contains_sequence(query.token_sequence, display_tokens):
-        score += 300
-    score += 100 * len(query.tokens & abbreviation_tokens)
-    score += 40 * len(query.tokens & frozenset(display_tokens))
-    score += 20 * len(query.tokens & protocol_tokens)
+    words = state.query.words & weights.keys()
+    raw = sum(weights[word] for word in words)
+    matched: set[str] = set()
+    for word in words:
+        matched |= covered.get(word, set())
+    if tokens.protocol in state.protocols:
+        raw += _PROTOCOL_WEIGHT
+        matched |= tokens.protocol_tokens
+    if raw == 0:
+        return 0
+    unmatched = len(tokens.abbreviation - matched)
+    score = raw * 1000 // (_COVERAGE_SLACK + unmatched)
+    if "." in tokens.folded and tokens.folded in state.query.lexemes:
+        score += _VERBATIM_BONUS
     return score
 
 
@@ -255,9 +310,10 @@ def _stream_fields(database: sqlite3.Connection) -> Iterator[FieldDefinition]:
             yield field
 
 
-def _consider(state: _QueryState, field: FieldDefinition, top_k: int) -> None:
+def _consider(
+    state: _QueryState, field: FieldDefinition, score: int, top_k: int
+) -> None:
     """Retain a matching field when it belongs in one bounded top-k heap."""
-    score = _score(field, state.query)
     if score <= 0:
         return
     candidate = _RankedCandidate(score=score, field=field)
@@ -315,6 +371,93 @@ def _bounded_context(
     return tuple(output)
 
 
+def _select_protocols(
+    database: sqlite3.Connection, states: list[_QueryState]
+) -> None:
+    """Resolve protocols named by abbreviation or display-name acronym."""
+    wanted = frozenset[str]().union(
+        *(state.query.protocol_words for state in states)
+    )
+    acronyms: dict[str, set[str]] = {}
+    for (record,) in database.execute(_PROTOCOL_ROWS_SQL):
+        columns = str(record).split("\t")
+        if len(columns) < 3:
+            continue
+        acronym = _initials(columns[1])
+        if len(acronym) >= _MIN_ABBREVIATION_CHARS and acronym in wanted:
+            acronyms.setdefault(acronym, set()).add(columns[2].casefold())
+    for state in states:
+        words = state.query.protocol_words
+        state.protocols = words.union(
+            *(acronyms.get(word, ()) for word in words)
+        )
+
+
+class _BatchIndex:
+    """Word, protocol and abbreviation lookups shared by one batch."""
+
+    def __init__(self, states: list[_QueryState]) -> None:
+        self.by_word: dict[str, list[_QueryState]] = {}
+        self.by_protocol: dict[str, list[_QueryState]] = {}
+        self._by_initial: dict[str, list[str]] = {}
+        self._expansions: dict[str, tuple[str, ...]] = {}
+        for state in states:
+            for word in sorted(state.query.words):
+                if word not in self.by_word and (
+                    _MIN_ABBREVIATION_CHARS
+                    < len(word)
+                    <= _MAX_ABBREVIATED_WORD_CHARS
+                ):
+                    self._by_initial.setdefault(word[0], []).append(word)
+                self.by_word.setdefault(word, []).append(state)
+            for protocol in state.protocols:
+                self.by_protocol.setdefault(protocol, []).append(state)
+
+    def expansions(self, token: str) -> tuple[str, ...]:
+        """Return batch words that the catalog token abbreviates."""
+        words = self._by_initial.get(token[0])
+        if not words:
+            return ()
+        cached = self._expansions.get(token)
+        if cached is None:
+            cached = tuple(
+                word for word in words if _is_abbreviation(token, word)
+            )
+            self._expansions[token] = cached
+        return cached
+
+
+def _scan(
+    database: sqlite3.Connection, states: list[_QueryState], top_k: int
+) -> None:
+    """Stream the inventory once, scoring a field only where it can match."""
+    index = _BatchIndex(states)
+    for field in _stream_fields(database):
+        tokens = _field_tokens(field)
+        weights: dict[str, int] = {}
+        covered: dict[str, set[str]] = {}
+        for token in tokens.abbreviation:
+            if token in index.by_word:
+                weights[token] = _EXACT_WEIGHT
+                covered.setdefault(token, set()).add(token)
+            for word in index.expansions(token):
+                weights[word] = max(weights.get(word, 0), _ABBREVIATION_WEIGHT)
+                covered.setdefault(word, set()).add(token)
+        for token in tokens.display:
+            if token in index.by_word:
+                weights[token] = _EXACT_WEIGHT
+        touched = {
+            id(state): state
+            for word in weights
+            for state in index.by_word[word]
+        }
+        for state in index.by_protocol.get(tokens.protocol, ()):
+            touched[id(state)] = state
+        for state in touched.values():
+            score = _score(state, tokens, weights, covered)
+            _consider(state, field, score, top_k)
+
+
 def retrieve_fields(
     path: Path,
     items: Sequence[FieldRetrievalItemV1],
@@ -322,12 +465,15 @@ def retrieve_fields(
     top_k: int = 16,
     limits: RetrievalLimits = RetrievalLimits(),
 ) -> tuple[FieldRetrievalResultV1, ...]:
-    """Retrieve field context for a batch with one frozen-inventory scan.
+    """Retrieve field context for a batch from the frozen inventory.
 
-    Results preserve input order and opaque item identifiers. Ranking uses
-    integer lexical scores followed by catalog metadata as deterministic tie
-    breakers. The inventory is opened read-only and no request value enters an
-    SQL statement.
+    The batch is served with one ordered scan plus one constant protocol-row
+    pass. Results preserve input order and opaque item identifiers. Ranking
+    prefers fields whose protocol the request names, scores exact and
+    abbreviated name matches, divides by the parts of the field name the
+    request did not mention, and falls back to catalog metadata as a
+    deterministic tie breaker. The inventory is opened read-only and no
+    request value enters an SQL statement.
 
     Args:
         path: Frozen SQLite catalog path.
@@ -368,9 +514,8 @@ def retrieve_fields(
         uri = f"{path.resolve().as_uri()}?mode=ro&immutable=1"
         with closing(sqlite3.connect(uri, uri=True)) as database:
             database.execute("PRAGMA trusted_schema = OFF")
-            for field in _stream_fields(database):
-                for state in states:
-                    _consider(state, field, top_k)
+            _select_protocols(database, states)
+            _scan(database, states, top_k)
     except (OSError, sqlite3.Error):
         raise FieldRetrievalError(
             "catalog_unavailable", "Frozen field inventory is unavailable"
