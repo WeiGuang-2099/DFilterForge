@@ -8,11 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from dfilterforge import live
 from dfilterforge.canonical import canonical_json
 from dfilterforge.catalog_runtime import bind_catalog
+from dfilterforge.evaluation import EvaluationReceiptV1
 from dfilterforge.evaluation import ProbeExpectationV1
 from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.field_catalog import CatalogError
+from dfilterforge.field_catalog import FieldCatalogV1
 from dfilterforge.intent_ir import All
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.intent_ir import Operator
@@ -21,6 +24,9 @@ from dfilterforge.live import evaluate_live
 from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import LiveError
 from dfilterforge.live import packet_set_hash
+from dfilterforge.model_split import generate_model_split
+from dfilterforge.model_split import ModelGoldCaseV1
+from dfilterforge.runner import RunnerError
 from dfilterforge.runner import RunnerLimits
 from dfilterforge.runner import RunResult
 from dfilterforge.runner import TsharkRunner
@@ -483,3 +489,217 @@ def test_trace_budget_fails_before_first_leaf_call(tmp_path: Path) -> None:
 
     assert caught.value.code == "trace_limit"
     assert len(runner.calls) == 2
+
+
+def test_display_filter_candidate_runs_after_each_verified_reference(
+    tmp_path: Path,
+) -> None:
+    spec = _spec(tmp_path)
+    runner = _RecordedRunner(
+        [
+            RunResult((1, 3), 4, _CAPTURE_HASH),
+            RunResult((1, 2, 3), 9, _CAPTURE_HASH),
+        ]
+    )
+
+    receipt, _ = evaluate_live(
+        spec,
+        "tcp || udp",
+        tmp_path,
+        run_id="run",
+        created_at=_TIME,
+        code_revision="test",
+        runner=runner,
+    )
+
+    assert runner.calls == [
+        (tmp_path / "probe.pcap", "tcp"),
+        (tmp_path / "probe.pcap", "tcp || udp"),
+    ]
+    assert receipt.candidate_filter == "tcp || udp"
+    assert receipt.probes[0].candidate_only == (2,)
+    assert receipt.probes[0].exact is False
+
+
+def test_display_filter_candidate_binds_only_canonical_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = _spec(tmp_path)
+    recorded: list[tuple[IntentIrV1, ...]] = []
+    real = live.bind_catalog
+
+    def record(
+        runner: TsharkRunner,
+        intents: tuple[IntentIrV1, ...],
+        supplied: FieldCatalogV1 | None = None,
+    ) -> FieldCatalogV1:
+        recorded.append(intents)
+        return real(runner, intents, supplied)
+
+    monkeypatch.setattr(live, "bind_catalog", record)
+    evaluate_live(
+        spec,
+        "tcp",
+        tmp_path,
+        run_id="string",
+        created_at=_TIME,
+        code_revision="test",
+        runner=_RecordedRunner(),
+    )
+    candidate_ir = IntentIrV1(
+        expression=Predicate(field="udp", operator=Operator.EXISTS)
+    )
+    evaluate_live(
+        spec,
+        candidate_ir,
+        tmp_path,
+        run_id="typed",
+        created_at=_TIME,
+        code_revision="test",
+        runner=_RecordedRunner(),
+    )
+
+    assert recorded == [
+        (spec.canonical_ir,),
+        (candidate_ir, spec.canonical_ir),
+    ]
+
+
+def test_rejected_display_filter_propagates_after_reference(
+    tmp_path: Path,
+) -> None:
+    class _RejectingRunner(_RecordedRunner):
+        """Accepts the reference filter and rejects the candidate string."""
+
+        def run(self, capture: Path, display_filter: str) -> RunResult:
+            if len(self.calls) == 1:
+                self.calls.append((capture, display_filter))
+                raise RunnerError(
+                    "filter_rejected", "tshark rejected the display filter"
+                )
+            return super().run(capture, display_filter)
+
+    spec = _spec(tmp_path)
+    runner = _RejectingRunner([RunResult((1, 3), 4, _CAPTURE_HASH)])
+
+    with pytest.raises(RunnerError) as caught:
+        evaluate_live(
+            spec,
+            "tcp &&",
+            tmp_path,
+            run_id="run",
+            created_at=_TIME,
+            code_revision="test",
+            runner=runner,
+        )
+
+    assert caught.value.code == "filter_rejected"
+    assert len(runner.calls) == 2
+
+
+def test_receipt_records_model_and_prompt_hashes(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    labelled, _ = evaluate_live(
+        spec,
+        "tcp",
+        tmp_path,
+        run_id="run",
+        created_at=_TIME,
+        code_revision="test",
+        runner=_RecordedRunner(),
+        model_hash="m",
+        prompt_hash="p",
+    )
+    plain, _ = evaluate_live(
+        spec,
+        "tcp",
+        tmp_path,
+        run_id="run",
+        created_at=_TIME,
+        code_revision="test",
+        runner=_RecordedRunner(),
+    )
+
+    assert labelled.model_hash == "m"
+    assert labelled.prompt_hash == "p"
+    assert plain.model_hash is None
+    assert labelled.receipt_hash() != plain.receipt_hash()
+
+
+def test_string_candidate_still_aborts_on_a_bad_oracle(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    runner = _RecordedRunner([RunResult((1, 2), 4, _CAPTURE_HASH)])
+
+    with pytest.raises(LiveError) as caught:
+        evaluate_live(
+            spec,
+            "tcp || udp",
+            tmp_path,
+            run_id="run",
+            created_at=_TIME,
+            code_revision="test",
+            runner=runner,
+        )
+
+    assert caught.value.code == "reference_label_mismatch"
+    assert len(runner.calls) == 1
+
+
+def _dev_case(tmp_path: Path) -> ModelGoldCaseV1:
+    """Materializes the dev split and returns its low-TTL TCP gold case."""
+    artifacts = generate_model_split(tmp_path)
+    return next(
+        gold
+        for gold in artifacts.gold.cases
+        if gold.case_id == "tcp-expiring-ttl"
+    )
+
+
+def _evaluate_dev_case(
+    case: ModelGoldCaseV1, candidate: str, capture_root: Path
+) -> EvaluationReceiptV1:
+    receipt, _ = evaluate_live(
+        case.spec,
+        candidate,
+        capture_root,
+        run_id="real",
+        created_at=_TIME,
+        code_revision="test",
+        runner=TsharkRunner(),
+    )
+    return receipt
+
+
+@pytest.mark.parametrize("candidate_kind", ["reference", "mutation"])
+def test_real_display_filter_candidates_against_dev_labels(
+    tmp_path: Path,
+    candidate_kind: str,
+) -> None:
+    case = _dev_case(tmp_path)
+    candidate = (
+        case.spec.reference_filter
+        if candidate_kind == "reference"
+        else case.mutation_filter
+    )
+
+    receipt = _evaluate_dev_case(case, candidate, tmp_path / "captures")
+
+    assert len(receipt.probes) == 3
+    if candidate_kind == "reference":
+        assert all(probe.exact for probe in receipt.probes)
+        assert receipt.metrics.strong_exact_count == 3
+        return
+    assert receipt.metrics.strong_exact_count < 3
+    assert any(probe.candidate_only for probe in receipt.probes)
+
+
+def test_real_unknown_field_candidate_is_rejected_by_tshark(
+    tmp_path: Path,
+) -> None:
+    case = _dev_case(tmp_path)
+
+    with pytest.raises(RunnerError) as caught:
+        _evaluate_dev_case(case, "ip.ttll <= 1", tmp_path / "captures")
+
+    assert caught.value.code == "filter_unknown_field"

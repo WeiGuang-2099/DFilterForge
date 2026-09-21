@@ -142,6 +142,31 @@ def _install_execution(
         calls.append(("compile", (intent, catalog)))
         return compiled_filter
 
+    def replayed(
+        spec: SemanticSpecV1,
+        candidate_filter: str,
+        run_id: str,
+        created_at: datetime,
+        code_revision: str,
+    ) -> EvaluationReceiptV1:
+        probe = evaluate_probe(
+            "probe-a",
+            spec.probes[0].expected_frames,
+            replayed_frames,
+            replayed_runtime_ms,
+        )
+        return EvaluationReceiptV1(
+            run_id=run_id,
+            created_at=created_at,
+            code_revision=code_revision,
+            environment_hash="fresh-environment",
+            data_hash="fresh-data",
+            candidate_filter=candidate_filter,
+            reference_filter=spec.reference_filter,
+            probes=(probe,),
+            metrics=aggregate_metrics((probe,)),
+        )
+
     def fake_evaluate_live_with_trace(
         spec: SemanticSpecV1,
         candidate_ir: IntentIrV1,
@@ -168,24 +193,45 @@ def _install_execution(
                 ),
             )
         )
-        probe = evaluate_probe(
-            "probe-a",
-            spec.probes[0].expected_frames,
-            replayed_frames,
-            replayed_runtime_ms,
-        )
-        replayed_receipt = EvaluationReceiptV1(
-            run_id=run_id,
-            created_at=created_at,
-            code_revision=code_revision,
-            environment_hash="fresh-environment",
-            data_hash="fresh-data",
-            candidate_filter=compiled_filter,
-            reference_filter=spec.reference_filter,
-            probes=(probe,),
-            metrics=aggregate_metrics((probe,)),
+        replayed_receipt = replayed(
+            spec, compiled_filter, run_id, created_at, code_revision
         )
         return replayed_receipt, environment, _trace(run_id=run_id)
+
+    def fake_evaluate_live(
+        spec: SemanticSpecV1,
+        candidate: IntentIrV1 | str,
+        capture_root: Path,
+        *,
+        run_id: str,
+        created_at: datetime,
+        code_revision: str,
+        catalog: FieldCatalogV1 | None = None,
+        runner: TsharkRunner | None = None,
+    ) -> tuple[EvaluationReceiptV1, LiveEnvironmentV1]:
+        calls.append(
+            (
+                "execute",
+                (
+                    spec,
+                    candidate,
+                    capture_root,
+                    run_id,
+                    created_at,
+                    code_revision,
+                    catalog,
+                    runner,
+                ),
+            )
+        )
+        replayed_receipt = replayed(
+            spec,
+            candidate if isinstance(candidate, str) else compiled_filter,
+            run_id,
+            created_at,
+            code_revision,
+        )
+        return replayed_receipt, environment
 
     monkeypatch.setattr(replay_module, "bind_catalog", fake_bind_catalog)
     monkeypatch.setattr(replay_module, "compile_intent", fake_compile_intent)
@@ -194,6 +240,7 @@ def _install_execution(
         "evaluate_live_with_trace",
         fake_evaluate_live_with_trace,
     )
+    monkeypatch.setattr(replay_module, "evaluate_live", fake_evaluate_live)
     return calls
 
 
@@ -445,3 +492,110 @@ def test_reference_execution_failure_remains_fail_closed(
         "compile",
         "reference-failed",
     ]
+
+
+def test_display_filter_replay_executes_recorded_string_without_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_execution(monkeypatch, replayed_frames=(1, 2))
+    receipt = _receipt()
+
+    result, _ = replay_live(
+        receipt,
+        _spec(),
+        receipt.candidate_filter,
+        tmp_path,
+        runner=TsharkRunner("unused"),
+    )
+
+    assert [name for name, _ in calls] == ["execute"]
+    assert result.trace is None
+    assert result.exact is True
+    assert result.executed is True
+    assert result.reference_verified is True
+    execute_arguments = calls[-1][1]
+    assert isinstance(execute_arguments, tuple)
+    assert execute_arguments[1] == "tcp"
+
+
+def test_display_filter_replay_rejects_a_different_string_before_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_execution(monkeypatch, replayed_frames=(1, 2))
+
+    with pytest.raises(ReplayError) as caught:
+        replay_live(
+            _receipt(candidate_filter="tcp"),
+            _spec(),
+            "udp",
+            tmp_path,
+            runner=TsharkRunner("must-not-run"),
+        )
+
+    assert caught.value.code == "candidate_filter_mismatch"
+    assert str(caught.value) == (
+        "Candidate filter differs from the recorded filter"
+    )
+    assert calls == []
+
+
+def test_display_filter_replay_reports_packet_drift_as_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_execution(monkeypatch, replayed_frames=(1, 3))
+    receipt = _receipt()
+
+    result, _ = replay_live(
+        receipt,
+        _spec(),
+        receipt.candidate_filter,
+        tmp_path,
+        runner=TsharkRunner("unused"),
+    )
+
+    assert result.exact is False
+    assert result.probes[0].recorded_only == (2,)
+    assert result.probes[0].replayed_only == (3,)
+    assert result.probes[0].exact is False
+    assert result.trace is None
+
+
+def test_replay_result_accepts_a_missing_trace_and_checks_probes() -> None:
+    probe = _replay_probe()
+
+    result = ExecutableReplayResultV1(
+        run_id="run-a", exact=True, probes=(probe,)
+    )
+
+    assert result.trace is None
+    with pytest.raises(ValidationError, match="unique"):
+        ExecutableReplayResultV1(
+            run_id="run-a", exact=True, probes=(probe, probe)
+        )
+    with pytest.raises(ValidationError, match="exact"):
+        ExecutableReplayResultV1(run_id="run-a", exact=False, probes=(probe,))
+    with pytest.raises(ValidationError, match="trace run ID"):
+        ExecutableReplayResultV1(
+            run_id="run-a",
+            exact=True,
+            probes=(probe,),
+            trace=_trace(run_id="other-run"),
+        )
+
+
+def test_typed_ir_replay_still_binds_compiles_and_traces(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_execution(monkeypatch, replayed_frames=(1, 2))
+
+    result, _ = replay_live(
+        _receipt(),
+        _spec(),
+        _intent(),
+        tmp_path,
+        runner=TsharkRunner("unused"),
+    )
+
+    assert [name for name, _ in calls] == ["bind", "compile", "execute"]
+    assert result.trace is not None
+    assert result.trace.run_id == "run-a"

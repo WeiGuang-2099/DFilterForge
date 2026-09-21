@@ -1,0 +1,150 @@
+{
+  "full_detects_label_drift": true,
+  "full_rejects_tampered_string": true,
+  "full_trace_present": false,
+  "receipt": {
+    "ablation_id": "004-addendum-raw-filter-replay",
+    "decision": "keep_full",
+    "full_complexity": {
+      "dependency_count": 0,
+      "module_count": 1,
+      "public_symbol_count": 4
+    },
+    "full_metrics": {
+      "empty_set_coincidence_count": 0,
+      "macro_f1": 1.0,
+      "macro_jaccard": 1.0,
+      "macro_precision": 1.0,
+      "macro_recall": 1.0,
+      "p50_runtime_ms": 73.70818100000065,
+      "p95_runtime_ms": 100.91505699999459,
+      "probe_count": 3,
+      "strong_exact_count": 3
+    },
+    "full_revision": "1c64140+working-tree",
+    "hypothesis": "Replaying a receipt by its recorded display-filter string through the shared replay path refuses a string the receipt does not vouch for before any capture is opened, and still re-executes the reference.",
+    "input_hashes": [
+      "0c1fe7cf432e81284de9f2b7e5ea109ccaafe4e8f8a2f68eadb7bd24885b990c",
+      "7fccd849184c6d0cd463527e2d783daca84c887208d26b765abd7eea635a93fe",
+      "adb8d1e9e573055da843eb533c07a44ef13eece70541ecd6dec2e318f4db4aa9",
+      "f849519f7813b9a20a467c5a61f41bb346e1a61097697220b175b9b1d94a64ec"
+    ],
+    "rationale": "Only the full path rejects a tampered string with no tshark call and still catches a corrupted probe label; its measured cost is one extra tshark call per probe and no predicate trace.",
+    "schema_version": "1.0",
+    "seeds": [
+      17,
+      42,
+      2026
+    ],
+    "simplified_complexity": {
+      "dependency_count": 0,
+      "module_count": 1,
+      "public_symbol_count": 0
+    },
+    "simplified_metrics": {
+      "empty_set_coincidence_count": 0,
+      "macro_f1": 1.0,
+      "macro_jaccard": 1.0,
+      "macro_precision": 1.0,
+      "macro_recall": 1.0,
+      "p50_runtime_ms": 59.80180599999585,
+      "p95_runtime_ms": 64.40577200000064,
+      "probe_count": 3,
+      "strong_exact_count": 3
+    },
+    "simplified_patch_hash": "bb7ee332bf38bba4434b635ec3ce1ebe99dfa542a1cc063d7983b5912138dbd6"
+  },
+  "schema_version": "1.0",
+  "simplified_detects_label_drift": false,
+  "simplified_rejects_tampered_string": false,
+  "source_revision": "1c64140+working-tree",
+  "stage": "replay",
+  "tshark_calls_before_rejection": {
+    "full": 0,
+    "simplified": 3
+  },
+  "tshark_calls_full": 7,
+  "tshark_calls_simplified": 9,
+  "tshark_version": "4.6.8",
+  "typed_ir_replay": {
+    "exact_probes": 3,
+    "frames": null,
+    "non_exact_probes": [],
+    "outcome": "trace_present",
+    "reference_verified": true,
+    "tshark_calls": 6
+  },
+  "typed_ir_trace_present": true,
+  "witnesses": [
+    {
+      "candidate": "tcp && ip.ttl <= 1",
+      "full": {
+        "exact_probes": 3,
+        "frames": null,
+        "non_exact_probes": [],
+        "outcome": "evaluated",
+        "reference_verified": true,
+        "tshark_calls": 6
+      },
+      "simplified": {
+        "exact_probes": 3,
+        "frames": null,
+        "non_exact_probes": [],
+        "outcome": "evaluated",
+        "reference_verified": false,
+        "tshark_calls": 3
+      },
+      "tshark_calls_full": 6,
+      "tshark_calls_simplified": 3,
+      "witness": "r1-honest-receipt"
+    },
+    {
+      "candidate": "tcp && ip.ttl <= 1",
+      "full": {
+        "exact_probes": 0,
+        "frames": null,
+        "non_exact_probes": [],
+        "outcome": "reference_label_mismatch",
+        "reference_verified": false,
+        "tshark_calls": 1
+      },
+      "simplified": {
+        "exact_probes": 3,
+        "frames": null,
+        "non_exact_probes": [],
+        "outcome": "evaluated",
+        "reference_verified": false,
+        "tshark_calls": 3
+      },
+      "tshark_calls_full": 1,
+      "tshark_calls_simplified": 3,
+      "witness": "r2-corrupted-label"
+    },
+    {
+      "candidate": "udp",
+      "full": {
+        "exact_probes": 0,
+        "frames": null,
+        "non_exact_probes": [],
+        "outcome": "candidate_filter_mismatch",
+        "reference_verified": false,
+        "tshark_calls": 0
+      },
+      "simplified": {
+        "exact_probes": 0,
+        "frames": null,
+        "non_exact_probes": [
+          "semantic-11",
+          "semantic-17",
+          "semantic-23"
+        ],
+        "outcome": "evaluated",
+        "reference_verified": false,
+        "tshark_calls": 3
+      },
+      "tshark_calls_full": 0,
+      "tshark_calls_simplified": 3,
+      "witness": "r3-tampered-string"
+    }
+  ]
+}
