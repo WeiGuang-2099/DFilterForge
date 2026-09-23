@@ -1531,6 +1531,44 @@ def test_effective_settings_flags_one_consistent_substitution(
     assert settings.provider_changed is True
 
 
+@pytest.mark.parametrize(
+    ("route", "served", "changed"),
+    [
+        ("deepinfra", "DeepInfra", False),
+        ("deepinfra/fp8", "DeepInfra", False),
+        ("google-ai-studio", "Google AI Studio", False),
+        ("deepinfra", "Novita", True),
+    ],
+)
+def test_effective_settings_matches_a_pinned_slug_to_its_display_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    route: str,
+    served: str,
+    changed: bool,
+) -> None:
+    """The router pins by slug but names the provider that answered."""
+    _install_live(monkeypatch)
+    pinned = RequestSettingsV1(
+        model_id=_MODEL_ID,
+        openrouter=OpenRouterOptionsV1(provider_order=(route,)),
+    )
+    run_dir = _run_dir(
+        tmp_path,
+        ("C1",),
+        provenance=_answered(response_model=_MODEL_ID, provider=served),
+        settings=pinned,
+    )
+    _write_manifest(run_dir, ("C1",), settings=pinned)
+
+    settings = _scored(run_dir, tmp_path / "split").effective_settings
+
+    assert settings is not None
+    assert settings.providers == (served,)
+    assert settings.providers_distinct == 1
+    assert settings.provider_changed is changed
+
+
 def test_effective_settings_counts_the_values_it_could_not_print(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

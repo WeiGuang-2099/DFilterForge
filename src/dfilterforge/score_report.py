@@ -18,6 +18,7 @@ from typing import cast
 from dfilterforge.score_summary import BOOTSTRAP_RESAMPLES
 from dfilterforge.score_summary import BOOTSTRAP_SEED
 from dfilterforge.score_summary import CONDITION_ORDER
+from dfilterforge.score_summary import ConditionSummaryV1
 from dfilterforge.score_summary import HIGH_PERCENTILE
 from dfilterforge.score_summary import LOW_PERCENTILE
 from dfilterforge.score_summary import MIN_DISCORDANT_CASES
@@ -30,7 +31,7 @@ from dfilterforge.score_summary import SpendV1
 _CONDITION_HEADER = (
     "| Condition | Items | Compile valid | Strong exact |"
     " Silent-wrong (all) | Silent-wrong (exec) | Over-abstention |"
-    " Provider failed | Malformed | Gold-field recall | Cost USD |"
+    " Provider failed | Malformed | Gold-field recall | Cost USD/item |"
     " Latency p50 ms |"
 )
 _CONDITION_RULE = (
@@ -52,8 +53,8 @@ _COMPILE_VALID_NOTE = (
     " types, operators and values."
 )
 _COST_NOTE = (
-    "Cost USD is derived from recorded token counts and the prices in the"
-    " run manifest; it is a lower bound where usage was missing."
+    "Cost USD/item is derived from recorded token counts and the prices in"
+    " the run manifest; it is a lower bound where usage was missing."
 )
 _CONDITIONS_HEADING = "## Conditions"
 _COMPARISONS_HEADING = "## Comparisons"
@@ -94,16 +95,35 @@ _MAX_CELL_CHARS = 64
 _ABSENT_CELL = "-"
 
 
-def _render_rate(rate: RateV1) -> str:
-    """Renders a rate and its interval to three decimals, or n/a."""
+def _render_rate(rate: RateV1, count: str = "") -> str:
+    """Renders a rate and its interval to three decimals, or n/a.
+
+    A count, when given, is printed after the value and before the
+    interval.
+    """
+    suffix = f" {count}" if count else ""
     if rate.value is None:
-        return "n/a"
+        return f"n/a{suffix}"
     interval = (
         f" [{rate.low:.3f}, {rate.high:.3f}]"
         if rate.low is not None and rate.high is not None
         else ""
     )
-    return f"{rate.value:.3f}{interval}"
+    return f"{rate.value:.3f}{suffix}{interval}"
+
+
+def _render_executable_rate(condition: ConditionSummaryV1) -> str:
+    """Renders the executable-only silent-wrong rate with its item count.
+
+    Its denominator is the executed items alone, which can be one item in
+    a condition that mostly failed to compile, so the count it rests on is
+    printed beside the rate instead of being left for the reader to derive.
+    """
+    silent = condition.outcomes[OutcomeV1.SILENT_WRONG.value]
+    executable = silent + condition.outcomes[OutcomeV1.STRONG_EXACT.value]
+    return _render_rate(
+        condition.silent_wrong_of_executable, f"({silent}/{executable})"
+    )
 
 
 def _render_recall(recall: RecallV1 | None) -> str:
@@ -124,7 +144,8 @@ def _condition_rows(summary: ScoreSummaryV1) -> list[str]:
         if condition is None:
             continue
         usage = condition.usage
-        cost = "n/a" if usage.cost_usd is None else f"{usage.cost_usd:.5f}"
+        per_item = usage.cost_per_item_usd
+        cost = "n/a" if per_item is None else f"{per_item:.6f}"
         latency = (
             "n/a" if usage.latency_items == 0 else f"{usage.latency_ms_p50:.0f}"
         )
@@ -133,7 +154,7 @@ def _condition_rows(summary: ScoreSummaryV1) -> list[str]:
             f" | {_render_rate(condition.compile_valid)}"
             f" | {_render_rate(condition.strong_exact)}"
             f" | {_render_rate(condition.silent_wrong_all)}"
-            f" | {_render_rate(condition.silent_wrong_of_executable)}"
+            f" | {_render_executable_rate(condition)}"
             f" | {_render_rate(condition.over_abstention)}"
             f" | {condition.outcomes[OutcomeV1.PROVIDER_FAILED.value]}"
             f" | {condition.outcomes[OutcomeV1.MALFORMED.value]}"
@@ -259,6 +280,14 @@ def _footnotes(summary: ScoreSummaryV1) -> list[str]:
         )
     if any(item.usage.cost_is_lower_bound for item in conditions):
         lines.append(_COST_NOTE)
+    thin = _thin_intervals(summary)
+    if thin:
+        lines.append(
+            f"Intervals drawn from fewer than {BOOTSTRAP_RESAMPLES:,}"
+            " resamples skip draws whose denominator is zero: "
+            + "; ".join(thin)
+            + "."
+        )
     if summary.spend is None and (
         summary.provider_reported_usd is not None
         or summary.charged_usd_upper_bound is not None
@@ -269,6 +298,27 @@ def _footnotes(summary: ScoreSummaryV1) -> list[str]:
             f" bound: {_render_usd(summary.charged_usd_upper_bound)}."
         )
     return lines
+
+
+def _thin_intervals(summary: ScoreSummaryV1) -> list[str]:
+    """Names every printed interval drawn from fewer than all resamples."""
+    thin: list[str] = []
+    for label in CONDITION_ORDER:
+        condition = summary.conditions.get(label)
+        if condition is None:
+            continue
+        rates = (
+            ("compile valid", condition.compile_valid),
+            ("strong exact", condition.strong_exact),
+            ("silent-wrong (all)", condition.silent_wrong_all),
+            ("silent-wrong (exec)", condition.silent_wrong_of_executable),
+            ("over-abstention", condition.over_abstention),
+        )
+        for name, rate in rates:
+            if rate.low is None or rate.resamples_used >= BOOTSTRAP_RESAMPLES:
+                continue
+            thin.append(f"{label} {name} {rate.resamples_used:,}")
+    return thin
 
 
 def _comparison_lines(summary: ScoreSummaryV1) -> list[str]:
@@ -290,6 +340,15 @@ def _comparison_lines(summary: ScoreSummaryV1) -> list[str]:
             f" | {comparison.first_better_cases}"
             f" | {comparison.second_better_cases}"
             f" | {comparison.discordant_cases} | {verdict} |"
+        )
+    cases = summary.bootstrap["cases"]
+    if cases < MIN_DISCORDANT_CASES:
+        noun = "case" if cases == 1 else "cases"
+        lines.append("")
+        lines.append(
+            f"With {cases} {noun} no comparison can reach"
+            f" {MIN_DISCORDANT_CASES} discordant cases, so every verdict is"
+            " inconclusive by construction."
         )
     return lines
 

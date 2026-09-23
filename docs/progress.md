@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-09-21
+Last updated: 2026-09-23
 
 ## Current slice
 
@@ -124,18 +124,42 @@ directory and are not part of the uploadable project evidence.
   branch-aware coverage; the freeze guard skips there, as the image carries
   no `docs/` tree, and passes on the host.
 - CI has a step that re-scores every committed output directory offline with
-  `--check`; it has not yet run on a hosted runner.
-- No model has run. Nothing here is a model result, and with 8 ready cases
-  every protocol comparison will be inconclusive.
+  `--check`. It ran green on the hosted runner for the merge of PR #2 (as
+  reported from the GitHub Actions page; not re-checked locally).
+- No model had run by then. Nothing in this entry is a model result.
+
+## First dev run: 2026-09-23
+
+- qwen/qwen3-32b answered all 64 dev requests (C1 to C4), every one served by
+  DeepInfra with 0 reasoning tokens, for 0.0059 USD. The raw answers, attempts,
+  manifest and offline score are under
+  `docs/results/dev-qwen3-32b-2026-09-21/`; `score --check` reproduces them.
+- Strong exact out of 16: C1 10, C2 9, C3 1, C4 8. Silent-wrong: 2, 4, 0, 1.
+  Every comparison is inconclusive by construction with 8 cases.
+- An independent audit re-derived every outcome and summary number and found
+  no scoring error. It found that the typed-IR prompt never defines how a
+  value is written, so C3 and C4 - C3 mostly measure value typing; that three
+  strong exact answers (C1 mei-0005 and mei-0006, C4 mei-0013) are wrong but
+  no probe separates them; and that provider_changed true in the summary is a
+  case-sensitive false alarm. Details and item ids are in
+  `docs/decisions/first-dev-run.md`.
+- The report now matches a pinned route slug to the served provider name,
+  prints cost per item, the executed count behind silent-wrong (exec), any
+  interval drawn from fewer than 1,000 resamples, and a note when every
+  comparison is inconclusive by construction. The run and both controls were
+  re-scored: only provider_changed (now false), receipt timings and revisions
+  changed, and `score --check` reproduces all three. The Docker suite passed
+  803 tests at 96.10 percent coverage with every static gate clean.
 
 ## Planned next
 
-1. Run qwen/qwen3-32b, hosted and pinned to deepinfra, on the dev split under
-   all four conditions, score it offline in the lab container, and commit the
-   table. The prompts and controls are frozen; the README's Hosted model run
-   section lists the remaining steps.
-2. Boundary witnesses, shortcut policy, non-ready gold, frozen test set
-   (`docs/protocol.md` splits table).
+1. Typed-IR prompt v2 that states value encodings, protocol presence and the
+   all/any arity, then a new dev run of all four conditions, which also
+   repeats C1 and C2 under unchanged prompts.
+2. Witness recipes for the three probe gaps (ACK sent from port 443, ACK with
+   an acknowledgment number other than 1, ECE without SYN), then re-score the
+   stored dev answers offline; boundary witnesses, shortcut policy, non-ready
+   gold, frozen test set (`docs/protocol.md` splits table).
 3. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
 4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -146,7 +170,8 @@ directory and are not part of the uploadable project evidence.
 - The complete 50-capture by 150-filter stability gate has not passed. The
   stopped local run reached 28 captures and 4,200 exact pairs without a
   difference, but partial measurements are not release evidence.
-- Model compile validity, silent-wrong rate, prompt and retrieval baselines,
+- Only one model has been measured, on 8 dev cases under prompt v1, and its
+  typed-IR rows are confounded by the prompt gap above. Test-split baselines,
   SFT, DPO, and GRPO remain unmeasured. The complete Pilot Go/No-Go decision is
   still unverified.
 - The 12+4+4 dev split (8+0+0 built) and the frozen test hashes do not exist
@@ -161,7 +186,7 @@ directory and are not part of the uploadable project evidence.
 
 ## Next verification
 
-1. First dev-split model table committed with raw completions and receipts.
+1. Typed-IR prompt v2 dev run beside v1, with the witness-corrected gold.
 2. Boundary-witness ablation: count of loosened-threshold mutations that were
    reward-identical before and after witnesses.
 3. Locked-test run replayed offline from a clean checkout without an API key.

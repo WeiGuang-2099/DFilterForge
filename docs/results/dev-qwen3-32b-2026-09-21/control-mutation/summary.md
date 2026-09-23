@@ -5,10 +5,10 @@ Gold hash: 66e3b281ab77. Bootstrap: 1,000 case-level resamples, seed 17, nearest
 
 ## Conditions
 
-| Condition | Items | Compile valid | Strong exact | Silent-wrong (all) | Silent-wrong (exec) | Over-abstention | Provider failed | Malformed | Gold-field recall | Cost USD | Latency p50 ms |
+| Condition | Items | Compile valid | Strong exact | Silent-wrong (all) | Silent-wrong (exec) | Over-abstention | Provider failed | Malformed | Gold-field recall | Cost USD/item | Latency p50 ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| C1 | 16 | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 1.000 [1.000, 1.000] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0 | 0 | n/a | n/a | 0 |
-| C2 | 16 | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 1.000 [1.000, 1.000] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0 | 0 | 0.740 full 0.625 at k<=16 | n/a | 0 |
+| C1 | 16 | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 1.000 [1.000, 1.000] | 1.000 (16/16) [1.000, 1.000] | 0.000 [0.000, 0.000] | 0 | 0 | n/a | n/a | 0 |
+| C2 | 16 | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 1.000 [1.000, 1.000] | 1.000 (16/16) [1.000, 1.000] | 0.000 [0.000, 0.000] | 0 | 0 | 0.740 full 0.625 at k<=16 | n/a | 0 |
 
 Compile valid means C1 and C2 were accepted and run by pinned tshark only, so an accepted name outside the frozen catalog still counts as valid; C3 and C4 additionally bind the frozen catalog and check types, operators and values.
 
@@ -17,6 +17,8 @@ Compile valid means C1 and C2 were accepted and run by pinned tshark only, so an
 | Comparison | Metric | Difference | First better | Second better | Discordant | Verdict |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
 | C2 - C1 | strong exact | 0.000 [0.000, 0.000] | 0 | 0 | 0 | inconclusive (fewer than 10 discordant cases) |
+
+With 8 cases no comparison can reach 10 discordant cases, so every verdict is inconclusive by construction.
 
 ## Notes
 
