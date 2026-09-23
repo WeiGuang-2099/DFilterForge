@@ -22,7 +22,7 @@ jobs:
       - run: docker compose --profile dev build test
       - run: docker compose --profile dev run --rm test pyink --check src tests scripts
       - run: docker compose --profile dev run --rm test isort --check-only src tests scripts
-      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py
+      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
@@ -31,6 +31,12 @@ jobs:
           docker compose --profile dev run --rm test
           python scripts/benchmark_gate.py --phase suite
           --output-dir /tmp/benchmark
+          --source-revision "${{ github.sha }}"
+      - name: Check model split labels and mutation adequacy
+        run: >-
+          docker compose --profile dev run --rm test
+          python scripts/probe_adequacy.py
+          --output /tmp/adequacy/receipt.json
           --source-revision "${{ github.sha }}"
       - name: Prepare dev prompts from the frozen catalog
         run: >-

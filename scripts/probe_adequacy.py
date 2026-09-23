@@ -2,15 +2,17 @@
 
 The gate regenerates the model split and, for every dev and test case,
 proves the reference filter and the compiled canonical IR against the
-case's authored labels on all six probes, requires the authored mutation to
-differ from the labels on at least one probe of its split, and executes
+case's authored labels on all six probes, proves the authored mutation
+against its own authored labels on all six probes and requires it to differ
+from the case's labels on at least one probe of its split, and executes
 every single-site mutant of the canonical IR. A mutant whose frames equal
 the labels on every probe of its split survives: the probes cannot tell it
 from the gold. Survivors are matched against the reasoned waivers kept
 beside the gold.
 
-Strict mode exits 1 on a label mismatch, an authored mutation the probes do
-not tell apart, an unwaived survivor or a waiver that matches no survivor.
+Strict mode exits 1 on a label mismatch of any of the three filters, an
+authored mutation the probes do not tell apart, an unwaived survivor or a
+waiver that matches no survivor.
 Report mode records the same receipt and exits 0. An execution failure
 exits 2 in both modes.
 """
@@ -59,7 +61,7 @@ from dfilterforge.runner import TsharkRunner
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_REVISION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/+:-]{0,127}")
-_SCHEMA_VERSION = "probe-adequacy/1.0"
+_SCHEMA_VERSION = "probe-adequacy/1.1"
 _SPLITS: tuple[str, ...] = ("dev", "test")
 _STATUSES: tuple[str, ...] = ("killed", "survived", "rejected", "uncompilable")
 # A mutant tshark refuses to compile is invalid for a model too, so it can
@@ -72,7 +74,8 @@ _NOTES: tuple[str, ...] = (
     "A survivor matches its case's labels on all three probes of its split.",
     "Labels are checked on all six probes, dev and test: the reference "
     "filter and the compiled canonical IR must each select exactly the "
-    "frames the case's recipe oracle names.",
+    "frames the case's recipe oracle names, and the authored mutation "
+    "exactly the frames its mutation memberships name.",
     "Mutants come from the fixed operator set in dfilterforge.mutants, not "
     "from an enumeration of near misses; the gate never judges equivalence, "
     "only a waiver does.",
@@ -298,7 +301,9 @@ class _SplitProbes:
             for expected in case.spec.probes
         ]
 
-    def label_probes(self, case: ModelSemanticCase) -> list[_Probe]:
+    def label_probes(
+        self, case: ModelSemanticCase, *, mutation: bool = False
+    ) -> list[_Probe]:
         """Every gold probe, dev and test, labelled from the case oracle."""
         probes: list[_Probe] = []
         for probe_id, capture_sha256 in self.hashes.items():
@@ -308,28 +313,37 @@ class _SplitProbes:
                     probe_id,
                     probe.capture_path,
                     capture_sha256,
-                    case.labels(probe),
+                    case.labels(probe, mutation=mutation),
                 )
             )
         return probes
+
+
+def _checked_frames(
+    executor: _Executor, probes: Sequence[_Probe], display_filter: str
+) -> tuple[dict[str, tuple[int, ...]], list[dict[str, object]]]:
+    """Runs one filter on every probe; returns its frames and disagreements."""
+    frames = {
+        probe.probe_id: executor.frames(probe, display_filter)
+        for probe in probes
+    }
+    mismatches: list[dict[str, object]] = [
+        {
+            "probe_id": probe.probe_id,
+            "expected": probe.expected,
+            "frames": frames[probe.probe_id],
+        }
+        for probe in probes
+        if frames[probe.probe_id] != probe.expected
+    ]
+    return frames, mismatches
 
 
 def _label_mismatches(
     executor: _Executor, probes: Sequence[_Probe], display_filter: str
 ) -> list[dict[str, object]]:
     """Runs one gold filter on every probe and returns each disagreement."""
-    mismatches: list[dict[str, object]] = []
-    for probe in probes:
-        frames = executor.frames(probe, display_filter)
-        if frames != probe.expected:
-            mismatches.append(
-                {
-                    "probe_id": probe.probe_id,
-                    "expected": probe.expected,
-                    "frames": frames,
-                }
-            )
-    return mismatches
+    return _checked_frames(executor, probes, display_filter)[1]
 
 
 def _run_mutants(
@@ -405,7 +419,16 @@ def _measure_case(
         else _label_mismatches(executor, labelled, canonical)
     )
     own = probes.split_probes(case)
-    killers = executor.killing_probes(own, case.mutation_filter)
+    mutation_frames, mutation_mismatches = _checked_frames(
+        executor,
+        probes.label_probes(oracle, mutation=True),
+        case.mutation_filter,
+    )
+    killers = [
+        probe.probe_id
+        for probe in own
+        if mutation_frames[probe.probe_id] != probe.expected
+    ]
     counts = _run_mutants(
         executor, case, own, {canonical, spec.reference_filter}, tally
     )
@@ -418,6 +441,7 @@ def _measure_case(
             "label_mismatches": mismatches,
             "canonical_mismatches": canonical_mismatches,
             "mutation_filter": case.mutation_filter,
+            "mutation_label_mismatches": mutation_mismatches,
             "mutation_killing_probes": killers,
             "mutants_executed": counts["executed"],
             "mutants_rejected": counts["rejected"],
@@ -499,6 +523,7 @@ def _failures(
     return {
         "label_mismatches": mismatches("label_mismatches"),
         "canonical_mismatches": mismatches("canonical_mismatches"),
+        "mutation_label_mismatches": mismatches("mutation_label_mismatches"),
         "undistinguished_mutations": sum(
             not row["mutation_killing_probes"] for row in cases
         ),
@@ -562,6 +587,7 @@ def measure(
         "label_checks": {
             "reference_checked": tally.label_checks,
             "canonical_checked": tally.label_checks,
+            "mutation_checked": tally.label_checks,
         },
         "mutants": {
             "generated": tally.generated,

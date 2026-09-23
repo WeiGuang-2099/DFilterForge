@@ -1,9 +1,10 @@
 """The probe adequacy gate: waivers, receipt shape and exit status.
 
 A recorded runner stands in for tshark: it answers each reference filter
-and compiled canonical IR with its case's labels on all six probes, a
-chosen set of filters with the labels of their case, and everything else
-with no frames.
+and compiled canonical IR with its case's labels on all six probes, each
+authored mutation with its mutation labels on all six probes, a chosen set
+of filters with the labels of their case, and everything else with no
+frames.
 """
 
 from collections.abc import Sequence
@@ -27,6 +28,7 @@ from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelSplitArtifacts
+from dfilterforge.model_split import MUTANT_WAIVERS
 from dfilterforge.mutants import Mutant
 from dfilterforge.mutants import MutantCategory
 from dfilterforge.mutants import MutantWaiver
@@ -152,7 +154,7 @@ def fixture_gold(split: ModelSplitArtifacts) -> dict[str, ModelGoldCaseV1]:
 
 
 def _gold_answers(split: ModelSplitArtifacts) -> _Answers:
-    """Answers both gold filters of every case with its labels everywhere."""
+    """Answers every case's three authored filters with their labels."""
     answers: _Answers = {}
     for case in model_semantic_cases():
         for probe in split.probes:
@@ -160,6 +162,9 @@ def _gold_answers(split: ModelSplitArtifacts) -> _Answers:
             answers[(probe.probe_id, case.reference_filter)] = labels
             answers[(probe.probe_id, compile_intent(case.canonical_ir))] = (
                 labels
+            )
+            answers[(probe.probe_id, case.mutation_filter)] = case.labels(
+                probe, mutation=True
             )
     return answers
 
@@ -188,6 +193,14 @@ def _mutant_filters(
         for mutant in single_site_mutants(case.spec.canonical_ir)
         if mutant.category is category
     ]
+
+
+def _waived(gold: dict[str, ModelGoldCaseV1]) -> _Answers:
+    """Makes every declared waiver's mutant survive, as tshark does."""
+    answers: _Answers = {}
+    for waiver in MUTANT_WAIVERS:
+        answers.update(_exact(gold[waiver.case_id], waiver.display_filter))
+    return answers
 
 
 def _planted(
@@ -317,7 +330,7 @@ def test_receipt_counts_survivors_by_split_and_category(
         ],
     )
 
-    assert receipt["schema_version"] == "probe-adequacy/1.0"
+    assert receipt["schema_version"] == "probe-adequacy/1.1"
     assert receipt["mode"] == "strict"
     assert receipt["source_revision"] == "unit-test"
     assert receipt["case_count"] == 24
@@ -325,6 +338,7 @@ def test_receipt_counts_survivors_by_split_and_category(
     assert receipt["label_checks"] == {
         "reference_checked": 24 * 6,
         "canonical_checked": 24 * 6,
+        "mutation_checked": 24 * 6,
     }
     assert receipt["rejected"] == [
         {
@@ -394,6 +408,7 @@ def test_receipt_counts_survivors_by_split_and_category(
     assert receipt["failures"] == {
         "label_mismatches": 0,
         "canonical_mismatches": 0,
+        "mutation_label_mismatches": 0,
         "undistinguished_mutations": 0,
         "unwaived_survivors": 3,
         "stale_waivers": 1,
@@ -403,15 +418,18 @@ def test_receipt_counts_survivors_by_split_and_category(
     assert [row["case_id"] for row in cases] == list(gold)
     assert all(row["label_mismatches"] == [] for row in cases)
     assert all(row["canonical_mismatches"] == [] for row in cases)
+    assert all(row["mutation_label_mismatches"] == [] for row in cases)
     assert sum(cast(int, row["mutants_executed"]) for row in cases) == 182
     assert [row["case_id"] for row in cases if row["mutants_rejected"]] == [
         "tcp-expiring-ttl"
     ]
     runtime = _mapping(receipt["runtime"])
-    # 24 x 6 reference runs, the canonical runs whose text differs, 24 x 3
+    # 24 x 6 reference runs, the canonical runs whose text differs, 24 x 6
     # mutation runs and 181 x 3 mutant runs; the rejected mutant stops at
     # its first probe with no runtime.
-    assert runtime["timed_runs"] == 144 + _canonical_runs(gold) + 72 + 181 * 3
+    assert runtime["timed_runs"] == (
+        144 + _canonical_runs(gold) + 144 + 181 * 3
+    )
     assert runtime["p50_ms"] == runtime["p95_ms"] == 1.0
     identity = _mapping(receipt["measurement_identity"])
     assert receipt["measurement_identity_sha256"] == content_sha256(identity)
@@ -449,17 +467,30 @@ def test_label_mismatches_on_either_split_are_recorded(
     answers[("semantic-11", compile_intent(test_case.spec.canonical_ir))] = (
         999,
     )
+    # A dev mutation is wrong on a test probe, which only its own mutation
+    # labels can catch.
+    answers[("semantic-43", gold["tcp-expiring-ttl"].mutation_filter)] = (999,)
     blind = gold["aaaa-or-udp-source-dns"]
     answers.update(_exact(blind, blind.mutation_filter))
+    answers.update(_waived(gold))
+    # The blind mutation also misses its mutation labels wherever those
+    # differ from the case's labels.
+    blind_misses = sum(
+        oracles[blind.case_id].labels(probes[probe.probe_id], mutation=True)
+        != probe.expected_frames
+        for probe in blind.spec.probes
+    )
 
     receipt = probe_adequacy.measure(
         _AnswerRunner(answers), source_revision="unit-test", strict=False
     )
 
     assert receipt["mode"] == "report"
+    assert blind_misses > 0
     assert receipt["failures"] == {
         "label_mismatches": 1,
         "canonical_mismatches": 1,
+        "mutation_label_mismatches": 1 + blind_misses,
         "undistinguished_mutations": 1,
         "unwaived_survivors": 0,
         "stale_waivers": 0,
@@ -485,6 +516,20 @@ def test_label_mismatches_on_either_split_are_recorded(
         }
     ]
     assert cases["https-without-syn"]["label_mismatches"] == []
+    assert cases["tcp-expiring-ttl"]["mutation_label_mismatches"] == [
+        {
+            "probe_id": "semantic-43",
+            "expected": oracles["tcp-expiring-ttl"].labels(
+                probes["semantic-43"], mutation=True
+            ),
+            "frames": (999,),
+        }
+    ]
+    assert cases["tcp-expiring-ttl"]["mutation_killing_probes"] == [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23",
+    ]
     assert cases["aaaa-or-udp-source-dns"]["mutation_killing_probes"] == []
     assert cases["dns-a-queries"]["mutation_killing_probes"] == [
         "semantic-11",
@@ -496,7 +541,9 @@ def test_label_mismatches_on_either_split_are_recorded(
 
 @_POSIX_ONLY
 def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
-    split: ModelSplitArtifacts, monkeypatch: pytest.MonkeyPatch
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     uncompilable = Mutant(
         MutantCategory.VALUE_DOMAIN,
@@ -515,7 +562,7 @@ def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
     monkeypatch.setattr(probe_adequacy, "single_site_mutants", padded)
 
     receipt = probe_adequacy.measure(
-        _AnswerRunner(_gold_answers(split)),
+        _AnswerRunner({**_gold_answers(split), **_waived(gold)}),
         source_revision="unit-test",
         strict=True,
     )
@@ -523,7 +570,9 @@ def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
     mutants = _mapping(receipt["mutants"])
     assert (mutants["generated"], mutants["duplicates"]) == (182 + 48, 24)
     assert (mutants["executed"], mutants["uncompilable"]) == (182, 24)
-    assert (mutants["survived"], receipt["passed"]) == (0, True)
+    # Only the declared waivers survive, so strict mode passes.
+    assert (mutants["survived"], mutants["waived"]) == (4, 4)
+    assert receipt["passed"] is True
 
 
 def _main(
@@ -589,17 +638,36 @@ def test_report_mode_records_failures_and_exits_zero(
 
 
 @_POSIX_ONLY
-def test_strict_mode_passes_when_every_mutant_is_killed(
+def test_strict_mode_passes_when_only_waived_mutants_survive(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answers = {**_gold_answers(split), **_waived(gold)}
+
+    status, output = _main(tmp_path, monkeypatch, _AnswerRunner(answers))
+
+    receipt = _mapping(json.loads(output.read_text(encoding="utf-8")))
+    assert (status, receipt["passed"]) == (0, True)
+    waivers = _mapping(receipt["waivers"])
+    assert (waivers["declared"], waivers["applied"]) == (4, 4)
+
+
+@_POSIX_ONLY
+def test_strict_mode_fails_when_a_declared_waiver_has_no_survivor(
     split: ModelSplitArtifacts,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Every mutant killed leaves all four declared waivers stale.
     status, output = _main(
         tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split))
     )
 
     receipt = _mapping(json.loads(output.read_text(encoding="utf-8")))
-    assert (status, receipt["passed"]) == (0, True)
+    assert (status, receipt["passed"]) == (1, False)
+    assert _mapping(receipt["failures"])["stale_waivers"] == 4
 
 
 def test_an_existing_receipt_is_never_replaced(

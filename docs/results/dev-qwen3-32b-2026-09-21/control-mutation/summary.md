@@ -1,7 +1,7 @@
 # Score summary
 
 Model: control-mutation. Split: dev. Run: dev-qwen3-32b-2026-09-21. Cases: 8, items: 32.
-Gold hash: 66e3b281ab77. Bootstrap: 1,000 case-level resamples, seed 17, nearest-rank 2.5 and 97.5 percentiles, index vectors shared by every metric, drawn from 8 cases.
+Gold hash: 57db1369ae6f. Bootstrap: 1,000 case-level resamples, seed 17, nearest-rank 2.5 and 97.5 percentiles, index vectors shared by every metric, drawn from 8 cases.
 
 ## Conditions
 

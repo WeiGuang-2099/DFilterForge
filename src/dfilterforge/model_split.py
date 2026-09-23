@@ -2,12 +2,15 @@
 
 The split deliberately reuses the benchmark's packet recipes and protocols.
 It holds out predicate compositions and capture instances, not recipe or
-protocol families. Evaluator gold is written separately from model inputs.
+protocol families. Each probe copy ends in a tail of witness packets that
+separate near-miss filters the recipes alone cannot. Evaluator gold is
+written separately from model inputs.
 """
 
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 import hashlib
 import json
@@ -39,6 +42,21 @@ from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 from dfilterforge.intent_ir import ScalarValue
 from dfilterforge.mutants import MutantWaiver
+from dfilterforge.witnesses import A_QUERY_WITNESSES
+from dfilterforge.witnesses import ACK_WITNESSES
+from dfilterforge.witnesses import append_witnesses
+from dfilterforge.witnesses import CLIENT_WITNESSES
+from dfilterforge.witnesses import DNS_WITNESSES
+from dfilterforge.witnesses import HIGH_PORT_WITNESSES
+from dfilterforge.witnesses import HTTPS_WITNESSES
+from dfilterforge.witnesses import PRIVATE_WITNESSES
+from dfilterforge.witnesses import RESPONSE_WITNESSES
+from dfilterforge.witnesses import SOURCE_53_WITNESSES
+from dfilterforge.witnesses import SYN_WITNESSES
+from dfilterforge.witnesses import TCP_WITNESSES
+from dfilterforge.witnesses import TTL_BELOW_64_WITNESSES
+from dfilterforge.witnesses import UDP_WITNESSES
+from dfilterforge.witnesses import WITNESS_NAMES
 
 ModelSplit = Literal["dev", "test"]
 
@@ -56,14 +74,25 @@ _SPEC_ASSUMPTIONS = (
     "mDNS exposes shared dns.* fields but remains a distinct protocol.",
     "Equivalence applies only to the selected probes and pinned environment.",
 )
+# Evaluator-only readings of one case's wording, added to the shared
+# specification assumptions; the model never sees them.
+_CASE_ASSUMPTIONS: dict[str, tuple[str, ...]] = {
+    "fin-or-dns-response": (
+        "All DNS responses include mDNS responses, which carry the same "
+        "dns.* response flag.",
+    ),
+}
 _PROVENANCE = (
     "Model evaluation cases authored as held-out compositions over the same "
     "packet recipes and protocol families as dfilterforge.benchmark/v1. Dev "
-    "uses semantic-11/17/23 and test uses semantic-31/37/43, rather than the "
-    "original semantic-suite probes semantic-01/02/03. This is strictly an "
+    "uses copies of semantic-11/17/23 and test copies of semantic-31/37/43, "
+    "rather than the original semantic-suite probes semantic-01/02/03; each "
+    "copy keeps the benchmark frames byte for byte and appends the 31 "
+    "witness packets of dfilterforge.witnesses. This is strictly an "
     "unseen-composition plus unseen-capture-instance split; it is not an "
     "unseen-recipe or unseen-protocol split. Labels are authored from recipe "
-    "membership rather than inferred from display filters."
+    "and witness membership rather than inferred from display filters, and "
+    "scripts/probe_adequacy.py checks them with tshark on all six probes."
 )
 
 
@@ -126,7 +155,7 @@ class ModelGoldV1(FrozenModel):
 
 @dataclass(frozen=True)
 class RecipeOracle:
-    """Independent canonical and mutation recipe memberships."""
+    """Independent canonical and mutation recipe and witness memberships."""
 
     canonical: frozenset[str]
     mutation: frozenset[str]
@@ -174,7 +203,8 @@ class ModelSplitArtifacts:
     inputs_path: Path
     gold_path: Path
     capture_paths: tuple[Path, ...]
-    # The same captures with their recipe order, for labels on any probe.
+    # The same captures with their recipe and witness order, for labels on
+    # any probe.
     probes: tuple[BenchmarkProbe, ...]
 
 
@@ -187,10 +217,15 @@ def _p(
 
 
 def _oracle(
-    canonical: set[str] | frozenset[str],
-    mutation: set[str] | frozenset[str],
+    canonical: AbstractSet[str],
+    mutation: AbstractSet[str],
+    *,
+    witnesses: tuple[AbstractSet[str], AbstractSet[str]],
 ) -> RecipeOracle:
-    return RecipeOracle(frozenset(canonical), frozenset(mutation))
+    """Joins recipe memberships with the canonical and mutation witnesses."""
+    return RecipeOracle(
+        frozenset(canonical) | witnesses[0], frozenset(mutation) | witnesses[1]
+    )
 
 
 def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
@@ -223,7 +258,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             All(children=(_p("tcp"), ttl_low)),
             "tcp && ip.ttl <= 1",
             "ip.ttl <= 1 && (tcp || udp)",
-            _oracle({"tcp-lowttl"}, {"tcp-lowttl", "udp-lowttl"}),
+            _oracle(
+                {"tcp-lowttl"},
+                {"tcp-lowttl", "udp-lowttl"},
+                witnesses=({"tcp-ttl-0"}, {"tcp-ttl-0", "udp-ttl-0"}),
+            ),
         ),
         ModelSemanticCase(
             "udp-expiring-ttl",
@@ -236,7 +275,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             All(children=(_p("udp"), ttl_low)),
             "udp && ip.ttl <= 1",
             "ip.ttl <= 1 && (udp || tcp)",
-            _oracle({"udp-lowttl"}, {"tcp-lowttl", "udp-lowttl"}),
+            _oracle(
+                {"udp-lowttl"},
+                {"tcp-lowttl", "udp-lowttl"},
+                witnesses=({"udp-ttl-0"}, {"tcp-ttl-0", "udp-ttl-0"}),
+            ),
         ),
         ModelSemanticCase(
             "ack-to-https",
@@ -252,6 +295,7 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _oracle(
                 {"syn-ack", "ack", "reset", "tcp-lowttl", "tcp-reverse"},
                 ACK_RECIPES,
+                witnesses=(ACK_WITNESSES & HTTPS_WITNESSES, ACK_WITNESSES),
             ),
         ),
         ModelSemanticCase(
@@ -268,13 +312,12 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             "dns.flags.response == 0 && dns",
             _oracle(
                 {"tcp-query", "udp-query", "udp-both-53", "udp-mdns"},
-                {
-                    "tcp-query",
-                    "udp-query",
-                    "udp-both-53",
-                    "udp-mdns",
-                    "udp-aaaa",
-                },
+                # The dns protocol test in the mutation never matches mDNS.
+                {"tcp-query", "udp-query", "udp-both-53", "udp-aaaa"},
+                witnesses=(
+                    A_QUERY_WITNESSES,
+                    A_QUERY_WITNESSES | {"dns-mx-query"},
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -288,7 +331,14 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             AnyOf(children=(_p("tcp.flags.fin", Operator.EQ, True), response)),
             "tcp.flags.fin == 1 || dns.flags.response == 1",
             "dns && dns.flags.response == 1",
-            _oracle({"fin", *responses}, responses),
+            _oracle(
+                {"fin", *responses},
+                responses,
+                witnesses=(
+                    RESPONSE_WITNESSES,
+                    RESPONSE_WITNESSES & DNS_WITNESSES,
+                ),
+            ),
         ),
         ModelSemanticCase(
             "udp-nondns-private-destination",
@@ -308,7 +358,14 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             ),
             "udp && !dns && ip.dst == 10.0.0.0/8",
             "udp && !dns && ip",
-            _oracle({"udp-private-destination"}, UDP_RECIPES - DNS_RECIPES),
+            _oracle(
+                {"udp-private-destination"},
+                UDP_RECIPES - DNS_RECIPES,
+                witnesses=(
+                    {"udp-to-far-private"},
+                    UDP_WITNESSES - DNS_WITNESSES,
+                ),
+            ),
         ),
         ModelSemanticCase(
             "ecn-syn-or-expiring",
@@ -332,7 +389,12 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             ),
             "(tcp.flags.syn == 1 && tcp.flags.ece == 1) || ip.ttl <= 1",
             "tcp && tcp.flags.syn == 1 && tcp.flags.ece == 1",
-            _oracle({"ecn-syn", "tcp-lowttl", "udp-lowttl"}, {"ecn-syn"}),
+            _oracle(
+                {"ecn-syn", "tcp-lowttl", "udp-lowttl"},
+                {"ecn-syn"},
+                # cwr-syn has no ECE and ece-syn-reset no SYN.
+                witnesses=({"tcp-ttl-0", "udp-ttl-0"}, set()),
+            ),
         ),
         ModelSemanticCase(
             "aaaa-or-nxdomain",
@@ -345,7 +407,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             AnyOf(children=(qtype_aaaa, _p("dns.flags.rcode", Operator.EQ, 3))),
             "dns.qry.type == 28 || dns.flags.rcode == 3",
             "dns && dns.qry.type == 28",
-            _oracle({"udp-aaaa", "udp-nxdomain"}, {"udp-aaaa"}),
+            _oracle(
+                {"udp-aaaa", "udp-nxdomain"},
+                {"udp-aaaa"},
+                witnesses=(set(), set()),
+            ),
         ),
         ModelSemanticCase(
             "tcp-source-testnet",
@@ -358,7 +424,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             All(children=(_p("tcp"), source_test)),
             "tcp && ip.src == 192.0.2.0/24",
             "tcp && ip",
-            _oracle(TCP_RECIPES - {"tcp-reverse"}, TCP_RECIPES),
+            _oracle(
+                TCP_RECIPES - {"tcp-reverse"},
+                TCP_RECIPES,
+                witnesses=(TCP_WITNESSES & CLIENT_WITNESSES, TCP_WITNESSES),
+            ),
         ),
         ModelSemanticCase(
             "udp-source-testnet",
@@ -371,7 +441,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             All(children=(_p("udp"), source_test)),
             "udp && ip.src == 192.0.2.0/24",
             "udp && ip",
-            _oracle(UDP_RECIPES - {"udp-private"}, UDP_RECIPES),
+            _oracle(
+                UDP_RECIPES - {"udp-private"},
+                UDP_RECIPES,
+                witnesses=(UDP_WITNESSES & CLIENT_WITNESSES, UDP_WITNESSES),
+            ),
         ),
         ModelSemanticCase(
             "private-either-endpoint",
@@ -385,7 +459,9 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             "ip.src == 10.0.0.0/8 || ip.dst == 10.0.0.0/8",
             "ip && ip.src == 10.0.0.0/8",
             _oracle(
-                {"udp-private", "udp-private-destination"}, {"udp-private"}
+                {"udp-private", "udp-private-destination"},
+                {"udp-private"},
+                witnesses=(PRIVATE_WITNESSES, {"udp-from-far-private"}),
             ),
         ),
         ModelSemanticCase(
@@ -400,7 +476,14 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             AnyOf(children=(source_test, source_private)),
             "ip.src == 192.0.2.0/24 || ip.src == 10.0.0.0/8",
             "ip && ip.src == 192.0.2.0/24",
-            _oracle(frozenset(RECIPES) - {"tcp-reverse"}, source_testnet),
+            _oracle(
+                frozenset(RECIPES) - {"tcp-reverse"},
+                source_testnet,
+                witnesses=(
+                    CLIENT_WITNESSES | {"udp-from-far-private"},
+                    CLIENT_WITNESSES,
+                ),
+            ),
         ),
         ModelSemanticCase(
             "ack-outside-testnet",
@@ -414,7 +497,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             All(children=(ack_bit, Not(child=source_test))),
             "tcp.flags.ack == 1 && !(ip.src == 192.0.2.0/24)",
             "tcp && tcp.flags.ack == 1",
-            _oracle({"tcp-reverse"}, ACK_RECIPES),
+            _oracle(
+                {"tcp-reverse"},
+                ACK_RECIPES,
+                witnesses=(ACK_WITNESSES - CLIENT_WITNESSES, ACK_WITNESSES),
+            ),
         ),
         ModelSemanticCase(
             "high-udp-source-testnet",
@@ -429,7 +516,12 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             "udp.dstport > 5353 && ip.src == 192.0.2.0/24",
             "udp && udp.dstport > 5353",
             _oracle(
-                HIGH_UDP_PORT_RECIPES - {"udp-private"}, HIGH_UDP_PORT_RECIPES
+                HIGH_UDP_PORT_RECIPES - {"udp-private"},
+                HIGH_UDP_PORT_RECIPES,
+                witnesses=(
+                    HIGH_PORT_WITNESSES & CLIENT_WITNESSES,
+                    HIGH_PORT_WITNESSES,
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -445,7 +537,12 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             "udp.dstport > 5353 && ip.ttl >= 64",
             "ip && udp.dstport > 5353",
             _oracle(
-                HIGH_UDP_PORT_RECIPES - {"udp-lowttl"}, HIGH_UDP_PORT_RECIPES
+                HIGH_UDP_PORT_RECIPES - {"udp-lowttl"},
+                HIGH_UDP_PORT_RECIPES,
+                witnesses=(
+                    HIGH_PORT_WITNESSES - TTL_BELOW_64_WITNESSES,
+                    HIGH_PORT_WITNESSES,
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -463,6 +560,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _oracle(
                 HIGH_UDP_PORT_RECIPES - {"udp-private", "udp-lowttl"},
                 HIGH_UDP_PORT_RECIPES - {"udp-private"},
+                witnesses=(
+                    (HIGH_PORT_WITNESSES & CLIENT_WITNESSES)
+                    - TTL_BELOW_64_WITNESSES,
+                    HIGH_PORT_WITNESSES & CLIENT_WITNESSES,
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -485,6 +587,16 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _oracle(
                 {"udp-query", "udp-both-53"},
                 {"udp-query", "udp-both-53", "udp-aaaa"},
+                witnesses=(
+                    A_QUERY_WITNESSES
+                    | {"dns-response-53-to-53", "dns-response-to-low-port"},
+                    A_QUERY_WITNESSES
+                    | {
+                        "dns-response-53-to-53",
+                        "dns-response-to-low-port",
+                        "dns-mx-query",
+                    },
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -507,6 +619,19 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _oracle(
                 {"udp-query", "udp-aaaa"},
                 {"udp-query", "udp-both-53", "udp-aaaa"},
+                witnesses=(
+                    {
+                        "dns-mx-query",
+                        "dns-query-from-low-port",
+                        "dns-to-private",
+                    },
+                    {
+                        "dns-mx-query",
+                        "dns-query-from-low-port",
+                        "dns-to-private",
+                        "dns-response-53-to-53",
+                    },
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -527,7 +652,14 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             ),
             "udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode == 0",
             "udp && udp.srcport == 53 && udp.dstport != 53",
-            _oracle({"udp-response"}, responses),
+            _oracle(
+                {"udp-response"},
+                responses,
+                witnesses=(
+                    {"dns-response-to-low-port"},
+                    SOURCE_53_WITNESSES - {"dns-response-53-to-53"},
+                ),
+            ),
         ),
         ModelSemanticCase(
             "aaaa-or-udp-source-dns",
@@ -549,6 +681,7 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
                     "udp-both-53",
                 },
                 {"udp-response", "udp-nxdomain", "udp-both-53"},
+                witnesses=(SOURCE_53_WITNESSES, SOURCE_53_WITNESSES),
             ),
         ),
         ModelSemanticCase(
@@ -569,6 +702,10 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _oracle(
                 (TCP_RECIPES - SYN_RECIPES) - {"tcp-query"},
                 TCP_RECIPES - SYN_RECIPES,
+                witnesses=(
+                    HTTPS_WITNESSES - SYN_WITNESSES,
+                    TCP_WITNESSES - SYN_WITNESSES,
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -587,7 +724,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             ),
             "tcp.dstport == 443 && tcp.flags.syn == 1 && tcp.flags.ack == 0",
             "tcp && tcp.flags.syn == 1 && tcp.flags.ack == 0",
-            _oracle({"syn", "ecn-syn"}, SYN_RECIPES - {"syn-ack"}),
+            _oracle(
+                {"syn", "ecn-syn"},
+                SYN_RECIPES - {"syn-ack"},
+                witnesses=(HTTPS_WITNESSES & SYN_WITNESSES, SYN_WITNESSES),
+            ),
         ),
         ModelSemanticCase(
             "https-syn-or-reset",
@@ -609,6 +750,10 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _oracle(
                 (SYN_RECIPES - {"tcp-http"}) | {"reset"},
                 SYN_RECIPES | {"reset"},
+                witnesses=(
+                    (HTTPS_WITNESSES & SYN_WITNESSES) | {"ece-syn-reset"},
+                    SYN_WITNESSES | {"ece-syn-reset"},
+                ),
             ),
         ),
         ModelSemanticCase(
@@ -622,7 +767,11 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
             _p("tcp.dstport", Operator.NE, 443),
             "tcp.dstport != 443",
             "tcp.dstport == 53",
-            _oracle({"tcp-query", "tcp-http"}, {"tcp-query"}),
+            _oracle(
+                {"tcp-query", "tcp-http"},
+                {"tcp-query"},
+                witnesses=(TCP_WITNESSES - HTTPS_WITNESSES, set()),
+            ),
         ),
     )
 
@@ -630,11 +779,54 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
 # Single-site mutants of the cases above that the probes may leave alive,
 # each with a reason. scripts/probe_adequacy.py fails on any other survivor
 # and on any waiver that no longer matches a survivor.
-MUTANT_WAIVERS: tuple[MutantWaiver, ...] = ()
+MUTANT_WAIVERS: tuple[MutantWaiver, ...] = (
+    MutantWaiver(
+        case_id="private-either-endpoint",
+        edit="0: ip.src -> ip.addr",
+        display_filter="(ip.addr == 10.0.0.0/8 || ip.dst == 10.0.0.0/8)",
+        kind="equivalent",
+        reason=(
+            "ip.addr matches exactly where ip.src or ip.dst does, and the "
+            "other branch already tests ip.dst."
+        ),
+    ),
+    MutantWaiver(
+        case_id="private-either-endpoint",
+        edit="1: ip.dst -> ip.addr",
+        display_filter="(ip.src == 10.0.0.0/8 || ip.addr == 10.0.0.0/8)",
+        kind="equivalent",
+        reason=(
+            "ip.addr matches exactly where ip.src or ip.dst does, and the "
+            "other branch already tests ip.src."
+        ),
+    ),
+    MutantWaiver(
+        case_id="dns-destination-not-source",
+        edit="0: udp.dstport -> udp.port",
+        display_filter="(udp.port == 53 && udp.srcport != 53)",
+        kind="equivalent",
+        reason=(
+            "With the source port required not to be 53, udp.port == 53 can "
+            "only match the destination port."
+        ),
+    ),
+    MutantWaiver(
+        case_id="successful-source-dns",
+        edit="0: udp.srcport -> udp.port",
+        display_filter=(
+            "(udp.port == 53 && udp.dstport != 53 && dns.flags.rcode == 0)"
+        ),
+        kind="equivalent",
+        reason=(
+            "With the destination port required not to be 53, udp.port == 53 "
+            "can only match the source port."
+        ),
+    ),
+)
 
 
 def _copy_selected_probes(output_dir: Path) -> tuple[BenchmarkProbe, ...]:
-    """Materializes only the six selected instances from the benchmark."""
+    """Copies the six selected benchmark captures and appends witnesses."""
     capture_dir = output_dir / "captures"
     capture_dir.mkdir(parents=True, exist_ok=True)
     selected_ids = {
@@ -645,13 +837,20 @@ def _copy_selected_probes(output_dir: Path) -> tuple[BenchmarkProbe, ...]:
     selected: list[BenchmarkProbe] = []
     with TemporaryDirectory(prefix="dfilterforge-model-split-") as staging:
         generated = generate_benchmark(Path(staging))
-        for probe in generated:
+        # generate_benchmark builds capture i with seed 100 + i.
+        for seed, probe in enumerate(generated, 100):
             if probe.probe_id not in selected_ids:
                 continue
             target = capture_dir / probe.capture_path.name
-            target.write_bytes(probe.capture_path.read_bytes())
+            target.write_bytes(
+                append_witnesses(
+                    probe.capture_path.read_bytes(), seed, len(probe.recipes)
+                )
+            )
             selected.append(
-                BenchmarkProbe(probe.probe_id, target, probe.recipes)
+                BenchmarkProbe(
+                    probe.probe_id, target, probe.recipes + WITNESS_NAMES
+                )
             )
     order = {
         probe_id: index
@@ -681,7 +880,7 @@ def _build_gold_case(
     spec = SemanticSpecV1(
         task_id=case.case_id,
         intent=case.paraphrases[0],
-        assumptions=_SPEC_ASSUMPTIONS,
+        assumptions=_SPEC_ASSUMPTIONS + _CASE_ASSUMPTIONS.get(case.case_id, ()),
         canonical_ir=case.canonical_ir,
         reference_filter=case.reference_filter,
         probes=tuple(expectations),

@@ -15,12 +15,15 @@ synthetic multi-probe captures, packet diffs, predicate traces, executable
 replay, and measured receipts. One model, qwen/qwen3-32b, has been evaluated
 on the 8-case dev split under all four prompt conditions, and nothing has been
 trained; [what that run shows and what it does not](docs/decisions/first-dev-run.md)
-is written down, including a typed-IR prompt gap and three probe gaps that
-change how its numbers read. The Web Evaluation Lab still shows a hand-written
-illustrative example. See `docs/progress.md` for verified results and
-`docs/protocol.md` for the model evaluation protocol. Every committed run and
-its gold-derived reference and mutation controls re-score offline in the
-no-network container.
+is written down, including a typed-IR prompt gap. Three of its answers first
+passed as strong exact because no probe packet separated them from the gold;
+the model split probes now end in witness packets, a mutation-adequacy gate
+checks every single-site mutant of the gold from a fixed operator set on them
+in CI, and the run was re-scored against the corrected gold. The Web
+Evaluation Lab still shows a hand-written illustrative example. See
+`docs/progress.md` for verified results and `docs/protocol.md` for the model
+evaluation protocol. Every committed run and its gold-derived reference and
+mutation controls re-score offline in the no-network container.
 
 ## Development
 
