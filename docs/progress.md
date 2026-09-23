@@ -153,27 +153,27 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
 
 ## Typed-IR prompt v2: 2026-09-23
 
-- The typed-IR system prompt now states how each bound type is written, that
-  a protocol takes only exists, and that all and any need two children. It
+- The typed-IR system prompt states how each bound type is written, that a
+  protocol takes only exists, and that all and any need two children; it
   names no field. Scoring keeps every system prompt version, so the first run
-  still re-scores; tests pin its four system prompt hashes.
-- `docs/results/dev-qwen3-32b-v2-2026-09-23/` holds the prompts prepared at
-  33ad868: C1 and C2 are byte-identical to the first run's, C3 and C4 differ
-  only in the system message. The reference control is strong exact on 64/64
-  and the mutation control silent-wrong on 32/32.
-- The Docker suite passed 887 tests (1 skipped) at 96.34 percent coverage;
-  every committed tree reproduces with `score --check`.
+  still re-scores. The Docker suite passed 887 tests at 96.34 percent.
+- The v2 prompts were prepared at 33ad868: C1 and C2 byte-identical to the
+  first run's, C3 and C4 differing only in the system message. Controls:
+  64/64 strong exact and 32/32 silent-wrong.
+- The v2 run (64 answers, 0.0065 USD, DeepInfra, 0 reasoning tokens) moved
+  strong exact from 8, 9, 1, 7 to 9, 9, 8, 10 in C1 to C4; quoted typed values
+  fell from 30 to 0 and C4 silent-wrong rose from 2 to 5. The byte-identical
+  C1 and C2 prompts changed 6 of 32 answer texts and 1 outcome, so no
+  single-item difference is an effect (`docs/decisions/typed-ir-prompt-v2.md`).
 
 ## Planned next
 
-1. Call the v2 dev run (the only paid step), score it, and write a decision
-   note comparing C3 and C4 with the first run; C1 and C2 give a repeat.
-2. Shortcut policy, non-ready gold, frozen test set (`docs/protocol.md`
-   splits table); witnesses for the 36-spec suite only if it is ever used to
-   score a model.
-3. Counterexample repair with three feedback arms; four hosted models on the
+1. Gold correction for the two probe gaps the v2 audit found (UDP to 10/8
+   decoded as DNS off port 53; FIN+ACK), then shortcut policy, non-ready
+   gold and the frozen test set (`docs/protocol.md` splits table).
+2. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
-4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
+3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
 ## Blocked or unverified
