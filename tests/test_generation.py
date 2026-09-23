@@ -1,5 +1,6 @@
 """Behavioral tests for the four-condition prompt and response contracts."""
 
+import hashlib
 import json
 
 from pydantic import ValidationError
@@ -17,6 +18,7 @@ from dfilterforge.generation import parse_response
 from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
+from dfilterforge.generation import prompt_versions
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.generation import RetrievedFieldV1
 from dfilterforge.intent_ir import GenerationResultV1
@@ -334,6 +336,84 @@ def test_system_prompts_state_identical_abstention_rules() -> None:
     assert clause not in _system(
         OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE
     )
+
+
+# The system prompts committed runs were prepared with, by version. A run
+# re-scores only while its version still rebuilds these exact bytes.
+_COMMITTED_SYSTEMS = {
+    (OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE, 1): (
+        "ab9b4bd96df39af5e7d14ea1dbcc7bb6003a9fa41ae974ff7a790242c355eb38"
+    ),
+    (OutputContractV1.DISPLAY_FILTER, RetrievalV1.LEXICAL, 1): (
+        "81b43bf2b04167d858e484a2f9d8f2ea5f5eeae0f7938723cfc39007c5a9af2a"
+    ),
+    (OutputContractV1.TYPED_IR, RetrievalV1.NONE, 1): (
+        "8980a4eaba1f0d8014f80e46982075baad859609ca817a37be77f3f2b4482c6e"
+    ),
+    (OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL, 1): (
+        "fdeb379cc080c8ba14a1fdecf758fe7ed2e1cc8bcafc5f9b150e0b8fdda37414"
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("output_contract", "retrieval", "version"), list(_COMMITTED_SYSTEMS)
+)
+def test_committed_prompt_versions_rebuild_byte_for_byte(
+    output_contract: OutputContractV1, retrieval: RetrievalV1, version: int
+) -> None:
+    batch = prepare_batch(
+        (_item(retrieved_fields=_fields_for(retrieval)),),
+        output_contract=output_contract,
+        retrieval=retrieval,
+        prompt_version=version,
+    )
+    system = batch.prompts[0].messages[0].content
+
+    assert hashlib.sha256(system.encode("utf-8")).hexdigest() == (
+        _COMMITTED_SYSTEMS[(output_contract, retrieval, version)]
+    )
+
+
+def test_new_batches_use_the_latest_prompt_version() -> None:
+    latest = prompt_versions(OutputContractV1.TYPED_IR)
+    first = prepare_batch(
+        (_item(),),
+        output_contract=OutputContractV1.TYPED_IR,
+        retrieval=RetrievalV1.NONE,
+        prompt_version=1,
+    )
+
+    assert latest == 2
+    assert prompt_versions(OutputContractV1.DISPLAY_FILTER) == 1
+    assert _system(OutputContractV1.TYPED_IR, RetrievalV1.NONE) != (
+        first.prompts[0].messages[0].content
+    )
+    for version in (0, latest + 1):
+        with pytest.raises(GenerationError, match="no prompt version"):
+            prepare_batch(
+                (_item(),),
+                output_contract=OutputContractV1.TYPED_IR,
+                retrieval=RetrievalV1.NONE,
+                prompt_version=version,
+            )
+
+
+def test_typed_prompt_states_how_every_bound_type_is_written() -> None:
+    system = _system(OutputContractV1.TYPED_IR, RetrievalV1.NONE)
+    typed = " ".join(system.split())
+    direct = _system(OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE)
+
+    # The binder rejects a value whose JSON type does not match its field,
+    # so a contract without retrieved field types must still say how each
+    # type the catalog binds is written, and how a group is nested.
+    for field_type in FieldType:
+        if field_type is not FieldType.UNSUPPORTED:
+            assert field_type.value in typed
+    assert "never a quoted one" in typed
+    assert "true or false for boolean fields" in typed
+    assert "take two or more children" in typed
+    assert "JSON number" not in direct
 
 
 @pytest.mark.parametrize(

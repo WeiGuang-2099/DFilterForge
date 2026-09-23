@@ -658,13 +658,15 @@ def _run_dir(
     stored: bool = True,
     split: str = "dev",
     keep: Mapping[ConditionLabel, int] | None = None,
+    prompt_version: int | None = None,
 ) -> Path:
     """Builds a run directory from one split and gold-derived replies.
 
     With ``stored`` false only ``prepared/`` is written, which is the
     layout a control pass is asked to score. ``keep`` truncates the item
     list of the named conditions, which is how a run whose conditions
-    cover different items is built.
+    cover different items is built. ``prompt_version`` prepares every
+    condition with that system prompt version, as an older run was.
     """
     artifacts = generate_model_split(tmp_path / "source")
     everything = [item for item in artifacts.inputs if item.split == split]
@@ -692,6 +694,7 @@ def _run_dir(
             ],
             output_contract=output_contract,
             retrieval=retrieval,
+            prompt_version=prompt_version,
         )
         recorded = CompletionBatchV1(
             output_contract=output_contract,
@@ -1041,6 +1044,54 @@ def test_prompt_drift_stops_scoring(
 
     assert error.value.code == "prompt_mismatch"
     assert str(error.value) == "C1 mei-0001"
+
+
+def test_a_run_prepared_before_a_prompt_change_still_scores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every committed prompt rebuilds under the version that made it."""
+    _install_live(monkeypatch)
+    run_dir = _run_dir(tmp_path, ("C1", "C3"), prompt_version=1)
+
+    result = score_run(
+        run_dir, code_revision="revision", split_dir=tmp_path / "s"
+    )
+
+    assert result.items == 32
+
+
+def test_a_condition_mixing_prompt_versions_stops_scoring(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One condition's prompts must all come from one prompt version."""
+    _install_live(monkeypatch)
+    run_dir = _run_dir(tmp_path, ("C3",))
+    path = run_dir / "prepared" / "C3.json"
+    document: dict[str, Any] = json.loads(path.read_text("utf-8"))
+    first = prepare_batch(
+        [
+            GenerationInputV1(
+                item_id="mei-0002",
+                intent=_INTENT,
+                user_assumptions=_ASSUMPTIONS,
+                split="dev",
+            )
+        ],
+        output_contract=OutputContractV1.TYPED_IR,
+        retrieval=RetrievalV1.NONE,
+        prompt_version=1,
+    )
+    system = document["prompts"][1]["messages"][0]
+    assert document["prompts"][1]["item_id"] == "mei-0002"
+    assert system["content"] != first.prompts[0].messages[0].content
+    system["content"] = first.prompts[0].messages[0].content
+    _write_json(path, document)
+
+    with pytest.raises(ScoringError) as error:
+        score_run(run_dir, code_revision="revision", split_dir=tmp_path / "s")
+
+    assert error.value.code == "prompt_mismatch"
+    assert str(error.value) == "C3 mei-0002"
 
 
 def test_completion_items_must_match_prepared_items(
