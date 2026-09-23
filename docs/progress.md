@@ -70,24 +70,13 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
 
 ## Replan: 2026-09-15
 
-- The 200 AUD cloud pilot PRD is withdrawn. The public protocol is now
-  `docs/protocol.md` (four prompt conditions, splits, metrics, decoding and
-  provenance rules, training rules) and the decision is recorded in
-  `docs/adr/0002-hosted-inference-and-small-model.md`: hosted endpoints for
-  prompt baselines, a 1.7B-class model for QLoRA-SFT and verifier-labelled
-  DPO, GRPO measured but not trained, total spend under 50 USD.
-- Added `LICENSE` (MIT) and `NOTICE` (Wireshark GPL-2.0-or-later attribution
-  for the tshark build and the frozen catalog).
-- The Web now has two routes, Evaluate and Methodology. The hand-written
-  benchmark table, the placeholder ablation, receipt and workbench pages are
-  removed. The Evaluate page is labelled as a hand-written illustrative
-  example until it is regenerated from a real receipt. Web build, typecheck,
-  ESLint, Playwright and axe checks pass locally.
-- Shared `dfilterforge.errors.DFilterForgeError` base introduced; the model
-  scaffolding is being committed behind tests and the core modules are
-  getting a duplication and dead-code pass. No measured behaviour changes.
-- No model inference or training has run yet. Nothing in this entry is a
-  measured result.
+- The 200 AUD pilot PRD is withdrawn for `docs/protocol.md` and
+  `docs/adr/0002-hosted-inference-and-small-model.md`: hosted prompt
+  baselines, QLoRA-SFT and verifier-labelled DPO on a 1.7B-class model, GRPO
+  measured but not trained, total spend under 50 USD. `LICENSE` (MIT) and
+  `NOTICE` (Wireshark GPL-2.0-or-later) were added. The Web keeps two routes,
+  Evaluate (a labelled hand-written example) and Methodology; its build,
+  typecheck, ESLint, Playwright and axe checks passed locally.
 
 ## Model evaluation path: 2026-09-21
 
@@ -162,11 +151,23 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
   malformed Manolito (udp 41170); ablation 004 evidence predates the tail; the
   mDNS reading of fin-or-dns-response is in evaluator gold only.
 
+## Typed-IR prompt v2: 2026-09-23
+
+- The typed-IR system prompt now states how each bound type is written, that
+  a protocol takes only exists, and that all and any need two children. It
+  names no field. Scoring keeps every system prompt version, so the first run
+  still re-scores; tests pin its four system prompt hashes.
+- `docs/results/dev-qwen3-32b-v2-2026-09-23/` holds the prompts prepared at
+  33ad868: C1 and C2 are byte-identical to the first run's, C3 and C4 differ
+  only in the system message. The reference control is strong exact on 64/64
+  and the mutation control silent-wrong on 32/32.
+- The Docker suite passed 887 tests (1 skipped) at 96.34 percent coverage;
+  every committed tree reproduces with `score --check`.
+
 ## Planned next
 
-1. Typed-IR prompt v2 that states value encodings, protocol presence and the
-   all/any arity, then a new dev run of all four conditions, which also
-   repeats C1 and C2 under unchanged prompts.
+1. Call the v2 dev run (the only paid step), score it, and write a decision
+   note comparing C3 and C4 with the first run; C1 and C2 give a repeat.
 2. Shortcut policy, non-ready gold, frozen test set (`docs/protocol.md`
    splits table); witnesses for the 36-spec suite only if it is ever used to
    score a model.
@@ -187,9 +188,8 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
   still unverified.
 - The 12+4+4 dev split (8+0+0 built) and the frozen test hashes do not exist
   yet, so false-ready rate and slot match are unmeasurable.
-- The Web remains recorded-only. Linux CI teardown and the current production
-  container were not re-verified in this session, so no live Web job boundary
-  should be enabled.
+- The Web remains recorded-only; Linux CI teardown and the production
+  container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 

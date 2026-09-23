@@ -140,8 +140,10 @@ its data.
 
 ## Hosted model run
 
-`RUN` below is `dev-qwen3-32b-2026-09-21`: qwen/qwen3-32b on the dev split via
-deepinfra, fallbacks off; the date records when its prompts were frozen (UTC).
+`RUN` below is `dev-qwen3-32b-v2-2026-09-23`: qwen/qwen3-32b on the dev split
+via deepinfra, fallbacks off, with the second typed-IR prompt; the date records
+when its prompts were frozen (UTC). Its C1 and C2 prompts are byte-identical to
+the first run's, `dev-qwen3-32b-2026-09-21`, which is scored and committed.
 The [protocol](docs/protocol.md) defines what is measured.
 
 1. Build the test image the prompts are prepared in.
@@ -173,8 +175,8 @@ docker compose --profile pilot run --rm lab score --run-dir /workspace/results/R
 
 Step 5 is the only command here that needs a key and spends money; every other
 command is exercised by the test suite or by CI. The
-[reference](docs/results/dev-qwen3-32b-2026-09-21/control-reference/summary.md)
-and [mutation](docs/results/dev-qwen3-32b-2026-09-21/control-mutation/summary.md)
+[reference](docs/results/dev-qwen3-32b-v2-2026-09-23/control-reference/summary.md)
+and [mutation](docs/results/dev-qwen3-32b-v2-2026-09-23/control-mutation/summary.md)
 control scores are the scorer's measured baseline; the model's numbers are in
 `docs/results/RUN/scored/summary.md`, where C2 and C4 also print how often
 retrieval listed every gold field. `--check` (plus `--control reference`
