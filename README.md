@@ -12,14 +12,15 @@ proof.
 
 The local CLI connects the typed compiler to a bounded tshark 4.6.8 runner,
 synthetic multi-probe captures, packet diffs, predicate traces, executable
-replay, and measured receipts. No language model has been evaluated or
-trained yet; the Web Evaluation Lab shows a hand-written illustrative example
-until the first model run replaces it. See `docs/progress.md` for verified
-results and `docs/protocol.md` for the model evaluation protocol. The
-evaluation path is complete and measured without a model: the dev prompts for
-all four conditions and the receipt that records which catalog and code built
-them are frozen under `docs/results/`, and gold-derived reference and mutation
-controls score there end to end in the no-network container.
+replay, and measured receipts. One model, qwen/qwen3-32b, has been evaluated
+on the 8-case dev split under all four prompt conditions, and nothing has been
+trained; [what that run shows and what it does not](docs/decisions/first-dev-run.md)
+is written down, including a typed-IR prompt gap and three probe gaps that
+change how its numbers read. The Web Evaluation Lab still shows a hand-written
+illustrative example. See `docs/progress.md` for verified results and
+`docs/protocol.md` for the model evaluation protocol. Every committed run and
+its gold-derived reference and mutation controls re-score offline in the
+no-network container.
 
 ## Development
 
@@ -171,9 +172,9 @@ Step 5 is the only command here that needs a key and spends money; every other
 command is exercised by the test suite or by CI. The
 [reference](docs/results/dev-qwen3-32b-2026-09-21/control-reference/summary.md)
 and [mutation](docs/results/dev-qwen3-32b-2026-09-21/control-mutation/summary.md)
-control scores are the scorer's measured baseline; the first model number will
-appear in `docs/results/RUN/scored/summary.md`, where C2 and C4 also print how
-often retrieval listed every gold field. `--check` (plus `--control reference`
+control scores are the scorer's measured baseline; the model's numbers are in
+`docs/results/RUN/scored/summary.md`, where C2 and C4 also print how often
+retrieval listed every gold field. `--check` (plus `--control reference`
 or `mutation`) reproduces any of them without a key.
 
 ## Safety boundary

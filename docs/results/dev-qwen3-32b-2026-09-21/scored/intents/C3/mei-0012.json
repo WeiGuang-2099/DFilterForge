@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"udp.port","kind":"predicate","operator":"exists","value":null},{"child":{"field":"dns","kind":"predicate","operator":"exists","value":null},"kind":"not"},{"field":"ip.dst","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
