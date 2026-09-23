@@ -25,6 +25,7 @@ import itertools
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 from typing import cast, NamedTuple, TypeAlias, TypeVar
@@ -446,6 +447,18 @@ def _distinct(values: Iterable[str | None]) -> tuple[tuple[str, ...], int]:
     return tuple(seen[:MAX_EFFECTIVE_VALUES]), len(seen)
 
 
+def _provider_key(name: str) -> str:
+    """Reduces a provider route slug or display name to one comparable key.
+
+    OpenRouter routes by lowercase slug (``deepinfra``, or ``deepinfra/fp8``
+    for one endpoint) but names the provider that answered by its display
+    name (``DeepInfra``). Both reduce to the slug's first path segment,
+    case-folded, with every character that is not a letter or a digit
+    dropped, so a reply from the pinned provider is not read as a change.
+    """
+    return re.sub(r"[^0-9a-z]", "", name.split("/", 1)[0].casefold())
+
+
 def _served(
     answered: Sequence[CompletionV1], requested: str, pinned: Sequence[str]
 ) -> _Served:
@@ -455,7 +468,8 @@ def _served(
     was served something other than what it requested. One consistently
     substituted model id therefore reads as changed, and so does a
     provider outside a pinned route list, neither of which varies within
-    the run.
+    the run. Served providers are matched to pinned routes by
+    :func:`_provider_key`, because the two are spelled differently.
     """
     models, models_count = _distinct(
         record.response_model for record in answered
@@ -475,7 +489,11 @@ def _served(
         provider_changed=bool(providers)
         and (
             providers_count > 1
-            or (bool(pinned) and not set(providers) <= set(pinned))
+            or (
+                bool(pinned)
+                and not {_provider_key(name) for name in providers}
+                <= {_provider_key(route) for route in pinned}
+            )
         ),
         fingerprints=fingerprints,
         fingerprints_distinct=fingerprints_count,

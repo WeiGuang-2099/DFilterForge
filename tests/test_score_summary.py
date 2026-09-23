@@ -539,6 +539,75 @@ def test_cost_uses_recorded_prices_and_counts_missing_usage() -> None:
     assert "it is a lower bound" not in render_markdown(priced)
 
 
+def test_cost_column_prints_the_per_item_figure() -> None:
+    """The column is the protocol's cost per item, not the total."""
+    outcomes = [
+        _item(
+            "C1",
+            f"case-{index}",
+            f"i{index}",
+            OutcomeV1.STRONG_EXACT,
+            prompt_tokens=1000,
+            completion_tokens=500,
+        )
+        for index in range(2)
+    ]
+
+    summary = _summarize(outcomes, usd_per_million_tokens=_PRICES)
+    usage = summary.conditions["C1"].usage
+    rendered = render_markdown(summary)
+    row = next(
+        line for line in rendered.splitlines() if line.startswith("| C1 |")
+    )
+
+    assert usage.cost_per_item_usd is not None
+    assert "| Cost USD/item |" in rendered
+    assert f"| {usage.cost_per_item_usd:.6f} |" in row
+    assert f"{usage.cost_usd:.6f}" not in row
+
+
+def test_executable_rate_prints_the_count_it_rests_on() -> None:
+    """A rate over executed items says how many there were."""
+    outcomes = [
+        _item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT),
+        _item("C1", "case-2", "i2", OutcomeV1.SILENT_WRONG),
+        _item("C1", "case-3", "i3", OutcomeV1.INVALID),
+    ]
+    executed = outcomes[:2]
+
+    rendered = render_markdown(_summarize(outcomes))
+    row = next(
+        line for line in rendered.splitlines() if line.startswith("| C1 |")
+    )
+    full = render_markdown(_summarize(executed))
+
+    assert "| 0.500 (1/2) [" in row
+    assert (
+        "Intervals drawn from fewer than 1,000 resamples skip draws whose"
+        " denominator is zero: C1 silent-wrong (exec) "
+    ) in rendered
+    assert "Intervals drawn from fewer than" not in full
+
+
+def test_comparisons_below_the_discordant_rule_say_so() -> None:
+    """Too few cases make every verdict inconclusive before any data."""
+    few = render_markdown(
+        _summarize(
+            [
+                _item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT),
+                _item("C2", "case-1", "i2", OutcomeV1.SILENT_WRONG),
+            ]
+        )
+    )
+    enough = render_markdown(_summarize(_paired(9)))
+
+    assert (
+        "With 1 case no comparison can reach 10 discordant cases, so every"
+        " verdict is inconclusive by construction."
+    ) in few
+    assert "by construction" not in enough
+
+
 def test_provider_cost_is_carried_next_to_the_estimate() -> None:
     """The provider's own figure sits beside the derived estimate."""
     outcomes = [_item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT)]

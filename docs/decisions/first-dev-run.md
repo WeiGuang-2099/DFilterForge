@@ -6,8 +6,8 @@
 requests (16 dev items in C1 to C4) called from 21622f8 on 2026-09-23, prompts frozen on
 2026-09-21. All 64 answers were served as qwen/qwen3-32b by DeepInfra, finished with stop
 and reported 0 reasoning tokens. Price-derived and provider-reported spend were both
-0.0059 USD. Scored offline in the lab container with code 21622f8; `score --check`
-reproduces it with no differences.
+0.0059 USD. Scored offline in the lab container with code 21622f8, then re-scored after
+the report fix below; `score --check` reproduces it with no differences.
 
 | Condition | Strong exact | Silent-wrong | Invalid | Abstained | Malformed |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -60,10 +60,12 @@ all 64 replies copy user_assumptions; "use only those field names" has no rule f
 incomplete list and is not enforced (C4/mei-0004 used ip.proto from outside its list);
 retrieved enum_values are always empty.
 
-The summary's Run settings print provider_changed true. That is a false alarm: the pinned
-slug deepinfra is compared case-sensitively with the served name DeepInfra. Its Cost USD
-column is the 16-item total, and the silent-wrong (exec) cell does not show its denominator
-(C3 rests on 1 executable item and 647 of 1,000 resamples). None of these changes a metric.
+The first rendering of the summary printed provider_changed true. That was a false alarm:
+the pinned slug deepinfra was compared case-sensitively with the served name DeepInfra. Its
+Cost USD column was the 16-item total, and the silent-wrong (exec) cell hid its denominator
+(C3 rests on 1 executable item and 647 of 1,000 resamples). The report now matches slugs to
+names, prints cost per item, the executed count and thin intervals, and says when every
+comparison is inconclusive by construction. The re-score changed no outcome or metric.
 
 ## Consequences
 

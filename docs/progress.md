@@ -143,22 +143,26 @@ directory and are not part of the uploadable project evidence.
   no probe separates them; and that provider_changed true in the summary is a
   case-sensitive false alarm. Details and item ids are in
   `docs/decisions/first-dev-run.md`.
+- The report now matches a pinned route slug to the served provider name,
+  prints cost per item, the executed count behind silent-wrong (exec), any
+  interval drawn from fewer than 1,000 resamples, and a note when every
+  comparison is inconclusive by construction. The run and both controls were
+  re-scored: only provider_changed (now false), receipt timings and revisions
+  changed, and `score --check` reproduces all three. The Docker suite passed
+  803 tests at 96.10 percent coverage with every static gate clean.
 
 ## Planned next
 
-1. Fix the report: provider_changed compares the pinned slug with the served
-   name case-insensitively; the cost column and the exec-rate denominator are
-   labelled. No metric changes; regenerate the three committed summaries.
-2. Typed-IR prompt v2 that states value encodings, protocol presence and the
+1. Typed-IR prompt v2 that states value encodings, protocol presence and the
    all/any arity, then a new dev run of all four conditions, which also
    repeats C1 and C2 under unchanged prompts.
-3. Witness recipes for the three probe gaps (ACK sent from port 443, ACK with
+2. Witness recipes for the three probe gaps (ACK sent from port 443, ACK with
    an acknowledgment number other than 1, ECE without SYN), then re-score the
    stored dev answers offline; boundary witnesses, shortcut policy, non-ready
    gold, frozen test set (`docs/protocol.md` splits table).
-4. Counterexample repair with three feedback arms; four hosted models on the
+3. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
-5. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
+4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
 ## Blocked or unverified
