@@ -38,6 +38,7 @@ from dfilterforge.intent_ir import Not
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 from dfilterforge.intent_ir import ScalarValue
+from dfilterforge.mutants import MutantWaiver
 
 ModelSplit = Literal["dev", "test"]
 
@@ -173,6 +174,8 @@ class ModelSplitArtifacts:
     inputs_path: Path
     gold_path: Path
     capture_paths: tuple[Path, ...]
+    # The same captures with their recipe order, for labels on any probe.
+    probes: tuple[BenchmarkProbe, ...]
 
 
 def _p(
@@ -624,6 +627,12 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
     )
 
 
+# Single-site mutants of the cases above that the probes may leave alive,
+# each with a reason. scripts/probe_adequacy.py fails on any other survivor
+# and on any waiver that no longer matches a survivor.
+MUTANT_WAIVERS: tuple[MutantWaiver, ...] = ()
+
+
 def _copy_selected_probes(output_dir: Path) -> tuple[BenchmarkProbe, ...]:
     """Materializes only the six selected instances from the benchmark."""
     capture_dir = output_dir / "captures"
@@ -741,4 +750,5 @@ def generate_model_split(output_dir: Path) -> ModelSplitArtifacts:
         inputs_path=inputs_path,
         gold_path=gold_path,
         capture_paths=tuple(probe.capture_path for probe in capture_probes),
+        probes=capture_probes,
     )

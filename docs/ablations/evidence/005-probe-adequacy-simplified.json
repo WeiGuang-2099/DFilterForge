@@ -1,0 +1,1329 @@
+{
+  "case_count": 24,
+  "cases": [
+    {
+      "canonical_filter": "(tcp && ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "tcp-expiring-ttl",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.ttl <= 1 && (tcp || udp)",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "tcp && ip.ttl <= 1",
+      "split": "dev",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(udp && ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "udp-expiring-ttl",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.ttl <= 1 && (udp || tcp)",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "udp && ip.ttl <= 1",
+      "split": "dev",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(tcp.flags.ack == true && tcp.dstport == 443)",
+      "canonical_mismatches": [],
+      "case_id": "ack-to-https",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.ack == 1 && tcp",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "tcp.flags.ack == 1 && tcp.dstport == 443",
+      "split": "dev",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(dns.flags.response == false && dns.qry.type == 1)",
+      "canonical_mismatches": [],
+      "case_id": "dns-a-queries",
+      "label_mismatches": [],
+      "mutants_executed": 3,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns.flags.response == 0 && dns",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "dns.flags.response == 0 && dns.qry.type == 1",
+      "split": "dev",
+      "survivors": 1
+    },
+    {
+      "canonical_filter": "(tcp.flags.fin == true || dns.flags.response == true)",
+      "canonical_mismatches": [],
+      "case_id": "fin-or-dns-response",
+      "label_mismatches": [],
+      "mutants_executed": 2,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && dns.flags.response == 1",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "tcp.flags.fin == 1 || dns.flags.response == 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && !(dns) && ip.dst == 10.0.0.0/8)",
+      "canonical_mismatches": [],
+      "case_id": "udp-nondns-private-destination",
+      "label_mismatches": [],
+      "mutants_executed": 9,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && !dns && ip",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "udp && !dns && ip.dst == 10.0.0.0/8",
+      "split": "dev",
+      "survivors": 4
+    },
+    {
+      "canonical_filter": "((tcp.flags.syn == true && tcp.flags.ece == true) || ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "ecn-syn-or-expiring",
+      "label_mismatches": [],
+      "mutants_executed": 10,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.syn == 1 && tcp.flags.ece == 1",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "(tcp.flags.syn == 1 && tcp.flags.ece == 1) || ip.ttl <= 1",
+      "split": "dev",
+      "survivors": 5
+    },
+    {
+      "canonical_filter": "(dns.qry.type == 28 || dns.flags.rcode == 3)",
+      "canonical_mismatches": [],
+      "case_id": "aaaa-or-nxdomain",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && dns.qry.type == 28",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "reference_filter": "dns.qry.type == 28 || dns.flags.rcode == 3",
+      "split": "dev",
+      "survivors": 3
+    },
+    {
+      "canonical_filter": "(tcp && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "tcp-source-testnet",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && ip",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "tcp && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 1
+    },
+    {
+      "canonical_filter": "(udp && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "udp-source-testnet",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && ip",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(ip.src == 10.0.0.0/8 || ip.dst == 10.0.0.0/8)",
+      "canonical_mismatches": [],
+      "case_id": "private-either-endpoint",
+      "label_mismatches": [],
+      "mutants_executed": 12,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip && ip.src == 10.0.0.0/8",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "ip.src == 10.0.0.0/8 || ip.dst == 10.0.0.0/8",
+      "split": "test",
+      "survivors": 6
+    },
+    {
+      "canonical_filter": "(ip.src == 192.0.2.0/24 || ip.src == 10.0.0.0/8)",
+      "canonical_mismatches": [],
+      "case_id": "source-testnet-or-private",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip && ip.src == 192.0.2.0/24",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "ip.src == 192.0.2.0/24 || ip.src == 10.0.0.0/8",
+      "split": "test",
+      "survivors": 4
+    },
+    {
+      "canonical_filter": "(tcp.flags.ack == true && !(ip.src == 192.0.2.0/24))",
+      "canonical_mismatches": [],
+      "case_id": "ack-outside-testnet",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.ack == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "tcp.flags.ack == 1 && !(ip.src == 192.0.2.0/24)",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "high-udp-source-testnet",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport > 5353",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp.dstport > 5353 && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 3
+    },
+    {
+      "canonical_filter": "(udp.dstport > 5353 && ip.ttl >= 64)",
+      "canonical_mismatches": [],
+      "case_id": "high-udp-normal-ttl",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip && udp.dstport > 5353",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp.dstport > 5353 && ip.ttl >= 64",
+      "split": "test",
+      "survivors": 3
+    },
+    {
+      "canonical_filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/24 && ip.ttl >= 64)",
+      "canonical_mismatches": [],
+      "case_id": "high-udp-testnet-normal-ttl",
+      "label_mismatches": [],
+      "mutants_executed": 16,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport > 5353 && ip.src == 192.0.2.0/24",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp.dstport > 5353 && ip.src == 192.0.2.0/24 && ip.ttl >= 64",
+      "split": "test",
+      "survivors": 5
+    },
+    {
+      "canonical_filter": "(udp.dstport < 5353 && dns.qry.type == 1)",
+      "canonical_mismatches": [],
+      "case_id": "low-port-dns-a",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport < 5353",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp.dstport < 5353 && dns.qry.type == 1",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(udp.dstport == 53 && udp.srcport != 53)",
+      "canonical_mismatches": [],
+      "case_id": "dns-destination-not-source",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport == 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp.dstport == 53 && udp.srcport != 53",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode == 0)",
+      "canonical_mismatches": [],
+      "case_id": "successful-source-dns",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.srcport == 53 && udp.dstport != 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode == 0",
+      "split": "test",
+      "survivors": 6
+    },
+    {
+      "canonical_filter": "(dns.qry.type == 28 || udp.srcport == 53)",
+      "canonical_mismatches": [],
+      "case_id": "aaaa-or-udp-source-dns",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && udp.srcport == 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "dns.qry.type == 28 || udp.srcport == 53",
+      "split": "test",
+      "survivors": 1
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && tcp.flags.syn == false)",
+      "canonical_mismatches": [],
+      "case_id": "https-without-syn",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.syn == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "tcp.dstport == 443 && tcp.flags.syn == 0",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && tcp.flags.syn == true && tcp.flags.ack == false)",
+      "canonical_mismatches": [],
+      "case_id": "https-syn-no-ack",
+      "label_mismatches": [],
+      "mutants_executed": 7,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.syn == 1 && tcp.flags.ack == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "tcp.dstport == 443 && tcp.flags.syn == 1 && tcp.flags.ack == 0",
+      "split": "test",
+      "survivors": 3
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && (tcp.flags.syn == true || tcp.flags.reset == true))",
+      "canonical_mismatches": [],
+      "case_id": "https-syn-or-reset",
+      "label_mismatches": [],
+      "mutants_executed": 7,
+      "mutants_rejected": 0,
+      "mutation_filter": "(tcp && tcp.flags.syn == 1) || tcp.flags.reset == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "tcp.dstport == 443 && (tcp.flags.syn == 1 || tcp.flags.reset == 1)",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "tcp.dstport != 443",
+      "canonical_mismatches": [],
+      "case_id": "tcp-destination-not-https",
+      "label_mismatches": [],
+      "mutants_executed": 4,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.dstport == 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "reference_filter": "tcp.dstport != 443",
+      "split": "test",
+      "survivors": 2
+    }
+  ],
+  "categories": [
+    "field-swap",
+    "flag-as-number",
+    "value-domain",
+    "boundary",
+    "subnet",
+    "drop-conjunct",
+    "drop-disjunct",
+    "drop-not"
+  ],
+  "counts": {
+    "all": {
+      "by_category": {
+        "boundary": {
+          "killed": 21,
+          "rejected": 0,
+          "survived": 17,
+          "uncompilable": 0
+        },
+        "drop-conjunct": {
+          "killed": 35,
+          "rejected": 0,
+          "survived": 5,
+          "uncompilable": 0
+        },
+        "drop-disjunct": {
+          "killed": 14,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-not": {
+          "killed": 2,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "field-swap": {
+          "killed": 35,
+          "rejected": 0,
+          "survived": 14,
+          "uncompilable": 0
+        },
+        "flag-as-number": {
+          "killed": 0,
+          "rejected": 0,
+          "survived": 7,
+          "uncompilable": 0
+        },
+        "subnet": {
+          "killed": 10,
+          "rejected": 0,
+          "survived": 14,
+          "uncompilable": 0
+        },
+        "value-domain": {
+          "killed": 0,
+          "rejected": 0,
+          "survived": 8,
+          "uncompilable": 0
+        }
+      },
+      "executed": 182,
+      "killed": 117,
+      "rejected": 0,
+      "survived": 65,
+      "uncompilable": 0,
+      "unwaived": 65,
+      "waived": 0
+    },
+    "dev": {
+      "by_category": {
+        "boundary": {
+          "killed": 6,
+          "rejected": 0,
+          "survived": 6,
+          "uncompilable": 0
+        },
+        "drop-conjunct": {
+          "killed": 10,
+          "rejected": 0,
+          "survived": 3,
+          "uncompilable": 0
+        },
+        "drop-disjunct": {
+          "killed": 6,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-not": {
+          "killed": 1,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "field-swap": {
+          "killed": 3,
+          "rejected": 0,
+          "survived": 2,
+          "uncompilable": 0
+        },
+        "flag-as-number": {
+          "killed": 0,
+          "rejected": 0,
+          "survived": 2,
+          "uncompilable": 0
+        },
+        "subnet": {
+          "killed": 1,
+          "rejected": 0,
+          "survived": 2,
+          "uncompilable": 0
+        },
+        "value-domain": {
+          "killed": 0,
+          "rejected": 0,
+          "survived": 4,
+          "uncompilable": 0
+        }
+      },
+      "executed": 46,
+      "killed": 27,
+      "rejected": 0,
+      "survived": 19,
+      "uncompilable": 0,
+      "unwaived": 19,
+      "waived": 0
+    },
+    "test": {
+      "by_category": {
+        "boundary": {
+          "killed": 15,
+          "rejected": 0,
+          "survived": 11,
+          "uncompilable": 0
+        },
+        "drop-conjunct": {
+          "killed": 25,
+          "rejected": 0,
+          "survived": 2,
+          "uncompilable": 0
+        },
+        "drop-disjunct": {
+          "killed": 8,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-not": {
+          "killed": 1,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "field-swap": {
+          "killed": 32,
+          "rejected": 0,
+          "survived": 12,
+          "uncompilable": 0
+        },
+        "flag-as-number": {
+          "killed": 0,
+          "rejected": 0,
+          "survived": 5,
+          "uncompilable": 0
+        },
+        "subnet": {
+          "killed": 9,
+          "rejected": 0,
+          "survived": 12,
+          "uncompilable": 0
+        },
+        "value-domain": {
+          "killed": 0,
+          "rejected": 0,
+          "survived": 4,
+          "uncompilable": 0
+        }
+      },
+      "executed": 136,
+      "killed": 90,
+      "rejected": 0,
+      "survived": 46,
+      "uncompilable": 0,
+      "unwaived": 46,
+      "waived": 0
+    }
+  },
+  "failures": {
+    "canonical_mismatches": 0,
+    "label_mismatches": 0,
+    "stale_waivers": 0,
+    "undistinguished_mutations": 0,
+    "unwaived_survivors": 65
+  },
+  "label_checks": {
+    "canonical_checked": 144,
+    "reference_checked": 144
+  },
+  "measurement_identity": {
+    "capture_manifest": [
+      {
+        "capture_sha256": "f849519f7813b9a20a467c5a61f41bb346e1a61097697220b175b9b1d94a64ec",
+        "probe_id": "semantic-11",
+        "size_bytes": 1791,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "7fccd849184c6d0cd463527e2d783daca84c887208d26b765abd7eea635a93fe",
+        "probe_id": "semantic-17",
+        "size_bytes": 1844,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "adb8d1e9e573055da843eb533c07a44ef13eece70541ecd6dec2e318f4db4aa9",
+        "probe_id": "semantic-23",
+        "size_bytes": 2378,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "29b88f4757becf19f21b3b86c1c31920b688925b8f80798008af3e35773e804d",
+        "probe_id": "semantic-31",
+        "size_bytes": 2231,
+        "split": "test"
+      },
+      {
+        "capture_sha256": "d0d8a23552042a0d44168c4e0d7aeefbf11576290feae69b08232fbe8866d4fa",
+        "probe_id": "semantic-37",
+        "size_bytes": 2224,
+        "split": "test"
+      },
+      {
+        "capture_sha256": "0ca13772dd23204e106b60cb912a41b9e39db9e5c614850ded3b5a80ceac3a6a",
+        "probe_id": "semantic-43",
+        "size_bytes": 2838,
+        "split": "test"
+      }
+    ],
+    "capture_manifest_sha256": "d561c7b8f55db726c2a658f834c18c30bfe8da822ea1f3c35bfa8fb84476e6be",
+    "environment": {
+      "catalog_hash": null,
+      "catalog_profile_hash": null,
+      "executable_sha256": "67d31bae9ec022705e8b18cbbb21380d86773cdac619da14d075226a6f47e0b8",
+      "identity_scope": "binary-and-runner-source",
+      "platform_machine": "x86_64",
+      "python_version": "3.12.3",
+      "runner_limits_hash": "f623f081dc4a22ed8f91e987c11ed3e7e562ecdae5e0ec25b1d33266cd49d610",
+      "runner_source_sha256": "1420648c379c5fcae9dd743147c06560b65a389ffdd7cda5a668123baa6893ab",
+      "schema_version": "live-environment/1.0",
+      "tshark_version": "4.6.8",
+      "unmeasured": [
+        "container_image_digest",
+        "shared_libraries",
+        "system_dissector_data",
+        "plugin_and_lua_build_options"
+      ]
+    },
+    "environment_sha256": "8bfb53d31c02b4c36786cd4914840f0808092a7e4fa037058248d4c4ba1bf414",
+    "gold_sha256": "c1e3344d1cea23f44aab57b3aff9425568370280aaed2331d6b4078002b808ed",
+    "source_files": {
+      "scripts/probe_adequacy.py": "c78b74c0412d946df173b327be66b730f43c129cf861edd2f7a643baa3dd25fe",
+      "src/dfilterforge/__init__.py": "fb164f8e916b2839f95e6bb635f4e39ab25e83e94f7223fae73e75476a8ac1a0",
+      "src/dfilterforge/__main__.py": "4494efc46d5a811844e6e0141c365fca62360023dc20a056b4fa99951a0cad65",
+      "src/dfilterforge/benchmark.py": "377b8d7c2b1544319356515d1577ae03a74dda4f66c9e67702cbcd59968476c5",
+      "src/dfilterforge/canonical.py": "5f192f0acac67e6579019bbefe547ec6ccce7369fda5376a569edc6830162800",
+      "src/dfilterforge/catalog_runtime.py": "56cf194fd9769a7baa0502b9e3473e21f42d9f96575f4486955527d2134561b4",
+      "src/dfilterforge/cli.py": "e35ba2d117bf18eaaee83b977a411b4133b266446d3401aba4273189d2e81e17",
+      "src/dfilterforge/compiler.py": "575cef8ee3b9eed89f7965d3fa1ec3205a53deee468641fda76558c2ebfba60d",
+      "src/dfilterforge/completions.py": "6906a4471d60ecb75171920cfe402dcfd054031bd2eb8e8666b92bf7d6da2d5f",
+      "src/dfilterforge/errors.py": "23ff2819b1eebcd5359831c82468b6d472c3e3f2fa7a7352e6a3ea8da63d250b",
+      "src/dfilterforge/evaluation.py": "e23679662c8508026d263f27a44354bc17bd8c857250b8fbf3f5bd99b8fb3c1c",
+      "src/dfilterforge/field_catalog.py": "594a0940144e523fc7c3b149aad13e25b86f06f98f16498f1ff9adf959d0a1c7",
+      "src/dfilterforge/field_retrieval.py": "9ba9ac795be3a27c1b65f181ef268db45c0517cbf38bc926f50501004241121e",
+      "src/dfilterforge/fixtures.py": "362aee79b860b1aa5ceb91c6430ec75f42bf3571ac2048cb51bbba8dfb5f53c7",
+      "src/dfilterforge/generation.py": "a789dc7c6ca59f49db38b7b96f1bff4a2f4b33efde2659eb656d8cad98a6ff38",
+      "src/dfilterforge/intent_ir.py": "12a865c55fcebea5c0cc8a86ee173d989e679cb68bbd35b4f4e6658ccfab02f1",
+      "src/dfilterforge/live.py": "68be1ccdcaa67db14d98e2dfcaec3d6ab377f63a588df8c0da5004901e151136",
+      "src/dfilterforge/model_client.py": "4ce0811a75f44461af1ab98800c217d4d5004169db22a3abba52dfddc19cb609",
+      "src/dfilterforge/model_split.py": "debd1b55ee3109ff6b20ffaa74bd720779254abb7a655a7a26681d4574f7e65d",
+      "src/dfilterforge/mutants.py": "b918ceb928fe4908037c979e89e2a9304b62a75b1941601729521b5dd2800610",
+      "src/dfilterforge/replay.py": "78c47d576f30523317eb070ff06a07b587d50072407c1eb1a898111b2c8f71d3",
+      "src/dfilterforge/run_store.py": "c751e7ff6415fdf7cbbe40f1771c03af5fca90f09cb9169a179ac581679989d9",
+      "src/dfilterforge/runner.py": "1420648c379c5fcae9dd743147c06560b65a389ffdd7cda5a668123baa6893ab",
+      "src/dfilterforge/score_report.py": "8b3e548a32accb81d3b8d349c9c0c1cd4eddc9b6be3129c87a45c6042b2d8bbf",
+      "src/dfilterforge/score_summary.py": "0497d5e54935c848f839261c00368905a5558d44a4c50f74c7169bc10faf6759",
+      "src/dfilterforge/scoring.py": "ce1762f8b7f1fbf02f4d25a09add16e0fb582f27a7d805ae8eae53879aae96c3",
+      "src/dfilterforge/text_limits.py": "f1f6b06dbf01fc3ad43a215d8c2be1c7a1e1386b22a5b79a3062733ef453caaf"
+    },
+    "source_manifest_sha256": "76e57fb8aa7f3ef9daa5972283a4843cf9f9e8e26a695e8b815220cfe2b6099a"
+  },
+  "measurement_identity_sha256": "12c57d5ad2a5ff97f981ef4812a3e4dcf12578cc45aa121aa80c3b8f030f196a",
+  "mode": "report",
+  "mutants": {
+    "duplicates": 0,
+    "executed": 182,
+    "generated": 182,
+    "killed": 117,
+    "rejected": 0,
+    "survived": 65,
+    "uncompilable": 0,
+    "unwaived": 65,
+    "waived": 0
+  },
+  "notes": [
+    "A survivor matches its case's labels on all three probes of its split.",
+    "Labels are checked on all six probes, dev and test: the reference filter and the compiled canonical IR must each select exactly the frames the case's recipe oracle names.",
+    "Mutants come from the fixed operator set in dfilterforge.mutants, not from an enumeration of near misses; the gate never judges equivalence, only a waiver does.",
+    "Mutants are deduplicated by compiled filter text, including the reference filter and the compiled canonical IR, keeping the first.",
+    "A mutant tshark rejects is listed under rejected; it cannot be scored strong exact, so it is neither killed nor a survivor.",
+    "A waiver applies only when its case, edit label and compiled filter all match one survivor.",
+    "runtime varies between runs and is not part of the gate."
+  ],
+  "passed": false,
+  "rejected": [],
+  "runtime": {
+    "max_ms": 85.281,
+    "p50_ms": 60.328,
+    "p95_ms": 66.619,
+    "timed_runs": 900,
+    "wall_seconds": 55.327
+  },
+  "schema_version": "probe-adequacy/1.0",
+  "source_revision": "c3d4060+working-tree",
+  "survivors": [
+    {
+      "case_id": "tcp-expiring-ttl",
+      "category": "boundary",
+      "edit": "1: ip.ttl le 1 -> eq 1",
+      "filter": "(tcp && ip.ttl == 1)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "tcp-expiring-ttl",
+      "category": "boundary",
+      "edit": "1: ip.ttl le 1 -> le 2",
+      "filter": "(tcp && ip.ttl <= 2)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-expiring-ttl",
+      "category": "boundary",
+      "edit": "1: ip.ttl le 1 -> eq 1",
+      "filter": "(udp && ip.ttl == 1)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-expiring-ttl",
+      "category": "boundary",
+      "edit": "1: ip.ttl le 1 -> le 2",
+      "filter": "(udp && ip.ttl <= 2)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ack-to-https",
+      "category": "flag-as-number",
+      "edit": "0: tcp.flags.ack eq true -> tcp.ack eq 1",
+      "filter": "(tcp.ack == 1 && tcp.dstport == 443)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ack-to-https",
+      "category": "field-swap",
+      "edit": "1: tcp.dstport -> tcp.port",
+      "filter": "(tcp.flags.ack == true && tcp.port == 443)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "dns-a-queries",
+      "category": "value-domain",
+      "edit": "1: dns.qry.type eq 1 -> ne 28",
+      "filter": "(dns.flags.response == false && dns.qry.type != 28)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-nondns-private-destination",
+      "category": "drop-conjunct",
+      "edit": "root: drop child 0",
+      "filter": "(!(dns) && ip.dst == 10.0.0.0/8)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-nondns-private-destination",
+      "category": "drop-conjunct",
+      "edit": "root: drop child 1",
+      "filter": "(udp && ip.dst == 10.0.0.0/8)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-nondns-private-destination",
+      "category": "subnet",
+      "edit": "2: ip.dst 10.0.0.0/8 -> 10.0.0.0/9",
+      "filter": "(udp && !(dns) && ip.dst == 10.0.0.0/9)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-nondns-private-destination",
+      "category": "subnet",
+      "edit": "2: ip.dst 10.0.0.0/8 -> 10.1.0.0/16",
+      "filter": "(udp && !(dns) && ip.dst == 10.1.0.0/16)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ecn-syn-or-expiring",
+      "category": "drop-conjunct",
+      "edit": "0: drop child 0",
+      "filter": "(tcp.flags.ece == true || ip.ttl <= 1)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ecn-syn-or-expiring",
+      "category": "flag-as-number",
+      "edit": "0.0: tcp.flags.syn eq true -> tcp.seq eq 0",
+      "filter": "((tcp.seq == 0 && tcp.flags.ece == true) || ip.ttl <= 1)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ecn-syn-or-expiring",
+      "category": "field-swap",
+      "edit": "0.1: tcp.flags.ece -> tcp.flags.cwr",
+      "filter": "((tcp.flags.syn == true && tcp.flags.cwr == true) || ip.ttl <= 1)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ecn-syn-or-expiring",
+      "category": "boundary",
+      "edit": "1: ip.ttl le 1 -> eq 1",
+      "filter": "((tcp.flags.syn == true && tcp.flags.ece == true) || ip.ttl == 1)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ecn-syn-or-expiring",
+      "category": "boundary",
+      "edit": "1: ip.ttl le 1 -> le 2",
+      "filter": "((tcp.flags.syn == true && tcp.flags.ece == true) || ip.ttl <= 2)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "aaaa-or-nxdomain",
+      "category": "value-domain",
+      "edit": "0: dns.qry.type eq 28 -> ne 1",
+      "filter": "(dns.qry.type != 1 || dns.flags.rcode == 3)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "aaaa-or-nxdomain",
+      "category": "value-domain",
+      "edit": "1: dns.flags.rcode eq 3 -> ne 0",
+      "filter": "(dns.qry.type == 28 || dns.flags.rcode != 0)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "aaaa-or-nxdomain",
+      "category": "value-domain",
+      "edit": "1: dns.flags.rcode eq 3 -> gt 0",
+      "filter": "(dns.qry.type == 28 || dns.flags.rcode > 0)",
+      "split": "dev",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "tcp-source-testnet",
+      "category": "subnet",
+      "edit": "1: ip.src 192.0.2.0/24 -> 192.0.0.0/16",
+      "filter": "(tcp && ip.src == 192.0.0.0/16)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-source-testnet",
+      "category": "field-swap",
+      "edit": "1: ip.src -> ip.addr",
+      "filter": "(udp && ip.addr == 192.0.2.0/24)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "udp-source-testnet",
+      "category": "subnet",
+      "edit": "1: ip.src 192.0.2.0/24 -> 192.0.0.0/16",
+      "filter": "(udp && ip.src == 192.0.0.0/16)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "field-swap",
+      "edit": "0: ip.src -> ip.addr",
+      "filter": "(ip.addr == 10.0.0.0/8 || ip.dst == 10.0.0.0/8)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "subnet",
+      "edit": "0: ip.src 10.0.0.0/8 -> 10.0.0.0/9",
+      "filter": "(ip.src == 10.0.0.0/9 || ip.dst == 10.0.0.0/8)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "subnet",
+      "edit": "0: ip.src 10.0.0.0/8 -> 10.1.0.0/16",
+      "filter": "(ip.src == 10.1.0.0/16 || ip.dst == 10.0.0.0/8)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "field-swap",
+      "edit": "1: ip.dst -> ip.addr",
+      "filter": "(ip.src == 10.0.0.0/8 || ip.addr == 10.0.0.0/8)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "subnet",
+      "edit": "1: ip.dst 10.0.0.0/8 -> 10.0.0.0/9",
+      "filter": "(ip.src == 10.0.0.0/8 || ip.dst == 10.0.0.0/9)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "subnet",
+      "edit": "1: ip.dst 10.0.0.0/8 -> 10.1.0.0/16",
+      "filter": "(ip.src == 10.0.0.0/8 || ip.dst == 10.1.0.0/16)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "source-testnet-or-private",
+      "category": "subnet",
+      "edit": "0: ip.src 192.0.2.0/24 -> 192.0.0.0/16",
+      "filter": "(ip.src == 192.0.0.0/16 || ip.src == 10.0.0.0/8)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "source-testnet-or-private",
+      "category": "field-swap",
+      "edit": "1: ip.src -> ip.addr",
+      "filter": "(ip.src == 192.0.2.0/24 || ip.addr == 10.0.0.0/8)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "source-testnet-or-private",
+      "category": "subnet",
+      "edit": "1: ip.src 10.0.0.0/8 -> 10.0.0.0/9",
+      "filter": "(ip.src == 192.0.2.0/24 || ip.src == 10.0.0.0/9)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "source-testnet-or-private",
+      "category": "subnet",
+      "edit": "1: ip.src 10.0.0.0/8 -> 10.1.0.0/16",
+      "filter": "(ip.src == 192.0.2.0/24 || ip.src == 10.1.0.0/16)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ack-outside-testnet",
+      "category": "flag-as-number",
+      "edit": "0: tcp.flags.ack eq true -> tcp.ack eq 1",
+      "filter": "(tcp.ack == 1 && !(ip.src == 192.0.2.0/24))",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "ack-outside-testnet",
+      "category": "subnet",
+      "edit": "1.0: ip.src 192.0.2.0/24 -> 192.0.0.0/16",
+      "filter": "(tcp.flags.ack == true && !(ip.src == 192.0.0.0/16))",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-source-testnet",
+      "category": "boundary",
+      "edit": "0: udp.dstport gt 5353 -> gt 5354",
+      "filter": "(udp.dstport > 5354 && ip.src == 192.0.2.0/24)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-source-testnet",
+      "category": "field-swap",
+      "edit": "1: ip.src -> ip.addr",
+      "filter": "(udp.dstport > 5353 && ip.addr == 192.0.2.0/24)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-source-testnet",
+      "category": "subnet",
+      "edit": "1: ip.src 192.0.2.0/24 -> 192.0.0.0/16",
+      "filter": "(udp.dstport > 5353 && ip.src == 192.0.0.0/16)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-normal-ttl",
+      "category": "boundary",
+      "edit": "0: udp.dstport gt 5353 -> gt 5354",
+      "filter": "(udp.dstport > 5354 && ip.ttl >= 64)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-normal-ttl",
+      "category": "boundary",
+      "edit": "1: ip.ttl ge 64 -> eq 64",
+      "filter": "(udp.dstport > 5353 && ip.ttl == 64)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-normal-ttl",
+      "category": "boundary",
+      "edit": "1: ip.ttl ge 64 -> ge 63",
+      "filter": "(udp.dstport > 5353 && ip.ttl >= 63)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-testnet-normal-ttl",
+      "category": "boundary",
+      "edit": "0: udp.dstport gt 5353 -> gt 5354",
+      "filter": "(udp.dstport > 5354 && ip.src == 192.0.2.0/24 && ip.ttl >= 64)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-testnet-normal-ttl",
+      "category": "field-swap",
+      "edit": "1: ip.src -> ip.addr",
+      "filter": "(udp.dstport > 5353 && ip.addr == 192.0.2.0/24 && ip.ttl >= 64)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-testnet-normal-ttl",
+      "category": "subnet",
+      "edit": "1: ip.src 192.0.2.0/24 -> 192.0.0.0/16",
+      "filter": "(udp.dstport > 5353 && ip.src == 192.0.0.0/16 && ip.ttl >= 64)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-testnet-normal-ttl",
+      "category": "boundary",
+      "edit": "2: ip.ttl ge 64 -> eq 64",
+      "filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/24 && ip.ttl == 64)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "high-udp-testnet-normal-ttl",
+      "category": "boundary",
+      "edit": "2: ip.ttl ge 64 -> ge 63",
+      "filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/24 && ip.ttl >= 63)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "low-port-dns-a",
+      "category": "boundary",
+      "edit": "0: udp.dstport lt 5353 -> lt 5352",
+      "filter": "(udp.dstport < 5352 && dns.qry.type == 1)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "low-port-dns-a",
+      "category": "value-domain",
+      "edit": "1: dns.qry.type eq 1 -> ne 28",
+      "filter": "(udp.dstport < 5353 && dns.qry.type != 28)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "dns-destination-not-source",
+      "category": "field-swap",
+      "edit": "0: udp.dstport -> udp.port",
+      "filter": "(udp.port == 53 && udp.srcport != 53)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "dns-destination-not-source",
+      "category": "boundary",
+      "edit": "1: udp.srcport ne 53 -> gt 53",
+      "filter": "(udp.dstport == 53 && udp.srcport > 53)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "drop-conjunct",
+      "edit": "root: drop child 0",
+      "filter": "(udp.dstport != 53 && dns.flags.rcode == 0)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "field-swap",
+      "edit": "0: udp.srcport -> udp.port",
+      "filter": "(udp.port == 53 && udp.dstport != 53 && dns.flags.rcode == 0)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "drop-conjunct",
+      "edit": "root: drop child 1",
+      "filter": "(udp.srcport == 53 && dns.flags.rcode == 0)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "boundary",
+      "edit": "1: udp.dstport ne 53 -> gt 53",
+      "filter": "(udp.srcport == 53 && udp.dstport > 53 && dns.flags.rcode == 0)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "value-domain",
+      "edit": "2: dns.flags.rcode eq 0 -> ne 3",
+      "filter": "(udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode != 3)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "value-domain",
+      "edit": "2: dns.flags.rcode eq 0 -> lt 3",
+      "filter": "(udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode < 3)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "aaaa-or-udp-source-dns",
+      "category": "value-domain",
+      "edit": "0: dns.qry.type eq 28 -> ne 1",
+      "filter": "(dns.qry.type != 1 || udp.srcport == 53)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-without-syn",
+      "category": "field-swap",
+      "edit": "0: tcp.dstport -> tcp.port",
+      "filter": "(tcp.port == 443 && tcp.flags.syn == false)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-without-syn",
+      "category": "flag-as-number",
+      "edit": "1: tcp.flags.syn eq false -> tcp.seq ne 0",
+      "filter": "(tcp.dstport == 443 && tcp.seq != 0)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-syn-no-ack",
+      "category": "field-swap",
+      "edit": "0: tcp.dstport -> tcp.port",
+      "filter": "(tcp.port == 443 && tcp.flags.syn == true && tcp.flags.ack == false)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-syn-no-ack",
+      "category": "flag-as-number",
+      "edit": "1: tcp.flags.syn eq true -> tcp.seq eq 0",
+      "filter": "(tcp.dstport == 443 && tcp.seq == 0 && tcp.flags.ack == false)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-syn-no-ack",
+      "category": "flag-as-number",
+      "edit": "2: tcp.flags.ack eq false -> tcp.ack eq 0",
+      "filter": "(tcp.dstport == 443 && tcp.flags.syn == true && tcp.ack == 0)",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-syn-or-reset",
+      "category": "field-swap",
+      "edit": "0: tcp.dstport -> tcp.port",
+      "filter": "(tcp.port == 443 && (tcp.flags.syn == true || tcp.flags.reset == true))",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "https-syn-or-reset",
+      "category": "flag-as-number",
+      "edit": "1.0: tcp.flags.syn eq true -> tcp.seq eq 0",
+      "filter": "(tcp.dstport == 443 && (tcp.seq == 0 || tcp.flags.reset == true))",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "tcp-destination-not-https",
+      "category": "field-swap",
+      "edit": "root: tcp.dstport -> tcp.port",
+      "filter": "tcp.port != 443",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    },
+    {
+      "case_id": "tcp-destination-not-https",
+      "category": "boundary",
+      "edit": "root: tcp.dstport ne 443 -> lt 443",
+      "filter": "tcp.dstport < 443",
+      "split": "test",
+      "waived": false,
+      "waiver_kind": null
+    }
+  ],
+  "waivers": {
+    "applied": 0,
+    "declared": 0,
+    "stale": []
+  }
+}
