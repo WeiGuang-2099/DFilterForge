@@ -39,7 +39,9 @@ _SOURCE_FILES = (
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
     "src/dfilterforge/model_cases.py",
+    "src/dfilterforge/model_dev_cases.py",
     "src/dfilterforge/model_split.py",
+    "src/dfilterforge/model_test_cases.py",
 )
 # Gold fields placed at chosen ranks; every other slot holds a filler.
 # mei-0002 needs ip.ttl and tcp, and ip.ttl only enters at depth 32.

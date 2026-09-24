@@ -45,7 +45,9 @@ _SOURCE_FILES: tuple[str, ...] = (
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
     "src/dfilterforge/model_cases.py",
+    "src/dfilterforge/model_dev_cases.py",
     "src/dfilterforge/model_split.py",
+    "src/dfilterforge/model_test_cases.py",
 )
 _DEFAULT_TOP_KS: tuple[int, ...] = (8, 16, 32)
 _DETAIL_SPLITS: tuple[str, ...] = ("dev",)

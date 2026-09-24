@@ -146,5 +146,8 @@ forbidden_modules = [
   "dfilterforge.benchmark",
   "dfilterforge.evaluation",
   "dfilterforge.fixtures",
+  "dfilterforge.model_cases",
+  "dfilterforge.model_dev_cases",
   "dfilterforge.model_split",
+  "dfilterforge.model_test_cases",
 ]

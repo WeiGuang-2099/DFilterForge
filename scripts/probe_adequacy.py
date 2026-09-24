@@ -48,10 +48,10 @@ from dfilterforge.compiler import compile_intent
 from dfilterforge.compiler import CompileError
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.live import measure_environment
+from dfilterforge.model_cases import ModelSemanticCase
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
-from dfilterforge.model_split import ModelSemanticCase
 from dfilterforge.model_split import MUTANT_WAIVERS
 from dfilterforge.mutants import MutantCategory
 from dfilterforge.mutants import MutantWaiver
