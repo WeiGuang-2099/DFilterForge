@@ -10,20 +10,30 @@ The rules, pre-registered in ``docs/protocol.md``:
 
 - capture-position: a field the frozen catalog types as a frame number or a
   time, any ``frame.`` field other than frame.len, frame.cap_len and
-  frame.protocols, any ``_ws.`` field, and any conversation index (a name
-  component ``stream``).
+  frame.protocols, any ``_ws.`` field, any conversation index (a name
+  component ``stream``), and the conversation state tshark derives from other
+  frames: tcp.analysis, tcp.completeness, dns.unsolicited and the DNS
+  retransmission fields.
 - generator-identifier: the IPv4 identification, the DNS transaction ID,
   checksums and raw sequence numbers, which the generator derives from seeds
   and frame positions.
 - capture-constant: a literal the request does not state that only the
-  generator could have supplied: a single host address, a network touching
-  the server pool 198.51.100.0/24, a number at or above the ephemeral port
-  base, a MAC address or a generated DNS name.
+  generator could have supplied: a single host address other than the first
+  or last address of a network the request states, a network touching the
+  server pool 198.51.100.0/24 that leaves out the client pool 192.0.2.0/24,
+  outside every stated network, a number in the generator's ephemeral port
+  range, a MAC address or a generated DNS name.
+
+A request states a literal when it writes it as a whole token, ignoring case;
+it states a network by CIDR, by a shorthand such as 10/8, or by the name
+TEST-NET-1, -2 or -3.
 
 Detection is static. Field names and literals come from the typed IR, or,
-for a display filter, from a lexical scan that sets quoted strings aside. The
-scan implements no filter semantics; tshark alone decides what a filter
-means, and a name the catalog does not register can only match by name.
+for a display filter, from a lexical scan that reads quoted strings only for
+literals. Integers are read as tshark reads them: 0x hexadecimal, 0b binary
+and a leading 0 octal. The scan implements no filter semantics; tshark alone
+decides what a filter means, and a name the catalog does not register can
+only match by name.
 """
 
 from __future__ import annotations
@@ -62,21 +72,41 @@ POSITION_TYPES = frozenset(
 _PACKET_FRAME_FIELDS = frozenset(
     {"frame.len", "frame.cap_len", "frame.protocols"}
 )
+# State tshark derives from other frames of the same conversation.
+_STATE_FIELDS = frozenset({"dns.unsolicited"})
+_STATE_PREFIXES = ("tcp.analysis", "tcp.completeness", "dns.retransmi")
 _GENERATOR_FIELDS = frozenset({"ip.id", "dns.id", "tcp.seq_raw", "tcp.ack_raw"})
-# The generator's server hosts, 198.51.100.<ordinal>.
+# The generator's server hosts, 198.51.100.<ordinal>, and the probe clients,
+# 192.0.2.<seed>. A network that holds a server but no client can only serve
+# to pick servers out; a wider one, such as 0.0.0.0/0, says nothing of them.
 SERVER_POOL = ipaddress.IPv4Network("198.51.100.0/24")
-# fixtures and witnesses number ephemeral ports from 41000 + seed + ordinal.
-EPHEMERAL_BASE = 41000
+CLIENT_POOL = ipaddress.IPv4Network("192.0.2.0/24")
+# fixtures and witnesses number ephemeral ports 41000 + seed + ordinal, with
+# a seed of at most 10000 and an ordinal of at most 254.
+EPHEMERAL_PORTS = range(41000, 51255)
+_NAMED_NETWORKS = {
+    "test-net-1": ipaddress.IPv4Network("192.0.2.0/24"),
+    "test-net-2": ipaddress.IPv4Network("198.51.100.0/24"),
+    "test-net-3": ipaddress.IPv4Network("203.0.113.0/24"),
+}
 # Question names the generator writes: probe-<seed>-<ordinal>.example and
 # witness-<seed>-<ordinal>.example.
-_GENERATED_NAME = re.compile(r"(?:probe|witness)-\d+-\d+")
+_GENERATED_NAME = re.compile(r"(?:probe|witness)-\d+-\d+", re.IGNORECASE)
 _MAX_TOKEN_CHARS = 64
 
 _STRING = re.compile(r"""r?"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'""", re.DOTALL)
 _WORD = re.compile(r"[A-Za-z0-9_.:/-]+")
 _IPV4 = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?")
-_MAC = re.compile(r"[0-9A-Fa-f]{2}([:-])[0-9A-Fa-f]{2}(?:\1[0-9A-Fa-f]{2}){4}")
-_INTEGER = re.compile(r"0[xX][0-9A-Fa-f]+|\d+")
+# Six groups of one or two hex digits, or three of four, split by : - or .
+_MAC = re.compile(
+    r"[0-9A-Fa-f]{1,2}([:.-])[0-9A-Fa-f]{1,2}(?:\1[0-9A-Fa-f]{1,2}){4}"
+    r"|[0-9A-Fa-f]{4}([:.-])[0-9A-Fa-f]{4}\2[0-9A-Fa-f]{4}"
+)
+_INTEGER = re.compile(r"0[xX][0-9A-Fa-f]+|0[bB][01]+|0[0-7]*|[1-9][0-9]*")
+# A network a request writes by CIDR or by shorthand such as 10/8.
+_STATED_CIDR = re.compile(
+    r"(?<![0-9.])(\d{1,3}(?:\.\d{1,3}){0,3})/(\d{1,2})(?![0-9])"
+)
 _FIELD = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 _LETTER = re.compile(r"[A-Za-z_]")
 _KEYWORDS = frozenset(
@@ -152,7 +182,7 @@ class _Collected:
             self.macs.append(text)
             return True
         if _INTEGER.fullmatch(text):
-            self.numbers.append((text, int(text, 0)))
+            self.numbers.append((text, _integer(text)))
             return True
         return False
 
@@ -168,11 +198,23 @@ class _Collected:
         )
 
 
+def _integer(text: str) -> int:
+    """Reads an integer literal as tshark does; ``text`` fullmatches it."""
+    prefix = text[:2].lower()
+    if prefix in ("0x", "0b"):
+        return int(text, 16 if prefix == "0x" else 2)
+    return int(text, 8 if len(text) > 1 and text[0] == "0" else 10)
+
+
 def _scan_words(text: str, collected: _Collected) -> None:
     for word in _WORD.findall(text):
         # A set range such as 41000..41100 holds two literals.
         for part in word.split(".."):
             if not part or collected.add_literal(part):
+                continue
+            # tshark also reads an unquoted name as a string literal.
+            if _GENERATED_NAME.search(part):
+                collected.strings.append(part)
                 continue
             if (
                 _FIELD.fullmatch(part)
@@ -189,7 +231,10 @@ def _filter_references(text: str) -> FilterReferences:
     for match in _STRING.finditer(text):
         outside.append(text[position : match.start()])
         literal = match.group()
-        collected.strings.append(literal[2 if literal[0] == "r" else 1 : -1])
+        content = literal[2 if literal[0] == "r" else 1 : -1]
+        # A string field can hold an address, such as ip.dst_host.
+        if not collected.add_literal(content):
+            collected.strings.append(content)
         position = match.end()
     outside.append(text[position:])
     bare = " ".join(outside)
@@ -256,6 +301,8 @@ def _hit(rule: ShortcutRule, token: str) -> ShortcutHitV1:
 def _position_field(name: str, tshark_type: str | None) -> bool:
     if tshark_type in POSITION_TYPES or name.startswith("_ws."):
         return True
+    if name in _STATE_FIELDS or name.startswith(_STATE_PREFIXES):
+        return True
     if name.startswith("frame.") and name not in _PACKET_FRAME_FIELDS:
         return True
     return "stream" in name.split(".")
@@ -267,33 +314,83 @@ def _generator_field(name: str) -> bool:
     )
 
 
+def _stated(token: str, request: str) -> bool:
+    """Whether the request writes ``token`` as a whole token, ignoring case.
+
+    A sentence's closing period does not continue a token, so 10.1.2.3 is
+    stated by "from 10.1.2.3." but not by "from 10.1.2.30".
+    """
+    pattern = (
+        rf"(?<![0-9A-Za-z_.:/-]){re.escape(token)}"
+        r"(?![0-9A-Za-z_:/-]|\.[0-9A-Za-z])"
+    )
+    return re.search(pattern, request, re.IGNORECASE) is not None
+
+
+def _stated_networks(request: str) -> tuple[ipaddress.IPv4Network, ...]:
+    """Returns the networks a request states by CIDR, shorthand or name."""
+    networks: list[ipaddress.IPv4Network] = []
+    for address, prefix in _STATED_CIDR.findall(request):
+        octets = address.split(".")
+        padded = ".".join(octets + ["0"] * (4 - len(octets)))
+        try:
+            networks.append(
+                ipaddress.IPv4Network(f"{padded}/{prefix}", strict=False)
+            )
+        except ValueError:
+            continue
+    lowered = request.lower()
+    networks.extend(
+        network for name, network in _NAMED_NETWORKS.items() if name in lowered
+    )
+    return tuple(networks)
+
+
+def _address_stated(
+    text: str,
+    network: ipaddress.IPv4Network,
+    request: str,
+    stated: tuple[ipaddress.IPv4Network, ...],
+) -> bool:
+    """Whether the request states an address literal or a network holding it.
+
+    A single host counts as stated only as the first or last address of a
+    stated network, the bounds a range answer spells out.
+    """
+    if _stated(text, request) or _stated(str(network.network_address), request):
+        return True
+    if network.prefixlen == 32:
+        host = network.network_address
+        return any(
+            host in (outer.network_address, outer.broadcast_address)
+            for outer in stated
+        )
+    return any(network.subnet_of(outer) for outer in stated)
+
+
 def _constant_hits(
     found: FilterReferences, request: str
 ) -> Iterator[ShortcutHitV1]:
-    stated = request.lower()
-
-    def unstated(token: str) -> bool:
-        return token.lower() not in stated
-
+    stated = _stated_networks(request)
     for text, network in found.addresses:
-        address = str(network.network_address)
-        if not (unstated(text) and unstated(address)):
-            continue
-        if network.prefixlen == 32 or (
-            network.prefixlen >= 8
-            and network.overlaps(SERVER_POOL)
-            and unstated("TEST-NET-2")
+        picks_servers = network.overlaps(SERVER_POOL) and not (
+            network.overlaps(CLIENT_POOL)
+        )
+        if (network.prefixlen == 32 or picks_servers) and not _address_stated(
+            text, network, request, stated
         ):
             yield _hit(ShortcutRule.CAPTURE_CONSTANT, text)
     for text, value in found.numbers:
-        if value >= EPHEMERAL_BASE and unstated(str(value)) and unstated(text):
+        if value in EPHEMERAL_PORTS and not (
+            _stated(text, request) or _stated(str(value), request)
+        ):
             yield _hit(ShortcutRule.CAPTURE_CONSTANT, text)
     for text in found.macs:
-        if unstated(text):
+        if not _stated(text, request):
             yield _hit(ShortcutRule.CAPTURE_CONSTANT, text)
     for text in found.strings:
         for name in _GENERATED_NAME.findall(text):
-            if unstated(name):
+            if not _stated(name, request):
                 yield _hit(ShortcutRule.CAPTURE_CONSTANT, name)
 
 

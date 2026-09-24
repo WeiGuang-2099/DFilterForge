@@ -113,6 +113,11 @@ def test_a_typed_ir_counts_or_like_its_display_filter() -> None:
         # Known only by its catalog type.
         "dns.response_in",
         "tcp.time_delta < 1",
+        # Conversation state tshark derives from other frames.
+        "tcp.flags.fin == 1 || dns.unsolicited",
+        "dns.retransmission",
+        "tcp.analysis.retransmission",
+        "tcp.completeness == 31",
     ],
 )
 def test_capture_position_fields_are_shortcuts(candidate: str) -> None:
@@ -156,7 +161,65 @@ def test_generator_identifiers_are_shortcuts(candidate: str) -> None:
         ("tcp.srcport == 41170", "", [(_CONSTANT, "41170")]),
         ("tcp.srcport == 0xa0d2", "", [(_CONSTANT, "0xa0d2")]),
         ("tcp.srcport == 41170", "Show port 41170.", []),
+        ("tcp.srcport == 51254", "", [(_CONSTANT, "51254")]),
+        ("tcp.srcport == 51255", "", []),
         ("tcp.dstport == 443", "", []),
+        # The port field's own maximum is an intent-level bound.
+        ("udp.dstport in {5354..65535}", "", []),
+        ("udp.dstport <= 0xffff", "", []),
+        # A stated network's bounds, but no other host inside it.
+        ("ip.src in {192.0.2.0..192.0.2.255}", "Sources in 192.0.2.0/24.", []),
+        (
+            "ip.src >= 192.0.2.0 && ip.src <= 192.0.2.255",
+            "From TEST-NET-1.",
+            [],
+        ),
+        (
+            "ip.dst >= 10.0.0.0 && ip.dst <= 10.255.255.255",
+            "headed to a private 10/8 address",
+            [],
+        ),
+        (
+            "ip.src == 192.0.2.7",
+            "Sources in 192.0.2.0/24.",
+            [(_CONSTANT, "192.0.2.7")],
+        ),
+        # Stated means written as a whole token.
+        (
+            "ip.src == 10.1.2.3",
+            "Show traffic from 10.1.2.30.",
+            [(_CONSTANT, "10.1.2.3")],
+        ),
+        # Any network touching the server pool, unless a stated one holds it.
+        ("ip.src == 198.0.0.0/7", "", [(_CONSTANT, "198.0.0.0/7")]),
+        # A network holding the clients too says nothing of the servers.
+        ("ip.dst == 0.0.0.0/0", "", []),
+        ("ip.src == 128.0.0.0/1", "", []),
+        ("ip.src == 198.51.100.0/25", "Sources in TEST-NET-2.", []),
+        (
+            "ip.src == 198.0.0.0/8",
+            "Sources in TEST-NET-2.",
+            [(_CONSTANT, "198.0.0.0/8")],
+        ),
+        # Literals tshark also accepts in other spellings.
+        ('ip.dst_host == "198.51.100.7"', "", [(_CONSTANT, "198.51.100.7")]),
+        ("eth.src == 0200.0000.0001", "", [(_CONSTANT, "0200.0000.0001")]),
+        (
+            "eth.src == 02.00.00.00.00.01",
+            "",
+            [(_CONSTANT, "02.00.00.00.00.01")],
+        ),
+        ("eth.src == 2:0:0:0:0:1", "", [(_CONSTANT, "2:0:0:0:0:1")]),
+        (
+            "dns.qry.name == probe-110-2.example",
+            "",
+            [(_CONSTANT, "probe-110-2")],
+        ),
+        (
+            'dns.qry.name matches "(?i)PROBE-110-2"',
+            "",
+            [(_CONSTANT, "PROBE-110-2")],
+        ),
         (
             "eth.src == 02:00:00:00:00:01",
             "",
@@ -176,6 +239,31 @@ def test_capture_constants_are_shortcuts_unless_the_request_states_them(
     expected: list[tuple[ShortcutRule, str]],
 ) -> None:
     assert _hits(candidate, request_text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("0", 0),
+        ("01", 1),
+        ("0120050", 41000),
+        ("0b1010000000101000", 41000),
+        ("0xA028", 41000),
+        ("41000", 41000),
+    ],
+)
+def test_integers_are_read_as_tshark_reads_them(text: str, value: int) -> None:
+    assert references(f"tcp.srcport >= {text}").numbers == ((text, value),)
+
+
+def test_a_literal_tshark_would_reject_is_neither_a_number_nor_a_field() -> (
+    None
+):
+    found = references("ip.ttl <= 08")
+
+    assert (found.fields, found.numbers) == (("ip.ttl",), ())
+    typed = IntentIrV1(expression=_p("dns.qry.name", Operator.EQ, "007"))
+    assert references(typed).numbers == (("007", 7),)
 
 
 def test_typed_values_are_checked_like_filter_literals() -> None:
