@@ -4,8 +4,9 @@ Last updated: 2026-09-24
 
 ## Current slice
 
-The shortcut policy (ablation 006) is implemented and verified. Generated
-reports under the ignored `artifacts/` directory are not project evidence.
+The model split is expanded to 52 ready and 24 non-ready cases and verified;
+the test freeze is next. Generated reports under the ignored `artifacts/`
+directory are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -106,9 +107,37 @@ reports under the ignored `artifacts/` directory are not project evidence.
   the committed runs changes. The CI python job passes in the test image:
   973 tests, 1 skipped, 96.37 percent coverage.
 
+## Non-ready scoring and case expansion: 2026-09-24
+
+- Non-ready scoring pre-registered in `docs/protocol.md` (8ba42c8) before the
+  code (7b655b0): a ready answer to needs_clarification or not_expressible
+  gold is `false_ready`, never executed; ready and non-ready gold bootstrap
+  separately. After the code and before any test item, 508cdda added
+  false-ready per gold status and said slot match counts an answer naming at
+  least one gold slot. A review closed 15 gaps (8285726); no committed outcome
+  moved.
+- [Case expansion](decisions/case-expansion.md): 52 ready cases (12 dev, 40
+  test) and 24 non-ready (4+4 dev, 8+8 test), 152 items, numbered per split
+  and gold kind. The 32 requests of the 16 old test cases were rewritten; the
+  16 dev items of the published runs are unchanged. A dev pass is now 160
+  requests.
+- Adequacy gate, strict, at bb39ab7: 344 mutants (72 dev, 272 test), 0
+  unwaived survivors, the same 4 waivers, 0 label mismatches. A six-agent
+  review before the freeze found a test request the retriever would refuse,
+  four wording or slot problems and item numbers that tied dev to test, all
+  fixed. Tests now send every request through the real retriever, reject
+  dotted field names and filter operators in requests, and check that the
+  committed non-ready gold scores as matched end to end and under the
+  reference control.
+- The CI python job passes in the test image at bb037b8: 1,004 tests, 1
+  skipped, 96.50 percent coverage; `score --check` reproduces all six
+  committed outputs.
+
 ## Planned next
 
-1. Non-ready gold and the frozen test set (`docs/protocol.md` splits table).
+1. Freeze the test split: raise the 64-item prepare bounds (test holds 112
+   items), widen prepare to test, record the input hashes in
+   `docs/protocol.md` and pre-register the A/A rerun.
 2. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -124,8 +153,8 @@ reports under the ignored `artifacts/` directory are not project evidence.
   comparison is inconclusive by construction. Test-split baselines,
   SFT, DPO, and GRPO remain unmeasured. The complete Pilot Go/No-Go decision is
   still unverified.
-- The 12+4+4 dev split (8+0+0 built) and the frozen test hashes do not exist
-  yet, so false-ready rate and slot match are unmeasurable.
+- The test input hashes are not frozen, and no run has answered non-ready
+  gold, so false-ready rate and slot match are still unmeasured.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
@@ -133,6 +162,7 @@ reports under the ignored `artifacts/` directory are not project evidence.
 
 ## Next verification
 
-1. Hosted CI on the gold correction and shortcut policy, pylint included.
+1. Hosted CI on the gold correction, shortcut policy, non-ready scoring and
+   case expansion, pylint included.
 2. Locked-test run replayed offline from a clean checkout without an API key.
 3. Web numbers checked against the scored summary by a CI test.

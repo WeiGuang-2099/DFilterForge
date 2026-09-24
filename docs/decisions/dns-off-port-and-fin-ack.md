@@ -11,7 +11,7 @@ FIN frames exactly. Neither near miss was in the gate's operator set, so the gat
 ## Specification
 
 Case udp-nondns-private-destination asks for "non-DNS UDP packets", and its second phrasing for
-"UDP traffic not decoded as DNS" (`model_split.py:348-351`). Its reference is
+"UDP traffic not decoded as DNS" (`a1d3724:src/dfilterforge/model_split.py:348-351`). Its reference is
 `udp && !dns && ip.dst == 10.0.0.0/8`, and the pilot family it draws on is "UDP without the
 unicast DNS protocol" (`benchmark.py:363`). DNS here is what the dissector finds, not a port
 number, and pinned tshark 4.6.8 finds it off port 53: its `dns_udp` heuristic is enabled
@@ -83,8 +83,9 @@ comparisons do not move.
 ## Limits
 
 - Whether an mDNS packet to 10/8 counts as non-DNS is still untested: no mDNS packet goes to
-  10/8. The reading is an evaluator-only assumption (`model_split.py:75`) left for the next
-  paraphrase pass.
+  10/8. The reading is an evaluator-only assumption (`a1d3724:src/dfilterforge/model_split.py:75`).
+  The rewritten test requests state it; the dev requests stay unchanged so the published runs
+  keep their text.
 - A two-site near miss is outside a single-site operator set. The FIN witness separates
   `fin && !ack` today, but no gate rule requires it to.
 - The DNS witness relies on the heuristic staying enabled in the pinned profile. If a tshark or
