@@ -5,9 +5,12 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
 
 from dfilterforge.benchmark import generate_benchmark
 from dfilterforge.benchmark import RECIPES
+from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
+from dfilterforge.catalog_runtime import open_frozen_catalog
 from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
@@ -17,6 +20,12 @@ from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.witnesses import WITNESS_NAMES
 
 _ALLOWED_KEYS = {"item_id", "intent", "user_assumptions", "split"}
+# A dotted name, the shape of every display filter field.
+_FIELD_LEXEME = re.compile(
+    r"(?<![\w.])[a-z_][a-z0-9_-]*(?:\.[a-z0-9_-]+)+", re.IGNORECASE
+)
+# Comparison, logical and set operators of the display filter language.
+_FILTER_SYNTAX = re.compile(r"==|!=|<=|>=|&&|\|\||\bin\s*\{")
 
 
 def _split(tmp_path: Path) -> tuple[ModelSplitArtifacts, list[str]]:
@@ -72,6 +81,34 @@ def test_model_inputs_never_leak_evaluator_gold(tmp_path: Path) -> None:
             frames = list(probe.expected_frames)
             assert json.dumps(frames) not in text
             assert repr(tuple(frames)) not in text
+
+
+def test_no_request_names_a_filter_field_or_operator(
+    tmp_path: Path,
+) -> None:
+    """Requests use network terms, never display filter vocabulary.
+
+    No skip: the test image must supply the frozen field catalog.
+    """
+    with open_frozen_catalog(DEFAULT_CATALOG_PATH) as frozen:
+        database = sqlite3.connect(
+            f"{frozen.sqlite_path.resolve().as_uri()}?mode=ro", uri=True
+        )
+        try:
+            names = {
+                row[0]
+                for row in database.execute("SELECT name FROM fields_records")
+            }
+        finally:
+            database.close()
+    assert "tcp.dstport" in names
+
+    for item in generate_model_split(tmp_path / "split").inputs:
+        lexemes = {
+            lexeme.lower() for lexeme in _FIELD_LEXEME.findall(item.intent)
+        }
+        assert not lexemes & names, item.item_id
+        assert _FILTER_SYNTAX.search(item.intent) is None, item.item_id
 
 
 def test_every_gold_case_routes_exactly_two_distinct_paraphrases(
