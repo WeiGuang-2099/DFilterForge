@@ -83,6 +83,9 @@ def test_model_inputs_never_leak_evaluator_gold(tmp_path: Path) -> None:
             frames = list(probe.expected_frames)
             assert json.dumps(frames) not in text
             assert repr(tuple(frames)) not in text
+    for record in artifacts.gold.non_ready:
+        assert record.case_id not in text
+        assert record.rationale not in text
 
 
 def test_no_request_names_a_filter_field_or_operator(

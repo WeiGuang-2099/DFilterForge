@@ -54,14 +54,23 @@ _EMPTY_ITEM = "mei-0003"
 # The figures below were measured on the pilot cases, the first eight dev
 # and sixteen test compositions with no non-ready gold, which are the items
 # _DEV_IDS and _TEST_IDS name. Pinning the table keeps them independent of
-# later cases; CI measures recall over the whole split.
+# later cases; the one test using whole_split pins the committed table.
 _PILOT_DEV_CASES = 8
 _PILOT_TEST_CASES = 16
 
 
+@pytest.fixture(name="whole_split")
+def fixture_whole_split() -> None:
+    """Asks for the committed case table instead of the pilot cases."""
+
+
 @pytest.fixture(name="pilot_cases", autouse=True)
-def fixture_pilot_cases(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Generates every split in this module from the pilot cases alone."""
+def fixture_pilot_cases(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generates every split from the pilot cases, unless whole_split is on."""
+    if "whole_split" in request.fixturenames:
+        return
     dev = model_split.ready_dev_cases()[:_PILOT_DEV_CASES]
     test = model_split.ready_test_cases()[:_PILOT_TEST_CASES]
     monkeypatch.setattr(model_split, "ready_dev_cases", lambda: dev)
@@ -611,3 +620,19 @@ def test_every_dev_intent_retrieves_over_the_real_catalog() -> None:
     max_context_bytes = at_16["max_context_bytes"]
     assert isinstance(max_context_bytes, int)
     assert max_context_bytes <= 32 * 1024
+
+
+@pytest.mark.usefixtures("whole_split")
+def test_every_ready_dev_item_of_the_committed_split_is_retrieved() -> None:
+    # No skip: the test image must supply the frozen field catalog.
+    receipt = retrieval_recall.measure(DEFAULT_CATALOG_PATH, ("dev",), (16,))
+
+    at_16 = _at(receipt, "dev", 16)
+    # 12 ready dev cases; non-ready items name no field to recall.
+    assert at_16["items"] == 24
+    assert at_16["empty_contexts"] == 0
+    assert (at_16["all_in"], at_16["micro_found"], at_16["micro_total"]) == (
+        11,
+        34,
+        50,
+    )

@@ -44,6 +44,7 @@ from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievedFieldV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
+from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_client import API_KEY_ENV
 from dfilterforge.model_split import generate_model_split
@@ -56,6 +57,7 @@ from dfilterforge.run_store import check_prepare
 from dfilterforge.run_store import check_splits
 from dfilterforge.run_store import load_run
 from dfilterforge.runner import TsharkRunner
+from dfilterforge.score_summary import ScoreSummaryV1
 from dfilterforge.scoring import score_run
 
 _LABELS = ("C1", "C2", "C3", "C4")
@@ -254,6 +256,9 @@ def test_prepare_writes_four_dev_batches_and_no_gold(
         assert case.case_id.encode("utf-8") not in produced
         assert case.reference_filter.encode("utf-8") not in produced
         assert case.mutation_filter.encode("utf-8") not in produced
+    for record in model_non_ready_cases():
+        assert record.case_id.encode("utf-8") not in produced
+        assert record.rationale.encode("utf-8") not in produced
     manifest = _manifest(output_dir)
     assert manifest.split == "dev"
     assert manifest.item_ids == _DEV_ITEM_IDS
@@ -2139,6 +2144,14 @@ def test_published_run_scores_end_to_end(
     assert report.outcomes["strong_exact"] == len(_LABELS) * ready
     assert report.outcomes["abstained"] == _PASS_REQUESTS - len(_LABELS) * ready
     assert sum(report.outcomes.values()) == _PASS_REQUESTS
+    summary = ScoreSummaryV1.model_validate_json(
+        (published / "scored" / "summary.json").read_bytes()
+    )
+    for condition in summary.conditions.values():
+        assert condition.false_ready is not None
+        assert condition.false_ready.value == 0.0
+        assert condition.slot_match is not None
+        assert condition.slot_match.value == 1.0
     scored = published / "scored"
     assert (scored / "summary.json").is_file()
     assert (scored / "summary.md").is_file()
