@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing
 from contextlib import contextmanager
 from contextlib import ExitStack
@@ -213,6 +213,55 @@ def _definition(database: sqlite3.Connection, name: str) -> FieldDefinition:
     )
     values = parse_tshark_values(str(row[0]) for row in rows)
     return apply_enum_values((fields[0],), values)[0]
+
+
+def tshark_types(
+    names: Iterable[str], path: Path = DEFAULT_CATALOG_PATH
+) -> dict[str, str]:
+    """Returns the raw tshark type of each name the frozen inventory registers.
+
+    A name the inventory does not register, or registers with conflicting
+    types, is left out, so no caller can mistake it for a known type.
+
+    Args:
+        names: Field names as a candidate wrote them.
+        path: The frozen inventory.
+
+    Returns:
+        The tshark type, such as ``FT_FRAMENUM``, of each registered name.
+
+    Raises:
+        CatalogError: With code ``catalog_unavailable`` or
+            ``catalog_invalid`` when the inventory cannot be read.
+    """
+    try:
+        with closing(
+            sqlite3.connect(
+                f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True
+            )
+        ) as database:
+            database.execute("PRAGMA trusted_schema = OFF")
+            found: dict[str, str] = {}
+            for name in sorted(set(names)):
+                rows = database.execute(
+                    "SELECT record FROM fields_records WHERE name = ? "
+                    "ORDER BY rowid",
+                    (name,),
+                )
+                raw = {
+                    field.tshark_type
+                    for field in parse_tshark_fields(
+                        str(row[0]) for row in rows
+                    )
+                    if field.tshark_type is not None
+                }
+                if len(raw) == 1:
+                    found[name] = raw.pop()
+            return found
+    except (sqlite3.Error, OSError):
+        raise _unavailable() from None
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        raise _invalid_metadata() from None
 
 
 def _invalid_metadata() -> CatalogError:

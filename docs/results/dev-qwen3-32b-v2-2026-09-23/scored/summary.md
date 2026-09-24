@@ -5,12 +5,12 @@ Gold hash: 8a061589fe6c. Bootstrap: 1,000 case-level resamples, seed 17, nearest
 
 ## Conditions
 
-| Condition | Items | Compile valid | Strong exact | Silent-wrong (all) | Silent-wrong (exec) | Over-abstention | Provider failed | Malformed | Gold-field recall | Cost USD/item | Latency p50 ms |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| C1 | 16 | 0.750 [0.562, 0.938] | 0.562 [0.250, 0.812] | 0.188 [0.062, 0.375] | 0.250 (3/12) [0.071, 0.545] | 0.062 [0.000, 0.188] | 0 | 0 | n/a | 0.000050 | 2672 |
-| C2 | 16 | 0.812 [0.562, 1.000] | 0.562 [0.250, 0.875] | 0.250 [0.062, 0.500] | 0.308 (4/13) [0.062, 0.636] | 0.125 [0.000, 0.375] | 0 | 0 | 0.740 full 0.625 at k<=16 | 0.000101 | 2641 |
-| C3 | 16 | 0.562 [0.312, 0.812] | 0.438 [0.188, 0.688] | 0.125 [0.000, 0.250] | 0.222 (2/9) [0.000, 0.500] | 0.000 [0.000, 0.000] | 0 | 1 | n/a | 0.000106 | 6704 |
-| C4 | 16 | 0.938 [0.812, 1.000] | 0.625 [0.312, 0.875] | 0.312 [0.062, 0.625] | 0.333 (5/15) [0.062, 0.667] | 0.062 [0.000, 0.188] | 0 | 0 | 0.740 full 0.625 at k<=16 | 0.000148 | 5672 |
+| Condition | Items | Compile valid | Strong exact | Silent-wrong (all) | Silent-wrong (exec) | Over-abstention | Shortcut | Provider failed | Malformed | Gold-field recall | Cost USD/item | Latency p50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| C1 | 16 | 0.750 [0.562, 0.938] | 0.562 [0.250, 0.812] | 0.188 [0.062, 0.375] | 0.250 (3/12) [0.071, 0.545] | 0.062 [0.000, 0.188] | 0 | 0 | 0 | n/a | 0.000050 | 2672 |
+| C2 | 16 | 0.812 [0.562, 1.000] | 0.562 [0.250, 0.875] | 0.250 [0.062, 0.500] | 0.308 (4/13) [0.062, 0.636] | 0.125 [0.000, 0.375] | 0 | 0 | 0 | 0.740 full 0.625 at k<=16 | 0.000101 | 2641 |
+| C3 | 16 | 0.562 [0.312, 0.812] | 0.438 [0.188, 0.688] | 0.125 [0.000, 0.250] | 0.222 (2/9) [0.000, 0.500] | 0.000 [0.000, 0.000] | 0 | 0 | 1 | n/a | 0.000106 | 6704 |
+| C4 | 16 | 0.938 [0.812, 1.000] | 0.625 [0.312, 0.875] | 0.312 [0.062, 0.625] | 0.333 (5/15) [0.062, 0.667] | 0.062 [0.000, 0.188] | 0 | 0 | 0 | 0.740 full 0.625 at k<=16 | 0.000148 | 5672 |
 
 Compile valid means C1 and C2 were accepted and run by pinned tshark only, so an accepted name outside the frozen catalog still counts as valid; C3 and C4 additionally bind the frozen catalog and check types, operators and values.
 

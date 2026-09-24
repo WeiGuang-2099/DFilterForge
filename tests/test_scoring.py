@@ -64,6 +64,7 @@ from dfilterforge.scoring import score_item
 from dfilterforge.scoring import score_run
 from dfilterforge.scoring import ScoringError
 from dfilterforge.scoring import verify_gold
+from dfilterforge.shortcuts import ShortcutRule
 
 _CREATED_AT = datetime(2026, 9, 18, tzinfo=timezone.utc)
 _DEV_PROBES = ("semantic-11", "semantic-17", "semantic-23")
@@ -120,13 +121,14 @@ def _case(
     *,
     case_id: str = "tcp-expiring-ttl",
     expected: tuple[tuple[int, ...], ...] = ((1, 2), (3,), (4, 5)),
+    reference_filter: str = _REFERENCE,
 ) -> ModelGoldCaseV1:
     """Builds one dev gold case without touching the generated split."""
     spec = SemanticSpecV1(
         task_id=case_id,
         intent=_INTENT,
         canonical_ir=_canonical_ir(),
-        reference_filter=_REFERENCE,
+        reference_filter=reference_filter,
         probes=tuple(
             ProbeExpectationV1(
                 probe_id=probe_id,
@@ -307,6 +309,7 @@ def _score(
         code_revision="revision",
         model_hash=model_hash,
         runner=_RUNNER,
+        request="Show some packets.",
     )
 
 
@@ -547,6 +550,81 @@ def test_receipt_probes_decide_strong_exact_or_silent_wrong(
     assert wrong_outcome.probe_exact == (True, False, True)
     assert wrong_outcome.packet_set_hash is not None
     assert wrong_receipt is not None
+
+
+def test_an_exact_answer_that_breaks_a_shortcut_rule_is_shortcut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matching every probe by frame number or a capture constant never
+    counts as strong exact; a wrong answer stays silent-wrong."""
+    shortcut_filter = "(tcp && frame.number <= 40) || ip.ttl == 0"
+    _install_live(monkeypatch)
+    shortcut, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply(shortcut_filter)),
+    )
+    constant, _, _ = _score(
+        _prompt(OutputContractV1.TYPED_IR, item_id="mei-0002"),
+        _completion(
+            "mei-0002",
+            response_text=_ir_reply(
+                IntentIrV1(
+                    expression=All(
+                        children=(
+                            Predicate(field="tcp", operator=Operator.EXISTS),
+                            Predicate(
+                                field="ip.src",
+                                operator=Operator.EQ,
+                                value="198.51.100.7",
+                            ),
+                        )
+                    )
+                )
+            ),
+        ),
+    )
+    _install_live(monkeypatch, inexact=("semantic-17",))
+    wrong, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply(shortcut_filter)),
+    )
+    exact, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply()),
+    )
+
+    assert shortcut.outcome is OutcomeV1.SHORTCUT
+    assert [(hit.rule, hit.token) for hit in shortcut.shortcuts] == [
+        (ShortcutRule.CAPTURE_POSITION, "frame.number")
+    ]
+    assert shortcut.disjunctions == 1
+    assert constant.outcome is OutcomeV1.SHORTCUT
+    assert [(hit.rule, hit.token) for hit in constant.shortcuts] == [
+        (ShortcutRule.CAPTURE_CONSTANT, "198.51.100.7")
+    ]
+    assert wrong.outcome is OutcomeV1.SILENT_WRONG
+    assert wrong.shortcuts == shortcut.shortcuts
+    assert (exact.shortcuts, exact.disjunctions) == ((), 0)
+
+
+def test_gold_preflight_rejects_a_gold_filter_that_is_a_shortcut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reference that leans on the capture is a gold error, not a score."""
+    _install_live(monkeypatch)
+
+    with pytest.raises(ScoringError) as error:
+        verify_gold(
+            [_case(reference_filter="tcp && ip.ttl <= 1 && tcp.stream >= 0")],
+            Path("captures"),
+            run_id="dev-0001",
+            created_at=_CREATED_AT,
+            code_revision="revision",
+            runner=_RUNNER,
+        )
+
+    assert error.value.code == "gold_invalid"
+    assert str(error.value) == "tcp-expiring-ttl: gold uses a shortcut"
 
 
 def test_display_filter_goes_in_unchanged_and_typed_ir_as_ir(
