@@ -7,11 +7,13 @@ from pathlib import Path
 import re
 
 from dfilterforge.benchmark import generate_benchmark
+from dfilterforge.benchmark import RECIPES
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldV1
 from dfilterforge.model_split import ModelInputItemV1
 from dfilterforge.model_split import ModelSplitArtifacts
+from dfilterforge.witnesses import WITNESS_NAMES
 
 _ALLOWED_KEYS = {"item_id", "intent", "user_assumptions", "split"}
 
@@ -120,15 +122,27 @@ def test_dev_and_test_captures_are_disjoint_and_hash_verified(
             assert digest == probe.capture_sha256
 
 
+def _packets(capture: bytes) -> list[bytes]:
+    """Splits a little-endian PCAP into its packet bytes."""
+    packets: list[bytes] = []
+    offset = 24
+    while offset < len(capture):
+        length = int.from_bytes(capture[offset + 8 : offset + 12], "little")
+        packets.append(capture[offset + 16 : offset + 16 + length])
+        offset += 16 + length
+    return packets
+
+
 def test_generation_is_deterministic_and_mutations_stay_distinguishable(
     tmp_path: Path,
 ) -> None:
     first, _ = _split(tmp_path / "one")
     second, _ = _split(tmp_path / "two")
-    probes = {
+    benchmark = {
         probe.probe_id: probe
         for probe in generate_benchmark(tmp_path / "benchmark")
     }
+    probes = {probe.probe_id: probe for probe in first.probes}
     cases = {case.case_id: case for case in model_semantic_cases()}
 
     assert first.inputs_path.read_bytes() == second.inputs_path.read_bytes()
@@ -141,10 +155,73 @@ def test_generation_is_deterministic_and_mutations_stay_distinguishable(
         }
         for probe_id, frames in canonical.items():
             probe = probes[probe_id]
+            original = benchmark[probe_id]
             assert frames == case.labels(probe)
             assert frames
             assert len(frames) < len(probe.recipes)
+            # The witness tail leaves the benchmark frames' labels alone.
+            assert tuple(
+                frame for frame in frames if frame <= len(original.recipes)
+            ) == case.labels(original)
         assert any(
             case.labels(probes[probe_id], mutation=True) != frames
             for probe_id, frames in canonical.items()
         )
+
+
+def test_probe_copies_keep_benchmark_bytes_and_share_no_packet(
+    tmp_path: Path,
+) -> None:
+    artifacts, _ = _split(tmp_path)
+    benchmark = {
+        probe.probe_id: probe
+        for probe in generate_benchmark(tmp_path / "benchmark")
+    }
+    splits = {
+        probe.probe_id: case.spec.split
+        for case in artifacts.gold.cases
+        for probe in case.spec.probes
+    }
+    packets: dict[str, set[bytes]] = {"dev": set(), "test": set()}
+
+    for probe in artifacts.probes:
+        original = benchmark[probe.probe_id]
+        capture = probe.capture_path.read_bytes()
+        assert capture.startswith(original.capture_path.read_bytes())
+        assert probe.recipes == original.recipes + WITNESS_NAMES
+        found = _packets(capture)
+        assert len(found) == len(probe.recipes)
+        packets[splits[probe.probe_id]].update(found)
+    assert not packets["dev"] & packets["test"]
+
+
+def test_every_oracle_name_is_a_recipe_or_a_witness() -> None:
+    known = set(RECIPES) | set(WITNESS_NAMES)
+
+    for case in model_semantic_cases():
+        oracle = case.recipe_oracle
+        assert oracle.canonical | oracle.mutation <= known, case.case_id
+        assert oracle.canonical != oracle.mutation, case.case_id
+
+
+def test_case_readings_reach_the_gold_but_never_the_model(
+    tmp_path: Path,
+) -> None:
+    artifacts, lines = _split(tmp_path)
+    text = "\n".join(lines)
+    shared = min(
+        (case.spec.assumptions for case in artifacts.gold.cases), key=len
+    )
+    readings = {
+        case.case_id: case.spec.assumptions[len(shared) :]
+        for case in artifacts.gold.cases
+        if case.spec.assumptions != shared
+    }
+
+    # Only the mDNS reading of "all DNS responses" is case-specific.
+    assert list(readings) == ["fin-or-dns-response"]
+    for case in artifacts.gold.cases:
+        assert case.spec.assumptions[: len(shared)] == shared
+    (reading,) = readings["fin-or-dns-response"]
+    assert "mDNS" in reading
+    assert reading not in text

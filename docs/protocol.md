@@ -11,6 +11,8 @@ or a typed IR the compiler turns into one (C3/C4); `needs_clarification` carries
 one question and `missing_slots` from the closed list address, direction, field,
 port, protocol, value; `not_expressible` neither. Ready answers run on pinned
 tshark 4.6.8 over three probes labelled by packet recipes, not filter strings.
+Each probe is a benchmark capture followed by a fixed tail of witness packets
+that separate near misses the recipes alone cannot.
 
 ## Conditions
 
@@ -37,10 +39,11 @@ was incorrect" arm and a same-temperature resample.
 | train (synthetic, models only) | about 1,000 to 1,500 | about 15 percent non-ready | | 3 |
 
 Canonical IR hashes, paraphrase families, capture seeds and bytes are disjoint
-across splits; a test asserts it for probes only. Test input hashes land here
-when frozen, before any test item is sent. The first dev run, on qwen/qwen3-32b,
-is 8 cases x 2 paraphrases x 4 conditions = 64 completions: false-ready rate,
-slot match and repair@1 are not yet measurable, over-abstention is.
+across splits; a test asserts it for probe ids and packet bytes. Test input
+hashes land here when frozen, before any test item is sent. The first dev run,
+on qwen/qwen3-32b, is 8 cases x 2 paraphrases x 4 conditions = 64 completions:
+false-ready rate, slot match and repair@1 are not yet measurable,
+over-abstention is.
 
 ## Metrics (per condition, per model)
 
@@ -79,6 +82,17 @@ disagreeing with its labels, a gold case with no non-empty expected set, or any
 capture, catalog or harness failure stops scoring; a candidate timeout or output
 or frame limit counts as invalid, not as a stop, if its gold case reruns clean.
 
+The mutation-adequacy gate is part of the gold. For every dev and test case,
+`scripts/probe_adequacy.py` requires the reference filter and the compiled
+canonical IR to select exactly the labelled frames on all six probes, the
+authored mutation to select exactly its own authored frames there and to
+differ from the labels on one probe of its split, and every single-site mutant
+of the canonical IR from the fixed operator set in `dfilterforge.mutants` to
+differ on one probe of its split unless a waiver in
+`model_split.MUTANT_WAIVERS` names its case, edit and filter with a reason
+(`equivalent` or `not_separable`). A mismatch, a survivor without a waiver, or
+a waiver without a survivor fails CI.
+
 ## Decoding and provenance
 
 Temperature 0, one greedy pass, fixed max output tokens, thinking disabled where
@@ -95,6 +109,14 @@ the first answer shows thinking not honoured, the run stops and the provider or
 model is changed ([note](decisions/model-client-replies.md)). Scoring is offline
 in the no-network lab container: `dfilterforge score --check` must reproduce the
 committed outcomes and summary byte for byte from a clean checkout, no API key.
+A gold correction (labels, probes or reference filters) is justified from the
+packet specification and the adequacy gate, never from which answers it flips.
+It re-scores every committed run in place; stored answers never change, the
+previous outcomes stay in git history, and the correction's note gives the
+numbers before and after and lists every flipped item in both directions. Once
+the test split is frozen, a test gold correction is published beside the
+original test score, not in its place. A waiver changes no outcome, so it
+triggers no re-score.
 
 ## Models
 
@@ -117,4 +139,6 @@ percent; the histogram is published anyway and GRPO is unfunded here.
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
 TCP/UDP/DNS captures. They say nothing about other versions, real traffic, or
-protocols outside the recipe world. Negative results are published unchanged.
+protocols outside the recipe world. Negative results are published unchanged:
+model answers are never edited, and a gold correction changes only the score,
+under the rule above.

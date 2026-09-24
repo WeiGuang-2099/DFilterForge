@@ -13,14 +13,18 @@ proof.
 The local CLI connects the typed compiler to a bounded tshark 4.6.8 runner,
 synthetic multi-probe captures, packet diffs, predicate traces, executable
 replay, and measured receipts. One model, qwen/qwen3-32b, has been evaluated
-on the 8-case dev split under all four prompt conditions, and nothing has been
-trained; [what that run shows and what it does not](docs/decisions/first-dev-run.md)
-is written down, including a typed-IR prompt gap and three probe gaps that
-change how its numbers read. The Web Evaluation Lab still shows a hand-written
-illustrative example. See `docs/progress.md` for verified results and
-`docs/protocol.md` for the model evaluation protocol. Every committed run and
-its gold-derived reference and mutation controls re-score offline in the
-no-network container.
+twice on the 8-case dev split under all four prompt conditions, and nothing has
+been trained; [what the first run shows and what it does not](docs/decisions/first-dev-run.md)
+is written down, including a typed-IR prompt gap that the
+[second run](docs/decisions/typed-ir-prompt-v2.md) measured closed. Three of its answers first
+passed as strong exact because no probe packet separated them from the gold;
+the model split probes now end in witness packets, a mutation-adequacy gate
+checks every single-site mutant of the gold from a fixed operator set on them
+in CI, and the run was re-scored against the corrected gold. The Web
+Evaluation Lab still shows a hand-written illustrative example. See
+`docs/progress.md` for verified results and `docs/protocol.md` for the model
+evaluation protocol. Every committed run and its gold-derived reference and
+mutation controls re-score offline in the no-network container.
 
 ## Development
 
@@ -137,8 +141,10 @@ its data.
 
 ## Hosted model run
 
-`RUN` below is `dev-qwen3-32b-2026-09-21`: qwen/qwen3-32b on the dev split via
-deepinfra, fallbacks off; the date records when its prompts were frozen (UTC).
+`RUN` below is `dev-qwen3-32b-v2-2026-09-23`: qwen/qwen3-32b on the dev split
+via deepinfra, fallbacks off, with the second typed-IR prompt; the date records
+when its prompts were frozen (UTC). Its C1 and C2 prompts are byte-identical to
+the first run's, `dev-qwen3-32b-2026-09-21`, which is scored and committed.
 The [protocol](docs/protocol.md) defines what is measured.
 
 1. Build the test image the prompts are prepared in.
@@ -170,8 +176,8 @@ docker compose --profile pilot run --rm lab score --run-dir /workspace/results/R
 
 Step 5 is the only command here that needs a key and spends money; every other
 command is exercised by the test suite or by CI. The
-[reference](docs/results/dev-qwen3-32b-2026-09-21/control-reference/summary.md)
-and [mutation](docs/results/dev-qwen3-32b-2026-09-21/control-mutation/summary.md)
+[reference](docs/results/dev-qwen3-32b-v2-2026-09-23/control-reference/summary.md)
+and [mutation](docs/results/dev-qwen3-32b-v2-2026-09-23/control-mutation/summary.md)
 control scores are the scorer's measured baseline; the model's numbers are in
 `docs/results/RUN/scored/summary.md`, where C2 and C4 also print how often
 retrieval listed every gold field. `--check` (plus `--control reference`

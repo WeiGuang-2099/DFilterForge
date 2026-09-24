@@ -47,6 +47,7 @@ from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
+from dfilterforge.generation import prompt_versions
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.live import LiveEnvironmentV1
@@ -395,32 +396,54 @@ def selected_cases(
 def check_prompts(
     prepared: PreparedFiles, items_by_id: Mapping[str, ModelInputItemV1]
 ) -> None:
-    """Re-prepares every committed prompt and requires an exact match."""
+    """Re-prepares every committed prompt and requires an exact match.
+
+    A condition's prompts are rebuilt under each system prompt version,
+    newest first, and must all match under one of them, so a run prepared
+    before a prompt change still re-scores while a batch mixing versions,
+    or a prompt no version reproduces, is refused.
+    """
     for label, (batch, _) in prepared.items():
         output_contract, retrieval = _CONDITIONS[label]
-        for prompt in batch.prompts:
-            item = items_by_id[prompt.item_id]
-            rebuilt = prepare_batch(
-                [
-                    GenerationInputV1(
-                        item_id=item.item_id,
-                        intent=item.intent,
-                        user_assumptions=item.user_assumptions,
-                        retrieved_fields=(
-                            prompt.retrieved_fields
-                            if retrieval is RetrievalV1.LEXICAL
-                            else None
-                        ),
-                        split=item.split,
-                    )
-                ],
-                output_contract=output_contract,
-                retrieval=retrieval,
+        versions = range(prompt_versions(output_contract), 0, -1)
+        mismatches = [
+            [
+                prompt.item_id
+                for prompt in batch.prompts
+                if _rebuilt(prompt, items_by_id, retrieval, version) != prompt
+            ]
+            for version in versions
+        ]
+        if all(mismatches):
+            raise ScoringError("prompt_mismatch", f"{label} {mismatches[0][0]}")
+
+
+def _rebuilt(
+    prompt: PreparedPromptV1,
+    items_by_id: Mapping[str, ModelInputItemV1],
+    retrieval: RetrievalV1,
+    version: int,
+) -> PreparedPromptV1:
+    """Prepares one committed prompt's item again under one prompt version."""
+    item = items_by_id[prompt.item_id]
+    return prepare_batch(
+        [
+            GenerationInputV1(
+                item_id=item.item_id,
+                intent=item.intent,
+                user_assumptions=item.user_assumptions,
+                retrieved_fields=(
+                    prompt.retrieved_fields
+                    if retrieval is RetrievalV1.LEXICAL
+                    else None
+                ),
+                split=item.split,
             )
-            if rebuilt.prompts[0] != prompt:
-                raise ScoringError(
-                    "prompt_mismatch", f"{label} {prompt.item_id}"
-                )
+        ],
+        output_contract=prompt.output_contract,
+        retrieval=retrieval,
+        prompt_version=version,
+    ).prompts[0]
 
 
 class _Served(NamedTuple):

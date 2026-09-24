@@ -136,9 +136,25 @@ def _check_capture_hash(actual: str, expected: str) -> None:
         )
 
 
-def _environment(
-    runner: TsharkRunner, catalog: FieldCatalogV1 | None
+def measure_environment(
+    runner: TsharkRunner, catalog: FieldCatalogV1 | None = None
 ) -> LiveEnvironmentV1:
+    """Measures the executable, runner and optional catalog identity.
+
+    Live evaluation and the probe adequacy gate both call this, so one
+    binary and runner hash the same in their receipts.
+
+    Args:
+        runner: The bounded tshark runner whose executable is measured.
+        catalog: The bound field catalog, or ``None`` when no filter needs one.
+
+    Returns:
+        The measured environment.
+
+    Raises:
+        LiveError: If the catalog was frozen for another tshark version, or
+            the executable cannot be read.
+    """
     version = runner.version()
     if catalog is not None and catalog.tshark_version != version:
         raise LiveError(
@@ -459,7 +475,7 @@ def evaluate_live(
     else:
         candidate_filter = compile_intent(candidate, catalog)
     compile_intent(spec.canonical_ir, catalog)
-    environment = _environment(active_runner, catalog)
+    environment = measure_environment(active_runner, catalog)
     probes: list[ProbeResultV1] = []
     for expected in spec.probes:
         capture = _capture_path(capture_root, expected.probe_id)

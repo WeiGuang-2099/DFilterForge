@@ -46,6 +46,7 @@ include = [
   "src",
   "tests",
   "scripts/model_run.py",
+  "scripts/probe_adequacy.py",
   "scripts/provider_reply_replay.py",
   "scripts/retrieval_recall.py",
 ]
@@ -100,6 +101,7 @@ source_modules = [
   "dfilterforge.field_catalog",
   "dfilterforge.compiler",
   "dfilterforge.evaluation",
+  "dfilterforge.mutants",
   "dfilterforge.score_summary",
   "dfilterforge.score_report",
 ]
