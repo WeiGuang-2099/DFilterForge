@@ -49,8 +49,10 @@ over-abstention is.
 
 Every item has exactly one outcome: `provider_failed` (including a provider
 error or empty content inside an HTTP 200 response), `malformed`, `abstained`,
-`invalid`, `shortcut`, `silent_wrong` or `strong_exact`. All items are
-denominators.
+`false_ready`, `invalid`, `shortcut`, `silent_wrong` or `strong_exact`. All
+items are denominators. Ready and non-ready gold are two case universes, each
+bootstrapped with its own seed-17 vectors, so non-ready cases move no ready
+number; every rate below except false-ready and slot match covers ready gold.
 
 - compile validity: the output parses under its contract and pinned tshark
   accepts and runs it; a rejected filter exits 4 ([ablation
@@ -80,8 +82,13 @@ denominators.
   over all items and over compile-valid items.
 - repair@1: share of silent-wrong or invalid items that become strong exact
   after one feedback round, fed by a fourth unscored probe.
-- abstention (both contracts, no human rubric): over-abstention on ready gold;
-  false-ready, slot match (missing_slots meets gold slots) need non-ready gold.
+- abstention (both contracts, no human rubric): over-abstention on ready gold.
+  false-ready: a ready answer to needs_clarification or not_expressible gold,
+  never executed, over non-ready items. Slot match: over needs_clarification
+  items, the answer asks for clarification and its missing_slots meet the gold
+  slots. Whether an abstention names the gold status is recorded per item. The
+  reference control answers non-ready gold with its status and slots, the
+  mutation control with a ready filter (display-filter conditions only).
 - field context (C2 and C4): share of cases, paraphrases averaged, with every
   gold field in the retrieved list, beside that condition's scores; a non-empty
   list limits the prompt to its names, so C2-C1 and C4-C3 are read against it.
