@@ -471,7 +471,7 @@ def _ratio_rate(
 
 
 def _outcome_counts(items: Sequence[ItemOutcomeV1]) -> dict[str, int]:
-    """Counts every outcome, keeping all six keys present."""
+    """Counts every outcome, keeping all seven keys present."""
     counts = {outcome.value: 0 for outcome in OutcomeV1}
     for item in items:
         counts[item.outcome.value] += 1
