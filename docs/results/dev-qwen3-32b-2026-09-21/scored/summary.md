@@ -1,7 +1,7 @@
 # Score summary
 
 Model: qwen/qwen3-32b. Split: dev. Run: dev-qwen3-32b-2026-09-21. Cases: 8, items: 64.
-Gold hash: 57db1369ae6f. Bootstrap: 1,000 case-level resamples, seed 17, nearest-rank 2.5 and 97.5 percentiles, index vectors shared by every metric, drawn from 8 cases.
+Gold hash: 8a061589fe6c. Bootstrap: 1,000 case-level resamples, seed 17, nearest-rank 2.5 and 97.5 percentiles, index vectors shared by every metric, drawn from 8 cases.
 
 ## Conditions
 

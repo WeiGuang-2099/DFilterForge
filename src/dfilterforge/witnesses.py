@@ -2,8 +2,9 @@
 
 The benchmark recipes leave some near-miss filters indistinguishable from
 the gold on every probe: a port written for either side, the ACK number read
-as the ACK flag, a TTL, port or subnet bound moved by one, a DNS code read as
-a range. Each witness below is one packet that separates at least one such
+as the ACK flag, a flag read as the whole flag byte, DNS read as port 53, a
+TTL, port or subnet bound moved by one, a DNS code read as a range. Each
+witness below is one packet that separates at least one such
 near miss from its gold case. The model split appends the same witness tail
 to all six probe copies, after the last benchmark frame, so frames 1..N keep
 their bytes and labels.
@@ -21,10 +22,12 @@ distinct. Which cases each witness belongs to is authored in
 Pinned tshark 4.6.8 decodes every witness as its table entry says, with no
 malformed frame and no TCP analysis flag. The only expert items are the ones
 any such packet carries: a note for a TTL below 5 or a nonzero ACK field
-without the ACK flag, a chat for a SYN and a warning for a reset. UDP
-witnesses without DNS carry no payload, so no port-based dissector runs even
-when an ephemeral port is registered (udp 41170 is Manolito). Server
-addresses stay inside the hosts of 198.51.100.0/24, .1 to .254.
+without the ACK flag, a chat for a SYN, a chat and a note for a FIN and a
+warning for a reset. UDP witnesses without DNS carry no payload, so no
+port-based dissector runs even when an ephemeral port is registered (udp
+41170 is Manolito). The one DNS message whose ports both lack a dissector is
+decoded by tshark's DNS-over-UDP heuristic, which is enabled by default.
+Server addresses stay inside the hosts of 198.51.100.0/24, .1 to .254.
 """
 
 from __future__ import annotations
@@ -39,8 +42,8 @@ from dfilterforge.fixtures import internet_checksum
 Host: TypeAlias = Literal["client", "server"] | IPv4Address
 Transport: TypeAlias = Literal["tcp", "udp"]
 
-# A UDP destination above the 5353 and 5354 bounds with no registered
-# tshark 4.6.8 dissector for UDP or TCP.
+# A UDP port above the 5353 and 5354 bounds with no registered tshark 4.6.8
+# dissector for UDP or TCP.
 HIGH_PORT = 6100
 # A UDP port below 53 with no registered dissector, so tshark tries it first
 # and then decodes DNS from port 53 on the other side.
@@ -48,7 +51,7 @@ LOW_PORT = 52
 
 _ETHERNET = bytes.fromhex("0200000000020200000000010800")
 _EPHEMERAL_BASE = 41000
-_SYN, _RST, _ACK, _ECE, _CWR = 0x02, 0x04, 0x10, 0x40, 0x80
+_FIN, _SYN, _RST, _ACK, _ECE, _CWR = 0x01, 0x02, 0x04, 0x10, 0x40, 0x80
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +267,17 @@ WITNESSES: tuple[Witness, ...] = (
         TcpHeader(_ACK, 1),
     ),
     Witness("udp-near-testnet", Endpoint(_NEAR_TESTNET), _SERVER_HIGH),
+    # A DNS query to a private address on a port that is not 53: DNS by its
+    # dissector, not by its port. Both ports lack a dissector, so no
+    # registered ephemeral port can claim it first.
+    Witness(
+        "dns-query-to-private-low",
+        Endpoint("client", HIGH_PORT),
+        Endpoint(IPv4Address("10.2.3.6"), LOW_PORT),
+        dns=DnsMessage(response=False),
+    ),
+    # FIN together with ACK, as a server closes its side of a stream.
+    Witness("server-fin-ack", _SERVER_443, _CLIENT, TcpHeader(_FIN | _ACK, 1)),
 )
 WITNESS_NAMES: tuple[str, ...] = tuple(witness.name for witness in WITNESSES)
 
@@ -286,6 +300,7 @@ TCP_WITNESSES = frozenset(
         "tcp-ttl-2",
         "tcp-to-private",
         "tcp-near-testnet",
+        "server-fin-ack",
     )
 )
 UDP_WITNESSES = frozenset(
@@ -306,6 +321,7 @@ UDP_WITNESSES = frozenset(
         "udp-from-far-private",
         "dns-to-private",
         "udp-near-testnet",
+        "dns-query-to-private-low",
     )
 )
 # Sourced from the probe's own client in 192.0.2.0/24.
@@ -330,6 +346,7 @@ CLIENT_WITNESSES = frozenset(
         "dns-query-to-5352",
         "udp-to-far-private",
         "dns-to-private",
+        "dns-query-to-private-low",
     )
 )
 ACK_WITNESSES = frozenset(
@@ -345,9 +362,11 @@ ACK_WITNESSES = frozenset(
         "tcp-ttl-2",
         "tcp-to-private",
         "tcp-near-testnet",
+        "server-fin-ack",
     )
 )
 SYN_WITNESSES = frozenset(("cwr-syn", "server-syn", "syn-nonzero-ack"))
+FIN_WITNESSES = frozenset(("server-fin-ack",))
 # TCP sent to destination port 443.
 HTTPS_WITNESSES = frozenset(
     (
@@ -373,6 +392,7 @@ DNS_WITNESSES = frozenset(
         "dns-query-from-low-port",
         "dns-query-to-5352",
         "dns-to-private",
+        "dns-query-to-private-low",
     )
 )
 # DNS or mDNS responses, each with an A question.
@@ -386,7 +406,12 @@ RESPONSE_WITNESSES = frozenset(
 )
 # DNS queries for A records.
 A_QUERY_WITNESSES = frozenset(
-    ("dns-query-from-low-port", "dns-query-to-5352", "dns-to-private")
+    (
+        "dns-query-from-low-port",
+        "dns-query-to-5352",
+        "dns-to-private",
+        "dns-query-to-private-low",
+    )
 )
 # UDP sent from source port 53.
 SOURCE_53_WITNESSES = frozenset(
@@ -404,6 +429,7 @@ PRIVATE_WITNESSES = frozenset(
         "udp-from-far-private",
         "tcp-to-private",
         "dns-to-private",
+        "dns-query-to-private-low",
     )
 )
 TTL_BELOW_64_WITNESSES = frozenset(
