@@ -351,10 +351,10 @@ def test_receipt_counts_survivors_by_split_and_category(
         }
     ]
     assert receipt["mutants"] == {
-        "generated": 182,
+        "generated": 192,
         "duplicates": 0,
-        "executed": 182,
-        "killed": 177,
+        "executed": 192,
+        "killed": 187,
         "survived": 4,
         "rejected": 1,
         "uncompilable": 0,
@@ -363,8 +363,8 @@ def test_receipt_counts_survivors_by_split_and_category(
     }
     counts = _mapping(receipt["counts"])
     dev, test = _mapping(counts["dev"]), _mapping(counts["test"])
-    assert (dev["executed"], dev["survived"], dev["waived"]) == (46, 2, 1)
-    assert (test["executed"], test["survived"], test["waived"]) == (136, 2, 0)
+    assert (dev["executed"], dev["survived"], dev["waived"]) == (52, 2, 1)
+    assert (test["executed"], test["survived"], test["waived"]) == (140, 2, 0)
     dev_swaps = _mapping(_mapping(dev["by_category"])["field-swap"])
     assert dev_swaps["survived"] == 2
     boundary = _mapping(_mapping(dev["by_category"])["boundary"])
@@ -419,16 +419,16 @@ def test_receipt_counts_survivors_by_split_and_category(
     assert all(row["label_mismatches"] == [] for row in cases)
     assert all(row["canonical_mismatches"] == [] for row in cases)
     assert all(row["mutation_label_mismatches"] == [] for row in cases)
-    assert sum(cast(int, row["mutants_executed"]) for row in cases) == 182
+    assert sum(cast(int, row["mutants_executed"]) for row in cases) == 192
     assert [row["case_id"] for row in cases if row["mutants_rejected"]] == [
         "tcp-expiring-ttl"
     ]
     runtime = _mapping(receipt["runtime"])
     # 24 x 6 reference runs, the canonical runs whose text differs, 24 x 6
-    # mutation runs and 181 x 3 mutant runs; the rejected mutant stops at
+    # mutation runs and 191 x 3 mutant runs; the rejected mutant stops at
     # its first probe with no runtime.
     assert runtime["timed_runs"] == (
-        144 + _canonical_runs(gold) + 144 + 181 * 3
+        144 + _canonical_runs(gold) + 144 + 191 * 3
     )
     assert runtime["p50_ms"] == runtime["p95_ms"] == 1.0
     identity = _mapping(receipt["measurement_identity"])
@@ -568,8 +568,8 @@ def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
     )
 
     mutants = _mapping(receipt["mutants"])
-    assert (mutants["generated"], mutants["duplicates"]) == (182 + 48, 24)
-    assert (mutants["executed"], mutants["uncompilable"]) == (182, 24)
+    assert (mutants["generated"], mutants["duplicates"]) == (192 + 48, 24)
+    assert (mutants["executed"], mutants["uncompilable"]) == (192, 24)
     # Only the declared waivers survive, so strict mode passes.
     assert (mutants["survived"], mutants["waived"]) == (4, 4)
     assert receipt["passed"] is True
@@ -619,7 +619,7 @@ def test_strict_mode_fails_on_survivors_after_writing_the_receipt(
     assert _mapping(json.loads(lines[0]))["case_id"] == "ack-to-https"
     summary = _mapping(json.loads(lines[-1]))
     assert summary["passed"] is False
-    assert summary["dev"] == {"executed": 46, "survived": 2, "unwaived": 2}
+    assert summary["dev"] == {"executed": 52, "survived": 2, "unwaived": 2}
 
 
 @_POSIX_ONLY
