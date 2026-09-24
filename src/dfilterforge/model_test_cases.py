@@ -291,9 +291,8 @@ def ready_test_cases() -> tuple[ModelSemanticCase, ...]:
                 "5353 where the DNS question section is asking for an A record "
                 "- that covers A queries as well as any response whose "
                 "question was A. Judge it as DNS by what's actually in the "
-                "packet rather than insisting on port 53, and don't carve mDNS "
-                "out separately, since it still just needs to clear that same "
-                "port limit.",
+                "packet rather than insisting on port 53, and hold mDNS to "
+                "that same port limit.",
                 "Find UDP packets going to a destination port below 5353 that "
                 "carry a DNS question for an A record, whether they are "
                 "queries or responses. Recognize DNS by the packet content "
@@ -823,7 +822,7 @@ def ready_test_cases() -> tuple[ModelSemanticCase, ...]:
             "ttl-between",
             "test",
             (
-                "Pull packets with an IPv4 TTL strictly between 1 and 64 - 1 "
+                "Pull packets with an IPv4 TTL strictly between 1 and 64; 1 "
                 "and 64 themselves are excluded, but 2 and 63 should be "
                 "included. Any protocol, TCP and UDP both fine.",
                 "Give me packets whose IPv4 TTL is above 1 and below 64, "

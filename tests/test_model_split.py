@@ -11,6 +11,8 @@ from dfilterforge.benchmark import generate_benchmark
 from dfilterforge.benchmark import RECIPES
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
 from dfilterforge.catalog_runtime import open_frozen_catalog
+from dfilterforge.field_retrieval import FieldRetrievalItemV1
+from dfilterforge.field_retrieval import retrieve_fields
 from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
@@ -109,6 +111,27 @@ def test_no_request_names_a_filter_field_or_operator(
         }
         assert not lexemes & names, item.item_id
         assert _FILTER_SYNTAX.search(item.intent) is None, item.item_id
+
+
+def test_the_retriever_accepts_every_request_of_both_splits(
+    tmp_path: Path,
+) -> None:
+    """Prepare retrieves a whole split at once, so one long request stops it.
+
+    No skip: the test image must supply the frozen field catalog.
+    """
+    inputs = generate_model_split(tmp_path / "split").inputs
+    with open_frozen_catalog(DEFAULT_CATALOG_PATH) as frozen:
+        for split in ("dev", "test"):
+            queries = tuple(
+                FieldRetrievalItemV1(item_id=item.item_id, intent=item.intent)
+                for item in inputs
+                if item.split == split
+            )
+            results = retrieve_fields(frozen.sqlite_path, queries, top_k=16)
+            assert [result.item_id for result in results] == [
+                query.item_id for query in queries
+            ]
 
 
 def test_every_gold_case_routes_exactly_two_distinct_paraphrases(

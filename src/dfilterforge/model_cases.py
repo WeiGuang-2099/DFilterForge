@@ -316,9 +316,10 @@ def model_non_ready_cases() -> tuple[ModelNonReadyCase, ...]:
                 "Can you filter for TCP segments with the flag we were talking "
                 "about turned on?",
             ),
-            (MissingSlot.FIELD,),
+            (MissingSlot.FIELD, MissingSlot.VALUE),
             "TCP segments with one particular flag set; which flag is never "
-            "named.",
+            "named. A flag is its own field or a bit of the flag byte, so "
+            "either slot names what is missing.",
         ),
         ModelNonReadyCase(
             "nc-streaming-transport",
@@ -370,18 +371,20 @@ def model_non_ready_cases() -> tuple[ModelNonReadyCase, ...]:
             "never given. Contestable.",
         ),
         ModelNonReadyCase(
-            "nc-5353-one-direction",
+            "nc-dns-one-direction",
             "test",
             "needs_clarification",
             (
-                "I only need the UDP port 5353 traffic that's going one "
-                "direction, not both ways together.",
-                "Can you filter UDP traffic on port 5353 for a single "
-                "direction only? I don't want both directions mixed together.",
+                "Of the UDP traffic on port 53, keep only what travels in a "
+                "single direction.",
+                "Can you filter UDP port 53 traffic so that just one direction "
+                "shows up?",
             ),
             (MissingSlot.DIRECTION,),
-            "UDP packets on port 5353 in one direction only (source port or "
-            "destination port); which side is never stated.",
+            "UDP packets on port 53 in one direction only, to port 53 or from "
+            "it; which direction is never stated. Port 53 rather than mDNS's "
+            "5353, where both ends usually use the port and direction by port "
+            "would not split the traffic.",
         ),
         ModelNonReadyCase(
             "nc-printer",
@@ -430,14 +433,16 @@ def model_non_ready_cases() -> tuple[ModelNonReadyCase, ...]:
             "test",
             "not_expressible",
             (
-                "Looking for the packets that got lost before they ever "
-                "reached the capture point.",
+                "Looking for the original packets themselves that got lost "
+                "before they ever reached the capture point.",
                 "Can you pull up the actual packets that got dropped before "
                 "arriving at the capture point?",
             ),
             (),
             "The lost packets themselves, which never reached the capture; "
-            "they are absent from the capture file.",
+            "they are absent from the capture file. Contestable against the "
+            "tcp.analysis lost-segment and retransmission idioms, which select "
+            "packets beside a loss, not the lost ones.",
         ),
         ModelNonReadyCase(
             "ne-average-ttl",
