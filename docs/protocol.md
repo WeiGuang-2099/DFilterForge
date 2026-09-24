@@ -64,13 +64,18 @@ denominators.
   probes, with at least one non-empty expected set, and no shortcut rule hit.
 - shortcut: compiles, runs and matches all three probes, but mentions a field
   the frozen catalog types as a frame number or time, a `frame.` field other
-  than len, cap_len and protocols, a `_ws.` field or a stream index; ip.id,
-  dns.id, a checksum or a raw sequence number; or a literal the request does
-  not state: a single host address, a network touching 198.51.100.0/24, a
-  number of 41000 or more, a MAC address or a generated DNS name
-  (`dfilterforge.shortcuts`). It counts as compile valid, never as strong
-  exact; hits on a silent-wrong answer are recorded without changing it. The
-  number of ORs in each executed answer is recorded, not judged.
+  than len, cap_len and protocols, a `_ws.` field, a stream index or derived
+  conversation state (tcp.analysis, tcp.completeness, dns.unsolicited, DNS
+  retransmission); ip.id, dns.id, a checksum or a raw sequence number; or a
+  literal the request does not write as a whole token: a host address other
+  than the bounds of a network it states (by CIDR, shorthand such as 10/8, or
+  TEST-NET-1 to 3), a network touching the servers' 198.51.100.0/24 but not the
+  clients' 192.0.2.0/24, outside every stated network, a number from 41000 to
+  51254 (the generator's ephemeral ports), a MAC address or a generated DNS
+  name, in any spelling tshark accepts (`dfilterforge.shortcuts`). It counts
+  as compile valid, never as strong exact; hits on a silent-wrong answer are
+  recorded without changing it. The number of ORs in each executed answer is
+  recorded, not judged.
 - silent-wrong: compiles and runs, but at least one probe disagrees. Reported
   over all items and over compile-valid items.
 - repair@1: share of silent-wrong or invalid items that become strong exact
