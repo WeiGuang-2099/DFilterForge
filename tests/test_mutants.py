@@ -357,9 +357,9 @@ def test_model_cases_give_unique_labels_and_real_single_site_changes() -> None:
             for mutant in first
         )
         total += len(first)
-    # mutants.generated in the gate receipts of the DNS and FIN correction,
-    # docs/decisions/evidence/dns-fin-gate-*.json.
-    assert total == 192
+    # mutants.generated in the gate receipt of the case expansion,
+    # docs/decisions/evidence/case-expansion-gate.json.
+    assert total == 344
 
 
 def test_invalid_mutants_are_skipped_and_the_rest_kept(

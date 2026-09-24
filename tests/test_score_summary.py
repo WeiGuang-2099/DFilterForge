@@ -1,6 +1,8 @@
 """Behavioral tests for pure per-case aggregation and the seeded bootstrap."""
 
 from collections.abc import Sequence
+import math
+import random
 from typing import Any
 
 from pydantic import ValidationError
@@ -9,6 +11,7 @@ import pytest
 from dfilterforge.canonical import canonical_json
 from dfilterforge.score_report import render_markdown
 from dfilterforge.score_summary import BOOTSTRAP_RESAMPLES
+from dfilterforge.score_summary import BOOTSTRAP_SEED
 from dfilterforge.score_summary import ConditionLabel
 from dfilterforge.score_summary import EffectiveSettingsV1
 from dfilterforge.score_summary import ItemOutcomeV1
@@ -670,6 +673,183 @@ def test_shortcut_is_compile_valid_and_executed_but_never_exact() -> None:
         1 / 3, abs=1e-6
     )
     assert "(1/3)" in render_markdown(summary)
+
+
+def test_non_ready_gold_leaves_every_ready_number_alone() -> None:
+    """Non-ready cases are their own universe with their own vectors."""
+    ready = [
+        _item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT),
+        _item("C1", "case-2", "i2", OutcomeV1.SILENT_WRONG),
+        _item("C1", "case-3", "i3", OutcomeV1.ABSTAINED),
+        _item("C2", "case-1", "i7", OutcomeV1.STRONG_EXACT),
+        _item("C2", "case-2", "i8", OutcomeV1.STRONG_EXACT),
+        _item("C2", "case-3", "i9", OutcomeV1.STRONG_EXACT),
+    ]
+    non_ready = [
+        _item(
+            "C1",
+            "ask-1",
+            "i4",
+            OutcomeV1.FALSE_READY,
+            gold_status="needs_clarification",
+            status_match=False,
+            slot_match=False,
+        ),
+        _item(
+            "C1",
+            "ask-1",
+            "i5",
+            OutcomeV1.ABSTAINED,
+            gold_status="needs_clarification",
+            status_match=True,
+            slot_match=True,
+        ),
+        _item(
+            "C1",
+            "never-1",
+            "i6",
+            OutcomeV1.ABSTAINED,
+            gold_status="not_expressible",
+            status_match=True,
+        ),
+        _item(
+            "C2",
+            "never-1",
+            "i10",
+            OutcomeV1.ABSTAINED,
+            gold_status="not_expressible",
+            status_match=True,
+        ),
+    ]
+
+    alone = _summarize(ready)
+    mixed = _summarize(ready + non_ready)
+    before, after = alone.conditions["C1"], mixed.conditions["C1"]
+
+    for name in (
+        "compile_valid",
+        "strong_exact",
+        "silent_wrong_all",
+        "silent_wrong_of_executable",
+        "over_abstention",
+    ):
+        assert getattr(after, name) == getattr(before, name), name
+    assert (before.false_ready, before.slot_match) == (None, None)
+    assert after.false_ready is not None
+    assert after.false_ready.value == 0.25
+    assert after.slot_match is not None and after.slot_match.value == 0.5
+    assert after.outcomes[OutcomeV1.FALSE_READY.value] == 1
+    assert alone.comparisons[0].difference.value == pytest.approx(2 / 3)
+    assert mixed.comparisons == alone.comparisons
+    by_status = after.false_ready_by_status
+    assert by_status["needs_clarification"].value == 0.5
+    assert by_status["not_expressible"].value == 0.0
+    assert mixed.bootstrap["cases"] == alone.bootstrap["cases"] == 3
+    assert mixed.bootstrap["non_ready_cases"] == 2
+    assert mixed.case_count == 5
+    assert "false_ready" in alone.not_measured
+    assert "false_ready" not in mixed.not_measured
+    assert "slot_match" not in mixed.not_measured
+    assert "## Non-ready gold" not in render_markdown(alone)
+    rendered = render_markdown(mixed)
+    assert "| C1 | 0.250" in rendered
+    assert "drawn from 3 ready cases" in rendered
+    assert "count non-ready items too" in rendered
+    assert "drawn from 3 cases" in render_markdown(alone)
+
+
+@pytest.mark.parametrize(
+    "failure", [OutcomeV1.PROVIDER_FAILED, OutcomeV1.MALFORMED]
+)
+def test_failed_items_stay_in_the_non_ready_denominators(
+    failure: OutcomeV1,
+) -> None:
+    """A failed or malformed non-ready item counts in both non-ready rates."""
+    missed = {
+        "gold_status": "needs_clarification",
+        "status_match": False,
+        "slot_match": False,
+    }
+    outcomes = [
+        _item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT),
+        _item("C1", "ask-1", "i2", failure, **missed),
+        _item("C1", "ask-1", "i3", OutcomeV1.FALSE_READY, **missed),
+        _item(
+            "C1",
+            "ask-2",
+            "i4",
+            OutcomeV1.ABSTAINED,
+            gold_status="needs_clarification",
+            status_match=True,
+            slot_match=True,
+        ),
+        _item("C1", "ask-2", "i5", failure, **missed),
+    ]
+
+    condition = _summarize(outcomes).conditions["C1"]
+
+    assert condition.false_ready is not None
+    assert condition.false_ready.value == 0.25
+    assert condition.slot_match is not None
+    assert condition.slot_match.value == 0.25
+
+
+def test_non_ready_intervals_use_their_own_seed_17_vectors() -> None:
+    """Non-ready rates resample non-ready cases with the protocol seed."""
+    pattern = [0, 1, 2, 1, 0, 2, 2, 0, 1, 1, 0, 2]
+    outcomes = [_item("C1", "case-1", "i0", OutcomeV1.STRONG_EXACT)]
+    for index, hits in enumerate(pattern):
+        for paraphrase in range(2):
+            outcomes.append(
+                _item(
+                    "C1",
+                    f"never-{index:02d}",
+                    f"n{index}-{paraphrase}",
+                    (
+                        OutcomeV1.FALSE_READY
+                        if paraphrase < hits
+                        else OutcomeV1.ABSTAINED
+                    ),
+                    gold_status="not_expressible",
+                    status_match=paraphrase >= hits,
+                )
+            )
+    values = [hits / 2 for hits in pattern]
+    rng = random.Random(BOOTSTRAP_SEED)
+    means = sorted(
+        sum(values[int(rng.random() * 12)] for _ in range(12)) / 12
+        for _ in range(BOOTSTRAP_RESAMPLES)
+    )
+
+    rate = _summarize(outcomes).conditions["C1"].false_ready
+
+    assert rate is not None
+    assert (rate.low, rate.high) == (
+        round(means[math.ceil(0.025 * len(means)) - 1], 6),
+        round(means[math.ceil(0.975 * len(means)) - 1], 6),
+    )
+
+
+def test_not_expressible_only_gold_names_why_slot_match_is_missing() -> None:
+    """Non-ready gold without clarification cases skips slot match."""
+    outcomes = [
+        _item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT),
+        _item(
+            "C1",
+            "never-1",
+            "i2",
+            OutcomeV1.ABSTAINED,
+            gold_status="not_expressible",
+            status_match=True,
+        ),
+    ]
+
+    summary = _summarize(outcomes)
+
+    assert summary.conditions["C1"].false_ready is not None
+    assert summary.conditions["C1"].slot_match is None
+    assert summary.not_measured["slot_match"] == "no_needs_clarification_gold"
+    assert "false_ready" not in summary.not_measured
 
 
 def test_render_markdown_prints_settings_and_spend_deterministically() -> None:

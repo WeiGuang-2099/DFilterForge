@@ -313,8 +313,9 @@ class PrepareManifestV1(FrozenModel):
     ``split`` is deliberately ``Literal["dev"]``. The protocol's strongest
     prohibition is that no held-out item reaches a model before the freeze
     commit, and this type makes a held-out manifest unconstructible rather
-    than one script constant away. Widening it is a one-token, reviewed
-    edit in the slice that performs the freeze.
+    than one script constant away. Widening it is a reviewed edit in the
+    slice that performs the freeze, and so is raising the 64-item bounds on
+    ``item_ids`` and ``prompt_count``: the test split holds 112 items.
     """
 
     schema_version: Literal["model-prepare/1.0"] = "model-prepare/1.0"

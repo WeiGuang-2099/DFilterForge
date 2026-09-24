@@ -5,9 +5,15 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
 
 from dfilterforge.benchmark import generate_benchmark
 from dfilterforge.benchmark import RECIPES
+from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
+from dfilterforge.catalog_runtime import open_frozen_catalog
+from dfilterforge.field_retrieval import FieldRetrievalItemV1
+from dfilterforge.field_retrieval import retrieve_fields
+from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldV1
@@ -16,6 +22,12 @@ from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.witnesses import WITNESS_NAMES
 
 _ALLOWED_KEYS = {"item_id", "intent", "user_assumptions", "split"}
+# A dotted name, the shape of every display filter field.
+_FIELD_LEXEME = re.compile(
+    r"(?<![\w.])[a-z_][a-z0-9_-]*(?:\.[a-z0-9_-]+)+", re.IGNORECASE
+)
+# Comparison, logical and set operators of the display filter language.
+_FILTER_SYNTAX = re.compile(r"==|!=|<=|>=|&&|\|\||\bin\s*\{")
 
 
 def _split(tmp_path: Path) -> tuple[ModelSplitArtifacts, list[str]]:
@@ -29,7 +41,8 @@ def test_model_inputs_lines_contain_exactly_the_allowed_keys(
 ) -> None:
     artifacts, lines = _split(tmp_path)
 
-    assert len(lines) == 2 * len(model_semantic_cases()) == 48
+    cases = (*model_semantic_cases(), *model_non_ready_cases())
+    assert len(lines) == 2 * len(cases) == 152
     documents = [json.loads(line) for line in lines]
     assert all(set(document) == _ALLOWED_KEYS for document in documents)
     items = [
@@ -53,7 +66,9 @@ def test_model_inputs_never_leak_evaluator_gold(tmp_path: Path) -> None:
         "intent_ir",
         "canonical_ir",
         "case_id",
-        "probe",
+        # The key, not the word: a request may say probe as a port
+        # scanner does. The probe ids themselves are checked below.
+        "probe_id",
         "sha256",
     ):
         assert marker not in text
@@ -68,6 +83,58 @@ def test_model_inputs_never_leak_evaluator_gold(tmp_path: Path) -> None:
             frames = list(probe.expected_frames)
             assert json.dumps(frames) not in text
             assert repr(tuple(frames)) not in text
+    for record in artifacts.gold.non_ready:
+        assert record.case_id not in text
+        assert record.rationale not in text
+
+
+def test_no_request_names_a_filter_field_or_operator(
+    tmp_path: Path,
+) -> None:
+    """Requests use network terms, never display filter vocabulary.
+
+    No skip: the test image must supply the frozen field catalog.
+    """
+    with open_frozen_catalog(DEFAULT_CATALOG_PATH) as frozen:
+        database = sqlite3.connect(
+            f"{frozen.sqlite_path.resolve().as_uri()}?mode=ro", uri=True
+        )
+        try:
+            names = {
+                row[0]
+                for row in database.execute("SELECT name FROM fields_records")
+            }
+        finally:
+            database.close()
+    assert "tcp.dstport" in names
+
+    for item in generate_model_split(tmp_path / "split").inputs:
+        lexemes = {
+            lexeme.lower() for lexeme in _FIELD_LEXEME.findall(item.intent)
+        }
+        assert not lexemes & names, item.item_id
+        assert _FILTER_SYNTAX.search(item.intent) is None, item.item_id
+
+
+def test_the_retriever_accepts_every_request_of_both_splits(
+    tmp_path: Path,
+) -> None:
+    """Prepare retrieves a whole split at once, so one long request stops it.
+
+    No skip: the test image must supply the frozen field catalog.
+    """
+    inputs = generate_model_split(tmp_path / "split").inputs
+    with open_frozen_catalog(DEFAULT_CATALOG_PATH) as frozen:
+        for split in ("dev", "test"):
+            queries = tuple(
+                FieldRetrievalItemV1(item_id=item.item_id, intent=item.intent)
+                for item in inputs
+                if item.split == split
+            )
+            results = retrieve_fields(frozen.sqlite_path, queries, top_k=16)
+            assert [result.item_id for result in results] == [
+                query.item_id for query in queries
+            ]
 
 
 def test_every_gold_case_routes_exactly_two_distinct_paraphrases(

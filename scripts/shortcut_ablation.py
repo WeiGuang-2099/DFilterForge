@@ -31,9 +31,9 @@ from dfilterforge.catalog_runtime import tshark_types
 from dfilterforge.compiler import compile_intent
 from dfilterforge.field_catalog import parse_tshark_fields
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.model_cases import ModelSemanticCase
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
-from dfilterforge.model_split import ModelSemanticCase
 from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.mutants import single_site_mutants
 from dfilterforge.runner import TsharkRunner

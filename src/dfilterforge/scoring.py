@@ -52,11 +52,14 @@ from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import MissingSlot
 from dfilterforge.intent_ir import walk_predicates
 from dfilterforge.live import evaluate_live
 from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.live import packet_set_hash
+from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_split import generate_model_split
+from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.run_store import check_manifest
 from dfilterforge.run_store import check_prepare
@@ -131,6 +134,11 @@ _CONTROL_DIRECTORIES: dict[ControlMode, str] = {
 # typed target, so the typed conditions have nothing to answer under the
 # mutation control and are reported as skipped rather than dropped silently.
 _NO_TYPED_MUTATION = "no_typed_mutation"
+# The mutation control answers non-ready gold with a ready filter, so the
+# false-ready channel is exercised the way a wrong filter exercises the
+# silent-wrong one.
+_FALSE_READY_CONTROL_FILTER = "ip"
+_CONTROL_QUESTION = "Which value do you mean?"
 
 
 class ScoreReportV1(FrozenModel):
@@ -159,6 +167,7 @@ class _Execution:
 class _ItemFields(TypedDict):
     """The outcome fields every verdict carries, whatever the verdict."""
 
+    gold_status: Literal["ready", "needs_clarification", "not_expressible"]
     condition: ConditionLabel
     item_id: str
     case_id: str
@@ -174,16 +183,28 @@ class _ItemFields(TypedDict):
 def _item_fields(
     prompt: PreparedPromptV1,
     completion: CompletionV1,
-    case: ModelGoldCaseV1,
+    case: GoldCase,
     label: ConditionLabel,
 ) -> _ItemFields:
-    """Collects the fields that do not depend on the verdict."""
-    gold_fields = {
-        predicate.field
-        for _, predicate in walk_predicates(case.spec.canonical_ir.expression)
-    }
+    """Collects the fields that do not depend on the verdict.
+
+    Non-ready gold has no target fields, so its gold field count is zero.
+    """
+    gold_fields: set[str] = (
+        set()
+        if isinstance(case, ModelNonReadyCaseV1)
+        else {
+            predicate.field
+            for _, predicate in walk_predicates(
+                case.spec.canonical_ir.expression
+            )
+        }
+    )
     shown = {field.abbreviation for field in prompt.retrieved_fields}
     return _ItemFields(
+        gold_status=(
+            case.status if isinstance(case, ModelNonReadyCaseV1) else "ready"
+        ),
         condition=label,
         item_id=prompt.item_id,
         case_id=case.case_id,
@@ -239,6 +260,35 @@ def _shortcuts(
     )
 
 
+class _StatusFields(TypedDict, total=False):
+    """How an answer's status and slots compare with non-ready gold."""
+
+    status_match: bool
+    slot_match: bool
+
+
+def _status_fields(
+    case: GoldCase,
+    status: GenerationStatus | None,
+    slots: tuple[MissingSlot, ...] = (),
+) -> _StatusFields:
+    """Compares an answer's status and slots with non-ready gold.
+
+    Ready gold gets neither field. For non-ready gold, ``status`` is None
+    when there was no parsed answer, which matches nothing. Slot match is
+    set for needs_clarification gold only: the answer must ask for
+    clarification and name at least one gold slot.
+    """
+    if not isinstance(case, ModelNonReadyCaseV1):
+        return _StatusFields()
+    fields = _StatusFields(status_match=status == case.status)
+    if case.status == GenerationStatus.NEEDS_CLARIFICATION:
+        fields["slot_match"] = status == case.status and bool(
+            set(slots) & set(case.missing_slots)
+        )
+    return fields
+
+
 def _attributable_code(
     error: DFilterForgeError, case: ModelGoldCaseV1, context: _Execution
 ) -> str | None:
@@ -261,7 +311,7 @@ def _attributable_code(
 def score_item(
     prompt: PreparedPromptV1,
     completion: CompletionV1,
-    case: ModelGoldCaseV1,
+    case: GoldCase,
     capture_root: Path,
     *,
     run_id: str,
@@ -275,7 +325,9 @@ def score_item(
 
     An executed candidate that matches every probe but breaks a shortcut
     rule is ``shortcut``, never strong exact; a silent-wrong one keeps its
-    outcome and records the rules it breaks.
+    outcome and records the rules it breaks. A ready answer to non-ready
+    gold is ``false_ready`` and is never executed; an abstention on
+    non-ready gold records whether its status and slots match the gold.
 
     Args:
         prompt: The committed prompt the model actually answered.
@@ -310,6 +362,7 @@ def score_item(
                 error_code=completion.error_code,
                 http_status=completion.http_status,
                 provider_error_code=completion.provider_error_code,
+                **_status_fields(case, None),
             ),
             None,
             None,
@@ -320,7 +373,10 @@ def score_item(
         )
     except GenerationError as error:
         outcome = ItemOutcomeV1(
-            **fields, outcome=OutcomeV1.MALFORMED, error_code=error.code
+            **fields,
+            outcome=OutcomeV1.MALFORMED,
+            error_code=error.code,
+            **_status_fields(case, None),
         )
         return outcome, None, None
     if parsed.status is not GenerationStatus.READY:
@@ -328,6 +384,7 @@ def score_item(
             **fields,
             outcome=OutcomeV1.ABSTAINED,
             abstention_status=_ABSTENTIONS[parsed.status],
+            **_status_fields(case, parsed.status, parsed.missing_slots),
         )
         return outcome, None, None
     filter_text: str | None = None
@@ -341,6 +398,14 @@ def score_item(
         assert parsed.intent_ir is not None
         ready_ir = parsed.intent_ir
         candidate = ready_ir
+    if isinstance(case, ModelNonReadyCaseV1):
+        outcome = ItemOutcomeV1(
+            **fields,
+            outcome=OutcomeV1.FALSE_READY,
+            candidate_filter=filter_text,
+            **_status_fields(case, parsed.status),
+        )
+        return outcome, None, ready_ir
     try:
         receipt, _ = evaluate_live(
             case.spec,
@@ -409,7 +474,8 @@ def verify_gold(
         The measured execution environment, identical for every case.
 
     Raises:
-        ScoringError: With code ``gold_invalid`` naming the offending case.
+        ScoringError: With code ``gold_invalid`` naming the offending case,
+            or ``run_layout_invalid`` when no prompt reaches ready gold.
     """
     for case in cases:
         for gold in (case.spec.reference_filter, case.spec.canonical_ir):
@@ -438,18 +504,60 @@ def verify_gold(
                 "gold_invalid", f"{case.case_id}: canonical IR is not exact"
             )
         environment = measured
-    assert environment is not None
+    if environment is None:
+        raise ScoringError(
+            "run_layout_invalid", "No committed prompt reaches ready gold"
+        )
     return environment
 
 
+def _non_ready_control(
+    output_contract: OutputContractV1,
+    case: ModelNonReadyCaseV1,
+    mode: ControlMode,
+) -> str | None:
+    """Answers non-ready gold: its own status, or a ready filter."""
+    if mode == "mutation":
+        if output_contract is not OutputContractV1.DISPLAY_FILTER:
+            return None
+        return canonical_json(
+            DirectFilterResultV1(
+                status=GenerationStatus.READY,
+                display_filter=_FALSE_READY_CONTROL_FILTER,
+            )
+        )
+    status = GenerationStatus(case.status)
+    question = (
+        _CONTROL_QUESTION
+        if status is GenerationStatus.NEEDS_CLARIFICATION
+        else None
+    )
+    envelope: FrozenModel = (
+        DirectFilterResultV1(
+            status=status,
+            clarifying_question=question,
+            missing_slots=case.missing_slots,
+        )
+        if output_contract is OutputContractV1.DISPLAY_FILTER
+        else GenerationResultV1(
+            status=status,
+            clarifying_question=question,
+            missing_slots=case.missing_slots,
+        )
+    )
+    return canonical_json(envelope)
+
+
 def _control_completion(
-    prompt: PreparedPromptV1, case: ModelGoldCaseV1, mode: ControlMode
+    prompt: PreparedPromptV1, case: GoldCase, mode: ControlMode
 ) -> CompletionV1 | None:
     """Answers one committed prompt from the gold case it routes to.
 
     The envelope is built from the response contract itself rather than
     from a literal, so a later change to either envelope cannot leave this
-    path emitting a shape the parser would reject.
+    path emitting a shape the parser would reject. Non-ready gold is
+    answered with its own status and slots under the reference control
+    and with a ready filter under the mutation control.
 
     Args:
         prompt: The committed prompt to answer.
@@ -460,7 +568,11 @@ def _control_completion(
         The synthesized completion, or None when this contract has no
         answer in this mode, because gold holds no typed mutation.
     """
-    if prompt.output_contract is OutputContractV1.DISPLAY_FILTER:
+    if isinstance(case, ModelNonReadyCaseV1):
+        response = _non_ready_control(prompt.output_contract, case, mode)
+        if response is None:
+            return None
+    elif prompt.output_contract is OutputContractV1.DISPLAY_FILTER:
         response = canonical_json(
             DirectFilterResultV1(
                 status=GenerationStatus.READY,
@@ -489,7 +601,7 @@ def _control_completion(
 
 def _control_batch(
     prepared: PreparedBatchV1,
-    cases_by_item: Mapping[str, ModelGoldCaseV1],
+    cases_by_item: Mapping[str, GoldCase],
     mode: ControlMode,
 ) -> CompletionBatchV1 | None:
     """Answers one whole prepared condition from gold, in prepared order.
@@ -529,7 +641,7 @@ class _ControlPlan(NamedTuple):
 
 def _control_plan(
     prepared: Mapping[ConditionLabel, tuple[PreparedBatchV1, str]],
-    routes: Mapping[str, ModelGoldCaseV1],
+    routes: Mapping[str, GoldCase],
     mode: ControlMode,
 ) -> _ControlPlan:
     """Answers every committed condition that this control mode can answer.
@@ -569,7 +681,7 @@ def _control_plan(
 def _score_items(
     prepared: Mapping[ConditionLabel, tuple[PreparedBatchV1, str]],
     completions: Mapping[ConditionLabel, CompletionBatchV1],
-    routes: Mapping[str, ModelGoldCaseV1],
+    routes: Mapping[str, GoldCase],
     context: _Execution,
     requests: Mapping[str, str],
     *,
@@ -732,7 +844,9 @@ def score_run(
             )
         )
         artifacts = generate_model_split(base)
-        routes, selected = selected_cases(prompts, artifacts.gold, split)
+        routes, selected, non_ready = selected_cases(
+            prompts, artifacts.gold, split
+        )
         check_prompts(
             prepared, {item.item_id: item for item in artifacts.inputs}
         )
@@ -744,7 +858,7 @@ def score_run(
             # gold hash have to cover exactly the cases the scored
             # conditions reach. Leaving them wider would publish an answer
             # key for cases no outcome in the same summary was drawn from.
-            routes, selected = selected_cases(
+            routes, selected, non_ready = selected_cases(
                 _control_prompts(scored_conditions), artifacts.gold, split
             )
         captures = base / "captures"
@@ -784,6 +898,7 @@ def score_run(
         split=split,
         synthesized=control is not None,
         not_measured=not_measured,
+        non_ready=non_ready,
     )
     rendered = render(
         summary,
@@ -792,6 +907,7 @@ def score_run(
         selected,
         code_revision=code_revision,
         environment=environment,
+        non_ready=non_ready,
     )
     counts = {outcome.value: 0 for outcome in OutcomeV1}
     for item in outcomes:

@@ -34,23 +34,31 @@ was incorrect" arm and a same-temperature resample.
 
 | Split | Ready cases (built / target) | needs_clarification | not_expressible | Paraphrases |
 | --- | ---: | ---: | ---: | ---: |
-| dev | 8 / 12 | 0 / 4 | 0 / 4 | 2 |
-| test (freeze pending) | 16 / 40 | 0 / 8 | 0 / 8 | 2 |
+| dev | 12 / 12 | 4 / 4 | 4 / 4 | 2 |
+| test (freeze pending) | 40 / 40 | 8 / 8 | 8 / 8 | 2 |
 | train (synthetic, models only) | about 1,000 to 1,500 | about 15 percent non-ready | | 3 |
 
 Canonical IR hashes, paraphrase families, capture seeds and bytes are disjoint
-across splits; a test asserts it for probe ids and packet bytes. Test input
-hashes land here when frozen, before any test item is sent. The first dev run,
-on qwen/qwen3-32b, is 8 cases x 2 paraphrases x 4 conditions = 64 completions:
-false-ready rate, slot match and repair@1 are not yet measurable,
-over-abstention is.
+across splits; a test asserts it for probe ids and packet bytes. For non-ready
+cases disjointness holds per case: each case's requests are written
+separately, but the address, port, value and direction slots and most kinds of
+inexpressible request repeat across splits by design. Each split and gold kind numbers its items from its own block
+(dev ready from mei-0001, dev non-ready 0501, test ready 1001, test non-ready
+1501), so a case added to one block moves no other item. Test input hashes land
+here when frozen, before any test item is sent. The first dev run, on
+qwen/qwen3-32b, was 8 ready cases x 2 paraphrases x 4 conditions = 64
+completions, with no non-ready gold. A dev pass is now 20 cases x 2 x 4 = 160
+completions, so false-ready rate and slot match become measurable; repair@1
+is not yet.
 
 ## Metrics (per condition, per model)
 
 Every item has exactly one outcome: `provider_failed` (including a provider
 error or empty content inside an HTTP 200 response), `malformed`, `abstained`,
-`invalid`, `shortcut`, `silent_wrong` or `strong_exact`. All items are
-denominators.
+`false_ready`, `invalid`, `shortcut`, `silent_wrong` or `strong_exact`. All
+items are denominators. Ready and non-ready gold are two case universes, each
+bootstrapped with its own seed-17 vectors, so non-ready cases move no ready
+number; every rate below except false-ready and slot match covers ready gold.
 
 - compile validity: the output parses under its contract and pinned tshark
   accepts and runs it; a rejected filter exits 4 ([ablation
@@ -80,8 +88,13 @@ denominators.
   over all items and over compile-valid items.
 - repair@1: share of silent-wrong or invalid items that become strong exact
   after one feedback round, fed by a fourth unscored probe.
-- abstention (both contracts, no human rubric): over-abstention on ready gold;
-  false-ready, slot match (missing_slots meets gold slots) need non-ready gold.
+- abstention (both contracts, no human rubric): over-abstention on ready gold.
+  false-ready: a ready answer to needs_clarification or not_expressible gold,
+  never executed, over non-ready items, reported overall and per gold status.
+  Slot match: over needs_clarification items, the answer asks for
+  clarification and its missing_slots name at least one gold slot. Whether an abstention names the gold status is recorded per item. The
+  reference control answers non-ready gold with its status and slots, the
+  mutation control with a ready filter (display-filter conditions only).
 - field context (C2 and C4): share of cases, paraphrases averaged, with every
   gold field in the retrieved list, beside that condition's scores; a non-empty
   list limits the prompt to its names, so C2-C1 and C4-C3 are read against it.
@@ -98,8 +111,8 @@ rule, a gold case with no non-empty expected set, or any capture, catalog or
 harness failure stops scoring; a candidate timeout or output or frame limit
 counts as invalid, not as a stop, if its gold case reruns clean.
 
-The mutation-adequacy gate is part of the gold. For every dev and test case,
-`scripts/probe_adequacy.py` requires the reference filter and the compiled
+The mutation-adequacy gate is part of the gold. For every ready dev and test
+case, `scripts/probe_adequacy.py` requires the reference filter and the compiled
 canonical IR to select exactly the labelled frames on all six probes, the
 authored mutation to select exactly its own authored frames there and to
 differ from the labels on one probe of its split, and every single-site mutant

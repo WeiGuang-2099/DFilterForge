@@ -17,7 +17,8 @@ minimum frames. A witness that continues an earlier witness's flow reuses
 that witness's ordinal for its addresses, ports and sequence number, so the
 two share one TCP stream. Seed-derived bytes keep dev and test tails
 distinct. Which cases each witness belongs to is authored in
-``dfilterforge.model_split``, never derived from a filter.
+``dfilterforge.model_dev_cases`` and ``dfilterforge.model_test_cases``,
+never derived from a filter.
 
 Pinned tshark 4.6.8 decodes every witness as its table entry says, with no
 malformed frame and no TCP analysis flag. The only expert items are the ones
@@ -283,7 +284,7 @@ WITNESSES: tuple[Witness, ...] = (
 WITNESS_NAMES: tuple[str, ...] = tuple(witness.name for witness in WITNESSES)
 
 # Families authored from the table above, as benchmark.py does for recipes.
-# Case memberships in dfilterforge.model_split are built from them.
+# The case memberships of the ready case tables are built from them.
 TCP_WITNESSES = frozenset(
     (
         "server-ack",

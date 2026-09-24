@@ -19,14 +19,18 @@ captures/
 ```
 
 The model receives `model_inputs.jsonl` only. Every line contains exactly
-`item_id`, `intent`, `user_assumptions`, and `split`. Item IDs are opaque, and
-each of the 24 canonical cases has two independently worded model items.
+`item_id`, `intent`, `user_assumptions`, and `split`. Item IDs carry no case
+identity, but their number block (0001, 0501, 1001, 1501) shows the split and
+whether the gold is ready; prompts never include the item ID. Each of the 76
+cases has two differently worded model items, 152 in all.
 Descriptive case IDs, typed IR, reference and mutation filters, probe metadata,
 and expected frames are confined to `evaluator_gold.json`.
 
-The dev split has 8 canonical cases and uses capture instances
-`semantic-11`, `semantic-17`, and `semantic-23`. The test split has 16
-canonical cases and uses `semantic-31`, `semantic-37`, and `semantic-43`.
+The dev split has 12 ready cases, scored on capture instances
+`semantic-11`, `semantic-17`, and `semantic-23`, and 8 non-ready cases (4
+needs_clarification, 4 not_expressible) that no capture answers. The test
+split has 40 ready cases on `semantic-31`, `semantic-37`, and `semantic-43`,
+and 16 non-ready cases (8 and 8).
 Each file is a copy of the benchmark capture of that name, kept byte for byte,
 followed by the 33 witness packets of `dfilterforge.witnesses`: packets that
 separate near-miss filters (a port or address written for the wrong side, an

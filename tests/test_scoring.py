@@ -15,6 +15,7 @@ from typing import Any, TypeAlias
 
 import pytest
 
+from dfilterforge import model_split as model_split_module
 from dfilterforge import scoring as scoring_module
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
@@ -50,11 +51,16 @@ from dfilterforge.generation import RetrievalV1
 from dfilterforge.intent_ir import All
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import MissingSlot
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.live import LiveError
+from dfilterforge.model_cases import ModelNonReadyCase
+from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_split import generate_model_split
+from dfilterforge.model_split import GoldCase
+from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -226,6 +232,19 @@ def _install_live(
     return calls
 
 
+# The runs below are built from the ready dev cases alone. The tests that
+# exercise non-ready gold install their own cases, so no count here moves
+# when the non-ready table does.
+_DEV_CASES = sum(case.split == "dev" for case in model_semantic_cases())
+_DEV_ITEMS = 2 * _DEV_CASES
+
+
+@pytest.fixture(name="ready_gold_only", autouse=True)
+def fixture_ready_gold_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keeps the committed non-ready table out of every generated split."""
+    monkeypatch.setattr(model_split_module, "model_non_ready_cases", lambda: ())
+
+
 def _prompt(
     output_contract: OutputContractV1,
     retrieval: RetrievalV1 = RetrievalV1.NONE,
@@ -297,7 +316,7 @@ def _score(
     prompt: PreparedPromptV1,
     completion: CompletionV1,
     *,
-    case: ModelGoldCaseV1 | None = None,
+    case: GoldCase | None = None,
     model_hash: str = "model-settings-hash",
 ) -> tuple[ItemOutcomeV1, EvaluationReceiptV1 | None, IntentIrV1 | None]:
     """Scores one item with fixed run identity."""
@@ -721,6 +740,268 @@ def test_score_run_grounds_each_item_on_its_own_request(
     assert seen and seen == {item_id: expected[item_id] for item_id in seen}
 
 
+_CLARIFY_GOLD = ModelNonReadyCaseV1(
+    case_id="unnamed-server",
+    split="dev",
+    status="needs_clarification",
+    missing_slots=(MissingSlot.ADDRESS,),
+    rationale="No host or network is given.",
+)
+_INEXPRESSIBLE_GOLD = ModelNonReadyCaseV1(
+    case_id="five-largest",
+    split="dev",
+    status="not_expressible",
+    rationale="A ranking across packets is not a per-packet test.",
+)
+_TWO_SLOT_GOLD = ModelNonReadyCaseV1(
+    case_id="unnamed-service",
+    split="dev",
+    status="needs_clarification",
+    missing_slots=(MissingSlot.ADDRESS, MissingSlot.PORT),
+    rationale="Neither host nor port is given.",
+)
+
+
+@pytest.mark.parametrize(
+    ("output_contract", "reply", "candidate_filter", "ready_ir"),
+    [
+        (OutputContractV1.DISPLAY_FILTER, _filter_reply(), _REFERENCE, None),
+        (OutputContractV1.TYPED_IR, _ir_reply(), None, _canonical_ir()),
+    ],
+)
+def test_a_ready_answer_to_non_ready_gold_is_false_ready_and_never_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    output_contract: OutputContractV1,
+    reply: str,
+    candidate_filter: str | None,
+    ready_ir: IntentIrV1 | None,
+) -> None:
+    """Answering a question that has no filter is caught without tshark."""
+    calls = _install_live(monkeypatch)
+
+    outcome, receipt, intent = _score(
+        _prompt(output_contract),
+        _completion(response_text=reply),
+        case=_CLARIFY_GOLD,
+    )
+
+    assert outcome.outcome is OutcomeV1.FALSE_READY
+    assert (receipt, calls) == (None, [])
+    assert (outcome.candidate_filter, intent) == (candidate_filter, ready_ir)
+    assert outcome.gold_field_count == 0
+    assert (
+        outcome.gold_status,
+        outcome.status_match,
+        outcome.slot_match,
+    ) == ("needs_clarification", False, False)
+
+
+@pytest.mark.parametrize(
+    ("gold", "reply", "status_match", "slot_match"),
+    [
+        (
+            _CLARIFY_GOLD,
+            {
+                "clarifying_question": "Which host?",
+                "missing_slots": ["address"],
+            },
+            True,
+            True,
+        ),
+        (
+            _CLARIFY_GOLD,
+            {"clarifying_question": "Which port?", "missing_slots": ["port"]},
+            True,
+            False,
+        ),
+        (_CLARIFY_GOLD, {"status": "not_expressible"}, False, False),
+        # Naming one of two gold slots is enough.
+        (
+            _TWO_SLOT_GOLD,
+            {"clarifying_question": "Which port?", "missing_slots": ["port"]},
+            True,
+            True,
+        ),
+        (
+            _TWO_SLOT_GOLD,
+            {"clarifying_question": "Which?", "missing_slots": ["value"]},
+            True,
+            False,
+        ),
+        (_INEXPRESSIBLE_GOLD, {"status": "not_expressible"}, True, None),
+        (
+            _INEXPRESSIBLE_GOLD,
+            {"clarifying_question": "Which?", "missing_slots": ["value"]},
+            False,
+            None,
+        ),
+    ],
+)
+def test_abstentions_on_non_ready_gold_record_status_and_slot_matches(
+    monkeypatch: pytest.MonkeyPatch,
+    gold: ModelNonReadyCaseV1,
+    reply: dict[str, Any],
+    status_match: bool,
+    slot_match: bool | None,
+) -> None:
+    """Status must match the gold; slots must meet it for clarification."""
+    _install_live(monkeypatch)
+    envelope = {"status": "needs_clarification", **reply}
+
+    outcome, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply(None, **envelope)),
+        case=gold,
+    )
+
+    assert outcome.outcome is OutcomeV1.ABSTAINED
+    assert outcome.gold_status == gold.status
+    assert (outcome.status_match, outcome.slot_match) == (
+        status_match,
+        slot_match,
+    )
+
+
+@pytest.mark.parametrize(
+    ("gold", "matches"),
+    [(_CLARIFY_GOLD, (False, False)), (_INEXPRESSIBLE_GOLD, (False, None))],
+)
+def test_a_malformed_answer_to_non_ready_gold_stays_in_every_denominator(
+    monkeypatch: pytest.MonkeyPatch,
+    gold: ModelNonReadyCaseV1,
+    matches: tuple[bool, bool | None],
+) -> None:
+    """Unparseable output matches no status and, on clarification gold,
+    counts as a slot miss."""
+    _install_live(monkeypatch)
+
+    outcome, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text="not json"),
+        case=gold,
+    )
+
+    assert outcome.outcome is OutcomeV1.MALFORMED
+    assert outcome.gold_status == gold.status
+    assert (outcome.status_match, outcome.slot_match) == matches
+
+
+def test_a_run_that_reaches_no_ready_gold_is_a_layout_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gold preflight needs a ready case to measure the environment on."""
+    _install_live(monkeypatch)
+
+    with pytest.raises(ScoringError) as error:
+        verify_gold(
+            [],
+            Path("captures"),
+            run_id="dev-0001",
+            created_at=_CREATED_AT,
+            code_revision="revision",
+            runner=_RUNNER,
+        )
+
+    assert error.value.code == "run_layout_invalid"
+
+
+def test_a_failed_or_ready_gold_item_carries_no_false_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure matches no gold status; ready gold records no match."""
+    _install_live(monkeypatch)
+    failed, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(
+            status=CompletionStatusV1.FAILED,
+            response_text=None,
+            error_code="http_error",
+            http_status=429,
+        ),
+        case=_CLARIFY_GOLD,
+    )
+    abstained, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(
+            response_text=_filter_reply(None, status="not_expressible")
+        ),
+    )
+
+    assert failed.outcome is OutcomeV1.PROVIDER_FAILED
+    assert (failed.status_match, failed.slot_match) == (False, False)
+    assert abstained.gold_status == "ready"
+    assert (abstained.status_match, abstained.slot_match) == (None, None)
+
+
+def test_score_run_scores_non_ready_gold_and_publishes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reference answers match non-ready gold; the mutation control is
+    false-ready on it; ready numbers and their hash stay as they were."""
+    _install_live(monkeypatch)
+    plain = score_run(_run_dir(tmp_path / "plain"), code_revision="revision")
+    monkeypatch.setattr(
+        model_split_module,
+        "model_non_ready_cases",
+        lambda: (
+            ModelNonReadyCase(
+                case_id="unnamed-server",
+                split="dev",
+                status="needs_clarification",
+                paraphrases=("Show traffic to the file server.", "Find it."),
+                missing_slots=(MissingSlot.ADDRESS,),
+                rationale="No host is given.",
+            ),
+            ModelNonReadyCase(
+                case_id="five-largest",
+                split="dev",
+                status="not_expressible",
+                paraphrases=("Show the five largest packets.", "Top five."),
+                missing_slots=(),
+                rationale="A ranking across packets.",
+            ),
+        ),
+    )
+    run_dir = _run_dir(tmp_path / "mixed")
+
+    report = score_run(run_dir, code_revision="revision")
+    mutation = score_run(run_dir, code_revision="revision", control="mutation")
+
+    summary = ScoreSummaryV1.model_validate_json(
+        (run_dir / "scored" / "summary.json").read_bytes()
+    )
+    before = ScoreSummaryV1.model_validate_json(
+        (plain.output_dir / "summary.json").read_bytes()
+    )
+    c1 = summary.conditions["C1"]
+    assert report.items == 2 * (_DEV_ITEMS + 4)
+    assert report.outcomes[OutcomeV1.ABSTAINED.value] == 8
+    assert c1.false_ready is not None and c1.false_ready.value == 0.0
+    assert c1.slot_match is not None and c1.slot_match.value == 1.0
+    assert c1.strong_exact == before.conditions["C1"].strong_exact
+    assert summary.comparisons == before.comparisons
+    assert summary.bootstrap["cases"] == _DEV_CASES
+    assert summary.bootstrap["non_ready_cases"] == 2
+    assert "false_ready" not in summary.not_measured
+    assert summary.gold_hash != before.gold_hash
+    assert (run_dir / "scored" / "specs" / "unnamed-server.json").exists()
+    assert mutation.outcomes[OutcomeV1.FALSE_READY.value] == 4
+    reference = score_run(
+        run_dir, code_revision="revision", control="reference"
+    )
+    control = ScoreSummaryV1.model_validate_json(
+        (reference.output_dir / "summary.json").read_bytes()
+    )
+    assert reference.items == 2 * (_DEV_ITEMS + 4)
+    assert reference.outcomes[OutcomeV1.ABSTAINED.value] == 8
+    for label in ("C1", "C3"):
+        condition = control.conditions[label]
+        assert condition.false_ready is not None
+        assert condition.false_ready.value == 0.0
+        assert condition.slot_match is not None
+        assert condition.slot_match.value == 1.0
+
+
 def test_display_filter_goes_in_unchanged_and_typed_ir_as_ir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -813,8 +1094,22 @@ def _write_json(path: Path, value: object) -> None:
     path.write_bytes((canonical_json(value) + "\n").encode("utf-8"))
 
 
-def _reply_for(output_contract: OutputContractV1, case: ModelGoldCaseV1) -> str:
-    """Derives one answering reply from the gold case the item routes to."""
+def _reply_for(output_contract: OutputContractV1, case: GoldCase) -> str:
+    """Derives one answering reply from the gold case the item routes to.
+
+    Non-ready gold is answered with its own status and slots.
+    """
+    if isinstance(case, ModelNonReadyCaseV1):
+        extra: dict[str, Any] = {
+            "status": case.status,
+            "clarifying_question": (
+                "Which one?" if case.status == "needs_clarification" else None
+            ),
+            "missing_slots": [slot.value for slot in case.missing_slots],
+        }
+        if output_contract is OutputContractV1.DISPLAY_FILTER:
+            return _filter_reply(None, **extra)
+        return _ir_reply(None, intent_ir=None, **extra)
     if output_contract is OutputContractV1.DISPLAY_FILTER:
         return _filter_reply(case.spec.reference_filter)
     return _ir_reply(case.spec.canonical_ir)
@@ -842,7 +1137,10 @@ def _run_dir(
     """
     artifacts = generate_model_split(tmp_path / "source")
     everything = [item for item in artifacts.inputs if item.split == split]
-    cases = {case.case_id: case for case in artifacts.gold.cases}
+    cases: dict[str, GoldCase] = {
+        case.case_id: case for case in artifacts.gold.cases
+    }
+    cases.update({case.case_id: case for case in artifacts.gold.non_ready})
     run_dir = tmp_path / f"{split}-0001"
     for label in labels:
         output_contract, retrieval = _CONDITION_INPUTS[label]
@@ -912,14 +1210,13 @@ def _prepare_manifest(
     *,
     tweak_sha: ConditionLabel | None = None,
     drop_item: str | None = None,
-    prompt_count: int = 16,
+    prompt_count: int | None = None,
     mislabel: ConditionLabel | None = None,
     created_at: datetime = _CREATED_AT,
 ) -> PrepareManifestV1:
     """Builds the prepare manifest that describes the committed prompts."""
-    item_ids = [
-        item_id for item_id in _dev_item_ids(run_dir) if item_id != drop_item
-    ]
+    committed = _dev_item_ids(run_dir)
+    item_ids = [item_id for item_id in committed if item_id != drop_item]
     conditions: list[PreparedConditionV1] = []
     for label in labels:
         output_contract, retrieval = _CONDITION_INPUTS[label]
@@ -943,7 +1240,9 @@ def _prepare_manifest(
                 path=f"prepared/{label}.json",
                 sha256=digest,
                 system_prompt_sha256="1" * 64,
-                prompt_count=prompt_count,
+                prompt_count=(
+                    len(committed) if prompt_count is None else prompt_count
+                ),
             )
         )
     return PrepareManifestV1(
@@ -983,7 +1282,7 @@ def _write_manifest(
     *,
     tweak_sha: ConditionLabel | None = None,
     drop_item: str | None = None,
-    prompt_count: int = 16,
+    prompt_count: int | None = None,
     mislabel: ConditionLabel | None = None,
     prices: TokenPricesV1 | None = None,
     provider_reported_usd: float | None = None,
@@ -1073,19 +1372,20 @@ def test_score_run_writes_sorted_outcomes_summary_receipts_intents_and_specs(
     scored = run_dir / "scored"
     assert report.output_dir == scored
     assert not report.checked
-    assert report.items == 32
+    assert report.items == 2 * _DEV_ITEMS
     assert report.outcomes[OutcomeV1.MALFORMED.value] == 2
-    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 30
+    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 2 * _DEV_ITEMS - 2
     lines = (scored / "outcomes.jsonl").read_text("utf-8").splitlines()
     keys = [
         (json.loads(line)["condition"], json.loads(line)["item_id"])
         for line in lines
     ]
-    assert keys == sorted(keys) and len(keys) == 32
+    assert keys == sorted(keys) and len(keys) == 2 * _DEV_ITEMS
     summary = ScoreSummaryV1.model_validate_json(
         (scored / "summary.json").read_bytes()
     )
-    assert summary.case_count == 8 and summary.item_count == 32
+    assert summary.case_count == _DEV_CASES
+    assert summary.item_count == 2 * _DEV_ITEMS
     assert summary.conditions["C1"].usage.cost_usd is None
     assert (scored / "summary.md").read_text("utf-8").startswith("# Score")
     receipts = sorted(
@@ -1094,10 +1394,10 @@ def test_score_run_writes_sorted_outcomes_summary_receipts_intents_and_specs(
     intents = sorted(
         path.stem for path in (scored / "intents" / "C3").glob("*")
     )
-    assert len(receipts) == 15 and "mei-0001" not in receipts
-    assert len(intents) == 15 and "mei-0001" not in intents
+    assert len(receipts) == _DEV_ITEMS - 1 and "mei-0001" not in receipts
+    assert len(intents) == _DEV_ITEMS - 1 and "mei-0001" not in intents
     assert not (scored / "intents" / "C1").exists()
-    assert len(sorted((scored / "specs").glob("*.json"))) == 8
+    assert len(sorted((scored / "specs").glob("*.json"))) == _DEV_CASES
     assert not (run_dir / ".scored.partial").exists()
 
 
@@ -1229,7 +1529,7 @@ def test_a_run_prepared_before_a_prompt_change_still_scores(
         run_dir, code_revision="revision", split_dir=tmp_path / "s"
     )
 
-    assert result.items == 32
+    assert result.items == 2 * _DEV_ITEMS
 
 
 def test_a_condition_mixing_prompt_versions_stops_scoring(
@@ -1374,7 +1674,7 @@ def test_checking_an_unscored_run_names_every_committed_file(
     assert "outcomes:C1/mei-0001" in report.differences
     assert "receipts:C1/mei-0001" in report.differences
     assert "specs:tcp-expiring-ttl" in report.differences
-    assert len(report.differences) == 42
+    assert len(report.differences) == 2 + 2 * _DEV_ITEMS + _DEV_CASES
 
 
 def test_unreadable_committed_lines_and_receipts_still_differ(
@@ -1485,7 +1785,7 @@ def test_manifest_must_describe_the_committed_prompts(
         == "C1: manifest does not describe the committed prompts"
     )
     assert missing.value.code == "manifest_mismatch"
-    assert report.items == 32
+    assert report.items == 2 * _DEV_ITEMS
 
 
 def test_manifest_naming_an_uncommitted_condition_is_refused(
@@ -1601,6 +1901,11 @@ _TOKEN_PRICES = TokenPricesV1(
 )
 
 
+def _derived_usd(items: int) -> float:
+    """Prices the default usage of ``items`` completions at _TOKEN_PRICES."""
+    return round(items * (400 * 0.117 + 40 * 0.455) / 1e6, 8)
+
+
 def _scored(run_dir: Path, split_dir: Path) -> ScoreSummaryV1:
     """Scores one run directory and reads back the summary it committed."""
     score_run(run_dir, code_revision="revision", split_dir=split_dir)
@@ -1636,7 +1941,7 @@ def test_effective_settings_reports_thinking_honoured(
 
     assert settings is not None
     assert settings.thinking == "honoured"
-    assert settings.thinking_evidence_items == 16
+    assert settings.thinking_evidence_items == _DEV_ITEMS
     assert settings.reasoning_tokens_total == 0
     assert settings.items_with_reasoning == 0
     assert settings.requested_model == _MODEL_ID
@@ -1675,7 +1980,7 @@ def test_effective_settings_reports_thinking_not_honoured(
     assert settings.thinking == "not_honoured"
     assert settings.reasoning_tokens_total == 3
     assert settings.items_with_reasoning == 1
-    assert settings.thinking_evidence_items == 16
+    assert settings.thinking_evidence_items == _DEV_ITEMS
 
 
 def test_effective_settings_reports_thinking_uncontrolled(
@@ -1830,8 +2135,8 @@ def test_a_reasoning_flag_alone_is_counted_as_evidence(
 
     assert settings is not None
     assert settings.thinking == "not_honoured"
-    assert settings.thinking_evidence_items == 16
-    assert settings.items_with_reasoning == 16
+    assert settings.thinking_evidence_items == _DEV_ITEMS
+    assert settings.items_with_reasoning == _DEV_ITEMS
     assert settings.reasoning_tokens_total == 0
 
 
@@ -1865,7 +2170,7 @@ def test_manifest_settings_must_be_the_settings_that_were_sent(
         str(swapped.value) == "C1: manifest settings are not the recorded ones"
     )
     assert heated.value.code == "manifest_mismatch"
-    assert report.items == 16
+    assert report.items == _DEV_ITEMS
 
 
 def test_spend_marks_a_lower_bound_when_usage_is_missing(
@@ -1892,7 +2197,7 @@ def test_spend_marks_a_lower_bound_when_usage_is_missing(
     assert bounded.spend is not None and exact.spend is not None
     assert bounded.spend.usage_missing == 1
     assert bounded.spend.price_derived_is_lower_bound is True
-    assert bounded.spend.price_derived_usd == 0.000975
+    assert bounded.spend.price_derived_usd == _derived_usd(_DEV_ITEMS - 1)
     assert "usage was missing for 1 item." in report
     assert exact.spend.usage_missing == 0
     assert exact.spend.price_derived_is_lower_bound is False
@@ -1978,7 +2283,7 @@ def test_spend_carries_the_manifest_charges(
     bare = _scored(run_dir, split_dir)
 
     assert charged.spend is not None
-    assert charged.spend.price_derived_usd == 0.00104
+    assert charged.spend.price_derived_usd == _derived_usd(_DEV_ITEMS)
     assert charged.spend.price_derived_usd == (
         charged.conditions["C1"].usage.cost_usd
     )
@@ -2114,8 +2419,8 @@ def test_score_report_counts_every_outcome_key(
     )
 
     assert set(report.outcomes) == {outcome.value for outcome in OutcomeV1}
-    assert report.outcomes[OutcomeV1.SILENT_WRONG.value] == 16
-    assert report.items == 16
+    assert report.outcomes[OutcomeV1.SILENT_WRONG.value] == _DEV_ITEMS
+    assert report.items == _DEV_ITEMS
     assert report.summary_sha256
 
 
@@ -2201,7 +2506,7 @@ def test_reference_control_outputs_parse_under_their_contracts(
                 assert parsed.intent_ir == case.spec.canonical_ir
             answered += 1
 
-    assert answered == 64
+    assert answered == 4 * _DEV_ITEMS
 
 
 def test_control_envelopes_carry_every_contract_key(tmp_path: Path) -> None:
@@ -2227,7 +2532,7 @@ def test_mutation_control_uses_mutation_filters_and_skips_typed_conditions(
     direct = _control_batch(batches["C1"], routes, "mutation")
 
     assert direct is not None
-    assert len(direct.completions) == 16
+    assert len(direct.completions) == _DEV_ITEMS
     for answer in direct.completions:
         envelope: dict[str, Any] = json.loads(answer.response_text or "")
         mutation = routes[answer.item_id].mutation_filter
@@ -2253,8 +2558,8 @@ def test_control_does_not_read_completions(
     assert not (run_dir / "completions").exists()
     assert report.output_dir == run_dir / "control-reference"
     assert not (run_dir / "scored").exists()
-    assert report.items == 32
-    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 32
+    assert report.items == 2 * _DEV_ITEMS
+    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 2 * _DEV_ITEMS
 
 
 def test_control_batch_settings_carry_the_control_model_id(
@@ -2392,7 +2697,7 @@ def test_a_committed_prepare_manifest_pins_the_split_and_the_clock(
         )
     )
     assert prepare.split == "dev"
-    assert report.items == 16
+    assert report.items == _DEV_ITEMS
     assert receipt["created_at"].startswith("2026-09-17T11:30")
 
 

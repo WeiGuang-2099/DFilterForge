@@ -173,10 +173,18 @@ def _completions(
 
 
 def _build_run(root: Path) -> Path:
-    """Writes a C1 and C3 run directory answered from the dev gold."""
+    """Writes a C1 and C3 run directory answered from the dev gold.
+
+    The scripted replies answer the first sixteen ready dev items.
+    """
     artifacts = generate_model_split(root / "source")
-    items = [item for item in artifacts.inputs if item.split == "dev"]
     by_case = {case.case_id: case for case in artifacts.gold.cases}
+    items = [
+        item
+        for item in artifacts.inputs
+        if item.split == "dev"
+        and artifacts.gold.item_to_case[item.item_id] in by_case
+    ][:16]
     routed = [
         by_case[artifacts.gold.item_to_case[item.item_id]] for item in items
     ]
@@ -375,9 +383,13 @@ _FIELD_TYPES: dict[str, FieldType] = {
     "tcp.flags.ack": FieldType.BOOLEAN,
     "tcp.flags.ece": FieldType.BOOLEAN,
     "tcp.flags.fin": FieldType.BOOLEAN,
+    "tcp.flags.reset": FieldType.BOOLEAN,
     "tcp.flags.syn": FieldType.BOOLEAN,
     "udp": FieldType.PROTOCOL,
 }
+# The committed dev split: 12 ready and 8 non-ready cases, two items each.
+_READY_DEV_ITEMS = 24
+_NON_READY_DEV_ITEMS = 16
 # One field no dev case needs, so a retrieved context is never exactly the
 # gold field set and full coverage still has something to be measured over.
 _DISTRACTOR_FIELD = "frame.len"
@@ -434,13 +446,24 @@ def _retrieved(case: ModelGoldCaseV1) -> tuple[RetrievedFieldV1, ...]:
     )
 
 
+def _context(
+    case: ModelGoldCaseV1 | None,
+) -> tuple[RetrievedFieldV1, ...]:
+    """Builds a ready item's context from gold; a non-ready one is empty."""
+    return () if case is None else _retrieved(case)
+
+
 def _build_control_run(root: Path) -> Path:
-    """Writes the four committed conditions with no stored answers at all."""
+    """Writes the four committed conditions with no stored answers at all.
+
+    A non-ready item gets an empty context, as an item no field matches
+    does.
+    """
     artifacts = generate_model_split(root / "source")
-    items = [item for item in artifacts.inputs if item.split == "dev"]
     by_case = {case.case_id: case for case in artifacts.gold.cases}
+    items = [item for item in artifacts.inputs if item.split == "dev"]
     routed = {
-        item.item_id: by_case[artifacts.gold.item_to_case[item.item_id]]
+        item.item_id: by_case.get(artifacts.gold.item_to_case[item.item_id])
         for item in items
     }
     run_dir = root / "control-0001"
@@ -452,7 +475,7 @@ def _build_control_run(root: Path) -> Path:
                     intent=item.intent,
                     user_assumptions=item.user_assumptions,
                     retrieved_fields=(
-                        _retrieved(routed[item.item_id])
+                        _context(routed[item.item_id])
                         if retrieval is RetrievalV1.LEXICAL
                         else None
                     ),
@@ -501,18 +524,21 @@ def test_reference_control_is_strong_exact_in_every_condition(
     assert control_run.reference == 0
     for label, _, _ in _CONTROL_CONDITIONS:
         condition: dict[str, Any] = conditions[label]
-        assert condition["outcomes"]["strong_exact"] == 16
+        assert condition["items"] == _READY_DEV_ITEMS + _NON_READY_DEV_ITEMS
+        assert condition["outcomes"]["strong_exact"] == _READY_DEV_ITEMS
+        assert condition["outcomes"]["abstained"] == _NON_READY_DEV_ITEMS
         assert condition["compile_valid"]["value"] == 1.0
         assert condition["strong_exact"]["value"] == 1.0
+        assert condition["false_ready"]["value"] == 0.0
+        assert condition["slot_match"]["value"] == 1.0
     for label in ("C2", "C4"):
         recall: dict[str, Any] = conditions[label]["gold_field_recall"]
         assert recall["mean_recall"] == 1.0
         assert recall["full_coverage"] == 1.0
     assert conditions["C1"]["gold_field_recall"] is None
     assert conditions["C3"]["gold_field_recall"] is None
-    assert {"false_ready", "slot_match", "repair_at_1"} <= set(
-        summary["not_measured"]
-    )
+    assert "repair_at_1" in summary["not_measured"]
+    assert not {"false_ready", "slot_match"} & set(summary["not_measured"])
     assert rechecked == 0
     assert _digests(scored) == before
 
@@ -527,7 +553,9 @@ def test_mutation_control_is_silent_wrong_for_display_filters(
     assert control_run.mutation == 0
     assert set(conditions) == {"C1", "C2"}
     for label in ("C1", "C2"):
-        assert conditions[label]["outcomes"]["silent_wrong"] == 16
+        outcomes: dict[str, Any] = conditions[label]["outcomes"]
+        assert outcomes["silent_wrong"] == _READY_DEV_ITEMS
+        assert outcomes["false_ready"] == _NON_READY_DEV_ITEMS
         assert conditions[label]["outcomes"]["strong_exact"] == 0
     assert summary["not_measured"]["C3"] == "no_typed_mutation"
     assert summary["not_measured"]["C4"] == "no_typed_mutation"

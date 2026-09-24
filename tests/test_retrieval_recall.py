@@ -11,6 +11,7 @@ from typing import cast, Protocol
 
 import pytest
 
+from dfilterforge import model_split
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import file_sha256
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
@@ -21,6 +22,8 @@ from dfilterforge.field_catalog import FieldType
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
 from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.generation import RetrievedFieldV1
+from dfilterforge.intent_ir import MissingSlot
+from dfilterforge.model_cases import ModelNonReadyCase
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelInputItemV1
@@ -29,13 +32,16 @@ from dfilterforge.runner import TsharkRunner
 
 _ROOT = Path(__file__).parents[1]
 _DEV_IDS = tuple(f"mei-{index:04d}" for index in range(1, 17))
-_TEST_IDS = tuple(f"mei-{index:04d}" for index in range(17, 49))
+_TEST_IDS = tuple(f"mei-{index:04d}" for index in range(1001, 1033))
 _SOURCE_FILES = (
     "scripts/retrieval_recall.py",
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
+    "src/dfilterforge/model_cases.py",
+    "src/dfilterforge/model_dev_cases.py",
     "src/dfilterforge/model_split.py",
+    "src/dfilterforge/model_test_cases.py",
 )
 # Gold fields placed at chosen ranks; every other slot holds a filler.
 # mei-0002 needs ip.ttl and tcp, and ip.ttl only enters at depth 32.
@@ -45,6 +51,31 @@ _PLACEMENTS: dict[str, dict[str, int]] = {
     "mei-0011": {"dns": 1, "ip.dst": 5},
 }
 _EMPTY_ITEM = "mei-0003"
+# The figures below were measured on the pilot cases, the first eight dev
+# and sixteen test compositions with no non-ready gold, which are the items
+# _DEV_IDS and _TEST_IDS name. Pinning the table keeps them independent of
+# later cases; the one test using whole_split pins the committed table.
+_PILOT_DEV_CASES = 8
+_PILOT_TEST_CASES = 16
+
+
+@pytest.fixture(name="whole_split")
+def fixture_whole_split() -> None:
+    """Asks for the committed case table instead of the pilot cases."""
+
+
+@pytest.fixture(name="pilot_cases", autouse=True)
+def fixture_pilot_cases(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generates every split from the pilot cases, unless whole_split is on."""
+    if "whole_split" in request.fixturenames:
+        return
+    dev = model_split.ready_dev_cases()[:_PILOT_DEV_CASES]
+    test = model_split.ready_test_cases()[:_PILOT_TEST_CASES]
+    monkeypatch.setattr(model_split, "ready_dev_cases", lambda: dev)
+    monkeypatch.setattr(model_split, "ready_test_cases", lambda: test)
+    monkeypatch.setattr(model_split, "model_non_ready_cases", lambda: ())
 
 
 class _Retrieve(Protocol):
@@ -536,7 +567,7 @@ def test_an_item_without_gold_stops_the_measurement(
     def unrouted(output_dir: Path) -> ModelSplitArtifacts:
         artifacts = generate_model_split(output_dir)
         stray = ModelInputItemV1(
-            item_id="mei-0099",
+            item_id="mei-9999",
             intent="Show TCP packets.",
             user_assumptions=("fixture",),
             split="dev",
@@ -547,6 +578,29 @@ def test_an_item_without_gold_stops_the_measurement(
     with pytest.raises(DFilterForgeError) as caught:
         retrieval_recall.measure(catalog, ("dev",), (16,))
     assert caught.value.code == "gold_routing_invalid"
+
+
+def test_non_ready_items_have_no_recall_to_measure(
+    catalog: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        model_split,
+        "model_non_ready_cases",
+        lambda: (
+            ModelNonReadyCase(
+                case_id="unnamed-server",
+                split="dev",
+                status="needs_clarification",
+                paraphrases=("Show traffic to the file server.", "Find it."),
+                missing_slots=(MissingSlot.ADDRESS,),
+                rationale="No host is given.",
+            ),
+        ),
+    )
+
+    receipt = retrieval_recall.measure(catalog, ("dev",), (16,))
+
+    assert _at(receipt, "dev", 16)["items"] == 16
 
 
 def test_every_dev_intent_retrieves_over_the_real_catalog() -> None:
@@ -566,3 +620,19 @@ def test_every_dev_intent_retrieves_over_the_real_catalog() -> None:
     max_context_bytes = at_16["max_context_bytes"]
     assert isinstance(max_context_bytes, int)
     assert max_context_bytes <= 32 * 1024
+
+
+@pytest.mark.usefixtures("whole_split")
+def test_every_ready_dev_item_of_the_committed_split_is_retrieved() -> None:
+    # No skip: the test image must supply the frozen field catalog.
+    receipt = retrieval_recall.measure(DEFAULT_CATALOG_PATH, ("dev",), (16,))
+
+    at_16 = _at(receipt, "dev", 16)
+    # 12 ready dev cases; non-ready items name no field to recall.
+    assert at_16["items"] == 24
+    assert at_16["empty_contexts"] == 0
+    assert (at_16["all_in"], at_16["micro_found"], at_16["micro_total"]) == (
+        11,
+        34,
+        50,
+    )

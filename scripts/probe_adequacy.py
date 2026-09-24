@@ -1,6 +1,6 @@
 """Mutation-adequacy gate for the model split probes.
 
-The gate regenerates the model split and, for every dev and test case,
+The gate regenerates the model split and, for every ready dev and test case,
 proves the reference filter and the compiled canonical IR against the
 case's authored labels on all six probes, proves the authored mutation
 against its own authored labels on all six probes and requires it to differ
@@ -48,10 +48,10 @@ from dfilterforge.compiler import compile_intent
 from dfilterforge.compiler import CompileError
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.live import measure_environment
+from dfilterforge.model_cases import ModelSemanticCase
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
-from dfilterforge.model_split import ModelSemanticCase
 from dfilterforge.model_split import MUTANT_WAIVERS
 from dfilterforge.mutants import MutantCategory
 from dfilterforge.mutants import MutantWaiver
@@ -552,7 +552,7 @@ def measure(
     strict: bool,
     waivers: Sequence[MutantWaiver] = MUTANT_WAIVERS,
 ) -> dict[str, object]:
-    """Runs the gate once over every model split case.
+    """Runs the gate once over every ready model split case.
 
     Args:
         runner: The bounded tshark runner every filter goes through.
