@@ -91,10 +91,14 @@ def test_non_ready_items_follow_every_ready_item(
 
     assert split.gold.non_ready == (_CLARIFY.gold(), _INEXPRESSIBLE.gold())
     assert max(ready_ids) < min(non_ready_ids)
-    assert non_ready_ids == ["mei-0049", "mei-0050", "mei-0051", "mei-0052"]
+    first = len(ready_ids) + 1
+    assert non_ready_ids == [f"mei-{first + step:04d}" for step in range(4)]
     by_id = {item.item_id: item for item in split.inputs}
-    assert by_id["mei-0049"].intent == _CLARIFY.paraphrases[0]
-    assert (by_id["mei-0049"].split, by_id["mei-0051"].split) == ("dev", "test")
+    assert by_id[non_ready_ids[0]].intent == _CLARIFY.paraphrases[0]
+    assert (by_id[non_ready_ids[0]].split, by_id[non_ready_ids[2]].split) == (
+        "dev",
+        "test",
+    )
 
 
 def test_routing_counts_non_ready_cases_like_ready_ones(
@@ -102,12 +106,17 @@ def test_routing_counts_non_ready_cases_like_ready_ones(
 ) -> None:
     gold = split.gold.model_dump()
     duplicated = {**gold, "non_ready": [gold["non_ready"][0]] * 2}
+    clarify_items = sorted(
+        item_id
+        for item_id, case_id in gold["item_to_case"].items()
+        if case_id == _CLARIFY.case_id
+    )
     one_item = {
         **gold,
         "item_to_case": {
             key: value
             for key, value in gold["item_to_case"].items()
-            if key != "mei-0050"
+            if key != clarify_items[1]
         },
     }
 
@@ -140,10 +149,17 @@ def test_scoring_routes_non_ready_items_and_hashes_their_gold(
     )
 
     routes, ready, non_ready = selected_cases(batch.prompts, split.gold, "dev")
+    clarify_item = next(
+        item.item_id
+        for item in split.inputs
+        if item.intent == _CLARIFY.paraphrases[0]
+    )
 
-    assert routes["mei-0049"] == _CLARIFY.gold()
+    assert routes[clarify_item] == _CLARIFY.gold()
     assert non_ready == (_CLARIFY.gold(),)
-    assert len(ready) == 8
+    assert len(ready) == sum(
+        case.spec.split == "dev" for case in split.gold.cases
+    )
     # With no non-ready case the hash is the one committed summaries carry.
     assert gold_hash(ready) == content_sha256(ready)
     assert gold_hash(ready, non_ready) != gold_hash(ready)

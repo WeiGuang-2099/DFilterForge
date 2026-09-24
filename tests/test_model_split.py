@@ -29,7 +29,7 @@ def test_model_inputs_lines_contain_exactly_the_allowed_keys(
 ) -> None:
     artifacts, lines = _split(tmp_path)
 
-    assert len(lines) == 2 * len(model_semantic_cases()) == 48
+    assert len(lines) == 2 * len(model_semantic_cases()) == 104
     documents = [json.loads(line) for line in lines]
     assert all(set(document) == _ALLOWED_KEYS for document in documents)
     items = [

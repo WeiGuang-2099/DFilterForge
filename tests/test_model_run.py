@@ -58,7 +58,10 @@ from dfilterforge.scoring import score_run
 
 _LABELS = ("C1", "C2", "C3", "C4")
 _LEXICAL_LABELS = ("C2", "C4")
-_DEV_ITEM_IDS = tuple(f"mei-{index:04d}" for index in range(1, 17))
+_DEV_ITEM_IDS = tuple(f"mei-{index:04d}" for index in range(1, 25))
+_DEV_ITEMS = len(_DEV_ITEM_IDS)
+# One request per dev item and condition.
+_PASS_REQUESTS = len(_LABELS) * _DEV_ITEMS
 _INPUT_PREFIX = "INPUT_JSON\n"
 
 
@@ -221,7 +224,7 @@ def test_prepare_writes_four_dev_batches_and_no_gold(
     batches = {label: _batch(output_dir, label) for label in _LABELS}
     for label, batch in batches.items():
         assert condition_label(batch.output_contract, batch.retrieval) == label
-        assert len(batch.prompts) == 16
+        assert len(batch.prompts) == _DEV_ITEMS
         assert tuple(p.item_id for p in batch.prompts) == _DEV_ITEM_IDS
         assert {p.split for p in batch.prompts} == {"dev"}
         lexical = label in _LEXICAL_LABELS
@@ -253,7 +256,10 @@ def test_prepare_writes_four_dev_batches_and_no_gold(
     assert manifest.catalog.catalog_hash == catalog.catalog_hash
     for condition in manifest.conditions:
         digest = hashlib.sha256(files[condition.path]).hexdigest()
-        assert (condition.sha256, condition.prompt_count) == (digest, 16)
+        assert (condition.sha256, condition.prompt_count) == (
+            digest,
+            _DEV_ITEMS,
+        )
 
 
 def test_prepare_records_a_platform_independent_input_digest(
@@ -371,7 +377,7 @@ def test_prepare_records_items_whose_context_is_empty(
     assert _manifest(output_dir).empty_context_item_ids == empty
     for label in _LEXICAL_LABELS:
         batch = _batch(output_dir, label)
-        assert len(batch.prompts) == 16
+        assert len(batch.prompts) == _DEV_ITEMS
         blank = [
             prompt
             for prompt in batch.prompts
@@ -635,7 +641,7 @@ def _flaky(ordinal: int) -> tuple[int, bytes]:
 
 def _always_failing_third(ordinal: int) -> tuple[int, bytes]:
     """Answers 503 to one item on the first pass and on both resumes."""
-    if ordinal in (3, 65, 66):
+    if ordinal in (3, _PASS_REQUESTS + 1, _PASS_REQUESTS + 2):
         return 503, _ERROR_BODY
     return 200, _OK
 
@@ -821,7 +827,7 @@ def test_call_sends_each_prompt_once_and_records_raw_batches(
     with _provider(_healthy) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
         assert {entry.authorization for entry in provider.received} == {
             f"Bearer {_API_KEY}"
         }
@@ -861,7 +867,7 @@ def test_call_sends_each_prompt_once_and_records_raw_batches(
     assert invocation.started_at <= invocation.finished_at
     for condition in manifest.conditions:
         assert set(condition.attempts.values()) == {1}
-        assert (condition.completed, condition.pending) == (16, 0)
+        assert (condition.completed, condition.pending) == (_DEV_ITEMS, 0)
     for data in _files(run_dir).values():
         assert _API_KEY.encode("utf-8") not in data
         assert provider.url.encode("utf-8") not in data
@@ -882,18 +888,18 @@ def test_budget_is_checked_before_every_request_and_resume_continues(
             settings={"max_output_tokens": 100},
             prices={
                 "usd_per_million_input": 0.0,
-                "usd_per_million_output": 1000.0,
+                "usd_per_million_output": 500.0,
             },
         )
-        assert _call(prepare_dir, config, "--max-usd", "0.25") == 1
+        assert _call(prepare_dir, config, "--max-usd", "0.125") == 1
         assert len(provider.received) == 2
         first = _run_manifest(prepare_dir)
         assert first.invocations[-1].stop_reason == "budget"
-        assert first.charged_usd_upper_bound == 0.2
+        assert first.charged_usd_upper_bound == 0.1
         assert not (_run_dir(prepare_dir) / "completions").exists()
 
         assert _call(prepare_dir, config, "--max-usd", "12", "--resume") == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     second = _run_manifest(prepare_dir)
     assert second.status == "complete"
@@ -904,7 +910,7 @@ def test_budget_is_checked_before_every_request_and_resume_continues(
         for condition in second.conditions
         for count in condition.attempts.values()
     ]
-    assert len(counts) == 64
+    assert len(counts) == _PASS_REQUESTS
     assert set(counts) == {1}
 
 
@@ -919,14 +925,15 @@ def test_resume_resends_only_transient_failures_and_keeps_every_attempt(
     with _provider(_flaky) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 65
+        assert len(provider.received) == _PASS_REQUESTS + 1
 
     log = (_run_dir(prepare_dir) / "attempts" / "C1.jsonl").read_text(
         encoding="utf-8"
     )
-    assert len(log.splitlines()) == 17
+    # Every C1 item once, plus the rate-limited one again.
+    assert len(log.splitlines()) == _DEV_ITEMS + 1
     conditions = _run_manifest(prepare_dir).conditions
     census = {condition.label: condition.attempts for condition in conditions}
     assert census["C1"]["mei-0003"] == 2
@@ -951,9 +958,9 @@ def test_transient_failures_are_abandoned_after_three_attempts(
         assert _call(prepare_dir, config) == 1
         assert _call(prepare_dir, config, "--resume") == 1
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 66
+        assert len(provider.received) == _PASS_REQUESTS + 2
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 66
+        assert len(provider.received) == _PASS_REQUESTS + 2
 
     manifest = _run_manifest(prepare_dir)
     assert manifest.status == "complete"
@@ -962,7 +969,7 @@ def test_transient_failures_are_abandoned_after_three_attempts(
     assert (conditions["C1"].failed, conditions["C1"].pending) == (1, 0)
     for condition in manifest.conditions:
         total = condition.completed + condition.failed + condition.pending
-        assert total == 16
+        assert total == _DEV_ITEMS
     answers = {a.item_id: a for a in _answers(prepare_dir, "C1").completions}
     assert answers["mei-0003"].status is CompletionStatusV1.FAILED
     assert answers["mei-0003"].http_status == 503
@@ -987,7 +994,7 @@ def test_fatal_http_status_stops_the_run_before_more_spend(
 
         switch.status = 200
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 65
+        assert len(provider.received) == _PASS_REQUESTS + 1
         assert provider.received[1].body == provider.received[0].body
 
     manifest = _run_manifest(prepare_dir)
@@ -1007,9 +1014,9 @@ def test_provider_faults_inside_http_200_are_final(
     with _provider(_in_band) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     manifest = _run_manifest(prepare_dir)
     assert manifest.status == "complete"
@@ -1042,16 +1049,18 @@ def test_the_run_is_anchored_before_its_first_request(
     with _provider(_watch) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
-    assert len(anchors) == 64
+    assert len(anchors) == _PASS_REQUESTS
     assert all(anchors)
     anchor = RunManifestV1.model_validate_json(anchors[0])
     assert anchor.status == "incomplete"
     assert len(anchor.invocations) == 1
     assert anchor.invocations[0].requests_sent == 0
     assert anchor.invocations[0].finished_at == anchor.invocations[0].started_at
-    assert [condition.pending for condition in anchor.conditions] == [16] * 4
+    assert [condition.pending for condition in anchor.conditions] == [
+        _DEV_ITEMS
+    ] * 4
     assert _run_manifest(prepare_dir).status == "complete"
 
 
@@ -1071,12 +1080,12 @@ def test_a_pass_that_dies_before_recording_is_resumed_not_repeated(
         monkeypatch.setattr(model_run, "_write_completions", _died)
         with pytest.raises(RuntimeError):
             _call(prepare_dir, config)
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
         monkeypatch.undo()
         monkeypatch.setenv(API_KEY_ENV, _API_KEY)
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     manifest = _run_manifest(prepare_dir)
     assert manifest.status == "complete"
@@ -1096,7 +1105,7 @@ def test_an_impossible_provider_charge_cannot_strand_a_paid_run(
     with _provider(_overpriced) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     manifest = _run_manifest(prepare_dir)
     assert manifest.status == "complete"
@@ -1125,7 +1134,7 @@ def test_the_first_answer_gates_a_run_that_kept_on_thinking(
         assert gated.invocations[-1].requests_sent == 1
 
         assert _call(prepare_dir, config, "--resume", "--no-gate-first") == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     manifest = _run_manifest(prepare_dir)
     assert manifest.status == "complete"
@@ -1472,10 +1481,10 @@ def test_pacing_spaces_request_starts(
         monkeypatch.setattr(model_run, "_monotonic", _clock)
         monkeypatch.setattr(model_run, "_sleep", _record)
         sent = _call(prepare_dir, config, "--min-interval-seconds", "1.0")
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     assert sent == 0
-    assert len(sleeps) == 63
+    assert len(sleeps) == _PASS_REQUESTS - 1
     assert all(0 < seconds <= 1.0 for seconds, _ in sleeps)
     assert min(answered for _, answered in sleeps) >= 1
 
@@ -1491,11 +1500,12 @@ def test_a_reported_cost_is_what_the_run_is_charged(
     with _provider(_priced) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
 
     manifest = _run_manifest(prepare_dir)
-    assert manifest.charged_usd_upper_bound == 0.00032
-    assert manifest.provider_reported_usd == 0.00032
+    # Each reply reports a charge of 5 micro-USD.
+    assert manifest.charged_usd_upper_bound == _PASS_REQUESTS * 5 / 1e6
+    assert manifest.provider_reported_usd == _PASS_REQUESTS * 5 / 1e6
 
 
 def test_a_dropped_connection_is_retried_and_charged_in_full(
@@ -1509,9 +1519,9 @@ def test_a_dropped_connection_is_retried_and_charged_in_full(
     with _provider(_dropped) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
         assert _call(prepare_dir, config, "--resume") == 0
-        assert len(provider.received) == 65
+        assert len(provider.received) == _PASS_REQUESTS + 1
 
     log = (_run_dir(prepare_dir) / "attempts" / "C1.jsonl").read_text(
         encoding="utf-8"
@@ -1627,7 +1637,7 @@ def fixture_complete_run(
         with _provider(_healthy) as provider:
             _write_config(config, provider.url)
             assert _call(workspace, config, run_id=_PUBLISH_RUN_ID) == 0
-            assert len(provider.received) == 64
+            assert len(provider.received) == _PASS_REQUESTS
             endpoint = provider.url
     finally:
         patch.undo()
@@ -2066,7 +2076,7 @@ def test_published_run_scores_end_to_end(
         for item in artifacts.inputs
         if item.split == "dev"
     }
-    assert len(routing) == 16
+    assert len(routing) == _DEV_ITEMS
     prepare_dir = tmp_path / "model-eval" / _PUBLISH_RUN_ID
     assert (
         model_run.main(
@@ -2088,14 +2098,15 @@ def test_published_run_scores_end_to_end(
         answers.received = provider.received
         _write_config(config, provider.url)
         assert _call(prepare_dir, config, run_id=_PUBLISH_RUN_ID) == 0
-        assert len(provider.received) == 64
+        assert len(provider.received) == _PASS_REQUESTS
     published = tmp_path / "docs" / "results" / _PUBLISH_RUN_ID
     assert _publish(prepare_dir / "runs" / _PUBLISH_RUN_ID, published) == 0
 
     report = score_run(published, code_revision="integration-test")
 
-    assert (report.items, report.outcomes["strong_exact"]) == (64, 64)
-    assert sum(report.outcomes.values()) == 64
+    assert report.items == _PASS_REQUESTS
+    assert report.outcomes["strong_exact"] == _PASS_REQUESTS
+    assert sum(report.outcomes.values()) == _PASS_REQUESTS
     scored = published / "scored"
     assert (scored / "summary.json").is_file()
     assert (scored / "summary.md").is_file()

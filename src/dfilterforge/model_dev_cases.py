@@ -23,22 +23,28 @@ from dfilterforge.witnesses import ACK_WITNESSES
 from dfilterforge.witnesses import DNS_WITNESSES
 from dfilterforge.witnesses import FIN_WITNESSES
 from dfilterforge.witnesses import HTTPS_WITNESSES
+from dfilterforge.witnesses import PRIVATE_WITNESSES
 from dfilterforge.witnesses import RESPONSE_WITNESSES
+from dfilterforge.witnesses import TTL_BELOW_64_WITNESSES
 from dfilterforge.witnesses import UDP_WITNESSES
+
+_RESPONSE_RECIPES = frozenset({"udp-response", "udp-nxdomain"})
+
+_TTL_AT_MOST_1 = predicate("ip.ttl", Operator.LE, 1)
+_TTL_AT_LEAST_64 = predicate("ip.ttl", Operator.GE, 64)
+_TO_PRIVATE = predicate("ip.dst", Operator.IN_SUBNET, "10.0.0.0/8")
+_SYN = predicate("tcp.flags.syn", Operator.EQ, True)
+_ACK = predicate("tcp.flags.ack", Operator.EQ, True)
+_RST = predicate("tcp.flags.reset", Operator.EQ, True)
+_FIN = predicate("tcp.flags.fin", Operator.EQ, True)
+_QUERY = predicate("dns.flags.response", Operator.EQ, False)
+_RESPONSE = predicate("dns.flags.response", Operator.EQ, True)
+_QTYPE_A = predicate("dns.qry.type", Operator.EQ, 1)
+_QTYPE_AAAA = predicate("dns.qry.type", Operator.EQ, 28)
 
 
 def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
     """Returns the ready dev compositions."""
-    responses = frozenset({"udp-response", "udp-nxdomain"})
-    ttl_low = predicate("ip.ttl", Operator.LE, 1)
-    destination_private = predicate("ip.dst", Operator.IN_SUBNET, "10.0.0.0/8")
-    syn_bit = predicate("tcp.flags.syn", Operator.EQ, True)
-    ack_bit = predicate("tcp.flags.ack", Operator.EQ, True)
-    query = predicate("dns.flags.response", Operator.EQ, False)
-    response = predicate("dns.flags.response", Operator.EQ, True)
-    qtype_a = predicate("dns.qry.type", Operator.EQ, 1)
-    qtype_aaaa = predicate("dns.qry.type", Operator.EQ, 28)
-
     return (
         ModelSemanticCase(
             "tcp-expiring-ttl",
@@ -48,7 +54,7 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 "Find expiring IPv4 traffic carried by TCP, using TTL at "
                 "most one.",
             ),
-            All(children=(predicate("tcp"), ttl_low)),
+            All(children=(predicate("tcp"), _TTL_AT_MOST_1)),
             "tcp && ip.ttl <= 1",
             "ip.ttl <= 1 && (tcp || udp)",
             oracle(
@@ -65,7 +71,7 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 "Find expiring IPv4 datagrams carried by UDP, with TTL no "
                 "greater than 1.",
             ),
-            All(children=(predicate("udp"), ttl_low)),
+            All(children=(predicate("udp"), _TTL_AT_MOST_1)),
             "udp && ip.ttl <= 1",
             "ip.ttl <= 1 && (udp || tcp)",
             oracle(
@@ -82,7 +88,7 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 "Find acknowledged TCP segments whose destination service "
                 "port is 443.",
             ),
-            All(children=(ack_bit, predicate("tcp.dstport", Operator.EQ, 443))),
+            All(children=(_ACK, predicate("tcp.dstport", Operator.EQ, 443))),
             "tcp.flags.ack == 1 && tcp.dstport == 443",
             "tcp.flags.ack == 1 && tcp",
             oracle(
@@ -100,7 +106,7 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 "Find request-side DNS messages asking for IPv4 address "
                 "records without limiting transport.",
             ),
-            All(children=(query, qtype_a)),
+            All(children=(_QUERY, _QTYPE_A)),
             "dns.flags.response == 0 && dns.qry.type == 1",
             "dns.flags.response == 0 && dns",
             oracle(
@@ -124,14 +130,14 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
             AnyOf(
                 children=(
                     predicate("tcp.flags.fin", Operator.EQ, True),
-                    response,
+                    _RESPONSE,
                 )
             ),
             "tcp.flags.fin == 1 || dns.flags.response == 1",
             "dns && dns.flags.response == 1",
             oracle(
-                {"fin", *responses},
-                responses,
+                {"fin", *_RESPONSE_RECIPES},
+                _RESPONSE_RECIPES,
                 witnesses=(
                     RESPONSE_WITNESSES | FIN_WITNESSES,
                     RESPONSE_WITNESSES & DNS_WITNESSES,
@@ -151,7 +157,7 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 children=(
                     predicate("udp"),
                     Not(child=predicate("dns")),
-                    destination_private,
+                    _TO_PRIVATE,
                 )
             ),
             "udp && !dns && ip.dst == 10.0.0.0/8",
@@ -178,11 +184,11 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 children=(
                     All(
                         children=(
-                            syn_bit,
+                            _SYN,
                             predicate("tcp.flags.ece", Operator.EQ, True),
                         )
                     ),
-                    ttl_low,
+                    _TTL_AT_MOST_1,
                 )
             ),
             "(tcp.flags.syn == 1 && tcp.flags.ece == 1) || ip.ttl <= 1",
@@ -204,7 +210,7 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
             ),
             AnyOf(
                 children=(
-                    qtype_aaaa,
+                    _QTYPE_AAAA,
                     predicate("dns.flags.rcode", Operator.EQ, 3),
                 )
             ),
@@ -214,6 +220,102 @@ def ready_dev_cases() -> tuple[ModelSemanticCase, ...]:
                 {"udp-aaaa", "udp-nxdomain"},
                 {"udp-aaaa"},
                 witnesses=(set(), set()),
+            ),
+        ),
+        ModelSemanticCase(
+            "reset-or-fin",
+            "dev",
+            (
+                "I need every TCP segment that has the RST flag or the FIN "
+                "flag set - either one qualifies. It doesn't matter if ACK, "
+                "ECE, or other flags are on at the same time, like RST+ACK or "
+                "FIN+ACK, and there's no restriction on port or direction.",
+                "I need all TCP segments where RST is set, FIN is set, or "
+                "both, on any port and in any direction. Don't drop ones that "
+                "also carry ACK, ECE or other flags.",
+            ),
+            AnyOf(children=(_RST, _FIN)),
+            "tcp.flags.reset == 1 || tcp.flags.fin == 1",
+            "tcp.flags == 4 || tcp.flags == 1",
+            # Only the bare FIN has a whole flag byte of 1 or 4.
+            oracle(
+                {"reset", "fin"},
+                {"fin"},
+                witnesses=(FIN_WITNESSES | {"ece-syn-reset"}, set()),
+            ),
+        ),
+        ModelSemanticCase(
+            "udp-normal-ttl",
+            "dev",
+            (
+                "Pull all UDP packets with an IPv4 TTL of 64 or higher, any "
+                "port, any upper-layer protocol - DNS and mDNS packets count "
+                "too. Anything at TTL 63 or below should be left out.",
+                "Can you find all UDP traffic with an IPv4 TTL of at least 64? "
+                "Include DNS and mDNS too, don't narrow it by port or "
+                "upper-layer protocol, and drop anything at TTL 63 or below.",
+            ),
+            All(children=(predicate("udp"), _TTL_AT_LEAST_64)),
+            "udp && ip.ttl >= 64",
+            "udp && ip.ttl > 64",
+            oracle(
+                UDP_RECIPES - {"udp-lowttl"},
+                set(),
+                witnesses=(
+                    UDP_WITNESSES - TTL_BELOW_64_WITNESSES,
+                    {"udp-ttl-128"},
+                ),
+            ),
+        ),
+        ModelSemanticCase(
+            "private-destination",
+            "dev",
+            (
+                "Grab everything headed to an address inside 10.0.0.0/8, no "
+                "matter the protocol - TCP, UDP, DNS all count. If only the "
+                "source address falls in that range but the destination "
+                "doesn't, leave it out.",
+                "I need all traffic going to destination addresses in "
+                "10.0.0.0/8, any protocol. A packet sourced from 10.0.0.0/8 "
+                "but sent to an address outside that range doesn't qualify.",
+            ),
+            _TO_PRIVATE,
+            "ip.dst == 10.0.0.0/8",
+            "ip.addr == 10.0.0.0/8",
+            oracle(
+                {"udp-private-destination"},
+                {"udp-private-destination", "udp-private"},
+                witnesses=(
+                    PRIVATE_WITNESSES - {"udp-from-far-private"},
+                    PRIVATE_WITNESSES,
+                ),
+            ),
+        ),
+        ModelSemanticCase(
+            "dns-error-responses",
+            "dev",
+            (
+                "I want DNS responses that came back with anything other than "
+                "a successful result - NXDOMAIN, SERVFAIL, any error code "
+                "counts, but only responses, not queries. Include mDNS "
+                "responses too, regardless of transport.",
+                "Pull all failed DNS responses: any response code except "
+                "NOERROR, including NXDOMAIN and SERVFAIL. Responses only, not "
+                "queries, with mDNS responses included and no restriction on "
+                "transport.",
+            ),
+            All(
+                children=(
+                    _RESPONSE,
+                    Not(child=predicate("dns.flags.rcode", Operator.EQ, 0)),
+                )
+            ),
+            "dns.flags.response == 1 && !(dns.flags.rcode == 0)",
+            "dns.flags.rcode == 3",
+            oracle(
+                {"udp-nxdomain"},
+                {"udp-nxdomain"},
+                witnesses=({"dns-servfail"}, set()),
             ),
         ),
     )

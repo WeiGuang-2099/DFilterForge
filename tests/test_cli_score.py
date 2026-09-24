@@ -173,10 +173,18 @@ def _completions(
 
 
 def _build_run(root: Path) -> Path:
-    """Writes a C1 and C3 run directory answered from the dev gold."""
+    """Writes a C1 and C3 run directory answered from the dev gold.
+
+    The scripted replies answer the first sixteen ready dev items.
+    """
     artifacts = generate_model_split(root / "source")
-    items = [item for item in artifacts.inputs if item.split == "dev"]
     by_case = {case.case_id: case for case in artifacts.gold.cases}
+    items = [
+        item
+        for item in artifacts.inputs
+        if item.split == "dev"
+        and artifacts.gold.item_to_case[item.item_id] in by_case
+    ][:16]
     routed = [
         by_case[artifacts.gold.item_to_case[item.item_id]] for item in items
     ]
@@ -375,6 +383,7 @@ _FIELD_TYPES: dict[str, FieldType] = {
     "tcp.flags.ack": FieldType.BOOLEAN,
     "tcp.flags.ece": FieldType.BOOLEAN,
     "tcp.flags.fin": FieldType.BOOLEAN,
+    "tcp.flags.reset": FieldType.BOOLEAN,
     "tcp.flags.syn": FieldType.BOOLEAN,
     "udp": FieldType.PROTOCOL,
 }
@@ -435,10 +444,19 @@ def _retrieved(case: ModelGoldCaseV1) -> tuple[RetrievedFieldV1, ...]:
 
 
 def _build_control_run(root: Path) -> Path:
-    """Writes the four committed conditions with no stored answers at all."""
+    """Writes the four committed conditions with no stored answers at all.
+
+    Only ready dev items are committed; the scoring tests cover the control
+    answers to non-ready gold.
+    """
     artifacts = generate_model_split(root / "source")
-    items = [item for item in artifacts.inputs if item.split == "dev"]
     by_case = {case.case_id: case for case in artifacts.gold.cases}
+    items = [
+        item
+        for item in artifacts.inputs
+        if item.split == "dev"
+        and artifacts.gold.item_to_case[item.item_id] in by_case
+    ]
     routed = {
         item.item_id: by_case[artifacts.gold.item_to_case[item.item_id]]
         for item in items
@@ -501,7 +519,7 @@ def test_reference_control_is_strong_exact_in_every_condition(
     assert control_run.reference == 0
     for label, _, _ in _CONTROL_CONDITIONS:
         condition: dict[str, Any] = conditions[label]
-        assert condition["outcomes"]["strong_exact"] == 16
+        assert condition["outcomes"]["strong_exact"] == condition["items"]
         assert condition["compile_valid"]["value"] == 1.0
         assert condition["strong_exact"]["value"] == 1.0
     for label in ("C2", "C4"):
@@ -527,7 +545,9 @@ def test_mutation_control_is_silent_wrong_for_display_filters(
     assert control_run.mutation == 0
     assert set(conditions) == {"C1", "C2"}
     for label in ("C1", "C2"):
-        assert conditions[label]["outcomes"]["silent_wrong"] == 16
+        assert conditions[label]["outcomes"]["silent_wrong"] == (
+            conditions[label]["items"]
+        )
         assert conditions[label]["outcomes"]["strong_exact"] == 0
     assert summary["not_measured"]["C3"] == "no_typed_mutation"
     assert summary["not_measured"]["C4"] == "no_typed_mutation"

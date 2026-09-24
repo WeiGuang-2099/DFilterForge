@@ -51,6 +51,22 @@ _PLACEMENTS: dict[str, dict[str, int]] = {
     "mei-0011": {"dns": 1, "ip.dst": 5},
 }
 _EMPTY_ITEM = "mei-0003"
+# The figures below were measured on the pilot cases, the first eight dev
+# and sixteen test compositions with no non-ready gold, which are the items
+# _DEV_IDS and _TEST_IDS name. Pinning the table keeps them independent of
+# later cases; CI measures recall over the whole split.
+_PILOT_DEV_CASES = 8
+_PILOT_TEST_CASES = 16
+
+
+@pytest.fixture(name="pilot_cases", autouse=True)
+def fixture_pilot_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generates every split in this module from the pilot cases alone."""
+    dev = model_split.ready_dev_cases()[:_PILOT_DEV_CASES]
+    test = model_split.ready_test_cases()[:_PILOT_TEST_CASES]
+    monkeypatch.setattr(model_split, "ready_dev_cases", lambda: dev)
+    monkeypatch.setattr(model_split, "ready_test_cases", lambda: test)
+    monkeypatch.setattr(model_split, "model_non_ready_cases", lambda: ())
 
 
 class _Retrieve(Protocol):
@@ -542,7 +558,7 @@ def test_an_item_without_gold_stops_the_measurement(
     def unrouted(output_dir: Path) -> ModelSplitArtifacts:
         artifacts = generate_model_split(output_dir)
         stray = ModelInputItemV1(
-            item_id="mei-0099",
+            item_id="mei-9999",
             intent="Show TCP packets.",
             user_assumptions=("fixture",),
             split="dev",

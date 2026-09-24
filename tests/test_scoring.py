@@ -60,6 +60,7 @@ from dfilterforge.model_cases import ModelNonReadyCase
 from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import GoldCase
+from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -229,6 +230,11 @@ def _install_live(
 
     monkeypatch.setattr(scoring_module, "evaluate_live", fake_evaluate_live)
     return calls
+
+
+# The runs below are built from the ready dev cases.
+_DEV_CASES = sum(case.split == "dev" for case in model_semantic_cases())
+_DEV_ITEMS = 2 * _DEV_CASES
 
 
 def _prompt(
@@ -960,13 +966,13 @@ def test_score_run_scores_non_ready_gold_and_publishes_it(
         (plain.output_dir / "summary.json").read_bytes()
     )
     c1 = summary.conditions["C1"]
-    assert report.items == 40
+    assert report.items == 2 * (_DEV_ITEMS + 4)
     assert report.outcomes[OutcomeV1.ABSTAINED.value] == 8
     assert c1.false_ready is not None and c1.false_ready.value == 0.0
     assert c1.slot_match is not None and c1.slot_match.value == 1.0
     assert c1.strong_exact == before.conditions["C1"].strong_exact
     assert summary.comparisons == before.comparisons
-    assert summary.bootstrap["cases"] == 8
+    assert summary.bootstrap["cases"] == _DEV_CASES
     assert summary.bootstrap["non_ready_cases"] == 2
     assert "false_ready" not in summary.not_measured
     assert summary.gold_hash != before.gold_hash
@@ -978,7 +984,7 @@ def test_score_run_scores_non_ready_gold_and_publishes_it(
     control = ScoreSummaryV1.model_validate_json(
         (reference.output_dir / "summary.json").read_bytes()
     )
-    assert reference.items == 40
+    assert reference.items == 2 * (_DEV_ITEMS + 4)
     assert reference.outcomes[OutcomeV1.ABSTAINED.value] == 8
     for label in ("C1", "C3"):
         condition = control.conditions[label]
@@ -1196,14 +1202,13 @@ def _prepare_manifest(
     *,
     tweak_sha: ConditionLabel | None = None,
     drop_item: str | None = None,
-    prompt_count: int = 16,
+    prompt_count: int | None = None,
     mislabel: ConditionLabel | None = None,
     created_at: datetime = _CREATED_AT,
 ) -> PrepareManifestV1:
     """Builds the prepare manifest that describes the committed prompts."""
-    item_ids = [
-        item_id for item_id in _dev_item_ids(run_dir) if item_id != drop_item
-    ]
+    committed = _dev_item_ids(run_dir)
+    item_ids = [item_id for item_id in committed if item_id != drop_item]
     conditions: list[PreparedConditionV1] = []
     for label in labels:
         output_contract, retrieval = _CONDITION_INPUTS[label]
@@ -1227,7 +1232,9 @@ def _prepare_manifest(
                 path=f"prepared/{label}.json",
                 sha256=digest,
                 system_prompt_sha256="1" * 64,
-                prompt_count=prompt_count,
+                prompt_count=(
+                    len(committed) if prompt_count is None else prompt_count
+                ),
             )
         )
     return PrepareManifestV1(
@@ -1267,7 +1274,7 @@ def _write_manifest(
     *,
     tweak_sha: ConditionLabel | None = None,
     drop_item: str | None = None,
-    prompt_count: int = 16,
+    prompt_count: int | None = None,
     mislabel: ConditionLabel | None = None,
     prices: TokenPricesV1 | None = None,
     provider_reported_usd: float | None = None,
@@ -1357,19 +1364,20 @@ def test_score_run_writes_sorted_outcomes_summary_receipts_intents_and_specs(
     scored = run_dir / "scored"
     assert report.output_dir == scored
     assert not report.checked
-    assert report.items == 32
+    assert report.items == 2 * _DEV_ITEMS
     assert report.outcomes[OutcomeV1.MALFORMED.value] == 2
-    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 30
+    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 2 * _DEV_ITEMS - 2
     lines = (scored / "outcomes.jsonl").read_text("utf-8").splitlines()
     keys = [
         (json.loads(line)["condition"], json.loads(line)["item_id"])
         for line in lines
     ]
-    assert keys == sorted(keys) and len(keys) == 32
+    assert keys == sorted(keys) and len(keys) == 2 * _DEV_ITEMS
     summary = ScoreSummaryV1.model_validate_json(
         (scored / "summary.json").read_bytes()
     )
-    assert summary.case_count == 8 and summary.item_count == 32
+    assert summary.case_count == _DEV_CASES
+    assert summary.item_count == 2 * _DEV_ITEMS
     assert summary.conditions["C1"].usage.cost_usd is None
     assert (scored / "summary.md").read_text("utf-8").startswith("# Score")
     receipts = sorted(
@@ -1378,10 +1386,10 @@ def test_score_run_writes_sorted_outcomes_summary_receipts_intents_and_specs(
     intents = sorted(
         path.stem for path in (scored / "intents" / "C3").glob("*")
     )
-    assert len(receipts) == 15 and "mei-0001" not in receipts
-    assert len(intents) == 15 and "mei-0001" not in intents
+    assert len(receipts) == _DEV_ITEMS - 1 and "mei-0001" not in receipts
+    assert len(intents) == _DEV_ITEMS - 1 and "mei-0001" not in intents
     assert not (scored / "intents" / "C1").exists()
-    assert len(sorted((scored / "specs").glob("*.json"))) == 8
+    assert len(sorted((scored / "specs").glob("*.json"))) == _DEV_CASES
     assert not (run_dir / ".scored.partial").exists()
 
 
@@ -1513,7 +1521,7 @@ def test_a_run_prepared_before_a_prompt_change_still_scores(
         run_dir, code_revision="revision", split_dir=tmp_path / "s"
     )
 
-    assert result.items == 32
+    assert result.items == 2 * _DEV_ITEMS
 
 
 def test_a_condition_mixing_prompt_versions_stops_scoring(
@@ -1658,7 +1666,7 @@ def test_checking_an_unscored_run_names_every_committed_file(
     assert "outcomes:C1/mei-0001" in report.differences
     assert "receipts:C1/mei-0001" in report.differences
     assert "specs:tcp-expiring-ttl" in report.differences
-    assert len(report.differences) == 42
+    assert len(report.differences) == 2 + 2 * _DEV_ITEMS + _DEV_CASES
 
 
 def test_unreadable_committed_lines_and_receipts_still_differ(
@@ -1769,7 +1777,7 @@ def test_manifest_must_describe_the_committed_prompts(
         == "C1: manifest does not describe the committed prompts"
     )
     assert missing.value.code == "manifest_mismatch"
-    assert report.items == 32
+    assert report.items == 2 * _DEV_ITEMS
 
 
 def test_manifest_naming_an_uncommitted_condition_is_refused(
@@ -1885,6 +1893,11 @@ _TOKEN_PRICES = TokenPricesV1(
 )
 
 
+def _derived_usd(items: int) -> float:
+    """Prices the default usage of ``items`` completions at _TOKEN_PRICES."""
+    return round(items * (400 * 0.117 + 40 * 0.455) / 1e6, 8)
+
+
 def _scored(run_dir: Path, split_dir: Path) -> ScoreSummaryV1:
     """Scores one run directory and reads back the summary it committed."""
     score_run(run_dir, code_revision="revision", split_dir=split_dir)
@@ -1920,7 +1933,7 @@ def test_effective_settings_reports_thinking_honoured(
 
     assert settings is not None
     assert settings.thinking == "honoured"
-    assert settings.thinking_evidence_items == 16
+    assert settings.thinking_evidence_items == _DEV_ITEMS
     assert settings.reasoning_tokens_total == 0
     assert settings.items_with_reasoning == 0
     assert settings.requested_model == _MODEL_ID
@@ -1959,7 +1972,7 @@ def test_effective_settings_reports_thinking_not_honoured(
     assert settings.thinking == "not_honoured"
     assert settings.reasoning_tokens_total == 3
     assert settings.items_with_reasoning == 1
-    assert settings.thinking_evidence_items == 16
+    assert settings.thinking_evidence_items == _DEV_ITEMS
 
 
 def test_effective_settings_reports_thinking_uncontrolled(
@@ -2114,8 +2127,8 @@ def test_a_reasoning_flag_alone_is_counted_as_evidence(
 
     assert settings is not None
     assert settings.thinking == "not_honoured"
-    assert settings.thinking_evidence_items == 16
-    assert settings.items_with_reasoning == 16
+    assert settings.thinking_evidence_items == _DEV_ITEMS
+    assert settings.items_with_reasoning == _DEV_ITEMS
     assert settings.reasoning_tokens_total == 0
 
 
@@ -2149,7 +2162,7 @@ def test_manifest_settings_must_be_the_settings_that_were_sent(
         str(swapped.value) == "C1: manifest settings are not the recorded ones"
     )
     assert heated.value.code == "manifest_mismatch"
-    assert report.items == 16
+    assert report.items == _DEV_ITEMS
 
 
 def test_spend_marks_a_lower_bound_when_usage_is_missing(
@@ -2176,7 +2189,7 @@ def test_spend_marks_a_lower_bound_when_usage_is_missing(
     assert bounded.spend is not None and exact.spend is not None
     assert bounded.spend.usage_missing == 1
     assert bounded.spend.price_derived_is_lower_bound is True
-    assert bounded.spend.price_derived_usd == 0.000975
+    assert bounded.spend.price_derived_usd == _derived_usd(_DEV_ITEMS - 1)
     assert "usage was missing for 1 item." in report
     assert exact.spend.usage_missing == 0
     assert exact.spend.price_derived_is_lower_bound is False
@@ -2262,7 +2275,7 @@ def test_spend_carries_the_manifest_charges(
     bare = _scored(run_dir, split_dir)
 
     assert charged.spend is not None
-    assert charged.spend.price_derived_usd == 0.00104
+    assert charged.spend.price_derived_usd == _derived_usd(_DEV_ITEMS)
     assert charged.spend.price_derived_usd == (
         charged.conditions["C1"].usage.cost_usd
     )
@@ -2398,8 +2411,8 @@ def test_score_report_counts_every_outcome_key(
     )
 
     assert set(report.outcomes) == {outcome.value for outcome in OutcomeV1}
-    assert report.outcomes[OutcomeV1.SILENT_WRONG.value] == 16
-    assert report.items == 16
+    assert report.outcomes[OutcomeV1.SILENT_WRONG.value] == _DEV_ITEMS
+    assert report.items == _DEV_ITEMS
     assert report.summary_sha256
 
 
@@ -2485,7 +2498,7 @@ def test_reference_control_outputs_parse_under_their_contracts(
                 assert parsed.intent_ir == case.spec.canonical_ir
             answered += 1
 
-    assert answered == 64
+    assert answered == 4 * _DEV_ITEMS
 
 
 def test_control_envelopes_carry_every_contract_key(tmp_path: Path) -> None:
@@ -2511,7 +2524,7 @@ def test_mutation_control_uses_mutation_filters_and_skips_typed_conditions(
     direct = _control_batch(batches["C1"], routes, "mutation")
 
     assert direct is not None
-    assert len(direct.completions) == 16
+    assert len(direct.completions) == _DEV_ITEMS
     for answer in direct.completions:
         envelope: dict[str, Any] = json.loads(answer.response_text or "")
         mutation = routes[answer.item_id].mutation_filter
@@ -2537,8 +2550,8 @@ def test_control_does_not_read_completions(
     assert not (run_dir / "completions").exists()
     assert report.output_dir == run_dir / "control-reference"
     assert not (run_dir / "scored").exists()
-    assert report.items == 32
-    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 32
+    assert report.items == 2 * _DEV_ITEMS
+    assert report.outcomes[OutcomeV1.STRONG_EXACT.value] == 2 * _DEV_ITEMS
 
 
 def test_control_batch_settings_carry_the_control_model_id(
@@ -2676,7 +2689,7 @@ def test_a_committed_prepare_manifest_pins_the_split_and_the_clock(
         )
     )
     assert prepare.split == "dev"
-    assert report.items == 16
+    assert report.items == _DEV_ITEMS
     assert receipt["created_at"].startswith("2026-09-17T11:30")
 
 
