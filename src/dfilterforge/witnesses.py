@@ -46,7 +46,8 @@ Transport: TypeAlias = Literal["tcp", "udp"]
 # dissector for UDP or TCP.
 HIGH_PORT = 6100
 # A UDP port below 53 with no registered dissector, so tshark tries it first
-# and then decodes DNS from port 53 on the other side.
+# and then decodes DNS from port 53 on the other side, or with its DNS-over-UDP
+# heuristic when the other side has no dissector either.
 LOW_PORT = 52
 
 _ETHERNET = bytes.fromhex("0200000000020200000000010800")
