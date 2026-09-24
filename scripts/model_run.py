@@ -1231,7 +1231,7 @@ class _CallPass:
 
         The gate reads the first completed answer of the pass and nothing
         else: the point of a first run is that its settings are known,
-        and discovering after sixty-four requests that the reasoning
+        and discovering after a whole pass of requests that the reasoning
         control was ignored spends the budget on a comparison that cannot
         be made. Stopping here costs one request. A run the gate stopped
         is over: the provider or model is changed and a new run starts,

@@ -641,7 +641,7 @@ def _usage(
 
     The percentiles cover completed items only: a provider failure records
     the client's socket bound, so a single timeout would otherwise dominate
-    a sixteen-item condition and read as a latency result.
+    a condition of a few dozen items and read as a latency result.
     """
     prompt_tokens, completion_tokens, missing = token_census(items)
     cost_usd = derived_cost(prompt_tokens, completion_tokens, prices)

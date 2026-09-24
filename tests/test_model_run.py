@@ -1129,7 +1129,7 @@ def test_an_impossible_provider_charge_cannot_strand_a_paid_run(
 def test_the_first_answer_gates_a_run_that_kept_on_thinking(
     prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One request, not sixty-four, is what an ignored control costs."""
+    """One request, not a whole pass, is what an ignored control costs."""
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
     prepare_dir = _workspace(prepared, tmp_path)
     config = tmp_path / "call.json"

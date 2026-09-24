@@ -2,10 +2,12 @@
 
 The split deliberately reuses the benchmark's packet recipes and protocols.
 It holds out predicate compositions and capture instances, not recipe or
-protocol families; the compositions themselves are the case tables of
-:mod:`dfilterforge.model_cases`. Each probe copy ends in a tail of witness
-packets that separate near-miss filters the recipes alone cannot. Evaluator
-gold is written separately from model inputs.
+protocol families. The compositions themselves are the ready tables of
+:mod:`dfilterforge.model_dev_cases` and :mod:`dfilterforge.model_test_cases`
+and the non-ready table of :mod:`dfilterforge.model_cases`. Each probe copy
+ends in a tail of witness packets that separate near-miss filters the
+recipes alone cannot. Evaluator gold is written separately from model
+inputs.
 """
 
 from __future__ import annotations
