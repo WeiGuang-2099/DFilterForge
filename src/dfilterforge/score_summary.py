@@ -15,6 +15,7 @@ reads this module and is never read by it.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from enum import StrEnum
 import math
 import random
@@ -64,16 +65,18 @@ _CODE_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
 class OutcomeV1(StrEnum):
-    """The seven mutually exclusive verdicts one scored item can receive.
+    """The eight mutually exclusive verdicts one scored item can receive.
 
     ``shortcut`` is an executed candidate that matches every probe only by
     breaking a rule of :mod:`dfilterforge.shortcuts`; it is never strong
-    exact.
+    exact. ``false_ready`` is a ready answer to a request whose gold is
+    needs_clarification or not_expressible; it is never executed.
     """
 
     PROVIDER_FAILED = "provider_failed"
     MALFORMED = "malformed"
     ABSTAINED = "abstained"
+    FALSE_READY = "false_ready"
     INVALID = "invalid"
     SHORTCUT = "shortcut"
     SILENT_WRONG = "silent_wrong"
@@ -86,6 +89,10 @@ _EXECUTABLE = frozenset(
 _STRONG_EXACT = frozenset({OutcomeV1.STRONG_EXACT})
 _SILENT_WRONG = frozenset({OutcomeV1.SILENT_WRONG})
 _ABSTAINED = frozenset({OutcomeV1.ABSTAINED})
+_FALSE_READY = frozenset({OutcomeV1.FALSE_READY})
+GoldStatus: TypeAlias = Literal[
+    "ready", "needs_clarification", "not_expressible"
+]
 
 
 class ItemOutcomeV1(FrozenModel):
@@ -96,7 +103,10 @@ class ItemOutcomeV1(FrozenModel):
     64 characters; neither is rendered into Markdown, because the report
     module reads a :class:`ScoreSummaryV1` and nothing else.
     ``disjunctions`` counts the OR operations of an executed candidate; it
-    is measured, not judged.
+    is measured, not judged. ``gold_status`` is the status the gold expects;
+    for non-ready gold, ``status_match`` says whether an abstention named
+    that status and ``slot_match``, for needs_clarification gold only,
+    whether the answer asked about at least one gold slot.
 
     ``error_code`` and ``provider_error_code`` become object keys in the
     summary this repository publishes, so both are bounded here by the same
@@ -109,7 +119,7 @@ class ItemOutcomeV1(FrozenModel):
     later inside an aggregate.
     """
 
-    schema_version: Literal["item-outcome/1.1"] = "item-outcome/1.1"
+    schema_version: Literal["item-outcome/1.2"] = "item-outcome/1.2"
     condition: ConditionLabel
     item_id: str
     case_id: str
@@ -132,6 +142,9 @@ class ItemOutcomeV1(FrozenModel):
     latency_ms: float = Field(ge=0, allow_inf_nan=False)
     shortcuts: tuple[ShortcutHitV1, ...] = ()
     disjunctions: int | None = Field(default=None, ge=0)
+    gold_status: GoldStatus = "ready"
+    status_match: bool | None = None
+    slot_match: bool | None = None
 
     @field_validator("error_code", "provider_error_code")
     @classmethod
@@ -189,8 +202,12 @@ class RecallV1(FrozenModel):
 class ConditionSummaryV1(FrozenModel):
     """Every reported number for one of the four conditions.
 
-    ``outcomes`` always holds one zero-filled key per :class:`OutcomeV1`
-    value. ``error_codes`` is the complete per-code census, and
+    The rates from ``compile_valid`` to ``over_abstention`` cover the items
+    whose gold is ready; ``false_ready`` and ``slot_match`` cover the
+    non-ready ones and stay None when the run has none. ``items``, the
+    outcome census and ``usage`` cover every item. ``outcomes`` always
+    holds one zero-filled key per :class:`OutcomeV1` value.
+    ``error_codes`` is the complete per-code census, and
     ``failure_details`` is a pure refinement of it that keeps an HTTP 402
     apart from a 429; an item with neither a status nor a provider code
     contributes to ``error_codes`` alone. ``finish_reasons`` is bucketed
@@ -211,6 +228,8 @@ class ConditionSummaryV1(FrozenModel):
     silent_wrong_all: RateV1
     silent_wrong_of_executable: RateV1
     over_abstention: RateV1
+    false_ready: RateV1 | None = None
+    slot_match: RateV1 | None = None
     gold_field_recall: RecallV1 | None = None
     usage: UsageV1
 
@@ -315,7 +334,7 @@ class SpendV1(FrozenModel):
 class ScoreSummaryV1(FrozenModel):
     """The whole reported result of one scored run."""
 
-    schema_version: Literal["score-summary/1.1"] = "score-summary/1.1"
+    schema_version: Literal["score-summary/1.2"] = "score-summary/1.2"
     run: str
     model_id: str
     split: str
@@ -471,7 +490,7 @@ def _ratio_rate(
 
 
 def _outcome_counts(items: Sequence[ItemOutcomeV1]) -> dict[str, int]:
-    """Counts every outcome, keeping all seven keys present."""
+    """Counts every outcome, keeping all eight keys present."""
     counts = {outcome.value: 0 for outcome in OutcomeV1}
     for item in items:
         counts[item.outcome.value] += 1
@@ -642,18 +661,63 @@ def _usage(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _Universe:
+    """One case universe and its own seeded resample vectors."""
+
+    case_ids: tuple[str, ...]
+    vectors: tuple[tuple[int, ...], ...]
+
+    @classmethod
+    def of(cls, items: Sequence[ItemOutcomeV1]) -> _Universe:
+        """Draws the vectors for the distinct cases of ``items``."""
+        case_ids = tuple(sorted({item.case_id for item in items}))
+        return cls(case_ids, _draw_indices(len(case_ids)))
+
+
+def _non_ready_rates(
+    items: Sequence[ItemOutcomeV1], universe: _Universe
+) -> tuple[RateV1 | None, RateV1 | None]:
+    """Rates false-ready answers and, where slots are gold, slot matches."""
+    if not items:
+        return None, None
+    false_ready = _rate(
+        _case_values(items, _FALSE_READY), universe.vectors, universe.case_ids
+    )
+    slotted = [item for item in items if item.slot_match is not None]
+    if not slotted:
+        return false_ready, None
+    slot_match = _rate(
+        _case_means(
+            [
+                (item.case_id, 1.0 if item.slot_match else 0.0)
+                for item in slotted
+            ]
+        ),
+        universe.vectors,
+        universe.case_ids,
+    )
+    return false_ready, slot_match
+
+
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def _condition_summary(
     condition: ConditionLabel,
     items: Sequence[ItemOutcomeV1],
-    vectors: tuple[tuple[int, ...], ...],
-    case_ids: tuple[str, ...],
+    ready: _Universe,
+    non_ready: _Universe,
     prices: tuple[float, float] | None,
 ) -> ConditionSummaryV1:
     """Reduces one condition's items to its reported numbers."""
-    executable = _case_values(items, _EXECUTABLE)
-    strong = _case_values(items, _STRONG_EXACT)
-    silent = _case_values(items, _SILENT_WRONG)
-    abstained = _case_values(items, _ABSTAINED)
+    ready_items = [item for item in items if item.gold_status == "ready"]
+    vectors, case_ids = ready.vectors, ready.case_ids
+    executable = _case_values(ready_items, _EXECUTABLE)
+    strong = _case_values(ready_items, _STRONG_EXACT)
+    silent = _case_values(ready_items, _SILENT_WRONG)
+    abstained = _case_values(ready_items, _ABSTAINED)
+    false_ready, slot_match = _non_ready_rates(
+        [item for item in items if item.gold_status != "ready"], non_ready
+    )
     return ConditionSummaryV1(
         condition=condition,
         items=len(items),
@@ -669,7 +733,9 @@ def _condition_summary(
             silent, executable, vectors, case_ids
         ),
         over_abstention=_rate(abstained, vectors, case_ids),
-        gold_field_recall=_recall(items),
+        false_ready=false_ready,
+        slot_match=slot_match,
+        gold_field_recall=_recall(ready_items),
         usage=_usage(items, prices),
     )
 
@@ -766,41 +832,57 @@ def summarize(
     """
     if not outcomes:
         raise ValueError("at least one item outcome is required")
-    case_ids = tuple(sorted({item.case_id for item in outcomes}))
-    vectors = _draw_indices(len(case_ids))
+    # Ready and non-ready gold are two case universes with their own
+    # vectors, so adding non-ready cases never moves a ready interval.
+    ready = _Universe.of([o for o in outcomes if o.gold_status == "ready"])
+    non_ready = _Universe.of([o for o in outcomes if o.gold_status != "ready"])
     grouped: dict[ConditionLabel, list[ItemOutcomeV1]] = {}
+    ready_grouped: dict[ConditionLabel, list[ItemOutcomeV1]] = {}
     for item in outcomes:
         grouped.setdefault(item.condition, []).append(item)
+        if item.gold_status == "ready":
+            ready_grouped.setdefault(item.condition, []).append(item)
     conditions = {
         label: _condition_summary(
             label,
             grouped[label],
-            vectors,
-            case_ids,
+            ready,
+            non_ready,
             usd_per_million_tokens,
         )
         for label in CONDITION_ORDER
         if label in grouped
     }
-    comparisons, missing = _comparisons(grouped, vectors, case_ids)
+    comparisons, missing = _comparisons(
+        ready_grouped, ready.vectors, ready.case_ids
+    )
     reasons = dict(_DEFAULT_NOT_MEASURED)
+    if non_ready.case_ids:
+        del reasons["false_ready"]
+        if any(o.slot_match is not None for o in outcomes):
+            del reasons["slot_match"]
+        else:
+            reasons["slot_match"] = "no_needs_clarification_gold"
     reasons.update(missing)
     reasons.update(not_measured or {})
+    bootstrap = {
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "seed": BOOTSTRAP_SEED,
+        "cases": len(ready.case_ids),
+        "min_discordant_cases": MIN_DISCORDANT_CASES,
+    }
+    if non_ready.case_ids:
+        bootstrap["non_ready_cases"] = len(non_ready.case_ids)
     return ScoreSummaryV1(
         run=run,
         model_id=model_id,
         split=split,
-        case_count=len(case_ids),
+        case_count=len(ready.case_ids) + len(non_ready.case_ids),
         item_count=len(outcomes),
         gold_hash=gold_hash,
         capture_hashes=dict(capture_hashes),
         batch_hashes=dict(batch_hashes),
-        bootstrap={
-            "resamples": BOOTSTRAP_RESAMPLES,
-            "seed": BOOTSTRAP_SEED,
-            "cases": len(case_ids),
-            "min_discordant_cases": MIN_DISCORDANT_CASES,
-        },
+        bootstrap=bootstrap,
         conditions=conditions,
         comparisons=comparisons,
         provider_reported_usd=provider_reported_usd,

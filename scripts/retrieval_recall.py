@@ -44,6 +44,7 @@ _SOURCE_FILES: tuple[str, ...] = (
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
+    "src/dfilterforge/model_cases.py",
     "src/dfilterforge/model_split.py",
 )
 _DEFAULT_TOP_KS: tuple[int, ...] = (8, 16, 32)

@@ -120,6 +120,7 @@ _MODEL_SIDE_FILES: tuple[str, ...] = (
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
+    "src/dfilterforge/model_cases.py",
     "src/dfilterforge/model_split.py",
 )
 # C1, C2, C3 and C4 in condition_label order.

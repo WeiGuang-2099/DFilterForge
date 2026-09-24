@@ -35,6 +35,7 @@ _SOURCE_FILES = (
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
+    "src/dfilterforge/model_cases.py",
     "src/dfilterforge/model_split.py",
 )
 # Gold fields placed at chosen ranks; every other slot holds a filler.

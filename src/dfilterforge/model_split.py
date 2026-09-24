@@ -16,7 +16,7 @@ import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from pydantic import Field
 from pydantic import model_validator
@@ -41,6 +41,8 @@ from dfilterforge.intent_ir import Not
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 from dfilterforge.intent_ir import ScalarValue
+from dfilterforge.model_cases import model_non_ready_cases
+from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.mutants import MutantWaiver
 from dfilterforge.witnesses import A_QUERY_WITNESSES
 from dfilterforge.witnesses import ACK_WITNESSES
@@ -128,17 +130,24 @@ class ModelGoldCaseV1(FrozenModel):
         return self
 
 
+# The gold one model item routes to.
+GoldCase: TypeAlias = ModelGoldCaseV1 | ModelNonReadyCaseV1
+
+
 class ModelGoldV1(FrozenModel):
     """Evaluator-only targets and opaque model-item routing."""
 
     schema_version: Literal["model-gold/1.0"] = "model-gold/1.0"
     cases: tuple[ModelGoldCaseV1, ...] = Field(min_length=1)
+    non_ready: tuple[ModelNonReadyCaseV1, ...] = ()
     item_to_case: dict[str, str]
 
     @model_validator(mode="after")
     def validate_item_routing(self) -> "ModelGoldV1":
         """Requires unique cases and exactly two items routed to each case."""
-        case_ids = tuple(case.case_id for case in self.cases)
+        case_ids = tuple(case.case_id for case in self.cases) + tuple(
+            case.case_id for case in self.non_ready
+        )
         if len(set(case_ids)) != len(case_ids):
             raise ValueError("gold case IDs must be unique")
         if not self.item_to_case:
@@ -914,10 +923,12 @@ def generate_model_split(output_dir: Path) -> ModelSplitArtifacts:
     capture_probes = _copy_selected_probes(output_dir)
     probes_by_id = {probe.probe_id: probe for probe in capture_probes}
     cases = model_semantic_cases()
+    non_ready = model_non_ready_cases()
     inputs: list[ModelInputItemV1] = []
     routes: dict[str, str] = {}
     next_item_id = 1
-    for case in cases:
+    # Non-ready cases come last, so adding one never renumbers a ready item.
+    for case in (*cases, *non_ready):
         for intent in case.paraphrases:
             item_id = f"mei-{next_item_id:04d}"
             next_item_id += 1
@@ -932,6 +943,7 @@ def generate_model_split(output_dir: Path) -> ModelSplitArtifacts:
             routes[item_id] = case.case_id
     gold = ModelGoldV1(
         cases=tuple(_build_gold_case(case, probes_by_id) for case in cases),
+        non_ready=tuple(case.gold() for case in non_ready),
         item_to_case=routes,
     )
     inputs_path = output_dir / "model_inputs.jsonl"

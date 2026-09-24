@@ -57,6 +57,7 @@ _COST_NOTE = (
     " the run manifest; it is a lower bound where usage was missing."
 )
 _CONDITIONS_HEADING = "## Conditions"
+_NON_READY_HEADING = "## Non-ready gold"
 _COMPARISONS_HEADING = "## Comparisons"
 _SETTINGS_HEADING = "## Run settings"
 _SETTINGS_HEADER = "| Setting | Value |"
@@ -358,6 +359,43 @@ def _comparison_lines(summary: ScoreSummaryV1) -> list[str]:
     return lines
 
 
+def _non_ready_lines(summary: ScoreSummaryV1) -> list[str]:
+    """Renders false-ready and slot-match rates when non-ready gold ran."""
+    measured = [
+        condition
+        for label in CONDITION_ORDER
+        if (condition := summary.conditions.get(label)) is not None
+        and condition.false_ready is not None
+    ]
+    if not measured:
+        return []
+    lines = [
+        _NON_READY_HEADING,
+        "",
+        "| Condition | False-ready | Slot match |",
+        "| --- | ---: | ---: |",
+    ]
+    for condition in measured:
+        assert condition.false_ready is not None
+        slot = (
+            "n/a"
+            if condition.slot_match is None
+            else _render_rate(condition.slot_match)
+        )
+        lines.append(
+            f"| {condition.condition}"
+            f" | {_render_rate(condition.false_ready)} | {slot} |"
+        )
+    lines.append("")
+    lines.append(
+        "Rates above this table cover ready gold only; these cover the"
+        f" {summary.bootstrap.get('non_ready_cases', 0)} non-ready cases,"
+        " resampled with their own index vectors."
+    )
+    lines.append("")
+    return lines
+
+
 def render_markdown(summary: ScoreSummaryV1) -> str:
     """Renders the summary as Markdown that cannot contain model text.
 
@@ -397,6 +435,7 @@ def render_markdown(summary: ScoreSummaryV1) -> str:
     lines.extend(_condition_rows(summary))
     lines.append("")
     lines.extend(_footnotes(summary))
+    lines.extend(_non_ready_lines(summary))
     lines.extend(_comparison_lines(summary))
     lines.extend(_settings_lines(summary))
     lines.extend(_spend_lines(summary))

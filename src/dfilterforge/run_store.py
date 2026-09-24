@@ -51,6 +51,8 @@ from dfilterforge.generation import prompt_versions
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.live import LiveEnvironmentV1
+from dfilterforge.model_cases import ModelNonReadyCaseV1
+from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelGoldV1
 from dfilterforge.model_split import ModelInputItemV1
@@ -370,27 +372,58 @@ def check_splits(
 
 def selected_cases(
     prompts: Sequence[PreparedPromptV1], gold: ModelGoldV1, split: str
-) -> tuple[dict[str, ModelGoldCaseV1], tuple[ModelGoldCaseV1, ...]]:
+) -> tuple[
+    dict[str, GoldCase],
+    tuple[ModelGoldCaseV1, ...],
+    tuple[ModelNonReadyCaseV1, ...],
+]:
     """Routes every item to a gold case of the prompts' own split.
 
-    The returned tuple preserves ``gold.cases`` order, and that order is
-    exactly what the published ``gold_hash`` hashes. Sorting it differently,
-    by case id or otherwise, silently rewrites the hash in every committed
-    summary, so the order is part of the contract rather than an accident.
+    The returned tuples preserve ``gold.cases`` and ``gold.non_ready``
+    order, and that order is exactly what the published ``gold_hash``
+    hashes. Sorting either differently, by case id or otherwise, silently
+    rewrites the hash in every committed summary, so the order is part of
+    the contract rather than an accident.
     """
-    by_case = {case.case_id: case for case in gold.cases}
-    routes: dict[str, ModelGoldCaseV1] = {}
+    by_case: dict[str, GoldCase] = {case.case_id: case for case in gold.cases}
+    by_case.update({case.case_id: case for case in gold.non_ready})
+    routes: dict[str, GoldCase] = {}
     for prompt in prompts:
         case_id = gold.item_to_case.get(prompt.item_id)
         case = None if case_id is None else by_case.get(case_id)
-        if case is None or case.spec.split != split:
+        if case is None or case_split(case) != split:
             raise ScoringError(
                 "split_violation",
                 f"{prompt.item_id} does not route to a {split} case",
             )
         routes[prompt.item_id] = case
     chosen = {case.case_id for case in routes.values()}
-    return routes, tuple(case for case in gold.cases if case.case_id in chosen)
+    return (
+        routes,
+        tuple(case for case in gold.cases if case.case_id in chosen),
+        tuple(case for case in gold.non_ready if case.case_id in chosen),
+    )
+
+
+def case_split(case: GoldCase) -> str:
+    """Returns the split a ready or non-ready gold case belongs to."""
+    if isinstance(case, ModelNonReadyCaseV1):
+        return case.split
+    return case.spec.split
+
+
+def gold_hash(
+    selected: Sequence[ModelGoldCaseV1],
+    non_ready: Sequence[ModelNonReadyCaseV1] = (),
+) -> str:
+    """Hashes the gold a summary was scored against.
+
+    With no non-ready case the hash is the one every committed summary
+    already publishes; non-ready gold, when present, is hashed beside it.
+    """
+    if not non_ready:
+        return content_sha256(tuple(selected))
+    return content_sha256((tuple(selected), tuple(non_ready)))
 
 
 def check_prompts(
@@ -647,6 +680,7 @@ def summarize_run(
     split: str,
     synthesized: bool = False,
     not_measured: Mapping[str, str] | None = None,
+    non_ready: Sequence[ModelNonReadyCaseV1] = (),
 ) -> ScoreSummaryV1:
     """Aggregates the scored items with the run's recorded provenance.
 
@@ -654,7 +688,7 @@ def summarize_run(
         outcomes: Every scored item of the run.
         prepared: The committed conditions that were scored.
         completions: The answers those conditions were scored against.
-        selected: The gold cases the items routed to.
+        selected: The ready gold cases the items routed to.
         manifest: The run manifest, or None when the run recorded none.
         run: The run identifier recorded beside the numbers.
         split: The evaluation split the items came from.
@@ -662,6 +696,7 @@ def summarize_run(
             from the run directory. A derived batch is no committed file,
             so its hash would name nothing and is left out.
         not_measured: Extra skipped metrics merged over the defaults.
+        non_ready: The non-ready gold cases the items routed to.
 
     Returns:
         The frozen summary for the whole run.
@@ -682,7 +717,7 @@ def summarize_run(
         run=run,
         model_id=next(iter(completions.values())).settings.model_id,
         split=split,
-        gold_hash=content_sha256(tuple(selected)),
+        gold_hash=gold_hash(selected, non_ready),
         capture_hashes={
             probe.probe_id: probe.capture_sha256
             for case in selected
@@ -721,11 +756,19 @@ def render(
     *,
     code_revision: str,
     environment: LiveEnvironmentV1,
+    non_ready: Sequence[ModelNonReadyCaseV1] = (),
 ) -> dict[str, bytes]:
-    """Renders the whole scored tree in memory before anything is written."""
+    """Renders the whole scored tree in memory before anything is written.
+
+    Every gold case the items reached is published under ``specs/``: a
+    ready case as its specification, a non-ready case as its status, gold
+    slots and rationale.
+    """
     rendered = {name: _encode(model) for name, model in files.items()}
     for case in selected:
         rendered[f"specs/{case.case_id}.json"] = _encode(case.spec)
+    for case in non_ready:
+        rendered[f"specs/{case.case_id}.json"] = _encode(case)
     ordered = sorted(outcomes, key=lambda item: (item.condition, item.item_id))
     rendered[_OUTCOMES_NAME] = "".join(
         canonical_json(outcome) + "\n" for outcome in ordered

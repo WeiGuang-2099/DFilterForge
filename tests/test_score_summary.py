@@ -672,6 +672,69 @@ def test_shortcut_is_compile_valid_and_executed_but_never_exact() -> None:
     assert "(1/3)" in render_markdown(summary)
 
 
+def test_non_ready_gold_leaves_every_ready_number_alone() -> None:
+    """Non-ready cases are their own universe with their own vectors."""
+    ready = [
+        _item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT),
+        _item("C1", "case-2", "i2", OutcomeV1.SILENT_WRONG),
+        _item("C1", "case-3", "i3", OutcomeV1.ABSTAINED),
+    ]
+    non_ready = [
+        _item(
+            "C1",
+            "ask-1",
+            "i4",
+            OutcomeV1.FALSE_READY,
+            gold_status="needs_clarification",
+            status_match=False,
+            slot_match=False,
+        ),
+        _item(
+            "C1",
+            "ask-1",
+            "i5",
+            OutcomeV1.ABSTAINED,
+            gold_status="needs_clarification",
+            status_match=True,
+            slot_match=True,
+        ),
+        _item(
+            "C1",
+            "never-1",
+            "i6",
+            OutcomeV1.ABSTAINED,
+            gold_status="not_expressible",
+            status_match=True,
+        ),
+    ]
+
+    alone = _summarize(ready)
+    mixed = _summarize(ready + non_ready)
+    before, after = alone.conditions["C1"], mixed.conditions["C1"]
+
+    for name in (
+        "compile_valid",
+        "strong_exact",
+        "silent_wrong_all",
+        "silent_wrong_of_executable",
+        "over_abstention",
+    ):
+        assert getattr(after, name) == getattr(before, name), name
+    assert (before.false_ready, before.slot_match) == (None, None)
+    assert after.false_ready is not None
+    assert after.false_ready.value == 0.25
+    assert after.slot_match is not None and after.slot_match.value == 0.5
+    assert after.outcomes[OutcomeV1.FALSE_READY.value] == 1
+    assert mixed.bootstrap["cases"] == alone.bootstrap["cases"] == 3
+    assert mixed.bootstrap["non_ready_cases"] == 2
+    assert mixed.case_count == 5
+    assert "false_ready" in alone.not_measured
+    assert "false_ready" not in mixed.not_measured
+    assert "slot_match" not in mixed.not_measured
+    assert "## Non-ready gold" not in render_markdown(alone)
+    assert "| C1 | 0.250" in render_markdown(mixed)
+
+
 def test_render_markdown_prints_settings_and_spend_deterministically() -> None:
     """Both blocks render from the summary alone, the same way every time."""
     outcomes = [_item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT)]

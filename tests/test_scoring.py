@@ -15,6 +15,7 @@ from typing import Any, TypeAlias
 
 import pytest
 
+from dfilterforge import model_split as model_split_module
 from dfilterforge import scoring as scoring_module
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
@@ -50,11 +51,15 @@ from dfilterforge.generation import RetrievalV1
 from dfilterforge.intent_ir import All
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import MissingSlot
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 from dfilterforge.live import LiveEnvironmentV1
 from dfilterforge.live import LiveError
+from dfilterforge.model_cases import ModelNonReadyCase
+from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_split import generate_model_split
+from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -297,7 +302,7 @@ def _score(
     prompt: PreparedPromptV1,
     completion: CompletionV1,
     *,
-    case: ModelGoldCaseV1 | None = None,
+    case: GoldCase | None = None,
     model_hash: str = "model-settings-hash",
 ) -> tuple[ItemOutcomeV1, EvaluationReceiptV1 | None, IntentIrV1 | None]:
     """Scores one item with fixed run identity."""
@@ -721,6 +726,180 @@ def test_score_run_grounds_each_item_on_its_own_request(
     assert seen and seen == {item_id: expected[item_id] for item_id in seen}
 
 
+_CLARIFY_GOLD = ModelNonReadyCaseV1(
+    case_id="unnamed-server",
+    split="dev",
+    status="needs_clarification",
+    missing_slots=(MissingSlot.ADDRESS,),
+    rationale="No host or network is given.",
+)
+_INEXPRESSIBLE_GOLD = ModelNonReadyCaseV1(
+    case_id="five-largest",
+    split="dev",
+    status="not_expressible",
+    rationale="A ranking across packets is not a per-packet test.",
+)
+
+
+def test_a_ready_answer_to_non_ready_gold_is_false_ready_and_never_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Answering a question that has no filter is caught without tshark."""
+    calls = _install_live(monkeypatch)
+
+    outcome, receipt, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply()),
+        case=_CLARIFY_GOLD,
+    )
+
+    assert outcome.outcome is OutcomeV1.FALSE_READY
+    assert (receipt, calls) == (None, [])
+    assert outcome.candidate_filter == _REFERENCE
+    assert outcome.gold_field_count == 0
+    assert (
+        outcome.gold_status,
+        outcome.status_match,
+        outcome.slot_match,
+    ) == ("needs_clarification", False, False)
+
+
+@pytest.mark.parametrize(
+    ("gold", "reply", "status_match", "slot_match"),
+    [
+        (
+            _CLARIFY_GOLD,
+            {
+                "clarifying_question": "Which host?",
+                "missing_slots": ["address"],
+            },
+            True,
+            True,
+        ),
+        (
+            _CLARIFY_GOLD,
+            {"clarifying_question": "Which port?", "missing_slots": ["port"]},
+            True,
+            False,
+        ),
+        (_CLARIFY_GOLD, {"status": "not_expressible"}, False, False),
+        (_INEXPRESSIBLE_GOLD, {"status": "not_expressible"}, True, None),
+        (
+            _INEXPRESSIBLE_GOLD,
+            {"clarifying_question": "Which?", "missing_slots": ["value"]},
+            False,
+            None,
+        ),
+    ],
+)
+def test_abstentions_on_non_ready_gold_record_status_and_slot_matches(
+    monkeypatch: pytest.MonkeyPatch,
+    gold: ModelNonReadyCaseV1,
+    reply: dict[str, Any],
+    status_match: bool,
+    slot_match: bool | None,
+) -> None:
+    """Status must match the gold; slots must meet it for clarification."""
+    _install_live(monkeypatch)
+    envelope = {"status": "needs_clarification", **reply}
+
+    outcome, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply(None, **envelope)),
+        case=gold,
+    )
+
+    assert outcome.outcome is OutcomeV1.ABSTAINED
+    assert outcome.gold_status == gold.status
+    assert (outcome.status_match, outcome.slot_match) == (
+        status_match,
+        slot_match,
+    )
+
+
+def test_a_failed_or_ready_gold_item_carries_no_false_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure matches no gold status; ready gold records no match."""
+    _install_live(monkeypatch)
+    failed, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(
+            status=CompletionStatusV1.FAILED,
+            response_text=None,
+            error_code="http_error",
+            http_status=429,
+        ),
+        case=_CLARIFY_GOLD,
+    )
+    abstained, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(
+            response_text=_filter_reply(None, status="not_expressible")
+        ),
+    )
+
+    assert failed.outcome is OutcomeV1.PROVIDER_FAILED
+    assert (failed.status_match, failed.slot_match) == (False, False)
+    assert abstained.gold_status == "ready"
+    assert (abstained.status_match, abstained.slot_match) == (None, None)
+
+
+def test_score_run_scores_non_ready_gold_and_publishes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reference answers match non-ready gold; the mutation control is
+    false-ready on it; ready numbers and their hash stay as they were."""
+    _install_live(monkeypatch)
+    plain = score_run(_run_dir(tmp_path / "plain"), code_revision="revision")
+    monkeypatch.setattr(
+        model_split_module,
+        "model_non_ready_cases",
+        lambda: (
+            ModelNonReadyCase(
+                case_id="unnamed-server",
+                split="dev",
+                status="needs_clarification",
+                paraphrases=("Show traffic to the file server.", "Find it."),
+                missing_slots=(MissingSlot.ADDRESS,),
+                rationale="No host is given.",
+            ),
+            ModelNonReadyCase(
+                case_id="five-largest",
+                split="dev",
+                status="not_expressible",
+                paraphrases=("Show the five largest packets.", "Top five."),
+                missing_slots=(),
+                rationale="A ranking across packets.",
+            ),
+        ),
+    )
+    run_dir = _run_dir(tmp_path / "mixed")
+
+    report = score_run(run_dir, code_revision="revision")
+    mutation = score_run(run_dir, code_revision="revision", control="mutation")
+
+    summary = ScoreSummaryV1.model_validate_json(
+        (run_dir / "scored" / "summary.json").read_bytes()
+    )
+    before = ScoreSummaryV1.model_validate_json(
+        (plain.output_dir / "summary.json").read_bytes()
+    )
+    c1 = summary.conditions["C1"]
+    assert report.items == 40
+    assert report.outcomes[OutcomeV1.ABSTAINED.value] == 8
+    assert c1.false_ready is not None and c1.false_ready.value == 0.0
+    assert c1.slot_match is not None and c1.slot_match.value == 1.0
+    assert c1.strong_exact == before.conditions["C1"].strong_exact
+    assert summary.comparisons == before.comparisons
+    assert summary.bootstrap["cases"] == 8
+    assert summary.bootstrap["non_ready_cases"] == 2
+    assert "false_ready" not in summary.not_measured
+    assert summary.gold_hash != before.gold_hash
+    assert (run_dir / "scored" / "specs" / "unnamed-server.json").exists()
+    assert mutation.outcomes[OutcomeV1.FALSE_READY.value] == 4
+
+
 def test_display_filter_goes_in_unchanged_and_typed_ir_as_ir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -813,8 +992,22 @@ def _write_json(path: Path, value: object) -> None:
     path.write_bytes((canonical_json(value) + "\n").encode("utf-8"))
 
 
-def _reply_for(output_contract: OutputContractV1, case: ModelGoldCaseV1) -> str:
-    """Derives one answering reply from the gold case the item routes to."""
+def _reply_for(output_contract: OutputContractV1, case: GoldCase) -> str:
+    """Derives one answering reply from the gold case the item routes to.
+
+    Non-ready gold is answered with its own status and slots.
+    """
+    if isinstance(case, ModelNonReadyCaseV1):
+        extra: dict[str, Any] = {
+            "status": case.status,
+            "clarifying_question": (
+                "Which one?" if case.status == "needs_clarification" else None
+            ),
+            "missing_slots": [slot.value for slot in case.missing_slots],
+        }
+        if output_contract is OutputContractV1.DISPLAY_FILTER:
+            return _filter_reply(None, **extra)
+        return _ir_reply(None, intent_ir=None, **extra)
     if output_contract is OutputContractV1.DISPLAY_FILTER:
         return _filter_reply(case.spec.reference_filter)
     return _ir_reply(case.spec.canonical_ir)
@@ -842,7 +1035,10 @@ def _run_dir(
     """
     artifacts = generate_model_split(tmp_path / "source")
     everything = [item for item in artifacts.inputs if item.split == split]
-    cases = {case.case_id: case for case in artifacts.gold.cases}
+    cases: dict[str, GoldCase] = {
+        case.case_id: case for case in artifacts.gold.cases
+    }
+    cases.update({case.case_id: case for case in artifacts.gold.non_ready})
     run_dir = tmp_path / f"{split}-0001"
     for label in labels:
         output_contract, retrieval = _CONDITION_INPUTS[label]
