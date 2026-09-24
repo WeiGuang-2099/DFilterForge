@@ -4,10 +4,8 @@ Last updated: 2026-09-24
 
 ## Current slice
 
-The DNS and FIN gold correction
-(`docs/decisions/dns-off-port-and-fin-ack.md`) is implemented and verified.
-Local generated benchmark reports stay under the ignored `artifacts/`
-directory and are not uploadable project evidence.
+The shortcut policy (ablation 006) is implemented and verified. Generated
+reports under the ignored `artifacts/` directory are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -156,10 +154,23 @@ directory and are not uploadable project evidence.
   (888 tests, 1 skipped) and at a1d3724 (899 tests, 1 skipped, 96.35 percent
   branch-aware coverage).
 
+## Shortcut policy: 2026-09-24
+
+- Pre-registered in `docs/protocol.md` (422d9fa) before the code (b281d24):
+  a probe-exact answer that mentions a catalog frame-number or time field,
+  frame.*, _ws.*, a stream index, a generator identifier or an unstated
+  capture constant is `shortcut`, never strong exact; ORs are only counted.
+- Ablation 006, `keep_full`: catalog types catch 2,470 of 2,470 frame-number
+  and time fields, names alone 13. Of 8 shortcut filters written up front, 6
+  match their probes; Full flags all 6, names alone pass 3 as strong exact.
+  No gold candidate (264) or committed answer (84) is flagged.
+- Both runs and controls re-scored: no outcome changed, at most one OR per
+  answer. The CI python job passes in the test image: 938 tests, 1 skipped,
+  96.37 percent coverage.
+
 ## Planned next
 
-1. Shortcut policy, non-ready gold and the frozen test set
-   (`docs/protocol.md` splits table).
+1. Non-ready gold and the frozen test set (`docs/protocol.md` splits table).
 2. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -184,6 +195,6 @@ directory and are not uploadable project evidence.
 
 ## Next verification
 
-1. Hosted CI on this correction, pylint step included.
+1. Hosted CI on the gold correction and shortcut policy, pylint included.
 2. Locked-test run replayed offline from a clean checkout without an API key.
 3. Web numbers checked against the scored summary by a CI test.
