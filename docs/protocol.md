@@ -49,7 +49,8 @@ over-abstention is.
 
 Every item has exactly one outcome: `provider_failed` (including a provider
 error or empty content inside an HTTP 200 response), `malformed`, `abstained`,
-`invalid`, `silent_wrong` or `strong_exact`. All items are denominators.
+`invalid`, `shortcut`, `silent_wrong` or `strong_exact`. All items are
+denominators.
 
 - compile validity: the output parses under its contract and pinned tshark
   accepts and runs it; a rejected filter exits 4 ([ablation
@@ -60,7 +61,21 @@ error or empty content inside an HTTP 200 response), `malformed`, `abstained`,
   it accepts (`ssl`) are valid; one over 4 KiB or with a C0 control character is
   malformed, a compiled filter over 8 KiB invalid.
 - strong exact: the candidate frame set equals the labelled set on all three
-  probes, with at least one non-empty expected set.
+  probes, with at least one non-empty expected set, and no shortcut rule hit.
+- shortcut: compiles, runs and matches all three probes, but mentions a field
+  the frozen catalog types as a frame number or time, a `frame.` field other
+  than len, cap_len and protocols, a `_ws.` field, a stream index or derived
+  conversation state (tcp.analysis, tcp.completeness, dns.unsolicited, DNS
+  retransmission); ip.id, dns.id, a checksum or a raw sequence number; or a
+  literal the request does not write as a whole token: a host address other
+  than the bounds of a network it states (by CIDR, shorthand such as 10/8, or
+  TEST-NET-1 to 3), a network touching the servers' 198.51.100.0/24 but not the
+  clients' 192.0.2.0/24, outside every stated network, a number from 41000 to
+  51254 (the generator's ephemeral ports), a MAC address or a generated DNS
+  name, in any spelling tshark accepts (`dfilterforge.shortcuts`). It counts
+  as compile valid, never as strong exact; hits on a silent-wrong answer are
+  recorded without changing it. The number of ORs in each executed answer is
+  recorded, not judged.
 - silent-wrong: compiles and runs, but at least one probe disagrees. Reported
   over all items and over compile-valid items.
 - repair@1: share of silent-wrong or invalid items that become strong exact
@@ -78,9 +93,10 @@ The unit of analysis is the canonical case, paraphrases averaged inside it.
 Intervals are the 2.5 and 97.5 percent nearest-rank percentiles of 1,000
 case-level bootstrap resamples (seed 17). Discordant cases are counted on strong
 exact for C4-C2, C2-C1 and C4-C3; fewer than 10 is inconclusive. A reference
-disagreeing with its labels, a gold case with no non-empty expected set, or any
-capture, catalog or harness failure stops scoring; a candidate timeout or output
-or frame limit counts as invalid, not as a stop, if its gold case reruns clean.
+disagreeing with its labels, a gold filter or target that hits a shortcut
+rule, a gold case with no non-empty expected set, or any capture, catalog or
+harness failure stops scoring; a candidate timeout or output or frame limit
+counts as invalid, not as a stop, if its gold case reruns clean.
 
 The mutation-adequacy gate is part of the gold. For every dev and test case,
 `scripts/probe_adequacy.py` requires the reference filter and the compiled

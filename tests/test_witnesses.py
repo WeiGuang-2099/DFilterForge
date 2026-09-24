@@ -70,7 +70,7 @@ def _witness(name: str) -> Witness:
 
 
 def test_names_are_unique_and_never_benchmark_recipes() -> None:
-    assert len(set(WITNESS_NAMES)) == len(WITNESS_NAMES) == 31
+    assert len(set(WITNESS_NAMES)) == len(WITNESS_NAMES) == 33
     assert not set(WITNESS_NAMES) & set(RECIPES)
     for name, first in _FLOW_OF.items():
         assert _witness(name).flow_of == first
@@ -99,6 +99,7 @@ _FAMILY_RULES: dict[str, Callable[[Witness], bool]] = {
     "CLIENT_WITNESSES": lambda w: w.source.host == "client",
     "ACK_WITNESSES": lambda w: bool(_flags(w) & 0x10),
     "SYN_WITNESSES": lambda w: bool(_flags(w) & 0x02),
+    "FIN_WITNESSES": lambda w: bool(_flags(w) & 0x01),
     "HTTPS_WITNESSES": lambda w: (
         w.transport == "tcp" and w.destination.port == 443
     ),
@@ -246,10 +247,10 @@ def test_out_of_range_seeds_and_ordinals_are_refused(
 def test_the_last_server_address_is_the_last_host() -> None:
     frames = witness_frames(110, _LAST_FIRST)
 
-    # The last witness goes to its own server, 198.51.100.254, never to
-    # the broadcast address .255.
-    assert WITNESSES[-1].destination.host == "server"
-    assert _parse(frames[-1])["destination"] == bytes((198, 51, 100, 254))
+    # The last witness comes from its own server, 198.51.100.254, never
+    # from the broadcast address .255.
+    assert WITNESSES[-1].source.host == "server"
+    assert _parse(frames[-1])["source"] == bytes((198, 51, 100, 254))
 
 
 # What tshark 4.6.8 must decode for each witness, written from the packet
@@ -346,9 +347,17 @@ _DECODES = {
     "tcp.flags == 0x010",
     "udp-near-testnet": _UDP
     + "ip.src == 192.0.3.9 && ip.dst == {s} && udp.dstport == 6100",
+    # DNS on port 52 from port 6100, found by the heuristic, not a port.
+    "dns-query-to-private-low": _DNS
+    + "ip.src == {c} && ip.dst == 10.2.3.6 && udp.srcport == 6100 && "
+    "udp.dstport == 52 && dns.flags.response == 0 && dns.qry.type == 1",
+    "server-fin-ack": _TCP
+    + _FROM_443
+    + "tcp.dstport == {e} && tcp.flags == 0x011 && tcp.ack == 1",
 }
 # Expert items each witness may carry: the SYN and reset notes every such
-# segment gets, the ACK-number note, and the TTL-below-5 note.
+# segment gets, the FIN chat and closing note, the ACK-number note, and the
+# TTL-below-5 note.
 _EXPERTS = {
     "cwr-syn": "chat",
     "ece-syn-reset": "warn",
@@ -358,6 +367,7 @@ _EXPERTS = {
     "tcp-ttl-2": "note",
     "udp-ttl-0": "note",
     "udp-ttl-2": "note",
+    "server-fin-ack": "note",
 }
 _SEVERITY = {"chat": 0x00200000, "note": 0x00400000, "warn": 0x00600000}
 

@@ -47,6 +47,7 @@ from dfilterforge.witnesses import ACK_WITNESSES
 from dfilterforge.witnesses import append_witnesses
 from dfilterforge.witnesses import CLIENT_WITNESSES
 from dfilterforge.witnesses import DNS_WITNESSES
+from dfilterforge.witnesses import FIN_WITNESSES
 from dfilterforge.witnesses import HIGH_PORT_WITNESSES
 from dfilterforge.witnesses import HTTPS_WITNESSES
 from dfilterforge.witnesses import PRIVATE_WITNESSES
@@ -87,7 +88,7 @@ _PROVENANCE = (
     "packet recipes and protocol families as dfilterforge.benchmark/v1. Dev "
     "uses copies of semantic-11/17/23 and test copies of semantic-31/37/43, "
     "rather than the original semantic-suite probes semantic-01/02/03; each "
-    "copy keeps the benchmark frames byte for byte and appends the 31 "
+    "copy keeps the benchmark frames byte for byte and appends the 33 "
     "witness packets of dfilterforge.witnesses. This is strictly an "
     "unseen-composition plus unseen-capture-instance split; it is not an "
     "unseen-recipe or unseen-protocol split. Labels are authored from recipe "
@@ -335,7 +336,7 @@ def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
                 {"fin", *responses},
                 responses,
                 witnesses=(
-                    RESPONSE_WITNESSES,
+                    RESPONSE_WITNESSES | FIN_WITNESSES,
                     RESPONSE_WITNESSES & DNS_WITNESSES,
                 ),
             ),

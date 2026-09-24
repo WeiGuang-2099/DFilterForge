@@ -29,6 +29,7 @@ from pydantic import Field
 
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
+from dfilterforge.catalog_runtime import tshark_types
 from dfilterforge.compiler import CompileError
 from dfilterforge.completions import CompletionBatchV1
 from dfilterforge.completions import CompletionStatusV1
@@ -74,6 +75,9 @@ from dfilterforge.runner import TsharkRunner
 from dfilterforge.score_summary import ConditionLabel
 from dfilterforge.score_summary import ItemOutcomeV1
 from dfilterforge.score_summary import OutcomeV1
+from dfilterforge.shortcuts import find_shortcuts
+from dfilterforge.shortcuts import references
+from dfilterforge.shortcuts import ShortcutHitV1
 
 # Gold is verified before any model answer is read, so once scoring starts
 # only the candidate can still raise one of these codes.
@@ -224,6 +228,17 @@ def _case_is_healthy(case: ModelGoldCaseV1, context: _Execution) -> bool:
         return False
 
 
+def _shortcuts(
+    candidate: IntentIrV1 | str, request: str
+) -> tuple[tuple[ShortcutHitV1, ...], int]:
+    """Returns the shortcut rules a candidate breaks and its OR count."""
+    found = references(candidate)
+    return (
+        find_shortcuts(found, request, tshark_types(found.fields)),
+        found.disjunctions,
+    )
+
+
 def _attributable_code(
     error: DFilterForgeError, case: ModelGoldCaseV1, context: _Execution
 ) -> str | None:
@@ -254,8 +269,13 @@ def score_item(
     code_revision: str,
     model_hash: str,
     runner: TsharkRunner,
+    request: str,
 ) -> tuple[ItemOutcomeV1, EvaluationReceiptV1 | None, IntentIrV1 | None]:
     """Classifies one stored completion into exactly one protocol outcome.
+
+    An executed candidate that matches every probe but breaks a shortcut
+    rule is ``shortcut``, never strong exact; a silent-wrong one keeps its
+    outcome and records the rules it breaks.
 
     Args:
         prompt: The committed prompt the model actually answered.
@@ -267,6 +287,7 @@ def score_item(
         code_revision: Revision recorded on the receipt.
         model_hash: Content hash of the recorded request settings.
         runner: The shared bounded tshark runner.
+        request: The request text the model saw, which grounds literals.
 
     Returns:
         The scored outcome, the receipt for an executed candidate, and the
@@ -346,14 +367,18 @@ def score_item(
         )
         return outcome, None, ready_ir
     exact = tuple(probe.exact for probe in receipt.probes)
+    hits, disjunctions = _shortcuts(candidate, request)
+    verdict = OutcomeV1.SILENT_WRONG
+    if all(exact):
+        verdict = OutcomeV1.SHORTCUT if hits else OutcomeV1.STRONG_EXACT
     outcome = ItemOutcomeV1(
         **fields,
-        outcome=(
-            OutcomeV1.STRONG_EXACT if all(exact) else OutcomeV1.SILENT_WRONG
-        ),
+        outcome=verdict,
         candidate_filter=filter_text,
         probe_exact=exact,
         packet_set_hash=packet_set_hash(receipt),
+        shortcuts=hits,
+        disjunctions=disjunctions,
     )
     return outcome, receipt, ready_ir
 
@@ -386,6 +411,12 @@ def verify_gold(
     Raises:
         ScoringError: With code ``gold_invalid`` naming the offending case.
     """
+    for case in cases:
+        for gold in (case.spec.reference_filter, case.spec.canonical_ir):
+            if _shortcuts(gold, case.spec.intent)[0]:
+                raise ScoringError(
+                    "gold_invalid", f"{case.case_id}: gold uses a shortcut"
+                )
     context = _Execution(
         capture_root, f"{run_id}-gold", created_at, code_revision, runner
     )
@@ -534,15 +565,19 @@ def _control_plan(
     return _ControlPlan(scored, answered, skipped)
 
 
+# pylint: disable-next=too-many-locals
 def _score_items(
     prepared: Mapping[ConditionLabel, tuple[PreparedBatchV1, str]],
     completions: Mapping[ConditionLabel, CompletionBatchV1],
     routes: Mapping[str, ModelGoldCaseV1],
     context: _Execution,
+    requests: Mapping[str, str],
     *,
     model_hash: str | None = None,
 ) -> tuple[list[ItemOutcomeV1], dict[str, FrozenModel]]:
     """Scores every prompt in prepared order with one shared runner.
+
+    ``requests`` maps each item to the request text its model saw.
 
     ``model_hash`` names the answer source on every receipt. It is the
     content hash of the recorded request settings unless a caller pins it,
@@ -571,6 +606,7 @@ def _score_items(
                 code_revision=context.code_revision,
                 model_hash=answered_by,
                 runner=context.runner,
+                request=requests[prompt.item_id],
             )
             outcomes.append(outcome)
             if receipt is not None:
@@ -728,6 +764,7 @@ def score_run(
             completions,
             routes,
             context,
+            {item.item_id: item.intent for item in artifacts.inputs},
             model_hash=(
                 None
                 if control is None

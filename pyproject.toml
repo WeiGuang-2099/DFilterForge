@@ -69,6 +69,7 @@ omit = [
   "scripts/export_catalog.py",
   "scripts/raw_filter_ablation.py",
   "scripts/runner_ablation.py",
+  "scripts/shortcut_ablation.py",
   "scripts/trace_replay_ablation.py",
 ]
 

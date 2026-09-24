@@ -18,6 +18,7 @@ import pytest
 from dfilterforge import scoring as scoring_module
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
+from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
 from dfilterforge.compiler import CompileError
 from dfilterforge.completions import CatalogIdentityV1
 from dfilterforge.completions import CompletionBatchV1
@@ -64,6 +65,7 @@ from dfilterforge.scoring import score_item
 from dfilterforge.scoring import score_run
 from dfilterforge.scoring import ScoringError
 from dfilterforge.scoring import verify_gold
+from dfilterforge.shortcuts import ShortcutRule
 
 _CREATED_AT = datetime(2026, 9, 18, tzinfo=timezone.utc)
 _DEV_PROBES = ("semantic-11", "semantic-17", "semantic-23")
@@ -120,13 +122,15 @@ def _case(
     *,
     case_id: str = "tcp-expiring-ttl",
     expected: tuple[tuple[int, ...], ...] = ((1, 2), (3,), (4, 5)),
+    reference_filter: str = _REFERENCE,
+    canonical_ir: IntentIrV1 | None = None,
 ) -> ModelGoldCaseV1:
     """Builds one dev gold case without touching the generated split."""
     spec = SemanticSpecV1(
         task_id=case_id,
         intent=_INTENT,
-        canonical_ir=_canonical_ir(),
-        reference_filter=_REFERENCE,
+        canonical_ir=_canonical_ir() if canonical_ir is None else canonical_ir,
+        reference_filter=reference_filter,
         probes=tuple(
             ProbeExpectationV1(
                 probe_id=probe_id,
@@ -307,6 +311,7 @@ def _score(
         code_revision="revision",
         model_hash=model_hash,
         runner=_RUNNER,
+        request="Show some packets.",
     )
 
 
@@ -547,6 +552,173 @@ def test_receipt_probes_decide_strong_exact_or_silent_wrong(
     assert wrong_outcome.probe_exact == (True, False, True)
     assert wrong_outcome.packet_set_hash is not None
     assert wrong_receipt is not None
+
+
+def test_an_exact_answer_that_breaks_a_shortcut_rule_is_shortcut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matching every probe by frame number or a capture constant never
+    counts as strong exact; a wrong answer stays silent-wrong."""
+    shortcut_filter = "(tcp && frame.number <= 40) || ip.ttl == 0"
+    _install_live(monkeypatch)
+    shortcut, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply(shortcut_filter)),
+    )
+    constant, _, _ = _score(
+        _prompt(OutputContractV1.TYPED_IR, item_id="mei-0002"),
+        _completion(
+            "mei-0002",
+            response_text=_ir_reply(
+                IntentIrV1(
+                    expression=All(
+                        children=(
+                            Predicate(field="tcp", operator=Operator.EXISTS),
+                            Predicate(
+                                field="ip.src",
+                                operator=Operator.EQ,
+                                value="198.51.100.7",
+                            ),
+                        )
+                    )
+                )
+            ),
+        ),
+    )
+    _install_live(monkeypatch, inexact=("semantic-17",))
+    wrong, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply(shortcut_filter)),
+    )
+    exact, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text=_filter_reply()),
+    )
+
+    assert shortcut.outcome is OutcomeV1.SHORTCUT
+    assert [(hit.rule, hit.token) for hit in shortcut.shortcuts] == [
+        (ShortcutRule.CAPTURE_POSITION, "frame.number")
+    ]
+    assert shortcut.disjunctions == 1
+    assert constant.outcome is OutcomeV1.SHORTCUT
+    assert [(hit.rule, hit.token) for hit in constant.shortcuts] == [
+        (ShortcutRule.CAPTURE_CONSTANT, "198.51.100.7")
+    ]
+    assert wrong.outcome is OutcomeV1.SILENT_WRONG
+    assert wrong.shortcuts == shortcut.shortcuts
+    assert (exact.shortcuts, exact.disjunctions) == ((), 0)
+
+
+def test_gold_preflight_rejects_a_gold_filter_that_is_a_shortcut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reference that leans on the capture is a gold error, not a score."""
+    _install_live(monkeypatch)
+
+    with pytest.raises(ScoringError) as error:
+        verify_gold(
+            [_case(reference_filter="tcp && ip.ttl <= 1 && tcp.stream >= 0")],
+            Path("captures"),
+            run_id="dev-0001",
+            created_at=_CREATED_AT,
+            code_revision="revision",
+            runner=_RUNNER,
+        )
+
+    assert error.value.code == "gold_invalid"
+    assert str(error.value) == "tcp-expiring-ttl: gold uses a shortcut"
+    leaning = IntentIrV1(
+        expression=All(
+            children=(
+                _canonical_ir().expression,
+                Predicate(field="ip.id", operator=Operator.GE, value=0),
+            )
+        )
+    )
+    with pytest.raises(ScoringError) as target:
+        verify_gold(
+            [_case(canonical_ir=leaning)],
+            Path("captures"),
+            run_id="dev-0001",
+            created_at=_CREATED_AT,
+            code_revision="revision",
+            runner=_RUNNER,
+        )
+    assert str(target.value) == "tcp-expiring-ttl: gold uses a shortcut"
+
+
+@pytest.mark.skipif(
+    not DEFAULT_CATALOG_PATH.exists(),
+    reason="the frozen catalog ships in the Docker image",
+)
+def test_a_field_known_only_by_its_catalog_type_is_a_shortcut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """tcp.time_delta has no telling name; its catalog type gives it away."""
+    _install_live(monkeypatch)
+
+    outcome, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(
+            response_text=_filter_reply(
+                "tcp && ip.ttl <= 1 && tcp.time_delta >= 0"
+            )
+        ),
+    )
+
+    assert outcome.outcome is OutcomeV1.SHORTCUT
+    assert [(hit.rule, hit.token) for hit in outcome.shortcuts] == [
+        (ShortcutRule.CAPTURE_POSITION, "tcp.time_delta")
+    ]
+
+
+def test_a_literal_counts_as_stated_only_by_the_items_own_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same answer is exact or shortcut depending on what was asked."""
+    _install_live(monkeypatch)
+    answer = _completion(
+        response_text=_filter_reply("tcp && ip.ttl <= 1 && ip.src != 10.9.9.9")
+    )
+
+    unstated, _, _ = _score(_prompt(OutputContractV1.DISPLAY_FILTER), answer)
+    stated, _, _ = score_item(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        answer,
+        _case(),
+        Path("captures"),
+        run_id="dev-0001",
+        created_at=_CREATED_AT,
+        code_revision="revision",
+        model_hash="model-settings-hash",
+        runner=_RUNNER,
+        request="Keep TCP packets with TTL 1 or lower, except from 10.9.9.9.",
+    )
+
+    assert unstated.outcome is OutcomeV1.SHORTCUT
+    assert stated.outcome is OutcomeV1.STRONG_EXACT
+
+
+def test_score_run_grounds_each_item_on_its_own_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every item is checked against the request text its model saw."""
+    _install_live(monkeypatch)
+    seen: dict[str, str] = {}
+    real = scoring_module.score_item
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        seen[args[0].item_id] = kwargs["request"]
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(scoring_module, "score_item", spy)
+    run_dir = _run_dir(tmp_path)
+
+    score_run(run_dir, code_revision="revision")
+
+    inputs = generate_model_split(tmp_path / "inputs").inputs
+    expected = {item.item_id: item.intent for item in inputs}
+    assert seen and seen == {item_id: expected[item_id] for item_id in seen}
 
 
 def test_display_filter_goes_in_unchanged_and_typed_ir_as_ir(

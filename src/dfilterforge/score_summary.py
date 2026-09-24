@@ -26,6 +26,7 @@ from pydantic import field_validator
 from pydantic import model_validator
 
 from dfilterforge.intent_ir import FrozenModel
+from dfilterforge.shortcuts import ShortcutHitV1
 
 BOOTSTRAP_RESAMPLES = 1000
 BOOTSTRAP_SEED = 17
@@ -63,17 +64,25 @@ _CODE_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
 class OutcomeV1(StrEnum):
-    """The six mutually exclusive verdicts one scored item can receive."""
+    """The seven mutually exclusive verdicts one scored item can receive.
+
+    ``shortcut`` is an executed candidate that matches every probe only by
+    breaking a rule of :mod:`dfilterforge.shortcuts`; it is never strong
+    exact.
+    """
 
     PROVIDER_FAILED = "provider_failed"
     MALFORMED = "malformed"
     ABSTAINED = "abstained"
     INVALID = "invalid"
+    SHORTCUT = "shortcut"
     SILENT_WRONG = "silent_wrong"
     STRONG_EXACT = "strong_exact"
 
 
-_EXECUTABLE = frozenset({OutcomeV1.SILENT_WRONG, OutcomeV1.STRONG_EXACT})
+_EXECUTABLE = frozenset(
+    {OutcomeV1.SHORTCUT, OutcomeV1.SILENT_WRONG, OutcomeV1.STRONG_EXACT}
+)
 _STRONG_EXACT = frozenset({OutcomeV1.STRONG_EXACT})
 _SILENT_WRONG = frozenset({OutcomeV1.SILENT_WRONG})
 _ABSTAINED = frozenset({OutcomeV1.ABSTAINED})
@@ -82,9 +91,12 @@ _ABSTAINED = frozenset({OutcomeV1.ABSTAINED})
 class ItemOutcomeV1(FrozenModel):
     """One scored generation, already judged against gold.
 
-    ``candidate_filter`` is the only field that can hold model text; it is
-    never rendered into Markdown, because the report module reads a
-    :class:`ScoreSummaryV1` and nothing else.
+    ``candidate_filter`` and the shortcut tokens are the only fields that
+    can hold model text, and a token is a field name or literal of at most
+    64 characters; neither is rendered into Markdown, because the report
+    module reads a :class:`ScoreSummaryV1` and nothing else.
+    ``disjunctions`` counts the OR operations of an executed candidate; it
+    is measured, not judged.
 
     ``error_code`` and ``provider_error_code`` become object keys in the
     summary this repository publishes, so both are bounded here by the same
@@ -97,7 +109,7 @@ class ItemOutcomeV1(FrozenModel):
     later inside an aggregate.
     """
 
-    schema_version: Literal["item-outcome/1.0"] = "item-outcome/1.0"
+    schema_version: Literal["item-outcome/1.1"] = "item-outcome/1.1"
     condition: ConditionLabel
     item_id: str
     case_id: str
@@ -118,6 +130,8 @@ class ItemOutcomeV1(FrozenModel):
     prompt_tokens: int | None = Field(default=None, ge=0)
     completion_tokens: int | None = Field(default=None, ge=0)
     latency_ms: float = Field(ge=0, allow_inf_nan=False)
+    shortcuts: tuple[ShortcutHitV1, ...] = ()
+    disjunctions: int | None = Field(default=None, ge=0)
 
     @field_validator("error_code", "provider_error_code")
     @classmethod
@@ -301,7 +315,7 @@ class SpendV1(FrozenModel):
 class ScoreSummaryV1(FrozenModel):
     """The whole reported result of one scored run."""
 
-    schema_version: Literal["score-summary/1.0"] = "score-summary/1.0"
+    schema_version: Literal["score-summary/1.1"] = "score-summary/1.1"
     run: str
     model_id: str
     split: str
@@ -457,7 +471,7 @@ def _ratio_rate(
 
 
 def _outcome_counts(items: Sequence[ItemOutcomeV1]) -> dict[str, int]:
-    """Counts every outcome, keeping all six keys present."""
+    """Counts every outcome, keeping all seven keys present."""
     counts = {outcome.value: 0 for outcome in OutcomeV1}
     for item in items:
         counts[item.outcome.value] += 1

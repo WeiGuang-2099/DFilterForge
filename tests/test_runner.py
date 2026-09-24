@@ -455,8 +455,8 @@ def test_real_tshark_separates_filter_rejection_from_capture_failure(
         ("ssl", None, 0),
         ("http.request.method == GET", None, 0),
         ("diameter.TCP-SYN == 01:02", None, 0),
-        # 10 TCP recipe frames and 15 TCP witness frames.
-        ("tcp", None, 25),
+        # 10 TCP recipe frames and 16 TCP witness frames.
+        ("tcp", None, 26),
     ],
 )
 def test_real_tshark_names_unknown_fields_and_accepts_aliases(
@@ -484,8 +484,8 @@ def test_real_tshark_accepted_filter_never_classifies(tmp_path: Path) -> None:
     result = TsharkRunner().run(capture, "tcp")
 
     assert result.frames == tuple(sorted(result.frames))
-    # 10 TCP recipe frames and 15 TCP witness frames.
-    assert len(result.frames) == 25
+    # 10 TCP recipe frames and 16 TCP witness frames.
+    assert len(result.frames) == 26
     assert (
         result.capture_sha256
         == hashlib.sha256(capture.read_bytes()).hexdigest()

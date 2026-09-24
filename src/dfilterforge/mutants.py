@@ -36,7 +36,9 @@ class MutantCategory(StrEnum):
     """The operator family that produced a mutant."""
 
     FIELD_SWAP = "field-swap"
+    PROTOCOL_AS_PORT = "protocol-as-port"
     FLAG_AS_NUMBER = "flag-as-number"
+    FLAG_AS_BYTE = "flag-as-byte"
     VALUE_DOMAIN = "value-domain"
     BOUNDARY = "boundary"
     SUBNET = "subnet"
@@ -66,6 +68,17 @@ FIELD_SWAPS: Mapping[str, tuple[str, ...]] = MappingProxyType(
     }
 )
 
+# A protocol test written as the port the protocol usually runs on, on either
+# side. tshark decodes by dissector: DNS can run off port 53, where its UDP
+# heuristic still finds it, and a port can carry another payload.
+PROTOCOL_AS_PORT: Mapping[str, tuple[tuple[str, int], ...]] = MappingProxyType(
+    {
+        "dns": (("udp.port", 53), ("tcp.port", 53)),
+        "mdns": (("udp.port", 5353),),
+        "http": (("tcp.port", 80),),
+    }
+)
+
 # A TCP flag written as the number field with a similar name. Relative
 # numbering shows ack 1 on the first ACK of a stream and seq 0 on its SYN,
 # so these agree with the flag on ordinary traffic.
@@ -78,6 +91,22 @@ FLAG_AS_NUMBER: Mapping[tuple[str, bool], tuple[str, Operator, int]] = (
             ("tcp.flags.syn", False): ("tcp.seq", Operator.NE, 0),
         }
     )
+)
+
+# A set TCP flag written as the whole flag field equal to that bit alone,
+# as the pilot suite's tcp.flags == 2 mutations read SYN. It misses every
+# segment that carries another flag as well, such as FIN with ACK.
+FLAG_AS_BYTE: Mapping[str, int] = MappingProxyType(
+    {
+        "tcp.flags.fin": 0x01,
+        "tcp.flags.syn": 0x02,
+        "tcp.flags.reset": 0x04,
+        "tcp.flags.push": 0x08,
+        "tcp.flags.ack": 0x10,
+        "tcp.flags.urg": 0x20,
+        "tcp.flags.ece": 0x40,
+        "tcp.flags.cwr": 0x80,
+    }
 )
 
 # One DNS code rewritten as "not the other common code" or as a range: A (1)
@@ -230,6 +259,15 @@ def _predicate_candidates(predicate: Predicate) -> Iterator[_Candidate]:
             operator,
             value,
         )
+    if operator == Operator.EXISTS:
+        for port_field, port in PROTOCOL_AS_PORT.get(field, ()):
+            yield (
+                MutantCategory.PROTOCOL_AS_PORT,
+                f"{field} -> {port_field} eq {port}",
+                port_field,
+                Operator.EQ,
+                port,
+            )
     if operator == Operator.EQ and isinstance(value, bool):
         number = FLAG_AS_NUMBER.get((field, value))
         if number is not None:
@@ -241,6 +279,15 @@ def _predicate_candidates(predicate: Predicate) -> Iterator[_Candidate]:
                 other,
                 new_operator,
                 new_value,
+            )
+        bit = FLAG_AS_BYTE.get(field)
+        if value and bit is not None:
+            yield (
+                MutantCategory.FLAG_AS_BYTE,
+                f"{field} eq true -> tcp.flags eq {bit}",
+                "tcp.flags",
+                Operator.EQ,
+                bit,
             )
     if isinstance(value, int) and not isinstance(value, bool):
         yield from _integer_candidates(field, operator, value)
@@ -305,7 +352,8 @@ def single_site_mutants(intent: IntentIrV1) -> tuple[Mutant, ...]:
 
     Children come in index order, and each group's drop edit for a child
     precedes the edits inside that child. A predicate yields field swap,
-    flag as number, value domain, boundary and subnet edits, in that order.
+    protocol as port, flag as number, flag as byte, value domain, boundary
+    and subnet edits, in that order.
     An edit that does not validate as IR is skipped. Distinct mutants can
     compile to the same filter text; deduplication is the caller's choice.
 

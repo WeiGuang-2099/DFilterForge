@@ -31,11 +31,11 @@ from dfilterforge.score_summary import SpendV1
 _CONDITION_HEADER = (
     "| Condition | Items | Compile valid | Strong exact |"
     " Silent-wrong (all) | Silent-wrong (exec) | Over-abstention |"
-    " Provider failed | Malformed | Gold-field recall | Cost USD/item |"
-    " Latency p50 ms |"
+    " Shortcut | Provider failed | Malformed | Gold-field recall |"
+    " Cost USD/item | Latency p50 ms |"
 )
 _CONDITION_RULE = (
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
     " ---: | ---: | ---: |"
 )
 _COMPARISON_HEADER = (
@@ -120,7 +120,11 @@ def _render_executable_rate(condition: ConditionSummaryV1) -> str:
     printed beside the rate instead of being left for the reader to derive.
     """
     silent = condition.outcomes[OutcomeV1.SILENT_WRONG.value]
-    executable = silent + condition.outcomes[OutcomeV1.STRONG_EXACT.value]
+    executable = (
+        silent
+        + condition.outcomes[OutcomeV1.STRONG_EXACT.value]
+        + condition.outcomes[OutcomeV1.SHORTCUT.value]
+    )
     return _render_rate(
         condition.silent_wrong_of_executable, f"({silent}/{executable})"
     )
@@ -156,6 +160,7 @@ def _condition_rows(summary: ScoreSummaryV1) -> list[str]:
             f" | {_render_rate(condition.silent_wrong_all)}"
             f" | {_render_executable_rate(condition)}"
             f" | {_render_rate(condition.over_abstention)}"
+            f" | {condition.outcomes[OutcomeV1.SHORTCUT.value]}"
             f" | {condition.outcomes[OutcomeV1.PROVIDER_FAILED.value]}"
             f" | {condition.outcomes[OutcomeV1.MALFORMED.value]}"
             f" | {_render_recall(condition.gold_field_recall)}"

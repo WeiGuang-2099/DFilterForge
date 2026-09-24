@@ -53,7 +53,9 @@ def test_field_swaps_move_one_sided_fields_and_ecn_flags() -> None:
         ("root: ip.dst -> ip.addr", "ip.addr == 192.0.2.0/24"),
         ("root: ip.dst -> ip.src", "ip.src == 192.0.2.0/24"),
     ]
-    assert _texts(_p("tcp.flags.cwr", Operator.EQ, True)) == [
+    assert _texts(
+        _p("tcp.flags.cwr", Operator.EQ, True), MutantCategory.FIELD_SWAP
+    ) == [
         ("root: tcp.flags.cwr -> tcp.flags.ece", "tcp.flags.ece == true"),
     ]
 
@@ -92,10 +94,7 @@ def test_flag_as_number_reads_a_flag_as_its_number_field(
 ) -> None:
     expression = _p(field, Operator.EQ, value)
 
-    assert _texts(expression) == [(label, text)]
-    assert [mutant.category for mutant in _mutants(expression)] == [
-        MutantCategory.FLAG_AS_NUMBER
-    ]
+    assert _texts(expression, MutantCategory.FLAG_AS_NUMBER) == [(label, text)]
 
 
 def test_flag_as_number_needs_boolean_equality() -> None:
@@ -103,7 +102,72 @@ def test_flag_as_number_needs_boolean_equality() -> None:
     # never treated as an integer bound.
     assert not _mutants(_p("tcp.flags.ack", Operator.EQ, 1))
     assert not _mutants(_p("tcp.flags.syn", Operator.NE, True))
-    assert not _mutants(_p("tcp.flags.fin", Operator.EQ, True))
+    assert not _texts(
+        _p("tcp.flags.fin", Operator.EQ, True), MutantCategory.FLAG_AS_NUMBER
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "bit"),
+    [
+        ("tcp.flags.fin", 1),
+        ("tcp.flags.syn", 2),
+        ("tcp.flags.reset", 4),
+        ("tcp.flags.ack", 16),
+        ("tcp.flags.ece", 64),
+    ],
+)
+def test_flag_as_byte_reads_a_set_flag_as_the_whole_flag_field(
+    field: str, bit: int
+) -> None:
+    assert _texts(
+        _p(field, Operator.EQ, True), MutantCategory.FLAG_AS_BYTE
+    ) == [
+        (f"root: {field} eq true -> tcp.flags eq {bit}", f"tcp.flags == {bit}")
+    ]
+
+
+def test_flag_as_byte_needs_a_set_flag() -> None:
+    # A clear flag has no single byte value; a flag with a swap partner
+    # yields the swap first.
+    assert not _texts(
+        _p("tcp.flags.ack", Operator.EQ, False), MutantCategory.FLAG_AS_BYTE
+    )
+    assert not _mutants(_p("tcp.flags.fin", Operator.NE, True))
+    assert [
+        mutant.category
+        for mutant in _mutants(_p("tcp.flags.ece", Operator.EQ, True))
+    ] == [MutantCategory.FIELD_SWAP, MutantCategory.FLAG_AS_BYTE]
+
+
+@pytest.mark.parametrize(
+    ("protocol", "expected"),
+    [
+        (
+            "dns",
+            [
+                ("root: dns -> udp.port eq 53", "udp.port == 53"),
+                ("root: dns -> tcp.port eq 53", "tcp.port == 53"),
+            ],
+        ),
+        ("mdns", [("root: mdns -> udp.port eq 5353", "udp.port == 5353")]),
+        ("http", [("root: http -> tcp.port eq 80", "tcp.port == 80")]),
+        ("tcp", []),
+    ],
+)
+def test_protocol_as_port_reads_a_protocol_as_its_usual_port(
+    protocol: str, expected: list[tuple[str, str]]
+) -> None:
+    assert _texts(_p(protocol)) == expected
+
+
+def test_protocol_as_port_applies_to_exists_only() -> None:
+    assert not _mutants(_p("dns", Operator.EQ, True))
+    assert _texts(Not(child=_p("dns"))) == [
+        ("root: drop not", "dns"),
+        ("0: dns -> udp.port eq 53", "!(udp.port == 53)"),
+        ("0: dns -> tcp.port eq 53", "!(tcp.port == 53)"),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -249,15 +313,17 @@ def test_nested_edits_come_in_preorder_with_their_node_paths() -> None:
         ("drop-disjunct", "root: drop child 0"),
         ("drop-conjunct", "0: drop child 0"),
         ("flag-as-number", "0.0: tcp.flags.syn eq true -> tcp.seq eq 0"),
+        ("flag-as-byte", "0.0: tcp.flags.syn eq true -> tcp.flags eq 2"),
         ("drop-conjunct", "0: drop child 1"),
         ("field-swap", "0.1: tcp.flags.ece -> tcp.flags.cwr"),
+        ("flag-as-byte", "0.1: tcp.flags.ece eq true -> tcp.flags eq 64"),
         ("drop-disjunct", "root: drop child 1"),
         ("boundary", "1: ip.ttl le 1 -> lt 1"),
         ("boundary", "1: ip.ttl le 1 -> eq 1"),
         ("boundary", "1: ip.ttl le 1 -> le 2"),
         ("boundary", "1: ip.ttl le 1 -> le 0"),
     ]
-    assert compile_intent(_mutants(expression)[4].intent) == (
+    assert compile_intent(_mutants(expression)[5].intent) == (
         "((tcp.flags.syn == true && tcp.flags.cwr == true) || ip.ttl <= 1)"
     )
 
@@ -291,9 +357,9 @@ def test_model_cases_give_unique_labels_and_real_single_site_changes() -> None:
             for mutant in first
         )
         total += len(first)
-    # mutants.generated in the Simplified receipt,
-    # docs/ablations/evidence/005-probe-adequacy-simplified.json.
-    assert total == 182
+    # mutants.generated in the gate receipts of the DNS and FIN correction,
+    # docs/decisions/evidence/dns-fin-gate-*.json.
+    assert total == 192
 
 
 def test_invalid_mutants_are_skipped_and_the_rest_kept(
@@ -318,6 +384,10 @@ def test_invalid_mutants_are_skipped_and_the_rest_kept(
 
     assert _texts(expression) == [
         ("root: drop child 0", "tcp.dstport == 443"),
+        (
+            "0: tcp.flags.ack eq true -> tcp.flags eq 16",
+            "(tcp.flags == 16 && tcp.dstport == 443)",
+        ),
         ("root: drop child 1", "tcp.flags.ack == true"),
         (
             "1: tcp.dstport -> tcp.port",

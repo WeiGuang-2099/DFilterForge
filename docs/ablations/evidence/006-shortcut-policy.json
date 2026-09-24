@@ -1,0 +1,168 @@
+{
+  "catalog": {
+    "caught": {
+      "full": 2470,
+      "simplified": 21
+    },
+    "position_typed_fields": 2470,
+    "simplified_misses_in_recipe_protocols": [
+      "dns.dnscrypt.valid_from",
+      "dns.dnscrypt.valid_to",
+      "dns.response_in",
+      "dns.response_to",
+      "dns.rrsig.signature_expiration",
+      "dns.rrsig.signature_inception",
+      "dns.time",
+      "dns.tkey.signature_expiration",
+      "dns.tkey.signature_inception",
+      "dns.tsig.time_signed",
+      "ip.fragment",
+      "ip.fragment.error",
+      "ip.reassembled_in",
+      "tcp.continuation_to",
+      "tcp.fin_retransmission",
+      "tcp.pdu.last_frame",
+      "tcp.pdu.time",
+      "tcp.reassembled_in",
+      "tcp.segment",
+      "tcp.segment.error",
+      "tcp.time_delta",
+      "tcp.time_relative",
+      "udp.time_delta",
+      "udp.time_relative"
+    ]
+  },
+  "catalog_sha256": "8be7163808fe356cb253ff6fd2006d7651297b62b1b6392d0c5d8428f65523f4",
+  "committed_answers": {
+    "candidates": 84,
+    "flagged": {
+      "full": 0,
+      "simplified": 0
+    },
+    "median_ms": {
+      "full": 0.103,
+      "simplified": 0.015
+    }
+  },
+  "gold": {
+    "candidates": 264,
+    "flagged": {
+      "full": 0,
+      "simplified": 0
+    },
+    "median_ms": {
+      "full": 0.112,
+      "simplified": 0.02
+    }
+  },
+  "schema_version": "shortcut-ablation/1.0",
+  "shortcuts_sha256": "4a29a929449eba97f320ada5dd582ad77f22417a33603d7ff4f84d7410fe2cae",
+  "source_revision": "42274fd+working-tree",
+  "tshark_version": "4.6.8",
+  "witnesses": [
+    {
+      "case_id": "udp-expiring-ttl",
+      "filter": "udp && ip.ttl <= 1 && !dns.response_in",
+      "full": "shortcut",
+      "full_hits": [
+        {
+          "rule": "capture-position",
+          "token": "dns.response_in"
+        }
+      ],
+      "probe_exact": true,
+      "simplified": "strong_exact"
+    },
+    {
+      "case_id": "tcp-expiring-ttl",
+      "filter": "tcp && ip.ttl <= 1 && !(tcp.time_delta > 100)",
+      "full": "shortcut",
+      "full_hits": [
+        {
+          "rule": "capture-position",
+          "token": "tcp.time_delta"
+        }
+      ],
+      "probe_exact": true,
+      "simplified": "strong_exact"
+    },
+    {
+      "case_id": "tcp-expiring-ttl",
+      "filter": "tcp && ip.ttl <= 1 && frame.number >= 1",
+      "full": "shortcut",
+      "full_hits": [
+        {
+          "rule": "capture-position",
+          "token": "frame.number"
+        }
+      ],
+      "probe_exact": true,
+      "simplified": "shortcut"
+    },
+    {
+      "case_id": "ack-to-https",
+      "filter": "tcp.flags.ack == 1 && tcp.dstport == 443 && ip.id >= 0",
+      "full": "shortcut",
+      "full_hits": [
+        {
+          "rule": "generator-identifier",
+          "token": "ip.id"
+        }
+      ],
+      "probe_exact": true,
+      "simplified": "shortcut"
+    },
+    {
+      "case_id": "ack-to-https",
+      "filter": "tcp.flags.ack == 1 && tcp.dstport == 443 && !(ip.src == 198.51.100.254)",
+      "full": "shortcut",
+      "full_hits": [
+        {
+          "rule": "capture-constant",
+          "token": "198.51.100.254"
+        }
+      ],
+      "probe_exact": true,
+      "simplified": "shortcut"
+    },
+    {
+      "case_id": "dns-a-queries",
+      "filter": "dns.flags.response == 0 && dns.qry.type == 1 && !dns.response_to",
+      "full": "shortcut",
+      "full_hits": [
+        {
+          "rule": "capture-position",
+          "token": "dns.response_to"
+        }
+      ],
+      "probe_exact": true,
+      "simplified": "strong_exact"
+    },
+    {
+      "case_id": "ack-outside-testnet",
+      "filter": "tcp.flags.ack == 1 && ip.src == 198.51.100.0/24",
+      "full": "silent_wrong",
+      "full_hits": [
+        {
+          "rule": "capture-constant",
+          "token": "198.51.100.0/24"
+        }
+      ],
+      "probe_exact": false,
+      "simplified": "silent_wrong"
+    },
+    {
+      "case_id": "tcp-source-testnet",
+      "filter": "tcp && tcp.srcport >= 41000",
+      "full": "silent_wrong",
+      "full_hits": [
+        {
+          "rule": "capture-constant",
+          "token": "41000"
+        }
+      ],
+      "probe_exact": false,
+      "simplified": "silent_wrong"
+    }
+  ]
+}

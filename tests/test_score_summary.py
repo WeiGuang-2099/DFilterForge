@@ -652,6 +652,26 @@ def test_half_recorded_cost_reads_as_a_measurement(
     assert "n/a" in footnote
 
 
+def test_shortcut_is_compile_valid_and_executed_but_never_exact() -> None:
+    """A shortcut ran, so it counts as compile valid and as executed."""
+    outcomes = [
+        _item("C1", "case-1", "i1", OutcomeV1.SHORTCUT),
+        _item("C1", "case-2", "i2", OutcomeV1.STRONG_EXACT),
+        _item("C1", "case-3", "i3", OutcomeV1.SILENT_WRONG),
+    ]
+
+    summary = _summarize(outcomes)
+    condition = summary.conditions["C1"]
+
+    assert condition.outcomes[OutcomeV1.SHORTCUT.value] == 1
+    assert condition.compile_valid.value == 1.0
+    assert condition.strong_exact.value == pytest.approx(1 / 3, abs=1e-6)
+    assert condition.silent_wrong_of_executable.value == pytest.approx(
+        1 / 3, abs=1e-6
+    )
+    assert "(1/3)" in render_markdown(summary)
+
+
 def test_render_markdown_prints_settings_and_spend_deterministically() -> None:
     """Both blocks render from the summary alone, the same way every time."""
     outcomes = [_item("C1", "case-1", "i1", OutcomeV1.STRONG_EXACT)]

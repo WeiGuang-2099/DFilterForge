@@ -56,6 +56,12 @@ other side is already constrained). Reference filters, canonical IRs and authore
 agree with their authored labels on all six probes (144 of 144 each), and
 `scripts/probe_adequacy.py` fails CI on any mismatch or unwaived survivor.
 
+Updated on 2026-09-24 by the [DNS and FIN correction](dns-off-port-and-fin-ack.md): the probes
+now end in 33 witness packets and the gate runs 192 mutants with the same 4 waivers. This run
+was re-scored in place with code 75ccc59+working-tree against gold 8a061589fe6c, and no
+outcome changed. Its C3/mei-0011 answer, once coerced, is the v2 filter that the correction
+made silent-wrong, so the coercion estimate below becomes C3 7.
+
 ## Findings
 
 The typed-IR prompt never says how a value is written. It shows
