@@ -2,7 +2,7 @@
   "catalog": {
     "caught": {
       "full": 2470,
-      "simplified": 13
+      "simplified": 21
     },
     "position_typed_fields": 2470,
     "simplified_misses_in_recipe_protocols": [
@@ -10,8 +10,6 @@
       "dns.dnscrypt.valid_to",
       "dns.response_in",
       "dns.response_to",
-      "dns.retransmit_request_in",
-      "dns.retransmit_response_in",
       "dns.rrsig.signature_expiration",
       "dns.rrsig.signature_inception",
       "dns.time",
@@ -21,12 +19,6 @@
       "ip.fragment",
       "ip.fragment.error",
       "ip.reassembled_in",
-      "tcp.analysis.ack_rtt",
-      "tcp.analysis.acks_frame",
-      "tcp.analysis.duplicate_ack_frame",
-      "tcp.analysis.initial_rtt",
-      "tcp.analysis.rto",
-      "tcp.analysis.rto_frame",
       "tcp.continuation_to",
       "tcp.fin_retransmission",
       "tcp.pdu.last_frame",
@@ -48,8 +40,8 @@
       "simplified": 0
     },
     "median_ms": {
-      "full": 0.095,
-      "simplified": 0.013
+      "full": 0.103,
+      "simplified": 0.015
     }
   },
   "gold": {
@@ -59,13 +51,13 @@
       "simplified": 0
     },
     "median_ms": {
-      "full": 0.096,
-      "simplified": 0.016
+      "full": 0.112,
+      "simplified": 0.02
     }
   },
   "schema_version": "shortcut-ablation/1.0",
-  "shortcuts_sha256": "638baa1661589356c877543cdec7bfc6dccbdc210b8154718fbd7c81adaa65f4",
-  "source_revision": "b281d24+working-tree",
+  "shortcuts_sha256": "4a29a929449eba97f320ada5dd582ad77f22417a33603d7ff4f84d7410fe2cae",
+  "source_revision": "42274fd+working-tree",
   "tshark_version": "4.6.8",
   "witnesses": [
     {

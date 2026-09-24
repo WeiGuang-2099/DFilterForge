@@ -3,7 +3,8 @@
 Full reads each mentioned field's tshark type from the frozen catalog, so a
 frame reference such as dns.response_in or a time such as tcp.time_delta is a
 capture-position shortcut. Simplified is the same policy given no types: it
-keeps the name rules (frame.*, _ws.*, stream indexes) and nothing else.
+keeps every name, generator-identifier and capture-constant rule and drops
+only the catalog type lookup.
 
 The receipt records four things: how many frame-number and time fields of the
 catalog each variant catches; how each variant scores a fixed list of shortcut

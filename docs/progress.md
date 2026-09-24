@@ -156,17 +156,17 @@ reports under the ignored `artifacts/` directory are not project evidence.
 
 ## Shortcut policy: 2026-09-24
 
-- Pre-registered in `docs/protocol.md` (422d9fa) before the code (b281d24):
-  a probe-exact answer that mentions a catalog frame-number or time field,
-  frame.*, _ws.*, a stream index, a generator identifier or an unstated
-  capture constant is `shortcut`, never strong exact; ORs are only counted.
+- Pre-registered in `docs/protocol.md` (422d9fa) before the code; a review
+  then found an octal-literal crash and rule gaps, amended before any test
+  call (8b2f578, 42274fd). A probe-exact answer naming capture position or
+  state, a generator identifier or an unstated generator constant is
+  `shortcut`, never strong exact; ORs are only counted.
 - Ablation 006, `keep_full`: catalog types catch 2,470 of 2,470 frame-number
-  and time fields, names alone 13. Of 8 shortcut filters written up front, 6
+  and time fields, names alone 21. Of 8 shortcut filters written up front, 6
   match their probes; Full flags all 6, names alone pass 3 as strong exact.
-  No gold candidate (264) or committed answer (84) is flagged.
-- Both runs and controls re-scored: no outcome changed, at most one OR per
-  answer. The CI python job passes in the test image: 938 tests, 1 skipped,
-  96.37 percent coverage.
+  No gold candidate (264) or committed answer (84) is flagged; no outcome of
+  the committed runs changes. The CI python job passes in the test image:
+  973 tests, 1 skipped, 96.37 percent coverage.
 
 ## Planned next
 
