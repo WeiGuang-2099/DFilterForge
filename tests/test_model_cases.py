@@ -80,27 +80,43 @@ def test_gold_slots_must_fit_the_gold_status(
         )
 
 
-def test_non_ready_items_follow_every_ready_item(
+def test_each_split_and_status_numbers_its_own_block(
     split: model_split.ModelSplitArtifacts,
 ) -> None:
+    """A case added to one block renumbers no item of another."""
     routes = split.gold.item_to_case
-    ready_ids = [
+    by_id = {item.item_id: item for item in split.inputs}
+    ready_dev = sorted(
         item_id
         for item_id, case_id in routes.items()
-        if case_id not in {_CLARIFY.case_id, _INEXPRESSIBLE.case_id}
-    ]
-    non_ready_ids = sorted(set(routes) - set(ready_ids))
+        if by_id[item_id].split == "dev" and case_id != _CLARIFY.case_id
+    )
 
     assert split.gold.non_ready == (_CLARIFY.gold(), _INEXPRESSIBLE.gold())
-    assert max(ready_ids) < min(non_ready_ids)
-    first = len(ready_ids) + 1
-    assert non_ready_ids == [f"mei-{first + step:04d}" for step in range(4)]
-    by_id = {item.item_id: item for item in split.inputs}
-    assert by_id[non_ready_ids[0]].intent == _CLARIFY.paraphrases[0]
-    assert (by_id[non_ready_ids[0]].split, by_id[non_ready_ids[2]].split) == (
-        "dev",
-        "test",
-    )
+    assert ready_dev == [f"mei-{index:04d}" for index in range(1, 25)]
+    assert sorted(
+        item_id
+        for item_id, case_id in routes.items()
+        if case_id == _CLARIFY.case_id
+    ) == ["mei-0501", "mei-0502"]
+    assert by_id["mei-0501"].intent == _CLARIFY.paraphrases[0]
+    assert by_id["mei-1001"].split == "test"
+    assert routes["mei-1501"] == _INEXPRESSIBLE.case_id
+    assert [item.item_id for item in split.inputs][23:27] == [
+        "mei-0024",
+        "mei-0501",
+        "mei-0502",
+        "mei-1001",
+    ]
+
+
+def test_a_full_item_block_stops_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(model_split, "_BLOCK_ITEMS", 2)
+
+    with pytest.raises(ValueError, match="block"):
+        generate_model_split(tmp_path)
 
 
 def test_routing_counts_non_ready_cases_like_ready_ones(

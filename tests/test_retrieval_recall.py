@@ -32,7 +32,7 @@ from dfilterforge.runner import TsharkRunner
 
 _ROOT = Path(__file__).parents[1]
 _DEV_IDS = tuple(f"mei-{index:04d}" for index in range(1, 17))
-_TEST_IDS = tuple(f"mei-{index:04d}" for index in range(17, 49))
+_TEST_IDS = tuple(f"mei-{index:04d}" for index in range(1001, 1033))
 _SOURCE_FILES = (
     "scripts/retrieval_recall.py",
     "src/dfilterforge/field_retrieval.py",

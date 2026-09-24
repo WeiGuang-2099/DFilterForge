@@ -60,10 +60,9 @@ from dfilterforge.scoring import score_run
 
 _LABELS = ("C1", "C2", "C3", "C4")
 _LEXICAL_LABELS = ("C2", "C4")
-# Prepare selects the dev items: the ready ones, then the non-ready ones,
-# which are numbered after every test item.
+# Prepare selects the dev items: the ready block, then the non-ready one.
 _DEV_ITEM_IDS = tuple(
-    f"mei-{index:04d}" for index in (*range(1, 25), *range(105, 121))
+    f"mei-{index:04d}" for index in (*range(1, 25), *range(501, 517))
 )
 _DEV_ITEMS = len(_DEV_ITEM_IDS)
 # One request per dev item and condition.

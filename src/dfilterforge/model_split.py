@@ -11,6 +11,7 @@ gold is written separately from model inputs.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 import hashlib
 import json
@@ -27,6 +28,7 @@ from dfilterforge.evaluation import ProbeExpectationV1
 from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.model_cases import model_non_ready_cases
+from dfilterforge.model_cases import ModelNonReadyCase
 from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_cases import ModelSemanticCase
 from dfilterforge.model_dev_cases import ready_dev_cases
@@ -59,6 +61,17 @@ _CASE_ASSUMPTIONS: dict[str, tuple[str, ...]] = {
         "dns.* response flag.",
     ),
 }
+# The first item number of each split's ready and non-ready cases. Each
+# block is numbered on its own, so a case added to one block renumbers no
+# item of another: the dev items published runs answered keep their IDs,
+# and no dev change moves a test ID.
+_ITEM_BLOCKS: dict[tuple[ModelSplit, bool], int] = {
+    ("dev", True): 1,
+    ("dev", False): 501,
+    ("test", True): 1001,
+    ("test", False): 1501,
+}
+_BLOCK_ITEMS = 500
 _PROVENANCE = (
     "Model evaluation cases authored as held-out compositions over the same "
     "packet recipes and protocol families as dfilterforge.benchmark/v1. Dev "
@@ -152,12 +165,7 @@ class ModelSplitArtifacts:
 
 
 def model_semantic_cases() -> tuple[ModelSemanticCase, ...]:
-    """Returns the ready dev compositions, then the ready test ones.
-
-    Dev comes first so that the dev items a published run answered keep
-    their IDs. A new dev case renumbers the test items, which is harmless
-    only while no test item has been sent.
-    """
+    """Returns the ready dev compositions, then the ready test ones."""
     return (*ready_dev_cases(), *ready_test_cases())
 
 
@@ -281,12 +289,58 @@ def _build_gold_case(
     )
 
 
+def _numbered_items(
+    cases: Sequence[ModelSemanticCase],
+    non_ready: Sequence[ModelNonReadyCase],
+) -> tuple[list[ModelInputItemV1], dict[str, str]]:
+    """Numbers every request in its block and routes it to its case.
+
+    Args:
+        cases: The ready cases, dev first.
+        non_ready: The non-ready cases.
+
+    Returns:
+        The model items in block order and the item-to-case routing.
+
+    Raises:
+        ValueError: If a block holds more items than it has numbers.
+    """
+    inputs: list[ModelInputItemV1] = []
+    routes: dict[str, str] = {}
+    for (split, ready), first in _ITEM_BLOCKS.items():
+        block = [
+            case
+            for case in (cases if ready else non_ready)
+            if case.split == split
+        ]
+        if 2 * len(block) > _BLOCK_ITEMS:
+            raise ValueError(
+                f"the {split} item block for ready={ready} is full"
+            )
+        for number, (case, intent) in enumerate(
+            ((case, intent) for case in block for intent in case.paraphrases),
+            first,
+        ):
+            item_id = f"mei-{number:04d}"
+            inputs.append(
+                ModelInputItemV1(
+                    item_id=item_id,
+                    intent=intent,
+                    user_assumptions=_USER_ASSUMPTIONS,
+                    split=case.split,
+                )
+            )
+            routes[item_id] = case.case_id
+    return inputs, routes
+
+
 def generate_model_split(output_dir: Path) -> ModelSplitArtifacts:
     """Writes model-safe inputs, evaluator-only gold, and six captures.
 
     Existing generated files with the same names are replaced. No descriptive
     case identity, typed IR, filter, probe, frame, or capture metadata enters
-    ``model_inputs.jsonl``.
+    ``model_inputs.jsonl``. Items are numbered in the blocks of
+    ``_ITEM_BLOCKS``: dev ready, dev non-ready, test ready, test non-ready.
 
     Args:
         output_dir: Destination for the two contracts and selected captures.
@@ -299,23 +353,7 @@ def generate_model_split(output_dir: Path) -> ModelSplitArtifacts:
     probes_by_id = {probe.probe_id: probe for probe in capture_probes}
     cases = model_semantic_cases()
     non_ready = model_non_ready_cases()
-    inputs: list[ModelInputItemV1] = []
-    routes: dict[str, str] = {}
-    next_item_id = 1
-    # Non-ready cases come last, so adding one never renumbers a ready item.
-    for case in (*cases, *non_ready):
-        for intent in case.paraphrases:
-            item_id = f"mei-{next_item_id:04d}"
-            next_item_id += 1
-            inputs.append(
-                ModelInputItemV1(
-                    item_id=item_id,
-                    intent=intent,
-                    user_assumptions=_USER_ASSUMPTIONS,
-                    split=case.split,
-                )
-            )
-            routes[item_id] = case.case_id
+    inputs, routes = _numbered_items(cases, non_ready)
     gold = ModelGoldV1(
         cases=tuple(_build_gold_case(case, probes_by_id) for case in cases),
         non_ready=tuple(case.gold() for case in non_ready),
