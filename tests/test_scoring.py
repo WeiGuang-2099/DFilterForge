@@ -232,9 +232,17 @@ def _install_live(
     return calls
 
 
-# The runs below are built from the ready dev cases.
+# The runs below are built from the ready dev cases alone. The tests that
+# exercise non-ready gold install their own cases, so no count here moves
+# when the non-ready table does.
 _DEV_CASES = sum(case.split == "dev" for case in model_semantic_cases())
 _DEV_ITEMS = 2 * _DEV_CASES
+
+
+@pytest.fixture(name="ready_gold_only", autouse=True)
+def fixture_ready_gold_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keeps the committed non-ready table out of every generated split."""
+    monkeypatch.setattr(model_split_module, "model_non_ready_cases", lambda: ())
 
 
 def _prompt(

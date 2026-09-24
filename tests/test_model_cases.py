@@ -1,5 +1,6 @@
 """Non-ready gold: its record, its items and how scoring routes and hashes it."""
 
+from collections import Counter
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.intent_ir import MissingSlot
+from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_cases import ModelNonReadyCase
 from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_split import generate_model_split
@@ -166,3 +168,25 @@ def test_scoring_routes_non_ready_items_and_hashes_their_gold(
     with pytest.raises(ScoringError) as error:
         selected_cases(batch.prompts, split.gold, "test")
     assert error.value.code == "split_violation"
+
+
+def test_the_committed_non_ready_table_balances_status_and_split() -> None:
+    """Four of each status on dev and eight of each on test."""
+    cases = model_non_ready_cases()
+    counts = Counter((case.split, case.status) for case in cases)
+
+    assert counts == {
+        ("dev", "needs_clarification"): 4,
+        ("dev", "not_expressible"): 4,
+        ("test", "needs_clarification"): 8,
+        ("test", "not_expressible"): 8,
+    }
+    assert len({case.case_id for case in cases}) == len(cases)
+    ready_ids = {case.case_id for case in model_split.model_semantic_cases()}
+    assert not ready_ids & {case.case_id for case in cases}
+    for case in cases:
+        record = case.gold()
+        assert bool(record.missing_slots) is (
+            case.status == "needs_clarification"
+        )
+        assert len(set(case.paraphrases)) == 2

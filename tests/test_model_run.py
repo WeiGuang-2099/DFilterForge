@@ -44,8 +44,10 @@ from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievedFieldV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
+from dfilterforge.model_cases import ModelNonReadyCaseV1
 from dfilterforge.model_client import API_KEY_ENV
 from dfilterforge.model_split import generate_model_split
+from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelInputItemV1
@@ -58,7 +60,11 @@ from dfilterforge.scoring import score_run
 
 _LABELS = ("C1", "C2", "C3", "C4")
 _LEXICAL_LABELS = ("C2", "C4")
-_DEV_ITEM_IDS = tuple(f"mei-{index:04d}" for index in range(1, 25))
+# Prepare selects the dev items: the ready ones, then the non-ready ones,
+# which are numbered after every test item.
+_DEV_ITEM_IDS = tuple(
+    f"mei-{index:04d}" for index in (*range(1, 25), *range(105, 121))
+)
 _DEV_ITEMS = len(_DEV_ITEM_IDS)
 # One request per dev item and condition.
 _PASS_REQUESTS = len(_LABELS) * _DEV_ITEMS
@@ -2027,7 +2033,7 @@ def _reply_body(content: str) -> bytes:
 class _GoldReplies:
     """Answers each prompt from the gold case its own intent routes to."""
 
-    def __init__(self, cases: Mapping[str, ModelGoldCaseV1]) -> None:
+    def __init__(self, cases: Mapping[str, GoldCase]) -> None:
         """Stores the intent-to-case routing this endpoint answers from."""
         self.cases = cases
         self.received: list[_Received] = []
@@ -2041,7 +2047,29 @@ class _GoldReplies:
             json.loads(messages[1]["content"][len(_INPUT_PREFIX) :]),
         )
         case = self.cases[cast(str, payload["intent"])]
-        if '"direct-filter/1.0"' in messages[0]["content"]:
+        direct = '"direct-filter/1.0"' in messages[0]["content"]
+        if isinstance(case, ModelNonReadyCaseV1):
+            status = GenerationStatus(case.status)
+            question = (
+                "Which one?"
+                if status is GenerationStatus.NEEDS_CLARIFICATION
+                else None
+            )
+            envelope = (
+                DirectFilterResultV1(
+                    status=status,
+                    clarifying_question=question,
+                    missing_slots=case.missing_slots,
+                )
+                if direct
+                else GenerationResultV1(
+                    status=status,
+                    clarifying_question=question,
+                    missing_slots=case.missing_slots,
+                )
+            )
+            return 200, _reply_body(canonical_json(envelope))
+        if direct:
             return 200, _reply_body(
                 canonical_json(
                     DirectFilterResultV1(
@@ -2070,7 +2098,10 @@ def test_published_run_scores_end_to_end(
     """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
     artifacts = generate_model_split(tmp_path / "source")
-    by_case = {case.case_id: case for case in artifacts.gold.cases}
+    by_case: dict[str, GoldCase] = {
+        case.case_id: case for case in artifacts.gold.cases
+    }
+    by_case.update({case.case_id: case for case in artifacts.gold.non_ready})
     routing = {
         item.intent: by_case[artifacts.gold.item_to_case[item.item_id]]
         for item in artifacts.inputs
@@ -2104,8 +2135,10 @@ def test_published_run_scores_end_to_end(
 
     report = score_run(published, code_revision="integration-test")
 
+    ready = sum(isinstance(case, ModelGoldCaseV1) for case in routing.values())
     assert report.items == _PASS_REQUESTS
-    assert report.outcomes["strong_exact"] == _PASS_REQUESTS
+    assert report.outcomes["strong_exact"] == len(_LABELS) * ready
+    assert report.outcomes["abstained"] == _PASS_REQUESTS - len(_LABELS) * ready
     assert sum(report.outcomes.values()) == _PASS_REQUESTS
     scored = published / "scored"
     assert (scored / "summary.json").is_file()

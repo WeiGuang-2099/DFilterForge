@@ -8,6 +8,7 @@ import re
 
 from dfilterforge.benchmark import generate_benchmark
 from dfilterforge.benchmark import RECIPES
+from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldV1
@@ -29,7 +30,8 @@ def test_model_inputs_lines_contain_exactly_the_allowed_keys(
 ) -> None:
     artifacts, lines = _split(tmp_path)
 
-    assert len(lines) == 2 * len(model_semantic_cases()) == 104
+    cases = (*model_semantic_cases(), *model_non_ready_cases())
+    assert len(lines) == 2 * len(cases) == 152
     documents = [json.loads(line) for line in lines]
     assert all(set(document) == _ALLOWED_KEYS for document in documents)
     items = [
@@ -53,7 +55,9 @@ def test_model_inputs_never_leak_evaluator_gold(tmp_path: Path) -> None:
         "intent_ir",
         "canonical_ir",
         "case_id",
-        "probe",
+        # The key, not the word: a request may say probe as a port
+        # scanner does. The probe ids themselves are checked below.
+        "probe_id",
         "sha256",
     ):
         assert marker not in text
