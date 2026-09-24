@@ -80,9 +80,14 @@ def _gold_items() -> tuple[_GoldItem, ...]:
     with TemporaryDirectory(prefix="dfilterforge-recall-split-") as staging:
         artifacts = generate_model_split(Path(staging))
     cases = {case.case_id: case for case in artifacts.gold.cases}
+    # Non-ready gold names no field, so it has no recall to measure.
+    non_ready = {case.case_id for case in artifacts.gold.non_ready}
     items: list[_GoldItem] = []
     for item in artifacts.inputs:
-        case = cases.get(artifacts.gold.item_to_case.get(item.item_id, ""))
+        case_id = artifacts.gold.item_to_case.get(item.item_id, "")
+        if case_id in non_ready:
+            continue
+        case = cases.get(case_id)
         if case is None:
             raise RecallError(
                 "gold_routing_invalid", "A model item has no gold case"

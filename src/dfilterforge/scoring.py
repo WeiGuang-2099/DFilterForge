@@ -474,7 +474,8 @@ def verify_gold(
         The measured execution environment, identical for every case.
 
     Raises:
-        ScoringError: With code ``gold_invalid`` naming the offending case.
+        ScoringError: With code ``gold_invalid`` naming the offending case,
+            or ``run_layout_invalid`` when no prompt reaches ready gold.
     """
     for case in cases:
         for gold in (case.spec.reference_filter, case.spec.canonical_ir):
@@ -503,7 +504,10 @@ def verify_gold(
                 "gold_invalid", f"{case.case_id}: canonical IR is not exact"
             )
         environment = measured
-    assert environment is not None
+    if environment is None:
+        raise ScoringError(
+            "run_layout_invalid", "No committed prompt reaches ready gold"
+        )
     return environment
 
 

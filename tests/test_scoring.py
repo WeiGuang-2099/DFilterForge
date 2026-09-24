@@ -739,23 +739,41 @@ _INEXPRESSIBLE_GOLD = ModelNonReadyCaseV1(
     status="not_expressible",
     rationale="A ranking across packets is not a per-packet test.",
 )
+_TWO_SLOT_GOLD = ModelNonReadyCaseV1(
+    case_id="unnamed-service",
+    split="dev",
+    status="needs_clarification",
+    missing_slots=(MissingSlot.ADDRESS, MissingSlot.PORT),
+    rationale="Neither host nor port is given.",
+)
 
 
+@pytest.mark.parametrize(
+    ("output_contract", "reply", "candidate_filter", "ready_ir"),
+    [
+        (OutputContractV1.DISPLAY_FILTER, _filter_reply(), _REFERENCE, None),
+        (OutputContractV1.TYPED_IR, _ir_reply(), None, _canonical_ir()),
+    ],
+)
 def test_a_ready_answer_to_non_ready_gold_is_false_ready_and_never_runs(
     monkeypatch: pytest.MonkeyPatch,
+    output_contract: OutputContractV1,
+    reply: str,
+    candidate_filter: str | None,
+    ready_ir: IntentIrV1 | None,
 ) -> None:
     """Answering a question that has no filter is caught without tshark."""
     calls = _install_live(monkeypatch)
 
-    outcome, receipt, _ = _score(
-        _prompt(OutputContractV1.DISPLAY_FILTER),
-        _completion(response_text=_filter_reply()),
+    outcome, receipt, intent = _score(
+        _prompt(output_contract),
+        _completion(response_text=reply),
         case=_CLARIFY_GOLD,
     )
 
     assert outcome.outcome is OutcomeV1.FALSE_READY
     assert (receipt, calls) == (None, [])
-    assert outcome.candidate_filter == _REFERENCE
+    assert (outcome.candidate_filter, intent) == (candidate_filter, ready_ir)
     assert outcome.gold_field_count == 0
     assert (
         outcome.gold_status,
@@ -783,6 +801,19 @@ def test_a_ready_answer_to_non_ready_gold_is_false_ready_and_never_runs(
             False,
         ),
         (_CLARIFY_GOLD, {"status": "not_expressible"}, False, False),
+        # Naming one of two gold slots is enough.
+        (
+            _TWO_SLOT_GOLD,
+            {"clarifying_question": "Which port?", "missing_slots": ["port"]},
+            True,
+            True,
+        ),
+        (
+            _TWO_SLOT_GOLD,
+            {"clarifying_question": "Which?", "missing_slots": ["value"]},
+            True,
+            False,
+        ),
         (_INEXPRESSIBLE_GOLD, {"status": "not_expressible"}, True, None),
         (
             _INEXPRESSIBLE_GOLD,
@@ -815,6 +846,49 @@ def test_abstentions_on_non_ready_gold_record_status_and_slot_matches(
         status_match,
         slot_match,
     )
+
+
+@pytest.mark.parametrize(
+    ("gold", "matches"),
+    [(_CLARIFY_GOLD, (False, False)), (_INEXPRESSIBLE_GOLD, (False, None))],
+)
+def test_a_malformed_answer_to_non_ready_gold_stays_in_every_denominator(
+    monkeypatch: pytest.MonkeyPatch,
+    gold: ModelNonReadyCaseV1,
+    matches: tuple[bool, bool | None],
+) -> None:
+    """Unparseable output matches no status and, on clarification gold,
+    counts as a slot miss."""
+    _install_live(monkeypatch)
+
+    outcome, _, _ = _score(
+        _prompt(OutputContractV1.DISPLAY_FILTER),
+        _completion(response_text="not json"),
+        case=gold,
+    )
+
+    assert outcome.outcome is OutcomeV1.MALFORMED
+    assert outcome.gold_status == gold.status
+    assert (outcome.status_match, outcome.slot_match) == matches
+
+
+def test_a_run_that_reaches_no_ready_gold_is_a_layout_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gold preflight needs a ready case to measure the environment on."""
+    _install_live(monkeypatch)
+
+    with pytest.raises(ScoringError) as error:
+        verify_gold(
+            [],
+            Path("captures"),
+            run_id="dev-0001",
+            created_at=_CREATED_AT,
+            code_revision="revision",
+            runner=_RUNNER,
+        )
+
+    assert error.value.code == "run_layout_invalid"
 
 
 def test_a_failed_or_ready_gold_item_carries_no_false_match(
@@ -898,6 +972,20 @@ def test_score_run_scores_non_ready_gold_and_publishes_it(
     assert summary.gold_hash != before.gold_hash
     assert (run_dir / "scored" / "specs" / "unnamed-server.json").exists()
     assert mutation.outcomes[OutcomeV1.FALSE_READY.value] == 4
+    reference = score_run(
+        run_dir, code_revision="revision", control="reference"
+    )
+    control = ScoreSummaryV1.model_validate_json(
+        (reference.output_dir / "summary.json").read_bytes()
+    )
+    assert reference.items == 40
+    assert reference.outcomes[OutcomeV1.ABSTAINED.value] == 8
+    for label in ("C1", "C3"):
+        condition = control.conditions[label]
+        assert condition.false_ready is not None
+        assert condition.false_ready.value == 0.0
+        assert condition.slot_match is not None
+        assert condition.slot_match.value == 1.0
 
 
 def test_display_filter_goes_in_unchanged_and_typed_ir_as_ir(

@@ -3,10 +3,12 @@
 This module executes nothing and reads nothing from disk; it is the only
 place where paraphrase averaging, case-level rates and the seeded bootstrap
 are defined. A bootstrap interval is reproducible only for an unchanged case
-universe: the index vectors are drawn from the number of distinct case_id
-values in the whole outcome sequence, so adding a condition that covers a
-case no other condition covers changes every interval in the summary.
-``bootstrap.cases`` is recorded next to the numbers for exactly that reason.
+universe. Ready and non-ready gold are two universes, each with its own
+seeded index vectors drawn from its own number of distinct case_id values,
+so adding a condition that covers a case no other condition covers changes
+every interval of that case's universe. ``bootstrap.cases`` records the
+ready count and ``bootstrap.non_ready_cases``, present only when non-ready
+gold was scored, the other.
 
 How the result is printed lives in :mod:`dfilterforge.score_report`, which
 reads this module and is never read by it.
@@ -20,7 +22,7 @@ from enum import StrEnum
 import math
 import random
 import re
-from typing import Literal, TypeAlias
+from typing import Literal, NamedTuple, TypeAlias
 
 from pydantic import Field
 from pydantic import field_validator
@@ -204,7 +206,9 @@ class ConditionSummaryV1(FrozenModel):
 
     The rates from ``compile_valid`` to ``over_abstention`` cover the items
     whose gold is ready; ``false_ready`` and ``slot_match`` cover the
-    non-ready ones and stay None when the run has none. ``items``, the
+    non-ready ones and stay None when the run has none;
+    ``false_ready_by_status`` holds one false-ready rate per non-ready gold
+    status present, on the same non-ready vectors. ``items``, the
     outcome census and ``usage`` cover every item. ``outcomes`` always
     holds one zero-filled key per :class:`OutcomeV1` value.
     ``error_codes`` is the complete per-code census, and
@@ -229,6 +233,7 @@ class ConditionSummaryV1(FrozenModel):
     silent_wrong_of_executable: RateV1
     over_abstention: RateV1
     false_ready: RateV1 | None = None
+    false_ready_by_status: dict[str, RateV1] = Field(default_factory=dict)
     slot_match: RateV1 | None = None
     gold_field_recall: RecallV1 | None = None
     usage: UsageV1
@@ -361,16 +366,17 @@ _DEFAULT_NOT_MEASURED: dict[str, str] = {
 
 
 def _draw_indices(n: int) -> tuple[tuple[int, ...], ...]:
-    """Draws the resample index vectors shared by every reported number.
+    """Draws the resample index vectors for one case universe.
 
     The vectors depend only on ``n``, so the same seed reproduces the same
     intervals if and only if the case universe is unchanged. Reusing one
-    set of vectors for every metric, condition and comparison is what makes
-    the comparisons paired and keeps an existing condition's interval
-    unchanged when a later condition covering the same case ids is added.
+    set of vectors for every metric, condition and comparison of a universe
+    is what makes the comparisons paired and keeps an existing condition's
+    interval unchanged when a later condition covering the same case ids is
+    added.
 
     Args:
-        n: The number of distinct case ids in the whole outcome sequence.
+        n: The number of distinct case ids in the universe.
 
     Returns:
         ``BOOTSTRAP_RESAMPLES`` vectors of ``n`` case indices each.
@@ -675,18 +681,41 @@ class _Universe:
         return cls(case_ids, _draw_indices(len(case_ids)))
 
 
+class _NonReadyRates(NamedTuple):
+    """False-ready overall and per gold status, and slot match."""
+
+    false_ready: RateV1 | None
+    by_status: dict[str, RateV1]
+    slot_match: RateV1 | None
+
+
 def _non_ready_rates(
     items: Sequence[ItemOutcomeV1], universe: _Universe
-) -> tuple[RateV1 | None, RateV1 | None]:
-    """Rates false-ready answers and, where slots are gold, slot matches."""
+) -> _NonReadyRates:
+    """Rates false-ready answers and, where slots are gold, slot matches.
+
+    The pilot gate bounds false-ready for each non-ready status, so the
+    rate is also reported per status, over that status's cases.
+    """
     if not items:
-        return None, None
+        return _NonReadyRates(None, {}, None)
     false_ready = _rate(
         _case_values(items, _FALSE_READY), universe.vectors, universe.case_ids
     )
+    by_status = {
+        status: _rate(
+            _case_values(
+                [item for item in items if item.gold_status == status],
+                _FALSE_READY,
+            ),
+            universe.vectors,
+            universe.case_ids,
+        )
+        for status in sorted({item.gold_status for item in items})
+    }
     slotted = [item for item in items if item.slot_match is not None]
     if not slotted:
-        return false_ready, None
+        return _NonReadyRates(false_ready, by_status, None)
     slot_match = _rate(
         _case_means(
             [
@@ -697,7 +726,7 @@ def _non_ready_rates(
         universe.vectors,
         universe.case_ids,
     )
-    return false_ready, slot_match
+    return _NonReadyRates(false_ready, by_status, slot_match)
 
 
 # pylint: disable-next=too-many-arguments,too-many-positional-arguments
@@ -715,7 +744,7 @@ def _condition_summary(
     strong = _case_values(ready_items, _STRONG_EXACT)
     silent = _case_values(ready_items, _SILENT_WRONG)
     abstained = _case_values(ready_items, _ABSTAINED)
-    false_ready, slot_match = _non_ready_rates(
+    rates = _non_ready_rates(
         [item for item in items if item.gold_status != "ready"], non_ready
     )
     return ConditionSummaryV1(
@@ -733,8 +762,9 @@ def _condition_summary(
             silent, executable, vectors, case_ids
         ),
         over_abstention=_rate(abstained, vectors, case_ids),
-        false_ready=false_ready,
-        slot_match=slot_match,
+        false_ready=rates.false_ready,
+        false_ready_by_status=rates.by_status,
+        slot_match=rates.slot_match,
         gold_field_recall=_recall(ready_items),
         usage=_usage(items, prices),
     )

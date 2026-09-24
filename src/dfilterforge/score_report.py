@@ -276,6 +276,11 @@ def _footnotes(summary: ScoreSummaryV1) -> list[str]:
     """
     lines = [_COMPILE_VALID_NOTE]
     conditions = summary.conditions.values()
+    if any(item.false_ready is not None for item in conditions):
+        lines.append(
+            "Items, Shortcut, Provider failed and Malformed count non-ready"
+            " items too; every rate in this table covers ready gold only."
+        )
     failed = sum(item.usage.latency_failed_items for item in conditions)
     if failed:
         subject = "failure is" if failed == 1 else "failures are"
@@ -319,9 +324,15 @@ def _thin_intervals(summary: ScoreSummaryV1) -> list[str]:
             ("silent-wrong (all)", condition.silent_wrong_all),
             ("silent-wrong (exec)", condition.silent_wrong_of_executable),
             ("over-abstention", condition.over_abstention),
+            ("false-ready", condition.false_ready),
+            ("slot match", condition.slot_match),
         )
         for name, rate in rates:
-            if rate.low is None or rate.resamples_used >= BOOTSTRAP_RESAMPLES:
+            if (
+                rate is None
+                or rate.low is None
+                or rate.resamples_used >= BOOTSTRAP_RESAMPLES
+            ):
                 continue
             thin.append(f"{label} {name} {rate.resamples_used:,}")
     return thin
@@ -359,6 +370,11 @@ def _comparison_lines(summary: ScoreSummaryV1) -> list[str]:
     return lines
 
 
+def _render_optional(rate: RateV1 | None) -> str:
+    """Renders a rate, or n/a when its gold was not in the run."""
+    return "n/a" if rate is None else _render_rate(rate)
+
+
 def _non_ready_lines(summary: ScoreSummaryV1) -> list[str]:
     """Renders false-ready and slot-match rates when non-ready gold ran."""
     measured = [
@@ -372,19 +388,20 @@ def _non_ready_lines(summary: ScoreSummaryV1) -> list[str]:
     lines = [
         _NON_READY_HEADING,
         "",
-        "| Condition | False-ready | Slot match |",
-        "| --- | ---: | ---: |",
+        "| Condition | False-ready | Clarification | Not expressible"
+        " | Slot match |",
+        "| --- | ---: | ---: | ---: | ---: |",
     ]
     for condition in measured:
         assert condition.false_ready is not None
-        slot = (
-            "n/a"
-            if condition.slot_match is None
-            else _render_rate(condition.slot_match)
-        )
+        cells = [
+            _render_optional(condition.false_ready_by_status.get(status))
+            for status in ("needs_clarification", "not_expressible")
+        ]
         lines.append(
             f"| {condition.condition}"
-            f" | {_render_rate(condition.false_ready)} | {slot} |"
+            f" | {_render_rate(condition.false_ready)} | {cells[0]}"
+            f" | {cells[1]} | {_render_optional(condition.slot_match)} |"
         )
     lines.append("")
     lines.append(
@@ -423,8 +440,13 @@ def render_markdown(summary: ScoreSummaryV1) -> str:
             f" {BOOTSTRAP_SEED}, nearest-rank"
             f" {LOW_PERCENTILE * 100:.1f} and"
             f" {HIGH_PERCENTILE * 100:.1f} percentiles,"
-            " index vectors shared by every metric, drawn from"
-            f" {summary.bootstrap['cases']} cases."
+            + (
+                " index vectors shared by every ready-gold metric, drawn"
+                f" from {summary.bootstrap['cases']} ready cases."
+                if "non_ready_cases" in summary.bootstrap
+                else " index vectors shared by every metric, drawn from"
+                f" {summary.bootstrap['cases']} cases."
+            )
         ),
         "",
         _CONDITIONS_HEADING,

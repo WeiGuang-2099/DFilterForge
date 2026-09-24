@@ -11,6 +11,7 @@ from typing import cast, Protocol
 
 import pytest
 
+from dfilterforge import model_split
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import file_sha256
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
@@ -21,6 +22,8 @@ from dfilterforge.field_catalog import FieldType
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
 from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.generation import RetrievedFieldV1
+from dfilterforge.intent_ir import MissingSlot
+from dfilterforge.model_cases import ModelNonReadyCase
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelInputItemV1
@@ -548,6 +551,29 @@ def test_an_item_without_gold_stops_the_measurement(
     with pytest.raises(DFilterForgeError) as caught:
         retrieval_recall.measure(catalog, ("dev",), (16,))
     assert caught.value.code == "gold_routing_invalid"
+
+
+def test_non_ready_items_have_no_recall_to_measure(
+    catalog: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        model_split,
+        "model_non_ready_cases",
+        lambda: (
+            ModelNonReadyCase(
+                case_id="unnamed-server",
+                split="dev",
+                status="needs_clarification",
+                paraphrases=("Show traffic to the file server.", "Find it."),
+                missing_slots=(MissingSlot.ADDRESS,),
+                rationale="No host is given.",
+            ),
+        ),
+    )
+
+    receipt = retrieval_recall.measure(catalog, ("dev",), (16,))
+
+    assert _at(receipt, "dev", 16)["items"] == 16
 
 
 def test_every_dev_intent_retrieves_over_the_real_catalog() -> None:
