@@ -84,9 +84,9 @@ number; every rate below except false-ready and slot match covers ready gold.
   after one feedback round, fed by a fourth unscored probe.
 - abstention (both contracts, no human rubric): over-abstention on ready gold.
   false-ready: a ready answer to needs_clarification or not_expressible gold,
-  never executed, over non-ready items. Slot match: over needs_clarification
-  items, the answer asks for clarification and its missing_slots meet the gold
-  slots. Whether an abstention names the gold status is recorded per item. The
+  never executed, over non-ready items, reported overall and per gold status.
+  Slot match: over needs_clarification items, the answer asks for
+  clarification and its missing_slots name at least one gold slot. Whether an abstention names the gold status is recorded per item. The
   reference control answers non-ready gold with its status and slots, the
   mutation control with a ready filter (display-filter conditions only).
 - field context (C2 and C4): share of cases, paraphrases averaged, with every
