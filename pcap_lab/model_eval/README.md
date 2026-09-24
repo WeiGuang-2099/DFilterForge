@@ -28,10 +28,11 @@ The dev split has 8 canonical cases and uses capture instances
 `semantic-11`, `semantic-17`, and `semantic-23`. The test split has 16
 canonical cases and uses `semantic-31`, `semantic-37`, and `semantic-43`.
 Each file is a copy of the benchmark capture of that name, kept byte for byte,
-followed by the 31 witness packets of `dfilterforge.witnesses`: packets that
+followed by the 33 witness packets of `dfilterforge.witnesses`: packets that
 separate near-miss filters (a port or address written for the wrong side, an
-ACK or sequence number read as a flag, a TTL, port or subnet bound moved by
-one, another DNS code) that the benchmark recipes alone leave exact. The
+ACK or sequence number read as a flag, a flag read as the whole flag byte, DNS
+read as port 53, a TTL, port or subnet bound moved by one, another DNS code)
+that the benchmark recipes alone leave exact. The
 witness bytes are seed-derived, so no packet is shared between dev and test.
 `scripts/probe_adequacy.py` checks every label with tshark on all six probes
 and fails on any single-site mutant of a gold case (from the fixed operator

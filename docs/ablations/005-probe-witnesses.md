@@ -190,3 +190,5 @@ paraphrases stay frozen so later dev runs repeat them; new paraphrases should
 name it.
 Ablation 004's raw-filter evidence pins the semantic-11/17/23 hashes from
 before the tail and is not reproducible from current code.
+Addendum 2026-09-24: two operator families and two witness packets were added
+([DNS and FIN correction](../decisions/dns-off-port-and-fin-ack.md)).

@@ -86,3 +86,6 @@ Open, for the next gold correction under `docs/protocol.md`: C3/mei-0011
 that tshark decodes as DNS on a port other than 53; scored silent-wrong it would give C3 7.
 No probe holds a FIN+ACK segment, so a filter requiring FIN with ACK clear scores exact; no
 v2 answer relies on it. Both are near misses outside the fixed mutant operator set.
+Closed on 2026-09-24 by the [DNS and FIN correction](dns-off-port-and-fin-ack.md): against gold
+8a061589fe6c, C3/mei-0011 is silent-wrong and v2 C3 is 7 of 16; the numbers above are against
+57db1369ae6f.

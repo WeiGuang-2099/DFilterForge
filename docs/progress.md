@@ -1,12 +1,13 @@
 # Implementation Progress
 
-Last updated: 2026-09-23
+Last updated: 2026-09-24
 
 ## Current slice
 
-Probe witnesses and the mutation-adequacy gate for the model split (ablation
-005) are implemented and verified. Local generated benchmark reports stay under
-the ignored `artifacts/` directory and are not uploadable project evidence.
+The DNS and FIN gold correction
+(`docs/decisions/dns-off-port-and-fin-ack.md`) is implemented and verified.
+Local generated benchmark reports stay under the ignored `artifacts/`
+directory and are not uploadable project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -137,11 +138,28 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
   C1 and C2 prompts changed 6 of 32 answer texts and 1 outcome, so no
   single-item difference is an effect (`docs/decisions/typed-ir-prompt-v2.md`).
 
+## DNS and FIN gold correction: 2026-09-24
+
+- The pylint command CI runs failed in the test image from 33ad868 on
+  (`generation.py` line 83 of 80 characters). 75ccc59 adds a targeted
+  disable; all three system prompt hashes are unchanged.
+- Two mutant families, protocol-as-port and flag-as-byte, bring the gate to
+  192 mutants. On the 31-witness probes 3 survived without a waiver (dev 2,
+  test 1). A DNS query to 10.2.3.6 port 52 and a FIN+ACK from port 443 make
+  the tail 33 packets; strict mode then has 0 unwaived survivors and the same
+  4 equivalent waivers, and every label check matches on all six probes.
+- Both runs and their controls were re-scored in place (gold 8a061589fe6c).
+  Only v2 C3/mei-0011 flipped, strong exact to silent-wrong: v2 C3 is 7 of 16
+  and C4 - C3 +0.188 [0.000, 0.500], inconclusive. Controls stay 64/64 and
+  32/32; `--check` reproduces all six outputs.
+- Every step of the CI python job passes, run in the test image at 6079cec
+  (888 tests, 1 skipped) and at a1d3724 (899 tests, 1 skipped, 96.35 percent
+  branch-aware coverage).
+
 ## Planned next
 
-1. Gold correction for the two probe gaps the v2 audit found (UDP to 10/8
-   decoded as DNS off port 53; FIN+ACK), then shortcut policy, non-ready
-   gold and the frozen test set (`docs/protocol.md` splits table).
+1. Shortcut policy, non-ready gold and the frozen test set
+   (`docs/protocol.md` splits table).
 2. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -153,8 +171,8 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
   the standalone hash-validation phase was intentionally not run. The stopped
   local run reached 28 captures and 4,200 exact pairs without a difference,
   but partial measurements are not release evidence.
-- Only one model has been measured, on 8 dev cases under prompt v1, and its
-  typed-IR rows are confounded by the prompt gap above. Test-split baselines,
+- Only one model has been measured, twice, on 8 dev cases, and every
+  comparison is inconclusive by construction. Test-split baselines,
   SFT, DPO, and GRPO remain unmeasured. The complete Pilot Go/No-Go decision is
   still unverified.
 - The 12+4+4 dev split (8+0+0 built) and the frozen test hashes do not exist
@@ -166,6 +184,6 @@ the ignored `artifacts/` directory and are not uploadable project evidence.
 
 ## Next verification
 
-1. Typed-IR prompt v2 dev run beside v1, with the witness-corrected gold.
+1. Hosted CI on this correction, pylint step included.
 2. Locked-test run replayed offline from a clean checkout without an API key.
 3. Web numbers checked against the scored summary by a CI test.
