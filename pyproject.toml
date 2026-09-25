@@ -56,6 +56,9 @@ typeCheckingMode = "strict"
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
+# The test container gives /tmp a 128 MB tmpfs; keeping every passed
+# test's tmp_path fills it before the suite ends.
+tmp_path_retention_policy = "failed"
 
 [tool.coverage.run]
 branch = true
