@@ -42,14 +42,19 @@ Canonical IR hashes, paraphrase families, capture seeds and bytes are disjoint
 across splits; a test asserts it for probe ids and packet bytes. For non-ready
 cases disjointness holds per case: each case's requests are written
 separately, but the address, port, value and direction slots and most kinds of
-inexpressible request repeat across splits by design. Each split and gold kind numbers its items from its own block
-(dev ready from mei-0001, dev non-ready 0501, test ready 1001, test non-ready
-1501), so a case added to one block moves no other item. Test input hashes land
-here when frozen, before any test item is sent. The first dev run, on
-qwen/qwen3-32b, was 8 ready cases x 2 paraphrases x 4 conditions = 64
-completions, with no non-ready gold. A dev pass is now 20 cases x 2 x 4 = 160
-completions, so false-ready rate and slot match become measurable; repair@1
-is not yet.
+inexpressible request repeat across splits by design. Each split and gold kind
+numbers its items from its own block (dev ready from mei-0001, dev non-ready
+0501, test ready 1001, test non-ready 1501), so a case added to one block moves
+no other item. Before any test item is sent, one test prepare (112 items, C1 to
+C4, top-k 16, latest prompt versions), made back to back with a dev prepare
+from the same image, is frozen in `src/dfilterforge/held_out_freeze.json` with
+its prompt, system prompt, catalog and source file digests, beside digests of
+the test inputs, test gold with item routing, gold hash, captures and feedback
+labels that CI recomputes. The call refuses every test request whose
+`prepare.json` the record does not admit. Until the last baseline request (a
+hosted model's pass over the frozen test prompts, A/A rerun included) the
+files a prepare hashes stay unchanged; before the first, a re-freeze replaces
+the record in a commit that says why.
 
 ## Metrics (per condition, per model)
 
@@ -111,7 +116,15 @@ exact for C4-C2, C2-C1 and C4-C3; fewer than 10 is inconclusive. A reference
 disagreeing with its labels, a gold filter or target that hits a shortcut
 rule, a gold case with no non-empty expected set, or any capture, catalog or
 harness failure stops scoring; a candidate timeout or output or frame limit
-counts as invalid, not as a stop, if its gold case reruns clean.
+counts as invalid, not as a stop, if its gold case reruns clean. A/A:
+qwen/qwen3-32b on DeepInfra answers the frozen test prompts in all four
+conditions twice with identical settings; pass B starts within 24 hours of
+pass A whatever A shows, and the two are never pooled. Per condition the pair
+reports changed answers, outcome transitions and flipped cases (ready cases
+whose strong-exact case mean differs). A comparison with 10 or more discordant
+cases is within rerun noise if its net count is at most twice the square root
+of its two conditions' mean flipped cases, and not replicated if the rerun
+reverses its sign.
 
 The mutation-adequacy gate is part of the gold. For every ready dev and test
 case, `scripts/probe_adequacy.py` requires the reference filter and the compiled
@@ -146,17 +159,18 @@ A gold correction (labels, probes or reference filters) is justified from the
 packet specification and the adequacy gate, never from which answers it flips.
 It re-scores every committed run in place; stored answers never change, the
 previous outcomes stay in git history, and the correction's note gives the
-numbers before and after and lists every flipped item in both directions. Once
-the test split is frozen, a test gold correction is published beside the
-original test score, not in its place. A waiver changes no outcome, so it
-triggers no re-score.
+numbers before and after and lists every flipped item in both directions.
+After the freeze, a test gold or scorer correction also re-scores in place, as
+CI requires, and keeps each run's original outcomes and summary beside it in
+`scored-original/`. A waiver changes no outcome, so it triggers no re-score.
 
 ## Models
 
-Hosted open-weight models via an OpenAI-compatible endpoint (exact ids and
-prices recorded at run time): one 8B-class, one 27B to 32B-class, one 70B-class,
-one DeepSeek-V3-class, plus an optional closed ceiling on C2 and C4 only, capped
-at 5 USD. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and
+Hosted open-weight models via an OpenAI-compatible endpoint: one 8B-class, one
+27B to 32B-class, one 70B-class, one DeepSeek-V3-class, plus an optional closed
+ceiling on dev (C2 and C4 only, at most 5 USD). Every hosted test run's model
+id, provider and request settings are written here before the first test
+request. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and
 a continued-SFT control matched on optimizer steps and tokens, three seeds each.
 
 ## Training rules
