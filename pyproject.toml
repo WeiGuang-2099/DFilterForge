@@ -143,6 +143,7 @@ source_modules = [
   "dfilterforge.completions",
   "dfilterforge.field_retrieval",
   "dfilterforge.generation",
+  "dfilterforge.held_out",
   "dfilterforge.model_client",
 ]
 forbidden_modules = [

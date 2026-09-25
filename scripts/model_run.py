@@ -1,14 +1,15 @@
 """Host-side model run: prepare prompts, call the endpoint, publish a run.
 
 Preparation and publication open no socket and read no evaluator gold: the
-split is regenerated inside a temporary directory, only its model-visible
-dev items are kept, and the gold contract is deleted with that directory
-before the first prompt file is written.
+split is regenerated inside a temporary directory, only the model-visible
+items of the requested split are kept, and the gold contract is deleted
+with that directory before the first prompt file is written.
 
 The call step is the only one that opens a connection. It reads the
 credential from the environment, sends each prepared prompt at most once
 per pass, and writes neither the credential nor the endpoint URL into any
-file it produces.
+file it produces. A test prompt set is answered only when the committed
+freeze record admits its prepare.json.
 """
 
 # The three subcommands still share one file, which is over the size this
@@ -76,12 +77,14 @@ from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievalV1
+from dfilterforge.held_out import admit_prepare
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.model_client import API_KEY_ENV
 from dfilterforge.model_client import ModelClientError
 from dfilterforge.model_client import OpenAiCompatibleBackend
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import ModelInputItemV1
+from dfilterforge.model_split import ModelSplit
 from dfilterforge.text_limits import validate_text
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -90,7 +93,6 @@ _IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 _RESULT_DIR = re.compile(
     r"(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}"
 )
-_ALLOWED_SPLIT = "dev"
 _DEFAULT_TOP_K = 16
 _MAX_TOP_K = 32
 _FAILURE = 2
@@ -242,8 +244,10 @@ def _source_manifest() -> dict[str, str]:
     return digests
 
 
-def _dev_items() -> tuple[tuple[ModelInputItemV1, ...], str]:
-    """Regenerates the split and keeps only its model-visible dev items.
+def _split_items(
+    split: ModelSplit,
+) -> tuple[tuple[ModelInputItemV1, ...], str]:
+    """Regenerates the split and keeps the model-visible items of one split.
 
     The evaluator gold contract and the six captures are written into a
     temporary directory that is removed before this function returns, and
@@ -252,11 +256,15 @@ def _dev_items() -> tuple[tuple[ModelInputItemV1, ...], str]:
     uses platform line endings and a file digest would therefore name the
     same split differently on different hosts.
 
+    Args:
+        split: The split whose items are kept.
+
     Returns:
-        The dev items in file order and the digest of the parsed split.
+        That split's items in file order and the digest of the parsed
+        split.
 
     Raises:
-        RunError: If the regenerated split has no dev item.
+        RunError: If the regenerated split has no item of that split.
     """
     with TemporaryDirectory(prefix="dfilterforge-model-split-") as staging:
         artifacts = generate_model_split(Path(staging))
@@ -266,9 +274,11 @@ def _dev_items() -> tuple[tuple[ModelInputItemV1, ...], str]:
             for line in lines
             if line.strip()
         )
-    items = tuple(item for item in parsed if item.split == _ALLOWED_SPLIT)
+    items = tuple(item for item in parsed if item.split == split)
     if not items:
-        raise RunError("split_empty", "The regenerated split has no dev items")
+        raise RunError(
+            "split_empty", "The regenerated split has no items of that split"
+        )
     return items, content_sha256(parsed)
 
 
@@ -279,7 +289,7 @@ def _retrieved(
 
     Args:
         catalog: A frozen ``.sqlite3`` inventory or a ``.gz`` archive of one.
-        items: The dev items whose intents are the retrieval queries.
+        items: The items whose intents are the retrieval queries.
         top_k: Maximum candidate fields per item.
 
     Returns:
@@ -321,7 +331,7 @@ def _generation_inputs(
     at all; a no-retrieval item carries none.
 
     Args:
-        items: The dev items in file order.
+        items: The items in file order.
         results: One retrieval result per item, in the same order.
 
     Returns:
@@ -352,6 +362,7 @@ def _generation_inputs(
 
 def _write_conditions(
     prepared_dir: Path,
+    split: ModelSplit,
     none_inputs: Sequence[GenerationInputV1],
     lexical_inputs: Sequence[GenerationInputV1],
 ) -> tuple[PreparedConditionV1, ...]:
@@ -360,6 +371,7 @@ def _write_conditions(
     Args:
         prepared_dir: Existing directory that receives ``C1.json`` to
             ``C4.json``.
+        split: The split every prompt must be from.
         none_inputs: Items prepared for the no-retrieval conditions.
         lexical_inputs: Items prepared for the lexical conditions.
 
@@ -367,7 +379,7 @@ def _write_conditions(
         One record per written file, in protocol order.
 
     Raises:
-        RunError: If a prompt is not a dev prompt, or if one condition
+        RunError: If a prompt is not from that split, or if one condition
             produced more than one system prompt.
     """
     conditions: list[PreparedConditionV1] = []
@@ -379,9 +391,9 @@ def _write_conditions(
             output_contract=contract,
             retrieval=retrieval,
         )
-        if any(prompt.split != _ALLOWED_SPLIT for prompt in batch.prompts):
+        if any(prompt.split != split for prompt in batch.prompts):
             raise RunError(
-                "split_refused", "A prepared prompt is not from the dev split"
+                "split_refused", "A prepared prompt is not from that split"
             )
         systems = {prompt.messages[0].content for prompt in batch.prompts}
         if len(systems) != 1:
@@ -416,7 +428,7 @@ def _build_prepare(
     Args:
         staging: Directory holding an empty ``prepared`` subdirectory.
         arguments: The parsed ``prepare`` arguments.
-        items: The dev items in file order.
+        items: The items in file order.
         source_files: Digests of the files that decide prompt content.
         model_inputs_sha256: Digest of the parsed split.
 
@@ -425,17 +437,18 @@ def _build_prepare(
     """
     catalog = cast(Path, arguments.catalog)
     top_k = cast(int, arguments.top_k)
+    split = cast(ModelSplit, arguments.split)
     identity, results = _retrieved(catalog, items, top_k)
     none_inputs, lexical_inputs = _generation_inputs(items, results)
     conditions = _write_conditions(
-        staging / "prepared", none_inputs, lexical_inputs
+        staging / "prepared", split, none_inputs, lexical_inputs
     )
     manifest = PrepareManifestV1(
         prepare_id=cast(Path, arguments.output_dir).name,
         created_at=datetime.now(timezone.utc),
         source_revision=cast(str, arguments.source_revision),
         source_files=source_files,
-        split=_ALLOWED_SPLIT,
+        split=split,
         item_ids=tuple(item.item_id for item in items),
         model_inputs_sha256=model_inputs_sha256,
         catalog=identity,
@@ -472,7 +485,7 @@ def _prepare(arguments: argparse.Namespace) -> int:
     if output_dir.exists():
         raise RunError("output_exists", "The prepare directory already exists")
     source_files = _source_manifest()
-    items, model_inputs_sha256 = _dev_items()
+    items, model_inputs_sha256 = _split_items(cast(ModelSplit, arguments.split))
     staging = output_dir.parent / f".{prepare_id}.partial"
     shutil.rmtree(staging, ignore_errors=True)
     (staging / "prepared").mkdir(parents=True)
@@ -910,9 +923,9 @@ def _call_options(arguments: argparse.Namespace) -> _CallOptions:
 def _read_prepare(prepare_dir: Path) -> tuple[PrepareManifestV1, bytes]:
     """Reads the prepare manifest and the exact bytes it came from.
 
-    A hand-edited manifest naming the held-out split is refused here,
-    before an endpoint object exists, because the manifest type admits
-    only the dev split.
+    The bytes, not the parsed manifest, are what the freeze record admits,
+    so the call plan holds a test manifest to that record before it reads
+    a prompt file.
 
     Raises:
         RunError: If the manifest is oversized or unusable.
@@ -1010,6 +1023,9 @@ def _call_plan(arguments: argparse.Namespace) -> _CallPlan:
         raise RunError(
             "split_mismatch", "The run id does not name the prepared split"
         )
+    # Before any prompt file is read: a held-out prompt set the committed
+    # freeze record does not admit is refused on its manifest bytes alone.
+    admit_prepare(prepare.split, prepare_bytes)
     batches, raw = _read_prepared(prepare_dir, prepare)
     if _source_manifest() != prepare.source_files:
         raise RunError(
@@ -1811,6 +1827,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-revision", type=_source_revision, required=True
     )
     prepare.add_argument("--top-k", type=_top_k, default=_DEFAULT_TOP_K)
+    prepare.add_argument("--split", choices=("dev", "test"), default="dev")
     prepare.set_defaults(handler=_prepare)
     call = commands.add_parser(
         "call",

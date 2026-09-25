@@ -304,18 +304,18 @@ class PreparedConditionV1(FrozenModel):
     path: str
     sha256: str
     system_prompt_sha256: str
-    prompt_count: int = Field(ge=1, le=64)
+    prompt_count: int = Field(ge=1, le=_MAX_ITEMS_PER_CONDITION)
 
 
 class PrepareManifestV1(FrozenModel):
     """Everything the preparation step fixed before any request was sent.
 
-    ``split`` is deliberately ``Literal["dev"]``. The protocol's strongest
-    prohibition is that no held-out item reaches a model before the freeze
-    commit, and this type makes a held-out manifest unconstructible rather
-    than one script constant away. Widening it is a reviewed edit in the
-    slice that performs the freeze, and so is raising the 64-item bounds on
-    ``item_ids`` and ``prompt_count``: the test split holds 112 items.
+    ``split`` names either split. What keeps a held-out prompt set from a
+    model is no longer this type but the call step, which answers a test
+    manifest only when the committed record in :mod:`dfilterforge.held_out`
+    admits its exact bytes, and checks that before any client exists. Both
+    item bounds are the per-condition census bound of
+    :class:`ConditionRunV1`; the test split holds 112 items.
     """
 
     schema_version: Literal["model-prepare/1.0"] = "model-prepare/1.0"
@@ -323,8 +323,10 @@ class PrepareManifestV1(FrozenModel):
     created_at: datetime
     source_revision: str
     source_files: dict[str, str]
-    split: Literal["dev"]
-    item_ids: tuple[str, ...] = Field(min_length=1, max_length=64)
+    split: Literal["dev", "test"]
+    item_ids: tuple[str, ...] = Field(
+        min_length=1, max_length=_MAX_ITEMS_PER_CONDITION
+    )
     model_inputs_sha256: str
     catalog: CatalogIdentityV1
     top_k: int = Field(ge=1, le=32)

@@ -214,8 +214,8 @@ def load_run(run_dir: Path, *, with_completions: bool = True) -> LoadedRun:
     A published directory carries ``prepare.json`` beside ``prepared/``
     from the moment the prompts are frozen, and it is read here whether or
     not a run manifest exists: it is the only provenance a control pass
-    taken before any paid request can have, and its split is the type that
-    keeps a held-out item out of a published tree.
+    taken before any paid request can have. Either manifest pins the
+    split; scoring limits a tree that committed neither to dev.
 
     Args:
         run_dir: The run directory to read.
