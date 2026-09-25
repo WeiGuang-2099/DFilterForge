@@ -2460,6 +2460,37 @@ def test_publish_refuses_fewer_conditions_over_a_full_prompt_set(
     assert not list(output.parent.glob(".*.partial"))
 
 
+def _prepend_c1(document: dict[str, Any]) -> None:
+    """Names C1 as a run condition ahead of the one condition prepared."""
+    conditions = cast(list[dict[str, Any]], document["conditions"])
+    extra = dict(conditions[0])
+    extra.update(
+        label="C1",
+        attempts_path="attempts/C1.jsonl",
+        completions_path="completions/C1.json",
+    )
+    document["conditions"] = [extra, *conditions]
+
+
+def test_publish_refuses_a_run_condition_its_prepare_did_not_record(
+    c4_run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A run naming a condition beyond its prepare's is never published."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    _edit_manifest(run_dir, _prepend_c1)
+    output = tmp_path / "docs" / "results" / _C4_RUN_ID
+    output.parent.mkdir(parents=True)
+    capsys.readouterr()
+
+    refused = _publish(run_dir, output)
+
+    assert refused == 2
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "condition_mismatch"
+    assert not output.exists()
+    assert not list(output.parent.glob(".*.partial"))
+
+
 _README = Path(__file__).parents[1] / "README.md"
 _RESULTS = Path(__file__).parents[1] / "docs" / "results"
 _README_SECTION = "## Hosted model run"

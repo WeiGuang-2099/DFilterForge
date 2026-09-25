@@ -1539,7 +1539,8 @@ def _publish_manifest(run_dir: Path) -> tuple[RunManifestV1, bytes]:
 
     Raises:
         RunError: If the manifest is unusable, does not describe a
-            finished run, or records no token prices.
+            finished run, records no token prices, or names other
+            conditions than its prepare recorded.
     """
     data = _regular_file(run_dir / "run_manifest.json", _MAX_PREPARE_BYTES)
     try:
@@ -1553,6 +1554,16 @@ def _publish_manifest(run_dir: Path) -> tuple[RunManifestV1, bytes]:
     if manifest.prices is None:
         raise RunError(
             "prices_missing", "A published run must record its token prices"
+        )
+    # The published file set follows the prepared conditions, so a run
+    # condition the prepare never recorded would be published without
+    # its files.
+    if {condition.label for condition in manifest.conditions} != {
+        condition.label for condition in manifest.prepare.conditions
+    }:
+        raise RunError(
+            "condition_mismatch",
+            "The run conditions are not the ones its prepare recorded",
         )
     return manifest, data
 
