@@ -745,27 +745,28 @@ def _run_created_at(
     return _PLACEHOLDER_CREATED_AT
 
 
-def _check_control_pin(
+def _check_split_pin(
     split: str,
     manifest: RunManifestV1 | None,
     prepare: PrepareManifestV1 | None,
 ) -> None:
-    """Keeps an unpinned control pass on the development split.
+    """Keeps a pass over a directory with neither manifest on dev.
 
-    A control pass reads no stored answer, so a directory holding nothing
-    but ``prepared/`` is enough to run the whole path and to publish every
-    gold specification it touches. Without a manifest the split is only a
-    claim the prompts make about themselves; both manifest types pin it to
-    a reviewed literal, so a directory that committed neither is limited to
-    the split no held-out answer key can be published from.
+    Every pass publishes each gold specification it touches, whether it
+    answers from stored completions or, as a control pass does, from gold,
+    so a directory holding only ``prepared/`` and, for a stored pass,
+    ``completions/`` is enough to run the whole path. Without a manifest
+    the split is only a claim the prompts make about themselves; both
+    manifest types pin it to a reviewed literal, so a directory that
+    committed neither is limited to the split no held-out answer key can
+    be published from.
 
     Raises:
         ScoringError: With code ``split_violation``.
     """
     if manifest is None and prepare is None and split != "dev":
         raise ScoringError(
-            "split_violation",
-            "an unpinned control pass is limited to the dev split",
+            "split_violation", "an unpinned pass is limited to the dev split"
         )
 
 
@@ -824,8 +825,7 @@ def score_run(
         # committed prompts is checked exactly as it always is.
         check_manifest(manifest, prepared, completions)
     split = check_splits(prepared, manifest, prepare)
-    if control is not None:
-        _check_control_pin(split, manifest, prepare)
+    _check_split_pin(split, manifest, prepare)
     prompts = [
         prompt for batch, _ in prepared.values() for prompt in batch.prompts
     ]

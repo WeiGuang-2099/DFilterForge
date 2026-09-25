@@ -67,6 +67,7 @@ from dfilterforge.runner import TsharkRunner
 from dfilterforge.score_summary import ItemOutcomeV1
 from dfilterforge.score_summary import OutcomeV1
 from dfilterforge.score_summary import ScoreSummaryV1
+from dfilterforge.scoring import ControlMode
 from dfilterforge.scoring import score_item
 from dfilterforge.scoring import score_run
 from dfilterforge.scoring import ScoringError
@@ -2643,33 +2644,41 @@ def test_a_control_mode_with_nothing_to_answer_is_refused(
     )
 
 
-def test_an_unpinned_control_pass_refuses_a_held_out_split(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("stored", "control", "output"),
+    [
+        pytest.param(True, None, "scored", id="stored"),
+        pytest.param(False, "reference", "control-reference", id="control"),
+    ],
+)
+def test_an_unpinned_pass_refuses_a_held_out_split(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stored: bool,
+    control: ControlMode | None,
+    output: str,
 ) -> None:
     """A directory with no manifest at all cannot publish a held-out key.
 
-    A control pass reads no stored answer, so nothing but ``prepared/``
-    is needed to run the whole path and write every gold specification it
+    Stored answers or none, a pass writes every gold specification it
     touches. Without a manifest the split is the prompts' own claim, and
     the only split a run can claim for itself is the development one.
     """
     _install_live(monkeypatch)
-    run_dir = _run_dir(tmp_path, ("C1",), stored=False, split="test")
+    run_dir = _run_dir(tmp_path, ("C1",), stored=stored, split="test")
 
     with pytest.raises(ScoringError) as error:
         score_run(
             run_dir,
             code_revision="revision",
-            control="reference",
+            control=control,
             split_dir=tmp_path / "split",
         )
 
     assert error.value.code == "split_violation"
-    assert str(error.value) == (
-        "an unpinned control pass is limited to the dev split"
-    )
-    assert not (run_dir / "control-reference").exists()
-    assert not (run_dir / "split" / "captures").exists()
+    assert str(error.value) == "an unpinned pass is limited to the dev split"
+    assert not (run_dir / output).exists()
+    assert not (tmp_path / "split" / "captures").exists()
 
 
 def test_a_committed_prepare_manifest_pins_the_split_and_the_clock(
