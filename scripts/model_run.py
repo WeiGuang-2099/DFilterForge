@@ -139,13 +139,15 @@ _CONDITIONS: tuple[tuple[OutputContractV1, RetrievalV1], ...] = (
     (OutputContractV1.TYPED_IR, RetrievalV1.NONE),
     (OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL),
 )
-# Every file a published run directory carries, in written order. The
-# prepare manifest travels with the run although the run manifest embeds
-# the same fields: the offline scorer reads it as a standalone receipt,
-# it is the only provenance a pass that answers the committed prompts
-# from gold can have, and the run manifest records its digest, so the two
-# are cross-checked here rather than trusted. The prompt files are read
-# from the run directory because the call step copied them there.
+# Every file a run that prepared all four conditions publishes, in written
+# order; a run that prepared fewer publishes this list cut to its own
+# conditions. The prepare manifest travels with the run although the run
+# manifest embeds the same fields: the offline scorer reads it as a
+# standalone receipt, it is the only provenance a pass that answers the
+# committed prompts from gold can have, and the run manifest records its
+# digest, so the two are cross-checked here rather than trusted. The
+# prompt files are read from the run directory because the call step
+# copied them there.
 _PUBLISHED_FILES: tuple[str, ...] = (
     "run_manifest.json",
     "prepare.json",
@@ -1580,6 +1582,22 @@ def _recorded_digests(manifest: RunManifestV1) -> dict[str, str]:
     return digests
 
 
+def _published_files(manifest: RunManifestV1) -> tuple[str, ...]:
+    """Lists the files this run publishes, in written order.
+
+    A repair round or a closed ceiling prepares only some conditions, so
+    a run publishes the files of the conditions its prepare recorded: a
+    file of a prepared condition is never dropped, and one of a condition
+    it did not prepare is never published.
+    """
+    labels = {condition.label for condition in manifest.prepare.conditions}
+    return tuple(
+        name
+        for name in _PUBLISHED_FILES
+        if "/" not in name or Path(name).stem in labels
+    )
+
+
 def _published_sources(
     run_dir: Path, manifest: RunManifestV1, manifest_bytes: bytes
 ) -> dict[str, bytes]:
@@ -1595,7 +1613,7 @@ def _published_sources(
     """
     digests = _recorded_digests(manifest)
     sources: dict[str, bytes] = {"run_manifest.json": manifest_bytes}
-    for name in _PUBLISHED_FILES:
+    for name in _published_files(manifest):
         if name in sources:
             continue
         data = _regular_file(run_dir / name, _MAX_PUBLISHED_BYTES)
@@ -1621,7 +1639,7 @@ def _check_published_contracts(
             condition, carries a prompt from another split, or answers
             another item set.
     """
-    for label in _LABELS:
+    for label in (condition.label for condition in manifest.prepare.conditions):
         try:
             batch = PreparedBatchV1.model_validate_json(
                 sources[f"prepared/{label}.json"]
@@ -1687,7 +1705,8 @@ def _check_target(output: Path, sources: Mapping[str, bytes]) -> None:
         RunError: With ``output_exists`` if the target is not a directory
             or holds an entry this run cannot replace, and with
             ``prepared_drift`` if a frozen file is not the one this run
-            was prepared from.
+            was prepared from or belongs to a condition this run did not
+            prepare.
     """
     if not os.path.lexists(output):
         return
@@ -1714,7 +1733,7 @@ def _check_target(output: Path, sources: Mapping[str, bytes]) -> None:
         frozen = output / name
         if not os.path.lexists(frozen):
             continue
-        if _regular_file(frozen, _MAX_PUBLISHED_BYTES) != sources[name]:
+        if _regular_file(frozen, _MAX_PUBLISHED_BYTES) != sources.get(name):
             raise RunError(
                 "prepared_drift",
                 "A committed file differs from the run that answered it",
@@ -1771,7 +1790,7 @@ def _publish(arguments: argparse.Namespace) -> int:
             {
                 "run_id": manifest.run_id,
                 "output": output.as_posix(),
-                "files": list(_PUBLISHED_FILES),
+                "files": list(sources),
             }
         )
     )

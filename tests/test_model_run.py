@@ -53,6 +53,7 @@ from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelInputItemV1
+from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.run_store import check_manifest
 from dfilterforge.run_store import check_prepare
 from dfilterforge.run_store import check_splits
@@ -1893,6 +1894,12 @@ def _missing_answer_file(target: _Publishable) -> tuple[Path, Path]:
     return target.run_dir, target.output
 
 
+def _missing_prompt_copy(target: _Publishable) -> tuple[Path, Path]:
+    """Publishes a run one prepared condition's prompt copy is missing from."""
+    (target.run_dir / "prepared" / "C2.json").unlink()
+    return target.run_dir, target.output
+
+
 def _file_at_the_output(target: _Publishable) -> tuple[Path, Path]:
     """Publishes over something at the target that is not a directory."""
     target.output.write_bytes(b"{}\n")
@@ -1952,6 +1959,7 @@ def _linked_answers(target: _Publishable) -> tuple[Path, Path]:
         (_linked_prompt_directory, "output_exists"),
         (_linked_answers, "run_layout_invalid"),
         (_missing_answer_file, "run_layout_invalid"),
+        (_missing_prompt_copy, "run_layout_invalid"),
         (_file_at_the_output, "output_exists"),
     ],
 )
@@ -2093,6 +2101,19 @@ class _GoldReplies:
         )
 
 
+def _dev_routing(artifacts: ModelSplitArtifacts) -> dict[str, GoldCase]:
+    """Maps every dev intent to the gold case its item routes to."""
+    by_case: dict[str, GoldCase] = {
+        case.case_id: case for case in artifacts.gold.cases
+    }
+    by_case.update({case.case_id: case for case in artifacts.gold.non_ready})
+    return {
+        item.intent: by_case[artifacts.gold.item_to_case[item.item_id]]
+        for item in artifacts.inputs
+        if item.split == "dev"
+    }
+
+
 def test_published_run_scores_end_to_end(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2102,16 +2123,7 @@ def test_published_run_scores_end_to_end(
     catalog, exactly as tests/test_cli_live.py requires.
     """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
-    artifacts = generate_model_split(tmp_path / "source")
-    by_case: dict[str, GoldCase] = {
-        case.case_id: case for case in artifacts.gold.cases
-    }
-    by_case.update({case.case_id: case for case in artifacts.gold.non_ready})
-    routing = {
-        item.intent: by_case[artifacts.gold.item_to_case[item.item_id]]
-        for item in artifacts.inputs
-        if item.split == "dev"
-    }
+    routing = _dev_routing(generate_model_split(tmp_path / "source"))
     assert len(routing) == _DEV_ITEMS
     prepare_dir = tmp_path / "model-eval" / _PUBLISH_RUN_ID
     assert (
@@ -2159,6 +2171,111 @@ def test_published_run_scores_end_to_end(
     assert (scored / "outcomes.jsonl").is_file()
     again = score_run(published, code_revision="integration-test", check=True)
     assert again.differences == ()
+
+
+_C4_RUN_ID = "dev-qwen3-32b-c4-2026-09-20"
+# What a C4-only run publishes, in written order.
+_C4_FILES = (
+    "run_manifest.json",
+    "prepare.json",
+    "prepared/C4.json",
+    "completions/C4.json",
+    "attempts/C4.jsonl",
+)
+
+
+def _keep_conditions(prepare_dir: Path, labels: Sequence[str]) -> None:
+    """Cuts a prepare directory down to the named conditions.
+
+    That is the shape a repair round's or a closed ceiling's prompt set
+    takes: fewer condition files, the same items and receipt fields.
+    """
+    manifest = _manifest(prepare_dir)
+    for label in _LABELS:
+        if label not in labels:
+            (prepare_dir / "prepared" / f"{label}.json").unlink()
+    kept = tuple(c for c in manifest.conditions if c.label in labels)
+    (prepare_dir / "prepare.json").write_text(
+        canonical_json(manifest.model_copy(update={"conditions": kept})) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+@pytest.fixture(name="c4_run", scope="module")
+def fixture_c4_run(
+    prepared: Path, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Answers a copy of the dev prompt set cut to C4, from gold."""
+    root = tmp_path_factory.mktemp("c4")
+    workspace = root / "dev-c4"
+    shutil.copytree(prepared, workspace)
+    _keep_conditions(workspace, ("C4",))
+    answers = _GoldReplies(_dev_routing(generate_model_split(root / "split")))
+    config = root / "call.json"
+    patch = pytest.MonkeyPatch()
+    patch.setenv(API_KEY_ENV, _API_KEY)
+    try:
+        with _provider(answers) as provider:
+            answers.received = provider.received
+            _write_config(config, provider.url)
+            assert _call(workspace, config, run_id=_C4_RUN_ID) == 0
+            assert len(provider.received) == _DEV_ITEMS
+    finally:
+        patch.undo()
+    return workspace / "runs" / _C4_RUN_ID
+
+
+def test_a_run_over_fewer_conditions_is_published_and_scored(
+    c4_run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A repair round or a ceiling run publishes and scores its own subset.
+
+    No skip: scoring needs tshark 4.6.8 and the frozen field catalog, as
+    the end-to-end test above does.
+    """
+    run_dir = _run_copy(c4_run, tmp_path)
+    output = tmp_path / "docs" / "results" / _C4_RUN_ID
+    capsys.readouterr()
+
+    assert _publish(run_dir, output) == 0
+
+    report = cast(dict[str, Any], json.loads(capsys.readouterr().out))
+    assert report["files"] == list(_C4_FILES)
+    assert sorted(_files(output)) == sorted(_C4_FILES)
+    scored = score_run(output, code_revision="c4-test")
+    # mei-0001 to mei-0024 are the ready dev items, the rest non-ready.
+    assert scored.items == _DEV_ITEMS
+    assert scored.outcomes["strong_exact"] == 24
+    assert scored.outcomes["abstained"] == _DEV_ITEMS - 24
+    assert sum(scored.outcomes.values()) == _DEV_ITEMS
+    again = score_run(output, code_revision="c4-test", check=True)
+    assert again.differences == ()
+
+
+def test_publish_refuses_fewer_conditions_over_a_full_prompt_set(
+    c4_run: Path,
+    prepared: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A frozen prompt file of a condition the run did not prepare is drift."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    output = tmp_path / "docs" / "results" / _C4_RUN_ID
+    (output / "prepared").mkdir(parents=True)
+    shutil.copy2(run_dir / "prepare.json", output / "prepare.json")
+    shutil.copy2(run_dir / "prepared" / "C4.json", output / "prepared")
+    shutil.copy2(prepared / "prepared" / "C1.json", output / "prepared")
+    before = _files(output)
+    capsys.readouterr()
+
+    refused = _publish(run_dir, output)
+
+    assert refused == 2
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "prepared_drift"
+    assert _files(output) == before
+    assert not list(output.parent.glob(".*.partial"))
 
 
 _README = Path(__file__).parents[1] / "README.md"
