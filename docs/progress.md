@@ -1,12 +1,12 @@
 # Implementation Progress
 
-Last updated: 2026-09-24
+Last updated: 2026-09-25
 
 ## Current slice
 
-The model split is expanded to 52 ready and 24 non-ready cases and verified;
-the test freeze is next. Generated reports under the ignored `artifacts/`
-directory are not project evidence.
+Each split has an unscored feedback probe for the repair round, checked by
+the adequacy gate; the test freeze is next. Generated reports under the
+ignored `artifacts/` directory are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -122,22 +122,53 @@ directory are not project evidence.
   16 dev items of the published runs are unchanged. A dev pass is now 160
   requests.
 - Adequacy gate, strict, at bb39ab7: 344 mutants (72 dev, 272 test), 0
-  unwaived survivors, the same 4 waivers, 0 label mismatches. A six-agent
-  review before the freeze found a test request the retriever would refuse,
+  unwaived survivors, the same 4 waivers, 0 label mismatches. A review
+  before the freeze found a test request the retriever would refuse,
   four wording or slot problems and item numbers that tied dev to test, all
   fixed. Tests now send every request through the real retriever, reject
   dotted field names and filter operators in requests, and check that the
   committed non-ready gold scores as matched end to end and under the
   reference control.
-- The CI python job passes in the test image at bb037b8: 1,004 tests, 1
-  skipped, 96.50 percent coverage; `score --check` reproduces all six
-  committed outputs.
+- The suite at bb037b8 was reported as passing in the test image, but under
+  compose.yaml the same code and tests (at 684c78f) do not: pytest keeps every
+  tmp_path, the 128 MB /tmp tmpfs fills and 21 tests fail with ENOSPC.
+  b3fa85f keeps only failed tests' directories; the run then passes 1,004
+  tests, 1 skipped, 96.50 percent coverage, and `score --check` reproduces all
+  six committed outputs.
+
+## Feedback probe: 2026-09-25
+
+- Pre-registered in `docs/protocol.md` (36cff89) before the code: a repair
+  round shows packets only from one unscored probe per split, an item that
+  probe cannot separate stays in the repair@1 denominator, and the gate
+  checks it. One capture per split, not per case: every capture holds all 20
+  recipes and 33 witnesses. A planned ARP witness was dropped: requests say
+  complete Ethernet/IPv4 packets, and it would change every scored capture.
+- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev, client
+  192.0.2.129) and semantic-35 (test, client .135) with the witness tail
+  through the helper the scored probes use (d47eb32), into `feedback/`. No
+  scored capture, gold hash (8a061589fe6c) or model input changes; an import
+  contract keeps scoring from the module and a test keeps it off
+  `scripts/model_run.py`.
+- Gate `probe-adequacy/1.2` (11e01d7, tests 52a29d5) checks the gold filters
+  on all eight probes and runs every mutant on the feedback probe too. Strict
+  mode passes: 416 label checks per filter, 344 mutants, 4 waived survivors,
+  0 feedback-blind mutants or mutations, 0 disproved waivers.
+- [Ablation 007](ablations/007-feedback-probe.md), `keep_full`: without the
+  tail, 112 mutants, 10 authored mutations and 6 of 24 committed silent-wrong
+  answers get no packet; with it, 24 of 24, and none of 60 strong-exact
+  answers gets a false one.
+- CI python job in the test image at 52a29d5: 1,019 tests, 1 skipped, 96.55
+  percent coverage, static checks and all gates pass. `score --check`
+  reproduced all six committed outputs at 11e01d7; later commits change only
+  docstrings and tests.
 
 ## Planned next
 
 1. Freeze the test split: raise the 64-item prepare bounds (test holds 112
-   items), widen prepare to test, record the input hashes in
-   `docs/protocol.md` and pre-register the A/A rerun.
+   items), widen prepare to test, hash every file that shapes a request,
+   record the input and feedback label hashes in `docs/protocol.md` and
+   pre-register the A/A rerun.
 2. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -162,7 +193,7 @@ directory are not project evidence.
 
 ## Next verification
 
-1. Hosted CI on the gold correction, shortcut policy, non-ready scoring and
-   case expansion, pylint included.
+1. Hosted CI on the tmp retention fix and the feedback probe, pylint
+   included.
 2. Locked-test run replayed offline from a clean checkout without an API key.
 3. Web numbers checked against the scored summary by a CI test.
