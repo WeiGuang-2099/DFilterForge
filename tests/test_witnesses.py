@@ -13,6 +13,7 @@ from dfilterforge import witnesses
 from dfilterforge.benchmark import capture_bytes
 from dfilterforge.benchmark import RECIPES
 from dfilterforge.fixtures import internet_checksum
+from dfilterforge.model_feedback import generate_feedback_probes
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.runner import TsharkRunner
 from dfilterforge.witnesses import append_witnesses
@@ -376,14 +377,15 @@ _SEVERITY = {"chat": 0x00200000, "note": 0x00400000, "warn": 0x00600000}
     not sys.platform.startswith("linux"),
     reason="Runner requires a Linux container",
 )
-def test_every_witness_decodes_as_intended_on_all_six_probes(
+def test_every_witness_decodes_as_intended_on_every_probe(
     tmp_path: Path,
 ) -> None:
     runner = TsharkRunner()
     artifacts = generate_model_split(tmp_path)
+    feedback = generate_feedback_probes(artifacts)
     assert set(_DECODES) == set(WITNESS_NAMES)
 
-    for probe in artifacts.probes:
+    for probe in (*artifacts.probes, *feedback.probes):
         base = len(probe.recipes) - len(WITNESS_NAMES)
         assert probe.recipes[base:] == WITNESS_NAMES
         seed = 100 + int(probe.probe_id.removeprefix("semantic-")) - 1
@@ -430,3 +432,25 @@ def test_every_witness_decodes_as_intended_on_all_six_probes(
             ).frames
             == ()
         )
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="Runner requires a Linux container",
+)
+def test_no_feedback_frame_decodes_as_malformed(tmp_path: Path) -> None:
+    """The whole feedback capture, benchmark part included, decodes clean.
+
+    The tail test above looks only past the benchmark frames, where
+    semantic-43 frame 28 (a UDP port tshark hands to Manolito) sits.
+    """
+    runner = TsharkRunner()
+    feedback = generate_feedback_probes(generate_model_split(tmp_path))
+
+    for probe in feedback.probes:
+        assert (
+            runner.run(
+                probe.capture_path, "_ws.malformed || tcp.analysis.flags"
+            ).frames
+            == ()
+        ), probe.probe_id

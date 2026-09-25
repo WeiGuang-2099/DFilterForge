@@ -43,6 +43,15 @@ and fails on any single-site mutant of a gold case (from the fixed operator
 set in `dfilterforge.mutants`) that survives without a reasoned waiver in
 `model_split.MUTANT_WAIVERS`.
 
+`dfilterforge.model_feedback.generate_feedback_probes` adds one unscored
+capture per split under `feedback/`, beside `captures/`: `semantic-29.pcap`
+for dev (seed 128, client 192.0.2.129) and `semantic-35.pcap` for test (seed
+134, client 192.0.2.135), copied the same way with the same witness tail, with
+every ready case of the split labelled on it. A repair round shows packets only
+from it. No score, gold hash or model input reads it, and the import contracts
+keep scoring and prompt building from the module. Both clients lie above
+192.0.2.127, so the /25 narrowing of a TEST-NET-1 case differs there too.
+
 This is strictly an **unseen-composition plus unseen-capture-instance** split
 relative to the original 36 semantic specifications and their primary probes.
 It deliberately reuses the same packet recipes and protocol families, plus the

@@ -151,6 +151,16 @@ forbidden_modules = [
   "dfilterforge.fixtures",
   "dfilterforge.model_cases",
   "dfilterforge.model_dev_cases",
+  "dfilterforge.model_feedback",
   "dfilterforge.model_split",
   "dfilterforge.model_test_cases",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Scoring never sees the feedback probe"
+type = "forbidden"
+source_modules = [
+  "dfilterforge.run_store",
+  "dfilterforge.scoring",
+]
+forbidden_modules = ["dfilterforge.model_feedback"]
