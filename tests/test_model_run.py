@@ -1265,11 +1265,13 @@ def test_call_refuses_a_test_split_prompt_set_before_any_request(
 
 
 class _Freeze(NamedTuple):
-    """The record path, the catalog and the frozen test prompt set."""
+    """The record path, the catalog, the frozen prompt set and its copy."""
 
     record: Path
     catalog: Path
     frozen: Path
+    # The private copy of the frozen prompt set that the call reads.
+    workspace: Path
 
 
 def _broken_record(freeze: _Freeze) -> None:
@@ -1285,11 +1287,26 @@ def _other_prepare(freeze: _Freeze) -> None:
     )
 
 
+def _reindented_prepare(freeze: _Freeze) -> None:
+    """Admits the frozen prepare, then re-indents the copy the call reads."""
+    _write_record(freeze.record, freeze.frozen)
+    path = freeze.workspace / "prepare.json"
+    data = path.read_bytes()
+    path.write_text(
+        json.dumps(json.loads(data), indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert path.read_bytes() != data
+    assert _manifest(freeze.workspace) == _manifest(freeze.frozen)
+
+
 @pytest.mark.parametrize(
     ("mutate", "code"),
     [
         (_broken_record, "freeze_record_invalid"),
         (_other_prepare, "test_not_frozen"),
+        (_reindented_prepare, "test_not_frozen"),
     ],
 )
 def test_call_refuses_a_test_prompt_set_the_record_does_not_admit(
@@ -1304,13 +1321,15 @@ def test_call_refuses_a_test_prompt_set_the_record_does_not_admit(
     """Only the exact prepare.json bytes a record admits are answered.
 
     A second prepare of the same code and catalog writes the same prompt
-    files, but its own manifest, so it is not the frozen prompt set.
+    files, but its own manifest, so it is not the frozen prompt set. Nor
+    is the frozen manifest re-indented: it holds the same values in other
+    bytes.
     """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
     record = tmp_path / "held_out_freeze.json"
     monkeypatch.setattr(held_out, "RECORD_PATH", record)
-    mutate(_Freeze(record, catalog.path, held_out_prepared))
     prepare_dir = _workspace(held_out_prepared, tmp_path)
+    mutate(_Freeze(record, catalog.path, held_out_prepared, prepare_dir))
     config = tmp_path / "call.json"
 
     with _provider(_healthy) as provider:

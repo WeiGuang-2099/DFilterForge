@@ -62,6 +62,7 @@ from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
+from dfilterforge.model_split import ModelSplit
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
 from dfilterforge.score_summary import ItemOutcomeV1
@@ -233,11 +234,12 @@ def _install_live(
     return calls
 
 
-# The runs below are built from the ready dev cases alone. The tests that
-# exercise non-ready gold install their own cases, so no count here moves
-# when the non-ready table does.
+# The runs below are built from their split's ready cases alone. The tests
+# that exercise non-ready gold install their own cases, so no count here
+# moves when the non-ready table does.
 _DEV_CASES = sum(case.split == "dev" for case in model_semantic_cases())
 _DEV_ITEMS = 2 * _DEV_CASES
+_TEST_ITEMS = 2 * sum(case.split == "test" for case in model_semantic_cases())
 
 
 @pytest.fixture(name="ready_gold_only", autouse=True)
@@ -1214,6 +1216,7 @@ def _prepare_manifest(
     prompt_count: int | None = None,
     mislabel: ConditionLabel | None = None,
     created_at: datetime = _CREATED_AT,
+    split: ModelSplit = "dev",
 ) -> PrepareManifestV1:
     """Builds the prepare manifest that describes the committed prompts."""
     committed = _dev_item_ids(run_dir)
@@ -1251,7 +1254,7 @@ def _prepare_manifest(
         created_at=created_at,
         source_revision="revision",
         source_files={"model_inputs.jsonl": "2" * 64},
-        split="dev",
+        split=split,
         item_ids=tuple(item_ids),
         model_inputs_sha256="3" * 64,
         catalog=CatalogIdentityV1(
@@ -2679,6 +2682,40 @@ def test_an_unpinned_pass_refuses_a_held_out_split(
     assert str(error.value) == "an unpinned pass is limited to the dev split"
     assert not (run_dir / output).exists()
     assert not (tmp_path / "split" / "captures").exists()
+
+
+@pytest.mark.parametrize(
+    ("stored", "control", "output"),
+    [
+        pytest.param(True, None, "scored", id="stored"),
+        pytest.param(False, "reference", "control-reference", id="control"),
+    ],
+)
+def test_a_test_prepare_manifest_lets_a_pass_score_the_test_split(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stored: bool,
+    control: ControlMode | None,
+    output: str,
+) -> None:
+    """The split pin refuses only a tree that committed no manifest.
+
+    The frozen test prompts carry their prepare.json, so the control pass
+    taken before any request and the stored answers after it both score.
+    """
+    _install_live(monkeypatch)
+    run_dir = _run_dir(tmp_path, ("C1",), stored=stored, split="test")
+    _write_prepare(run_dir, ("C1",), split="test")
+
+    report = score_run(
+        run_dir,
+        code_revision="revision",
+        control=control,
+        split_dir=tmp_path / "split",
+    )
+
+    assert report.output_dir == run_dir / output
+    assert report.items == _TEST_ITEMS
 
 
 def test_a_committed_prepare_manifest_pins_the_split_and_the_clock(

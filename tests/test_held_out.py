@@ -24,6 +24,7 @@ from dfilterforge.held_out import HeldOutError
 from dfilterforge.held_out import HeldOutFreezeV1
 from dfilterforge.held_out_digests import frozen_digests
 from dfilterforge.held_out_digests import main
+from dfilterforge.model_feedback import feedback_labels_sha256
 from dfilterforge.model_feedback import FeedbackProbes
 from dfilterforge.model_feedback import generate_feedback_probes
 from dfilterforge.model_split import generate_model_split
@@ -142,6 +143,7 @@ def _record_fields(**overrides: Any) -> dict[str, Any]:
             {"admitted_prepares": ("2" * 64, "2" * 64)},
             id="repeated_admitted",
         ),
+        pytest.param({"admitted_prepares": ("x",)}, id="bad_admitted"),
         pytest.param({"digests": {"inputs": "x"}}, id="bad_digest"),
     ],
 )
@@ -196,6 +198,8 @@ def test_admission_reads_a_bounded_record_and_admits_only_its_list(
     assert _code(frozen) == "freeze_record_missing"
     path.write_bytes(b"{")
     assert _code(frozen) == "freeze_record_invalid"
+    path.write_bytes(b"{}")
+    assert _code(frozen) == "freeze_record_invalid"
     path.write_bytes(largest + b" ")
     assert _code(frozen) == "freeze_record_invalid"
     path.unlink()
@@ -206,6 +210,8 @@ def test_admission_reads_a_bounded_record_and_admits_only_its_list(
     admit_prepare("test", frozen)
     admit_prepare("test", later)
     assert _code(frozen.replace(b"revision", b"revisiom")) == "test_not_frozen"
+    # The same manifest in other bytes: only the exact bytes are admitted.
+    assert _code(frozen[:-1] + b" \n") == "test_not_frozen"
 
 
 @pytest.fixture(name="split", scope="module")
@@ -228,7 +234,7 @@ def _test_item_ids(split: ModelSplitArtifacts) -> tuple[str, ...]:
 def _edited(
     split: ModelSplitArtifacts, side: str, edit: str
 ) -> ModelSplitArtifacts:
-    """Rewords one item, widens one reference filter or swaps two routes."""
+    """Rewords one item or rationale, widens one filter or swaps two routes."""
     gold = split.gold
     if edit == "intent":
         inputs = list(split.inputs)
@@ -237,6 +243,17 @@ def _edited(
             update={"intent": inputs[index].intent + " now"}
         )
         return dataclasses.replace(split, inputs=tuple(inputs))
+    if edit == "rationale":
+        non_ready = list(gold.non_ready)
+        index = next(
+            n for n, case in enumerate(non_ready) if case.split == side
+        )
+        non_ready[index] = non_ready[index].model_copy(
+            update={"rationale": non_ready[index].rationale + " now"}
+        )
+        return dataclasses.replace(
+            split, gold=gold.model_copy(update={"non_ready": tuple(non_ready)})
+        )
     if edit == "filter":
         cases = list(gold.cases)
         index = next(
@@ -264,15 +281,48 @@ def _edited(
     )
 
 
+def _reframed(feedback: FeedbackProbes, side: str) -> FeedbackProbes:
+    """Adds one expected frame to one ready case's feedback expectation."""
+    specs = dict(feedback.specs)
+    case_id = next(key for key, spec in specs.items() if spec.split == side)
+    (probe,) = specs[case_id].probes
+    frames = (*probe.expected_frames, max(probe.expected_frames, default=0) + 1)
+    probe = probe.model_copy(update={"expected_frames": frames})
+    specs[case_id] = specs[case_id].model_copy(update={"probes": (probe,)})
+    return FeedbackProbes(feedback.capture_dir, feedback.probes, specs)
+
+
+def _test_captures(
+    split: ModelSplitArtifacts, feedback: FeedbackProbes
+) -> dict[str, str]:
+    """Maps each test scored and feedback probe to its recorded capture."""
+    specs = (
+        *(case.spec for case in split.gold.cases),
+        *feedback.specs.values(),
+    )
+    return {
+        probe.probe_id: probe.capture_sha256
+        for spec in specs
+        if spec.split == "test"
+        for probe in spec.probes
+    }
+
+
 @pytest.mark.parametrize(
     ("side", "edit", "moved"),
     [
         pytest.param("dev", "intent", set[str](), id="dev_intent"),
         pytest.param("dev", "filter", set[str](), id="dev_filter"),
         pytest.param("dev", "routing", set[str](), id="dev_routing"),
+        pytest.param("dev", "rationale", set[str](), id="dev_rationale"),
+        pytest.param("dev", "frames", set[str](), id="dev_frames"),
         pytest.param("test", "intent", {"inputs"}, id="test_intent"),
         pytest.param("test", "filter", {"gold", "gold_hash"}, id="test_filter"),
         pytest.param("test", "routing", {"gold"}, id="test_routing"),
+        pytest.param(
+            "test", "rationale", {"gold", "gold_hash"}, id="test_rationale"
+        ),
+        pytest.param("test", "frames", {"feedback_labels"}, id="test_frames"),
     ],
 )
 def test_the_digests_cover_the_test_split_and_nothing_of_dev(
@@ -285,12 +335,25 @@ def test_the_digests_cover_the_test_split_and_nothing_of_dev(
     """A test edit after the freeze fails the record test; a dev edit never.
 
     A routing swap moves only the routing-inclusive digest: the published
-    gold hash cannot see it, which is why the record holds both.
+    gold hash cannot see it, which is why the record holds both. Non-ready
+    gold moves both; a feedback label moves only the value the adequacy
+    receipt quotes, and each capture digest is the one its probe records.
     """
     before = frozen_digests(split, feedback)
-    after = frozen_digests(_edited(split, side, edit), feedback)
+    after = (
+        frozen_digests(split, _reframed(feedback, side))
+        if edit == "frames"
+        else frozen_digests(_edited(split, side, edit), feedback)
+    )
 
+    captures = {
+        name: digest
+        for name, digest in before.items()
+        if name.startswith("semantic-")
+    }
     assert set(before) == _DIGEST_KEYS
+    assert before["feedback_labels"] == feedback_labels_sha256(feedback, "test")
+    assert captures == _test_captures(split, feedback)
     assert {name for name in before if after[name] != before[name]} == moved
 
 
