@@ -1,8 +1,10 @@
-"""The test freeze record: what it must hold and which prompt sets it admits."""
+"""The test freeze record: what it holds, what it admits, how it is written."""
 
+import dataclasses
 from datetime import datetime
 from datetime import timezone
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +22,27 @@ from dfilterforge.generation import RetrievalV1
 from dfilterforge.held_out import admit_prepare
 from dfilterforge.held_out import HeldOutError
 from dfilterforge.held_out import HeldOutFreezeV1
+from dfilterforge.held_out_digests import frozen_digests
+from dfilterforge.held_out_digests import main
+from dfilterforge.model_feedback import FeedbackProbes
+from dfilterforge.model_feedback import generate_feedback_probes
+from dfilterforge.model_split import generate_model_split
+from dfilterforge.model_split import ModelSplitArtifacts
 
+# The freeze commit sets this, so from then on a missing record fails.
+_FROZEN = False
+_DIGEST_KEYS = frozenset(
+    {
+        "inputs",
+        "gold",
+        "gold_hash",
+        "feedback_labels",
+        "semantic-31",
+        "semantic-37",
+        "semantic-43",
+        "semantic-35",
+    }
+)
 _CONDITIONS: dict[ConditionLabel, tuple[OutputContractV1, RetrievalV1]] = {
     "C1": (OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE),
     "C2": (OutputContractV1.DISPLAY_FILTER, RetrievalV1.LEXICAL),
@@ -184,3 +206,148 @@ def test_admission_reads_a_bounded_record_and_admits_only_its_list(
     admit_prepare("test", frozen)
     admit_prepare("test", later)
     assert _code(frozen.replace(b"revision", b"revisiom")) == "test_not_frozen"
+
+
+@pytest.fixture(name="split", scope="module")
+def fixture_split(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> ModelSplitArtifacts:
+    return generate_model_split(tmp_path_factory.mktemp("split"))
+
+
+@pytest.fixture(name="feedback", scope="module")
+def fixture_feedback(split: ModelSplitArtifacts) -> FeedbackProbes:
+    return generate_feedback_probes(split)
+
+
+def _test_item_ids(split: ModelSplitArtifacts) -> tuple[str, ...]:
+    """Returns the test item IDs of a generated split in file order."""
+    return tuple(item.item_id for item in split.inputs if item.split == "test")
+
+
+def _edited(
+    split: ModelSplitArtifacts, side: str, edit: str
+) -> ModelSplitArtifacts:
+    """Rewords one item, widens one reference filter or swaps two routes."""
+    gold = split.gold
+    if edit == "intent":
+        inputs = list(split.inputs)
+        index = next(n for n, item in enumerate(inputs) if item.split == side)
+        inputs[index] = inputs[index].model_copy(
+            update={"intent": inputs[index].intent + " now"}
+        )
+        return dataclasses.replace(split, inputs=tuple(inputs))
+    if edit == "filter":
+        cases = list(gold.cases)
+        index = next(
+            n for n, case in enumerate(cases) if case.spec.split == side
+        )
+        spec = cases[index].spec.model_copy(
+            update={
+                "reference_filter": cases[index].spec.reference_filter
+                + " && tcp"
+            }
+        )
+        cases[index] = cases[index].model_copy(update={"spec": spec})
+        return dataclasses.replace(
+            split, gold=gold.model_copy(update={"cases": tuple(cases)})
+        )
+    first, second = {
+        "dev": ("mei-0001", "mei-0003"),
+        "test": ("mei-1001", "mei-1003"),
+    }[side]
+    routes = dict(gold.item_to_case)
+    assert routes[first] != routes[second]
+    routes[first], routes[second] = routes[second], routes[first]
+    return dataclasses.replace(
+        split, gold=gold.model_copy(update={"item_to_case": routes})
+    )
+
+
+@pytest.mark.parametrize(
+    ("side", "edit", "moved"),
+    [
+        pytest.param("dev", "intent", set[str](), id="dev_intent"),
+        pytest.param("dev", "filter", set[str](), id="dev_filter"),
+        pytest.param("dev", "routing", set[str](), id="dev_routing"),
+        pytest.param("test", "intent", {"inputs"}, id="test_intent"),
+        pytest.param("test", "filter", {"gold", "gold_hash"}, id="test_filter"),
+        pytest.param("test", "routing", {"gold"}, id="test_routing"),
+    ],
+)
+def test_the_digests_cover_the_test_split_and_nothing_of_dev(
+    split: ModelSplitArtifacts,
+    feedback: FeedbackProbes,
+    side: str,
+    edit: str,
+    moved: set[str],
+) -> None:
+    """A test edit after the freeze fails the record test; a dev edit never.
+
+    A routing swap moves only the routing-inclusive digest: the published
+    gold hash cannot see it, which is why the record holds both.
+    """
+    before = frozen_digests(split, feedback)
+    after = frozen_digests(_edited(split, side, edit), feedback)
+
+    assert set(before) == _DIGEST_KEYS
+    assert {name for name in before if after[name] != before[name]} == moved
+
+
+def test_the_writer_records_one_prepare_and_never_replaces_a_record(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    split: ModelSplitArtifacts,
+    feedback: FeedbackProbes,
+) -> None:
+    """The record is computed from a test prepare and the code, then kept."""
+    prepare = _test_prepare(item_ids=_test_item_ids(split))
+    data = _written(prepare)
+    prepare_dir = tmp_path / "test-fixture"
+    prepare_dir.mkdir()
+    (prepare_dir / "prepare.json").write_bytes(data)
+    output = tmp_path / "held_out_freeze.json"
+    argv = ["--prepare-dir", str(prepare_dir), "--output", str(output)]
+
+    assert main(argv) == 0
+
+    written = output.read_bytes()
+    record = HeldOutFreezeV1.model_validate_json(written)
+    digests = frozen_digests(split, feedback)
+    assert record.prepare == prepare
+    assert record.admitted_prepares == (_sha256(data),)
+    assert record.digests == digests
+    printed: dict[str, str] = json.loads(capsys.readouterr().out)
+    assert printed == {"prepare": _sha256(data), **digests}
+
+    with pytest.raises(HeldOutError) as error:
+        main(argv)
+    assert error.value.code == "record_exists"
+    assert output.read_bytes() == written
+
+    dev_output = tmp_path / "dev.json"
+    (prepare_dir / "prepare.json").write_bytes(
+        _written(_test_prepare(split="dev"))
+    )
+    with pytest.raises(ValidationError):
+        main(["--prepare-dir", str(prepare_dir), "--output", str(dev_output)])
+    assert not dev_output.exists()
+
+
+def test_the_frozen_record_matches_the_regenerated_test_split(
+    split: ModelSplitArtifacts, feedback: FeedbackProbes
+) -> None:
+    """A committed record names the test split the code regenerates.
+
+    Its digests and frozen items must match, and its embedded manifest must
+    hash to its first admitted digest, which ties every prepare-side field
+    to the admitted bytes without the results tree.
+    """
+    if not _FROZEN and not held_out.RECORD_PATH.exists():
+        pytest.skip("no freeze record yet")
+    record = held_out.load_record()
+    assert record is not None, "the freeze record is missing"
+
+    assert record.digests == frozen_digests(split, feedback)
+    assert record.prepare.item_ids == _test_item_ids(split)
+    assert _sha256(_written(record.prepare)) == record.admitted_prepares[0]
