@@ -86,8 +86,10 @@ number; every rate below except false-ready and slot match covers ready gold.
   recorded, not judged.
 - silent-wrong: compiles and runs, but at least one probe disagrees. Reported
   over all items and over compile-valid items.
-- repair@1: share of silent-wrong or invalid items that become strong exact
-  after one feedback round, fed by a fourth unscored probe.
+- repair@1: share of silent-wrong or invalid items that become strong exact on
+  the three scored probes after one feedback round, which shows packets only
+  from its split's unscored feedback probe (dev semantic-29, test semantic-35);
+  an item that probe cannot separate stays in the denominator.
 - abstention (both contracts, no human rubric): over-abstention on ready gold.
   false-ready: a ready answer to needs_clarification or not_expressible gold,
   never executed, over non-ready items, reported overall and per gold status.
@@ -113,14 +115,16 @@ counts as invalid, not as a stop, if its gold case reruns clean.
 
 The mutation-adequacy gate is part of the gold. For every ready dev and test
 case, `scripts/probe_adequacy.py` requires the reference filter and the compiled
-canonical IR to select exactly the labelled frames on all six probes, the
-authored mutation to select exactly its own authored frames there and to
-differ from the labels on one probe of its split, and every single-site mutant
-of the canonical IR from the fixed operator set in `dfilterforge.mutants` to
-differ on one probe of its split unless a waiver in
-`model_split.MUTANT_WAIVERS` names its case, edit and filter with a reason
-(`equivalent` or `not_separable`). A mismatch, a survivor without a waiver, or
-a waiver without a survivor fails CI.
+canonical IR to select exactly the labelled frames on all six scored and both
+feedback probes, the authored mutation to select exactly its own authored
+frames there and to differ from the labels on one scored probe of its split and
+on its feedback probe, and every single-site mutant of the canonical IR from
+the fixed operator set in `dfilterforge.mutants` to differ on one scored probe
+of its split unless a waiver in `model_split.MUTANT_WAIVERS` names its case,
+edit and filter with a reason (`equivalent` or `not_separable`). The feedback
+probe decides no survivor, but every killed mutant must differ on it too and
+no waived one may. A mismatch, a survivor without a waiver, a waiver without a
+survivor, or a breach of either feedback rule fails CI.
 
 ## Decoding and provenance
 

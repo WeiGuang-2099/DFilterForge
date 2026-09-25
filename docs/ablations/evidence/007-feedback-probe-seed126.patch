@@ -1,0 +1,11 @@
+--- a/src/dfilterforge/model_feedback.py
++++ b/src/dfilterforge/model_feedback.py
+@@ -34,7 +34,7 @@ from dfilterforge.model_split import ModelSplitArtifacts
+ # pilot probe. Their clients, 192.0.2.129 and .135, lie outside
+ # 192.0.2.0/25, which the /25 subnet mutant of a TEST-NET-1 case needs.
+ FEEDBACK_PROBE_IDS: Mapping[ModelSplit, str] = MappingProxyType(
+-    {"dev": "semantic-29", "test": "semantic-35"}
++    {"dev": "semantic-29", "test": "semantic-27"}
+ )
+ _PROVENANCE = (
+     "Feedback view of a model split case for the repair round: its gold "

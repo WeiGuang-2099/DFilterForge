@@ -13,7 +13,7 @@ inputs.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 import hashlib
 import json
@@ -220,21 +220,25 @@ MUTANT_WAIVERS: tuple[MutantWaiver, ...] = (
 )
 
 
-def _copy_selected_probes(output_dir: Path) -> tuple[BenchmarkProbe, ...]:
-    """Copies the six selected benchmark captures and appends witnesses."""
-    capture_dir = output_dir / "captures"
+def copy_with_witnesses(
+    probe_ids: Collection[str], capture_dir: Path
+) -> dict[str, BenchmarkProbe]:
+    """Copies benchmark captures and appends the witness tail to each.
+
+    Args:
+        probe_ids: The ``semantic-NN`` benchmark captures to copy.
+        capture_dir: Destination of the copies, named as the originals.
+
+    Returns:
+        Each copy by probe ID, with its recipe and witness order.
+    """
     capture_dir.mkdir(parents=True, exist_ok=True)
-    selected_ids = {
-        probe_id
-        for probe_ids in _CAPTURE_IDS.values()
-        for probe_id in probe_ids
-    }
-    selected: list[BenchmarkProbe] = []
+    copies: dict[str, BenchmarkProbe] = {}
     with TemporaryDirectory(prefix="dfilterforge-model-split-") as staging:
         generated = generate_benchmark(Path(staging))
         # generate_benchmark builds capture i with seed 100 + i.
         for seed, probe in enumerate(generated, 100):
-            if probe.probe_id not in selected_ids:
+            if probe.probe_id not in probe_ids:
                 continue
             target = capture_dir / probe.capture_path.name
             target.write_bytes(
@@ -242,20 +246,21 @@ def _copy_selected_probes(output_dir: Path) -> tuple[BenchmarkProbe, ...]:
                     probe.capture_path.read_bytes(), seed, len(probe.recipes)
                 )
             )
-            selected.append(
-                BenchmarkProbe(
-                    probe.probe_id, target, probe.recipes + WITNESS_NAMES
-                )
+            copies[probe.probe_id] = BenchmarkProbe(
+                probe.probe_id, target, probe.recipes + WITNESS_NAMES
             )
-    order = {
-        probe_id: index
-        for index, probe_id in enumerate(
-            probe_id
-            for split in ("dev", "test")
-            for probe_id in _CAPTURE_IDS[split]
-        )
-    }
-    return tuple(sorted(selected, key=lambda probe: order[probe.probe_id]))
+    return copies
+
+
+def _copy_selected_probes(output_dir: Path) -> tuple[BenchmarkProbe, ...]:
+    """Copies the six selected benchmark captures and appends witnesses."""
+    ordered = tuple(
+        probe_id
+        for split in ("dev", "test")
+        for probe_id in _CAPTURE_IDS[split]
+    )
+    copies = copy_with_witnesses(ordered, output_dir / "captures")
+    return tuple(copies[probe_id] for probe_id in ordered)
 
 
 def _build_gold_case(

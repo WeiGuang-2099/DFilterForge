@@ -1,0 +1,1654 @@
+{
+  "case_count": 52,
+  "cases": [
+    {
+      "canonical_filter": "(tcp && ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "tcp-expiring-ttl",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 3,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.ttl <= 1 && (tcp || udp)",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp && ip.ttl <= 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "udp-expiring-ttl",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 3,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.ttl <= 1 && (udp || tcp)",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && ip.ttl <= 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.ack == true && tcp.dstport == 443)",
+      "canonical_mismatches": [],
+      "case_id": "ack-to-https",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 13,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.ack == 1 && tcp",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.ack == 1 && tcp.dstport == 443",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns.flags.response == false && dns.qry.type == 1)",
+      "canonical_mismatches": [],
+      "case_id": "dns-a-queries",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 10,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 3,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns.flags.response == 0 && dns",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.flags.response == 0 && dns.qry.type == 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.fin == true || dns.flags.response == true)",
+      "canonical_mismatches": [],
+      "case_id": "fin-or-dns-response",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 10,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 3,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && dns.flags.response == 1",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.fin == 1 || dns.flags.response == 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && !(dns) && ip.dst == 10.0.0.0/8)",
+      "canonical_mismatches": [],
+      "case_id": "udp-nondns-private-destination",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 2,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && !dns && ip",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && !dns && ip.dst == 10.0.0.0/8",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "((tcp.flags.syn == true && tcp.flags.ece == true) || ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "ecn-syn-or-expiring",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 7,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 12,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.syn == 1 && tcp.flags.ece == 1",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "(tcp.flags.syn == 1 && tcp.flags.ece == 1) || ip.ttl <= 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns.qry.type == 28 || dns.flags.rcode == 3)",
+      "canonical_mismatches": [],
+      "case_id": "aaaa-or-nxdomain",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 4,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && dns.qry.type == 28",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.qry.type == 28 || dns.flags.rcode == 3",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.reset == true || tcp.flags.fin == true)",
+      "canonical_mismatches": [],
+      "case_id": "reset-or-fin",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 4,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 4,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags == 4 || tcp.flags == 1",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.reset == 1 || tcp.flags.fin == 1",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && ip.ttl >= 64)",
+      "canonical_mismatches": [],
+      "case_id": "udp-normal-ttl",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 29,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && ip.ttl > 64",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && ip.ttl >= 64",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "ip.dst == 10.0.0.0/8",
+      "canonical_mismatches": [],
+      "case_id": "private-destination",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 5,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.addr == 10.0.0.0/8",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "ip.dst == 10.0.0.0/8",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns.flags.response == true && !(dns.flags.rcode == 0))",
+      "canonical_mismatches": [],
+      "case_id": "dns-error-responses",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 3,
+      "feedback_probe_id": "semantic-29",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns.flags.rcode == 3",
+      "mutation_killing_probes": [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.flags.response == 1 && !(dns.flags.rcode == 0)",
+      "split": "dev",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "tcp-source-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(tcp && ip.src == 192.0.2.0/25)"
+        }
+      ],
+      "feedback_expected_count": 20,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && ip",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "udp-source-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(udp && ip.src == 192.0.2.0/25)"
+        }
+      ],
+      "feedback_expected_count": 25,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 6,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && ip",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(ip.src == 10.0.0.0/8 || ip.dst == 10.0.0.0/8)",
+      "canonical_mismatches": [],
+      "case_id": "private-either-endpoint",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 7,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 12,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip && ip.src == 10.0.0.0/8",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "ip.src == 10.0.0.0/8 || ip.dst == 10.0.0.0/8",
+      "split": "test",
+      "survivors": 2
+    },
+    {
+      "canonical_filter": "(ip.src == 192.0.2.0/24 || ip.src == 10.0.0.0/8)",
+      "canonical_mismatches": [],
+      "case_id": "source-testnet-or-private",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "0: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(ip.src == 192.0.2.0/25 || ip.src == 10.0.0.0/8)"
+        }
+      ],
+      "feedback_expected_count": 47,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip && ip.src == 192.0.2.0/24",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "ip.src == 192.0.2.0/24 || ip.src == 10.0.0.0/8",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.ack == true && !(ip.src == 192.0.2.0/24))",
+      "canonical_mismatches": [],
+      "case_id": "ack-outside-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1.0: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(tcp.flags.ack == true && !(ip.src == 192.0.2.0/25))"
+        }
+      ],
+      "feedback_expected_count": 7,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 9,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.ack == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.ack == 1 && !(ip.src == 192.0.2.0/24)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "high-udp-source-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/25)"
+        }
+      ],
+      "feedback_expected_count": 13,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport > 5353",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.dstport > 5353 && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp.dstport > 5353 && ip.ttl >= 64)",
+      "canonical_mismatches": [],
+      "case_id": "high-udp-normal-ttl",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 13,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip && udp.dstport > 5353",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.dstport > 5353 && ip.ttl >= 64",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/24 && ip.ttl >= 64)",
+      "canonical_mismatches": [],
+      "case_id": "high-udp-testnet-normal-ttl",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(udp.dstport > 5353 && ip.src == 192.0.2.0/25 && ip.ttl >= 64)"
+        }
+      ],
+      "feedback_expected_count": 9,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 16,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport > 5353 && ip.src == 192.0.2.0/24",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.dstport > 5353 && ip.src == 192.0.2.0/24 && ip.ttl >= 64",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp.dstport < 5353 && dns.qry.type == 1)",
+      "canonical_mismatches": [],
+      "case_id": "low-port-dns-a",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 10,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport < 5353",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.dstport < 5353 && dns.qry.type == 1",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp.dstport == 53 && udp.srcport != 53)",
+      "canonical_mismatches": [],
+      "case_id": "dns-destination-not-source",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 6,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.dstport == 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.dstport == 53 && udp.srcport != 53",
+      "split": "test",
+      "survivors": 1
+    },
+    {
+      "canonical_filter": "(udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode == 0)",
+      "canonical_mismatches": [],
+      "case_id": "successful-source-dns",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 3,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && udp.srcport == 53 && udp.dstport != 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.srcport == 53 && udp.dstport != 53 && dns.flags.rcode == 0",
+      "split": "test",
+      "survivors": 1
+    },
+    {
+      "canonical_filter": "(dns.qry.type == 28 || udp.srcport == 53)",
+      "canonical_mismatches": [],
+      "case_id": "aaaa-or-udp-source-dns",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 10,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && udp.srcport == 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.qry.type == 28 || udp.srcport == 53",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && tcp.flags.syn == false)",
+      "canonical_mismatches": [],
+      "case_id": "https-without-syn",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 13,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.syn == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.dstport == 443 && tcp.flags.syn == 0",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && tcp.flags.syn == true && tcp.flags.ack == false)",
+      "canonical_mismatches": [],
+      "case_id": "https-syn-no-ack",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 4,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.flags.syn == 1 && tcp.flags.ack == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.dstport == 443 && tcp.flags.syn == 1 && tcp.flags.ack == 0",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && (tcp.flags.syn == true || tcp.flags.reset == true))",
+      "canonical_mismatches": [],
+      "case_id": "https-syn-or-reset",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 7,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 9,
+      "mutants_rejected": 0,
+      "mutation_filter": "(tcp && tcp.flags.syn == 1) || tcp.flags.reset == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.dstport == 443 && (tcp.flags.syn == 1 || tcp.flags.reset == 1)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "tcp.dstport != 443",
+      "canonical_mismatches": [],
+      "case_id": "tcp-destination-not-https",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 10,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 4,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.dstport == 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.dstport != 443",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "tcp.srcport == 443",
+      "canonical_mismatches": [],
+      "case_id": "tcp-from-https-port",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 5,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 2,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.port == 443",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.srcport == 443",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp && !(tcp.port == 443))",
+      "canonical_mismatches": [],
+      "case_id": "tcp-without-port-443",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 5,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 3,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp && tcp.dstport != 443",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp && !(tcp.port == 443)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.fin == true && tcp.srcport == 443)",
+      "canonical_mismatches": [],
+      "case_id": "fin-from-https-port",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 1,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.fin == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.fin == 1 && tcp.srcport == 443",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "tcp.flags.ece == true",
+      "canonical_mismatches": [],
+      "case_id": "ece-any-segment",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 3,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 2,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.ece == 1 && tcp.flags.syn == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.ece == 1",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "tcp.flags.cwr == true",
+      "canonical_mismatches": [],
+      "case_id": "cwr-any-segment",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 2,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 2,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.ece == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.cwr == 1",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.syn == true && tcp.flags.ece == false)",
+      "canonical_mismatches": [],
+      "case_id": "syn-without-ece",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 7,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.syn == 1 && tcp.flags.cwr == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.syn == 1 && tcp.flags.ece == 0",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.syn == true || tcp.flags.fin == true || tcp.flags.reset == true)",
+      "canonical_mismatches": [],
+      "case_id": "control-segments",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 12,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 7,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.syn == 1 || tcp.flags.fin == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.syn == 1 || tcp.flags.fin == 1 || tcp.flags.reset == 1",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && !((tcp.flags.syn == true || tcp.flags.reset == true)))",
+      "canonical_mismatches": [],
+      "case_id": "https-no-syn-no-reset",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 11,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 10,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.port == 443 && !(tcp.flags.syn == 1 || tcp.flags.reset == 1)",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.dstport == 443 && !(tcp.flags.syn == 1 || tcp.flags.reset == 1)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.ack == true && tcp.flags.syn == false)",
+      "canonical_mismatches": [],
+      "case_id": "ack-without-syn",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 18,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags.ack == 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.ack == 1 && tcp.flags.syn == 0",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.flags.ack == true && tcp.len == 0)",
+      "canonical_mismatches": [],
+      "case_id": "ack-no-payload",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 17,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 4,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.flags == 16",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.flags.ack == 1 && tcp.len == 0",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && ip.ttl < 64)",
+      "canonical_mismatches": [],
+      "case_id": "udp-short-ttl",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 4,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && ip.ttl < 63",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && ip.ttl < 64",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(ip.ttl > 1 && ip.ttl < 64)",
+      "canonical_mismatches": [],
+      "case_id": "ttl-between",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 3,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 8,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.ttl >= 1 && ip.ttl < 64",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "ip.ttl > 1 && ip.ttl < 64",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "udp.dstport in {53, 5353}",
+      "canonical_mismatches": [],
+      "case_id": "udp-to-dns-or-mdns-port",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 12,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 2,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp.port in {53, 5353}",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp.dstport in {53, 5353}",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns.flags.response == false && dns && udp.dstport != 53)",
+      "canonical_mismatches": [],
+      "case_id": "dns-query-off-port-53",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 2,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 9,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns.flags.response == 0 && udp.dstport != 53",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.flags.response == 0 && dns && udp.dstport != 53",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns.flags.response == true && !(dns.flags.rcode == 3))",
+      "canonical_mismatches": [],
+      "case_id": "dns-response-not-nxdomain",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 6,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns.flags.response == 1 && dns.flags.rcode == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.flags.response == 1 && !(dns.flags.rcode == 3)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns.flags.response == false && !(dns.qry.type == 1))",
+      "canonical_mismatches": [],
+      "case_id": "dns-queries-not-a",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 2,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 4,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns.flags.response == 0 && dns.qry.type == 28",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns.flags.response == 0 && !(dns.qry.type == 1)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && dns && dns.flags.response == false)",
+      "canonical_mismatches": [],
+      "case_id": "unicast-dns-udp-queries",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 10,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 5,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && dns.flags.response == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && dns && dns.flags.response == 0",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(dns && !(dns.flags.rcode == 3))",
+      "canonical_mismatches": [],
+      "case_id": "dns-except-nxdomain",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 17,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 7,
+      "mutants_rejected": 0,
+      "mutation_filter": "dns && dns.flags.rcode == 0",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "dns && !(dns.flags.rcode == 3)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(ip.src == 10.0.0.0/8 || ip.ttl <= 1)",
+      "canonical_mismatches": [],
+      "case_id": "private-source-or-expiring",
+      "feedback_blind_mutants": [],
+      "feedback_expected_count": 6,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 11,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.src == 10.0.0.0/8 || ip.ttl < 1",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "ip.src == 10.0.0.0/8 || ip.ttl <= 1",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "ip.addr == 192.0.2.0/24",
+      "canonical_mismatches": [],
+      "case_id": "testnet-either-endpoint",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "root: ip.addr 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "ip.addr == 192.0.2.0/25"
+        }
+      ],
+      "feedback_expected_count": 55,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 2,
+      "mutants_rejected": 0,
+      "mutation_filter": "ip.src == 192.0.2.0/24",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "ip.addr == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "!(ip.addr == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "no-testnet-endpoint",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "0: ip.addr 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "!(ip.addr == 192.0.2.0/25)"
+        }
+      ],
+      "feedback_expected_count": 5,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 3,
+      "mutants_rejected": 0,
+      "mutation_filter": "!(ip.src == 192.0.2.0/24)",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "!(ip.addr == 192.0.2.0/24)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && !(ip.src == 192.0.2.0/24))",
+      "canonical_mismatches": [],
+      "case_id": "udp-not-from-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1.0: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(udp && !(ip.src == 192.0.2.0/25))"
+        }
+      ],
+      "feedback_expected_count": 7,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 7,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && ip.src == 10.0.0.0/8",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && !(ip.src == 192.0.2.0/24)",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(udp && !(dns) && ip.src == 192.0.2.0/24)",
+      "canonical_mismatches": [],
+      "case_id": "nondns-udp-from-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "2: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(udp && !(dns) && ip.src == 192.0.2.0/25)"
+        }
+      ],
+      "feedback_expected_count": 12,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 10,
+      "mutants_rejected": 0,
+      "mutation_filter": "udp && !dns",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "udp && !dns && ip.src == 192.0.2.0/24",
+      "split": "test",
+      "survivors": 0
+    },
+    {
+      "canonical_filter": "(tcp.dstport == 443 && !(ip.src == 192.0.2.0/24))",
+      "canonical_mismatches": [],
+      "case_id": "https-from-outside-testnet",
+      "feedback_blind_mutants": [
+        {
+          "category": "subnet",
+          "edit": "1.0: ip.src 192.0.2.0/24 -> 192.0.2.0/25",
+          "filter": "(tcp.dstport == 443 && !(ip.src == 192.0.2.0/25))"
+        }
+      ],
+      "feedback_expected_count": 2,
+      "feedback_probe_id": "semantic-27",
+      "label_mismatches": [],
+      "mutants_executed": 9,
+      "mutants_rejected": 0,
+      "mutation_filter": "tcp.dstport == 443 && !(ip.addr == 192.0.2.0/24)",
+      "mutation_killing_probes": [
+        "semantic-31",
+        "semantic-37",
+        "semantic-43"
+      ],
+      "mutation_label_mismatches": [],
+      "mutation_separated_on_feedback": true,
+      "reference_filter": "tcp.dstport == 443 && !(ip.src == 192.0.2.0/24)",
+      "split": "test",
+      "survivors": 0
+    }
+  ],
+  "categories": [
+    "field-swap",
+    "protocol-as-port",
+    "flag-as-number",
+    "flag-as-byte",
+    "value-domain",
+    "boundary",
+    "subnet",
+    "drop-conjunct",
+    "drop-disjunct",
+    "drop-not"
+  ],
+  "counts": {
+    "all": {
+      "by_category": {
+        "boundary": {
+          "killed": 57,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-conjunct": {
+          "killed": 79,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-disjunct": {
+          "killed": 23,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-not": {
+          "killed": 12,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "field-swap": {
+          "killed": 70,
+          "rejected": 0,
+          "survived": 4,
+          "uncompilable": 0
+        },
+        "flag-as-byte": {
+          "killed": 21,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "flag-as-number": {
+          "killed": 13,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "protocol-as-port": {
+          "killed": 10,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "subnet": {
+          "killed": 40,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "value-domain": {
+          "killed": 15,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        }
+      },
+      "executed": 344,
+      "killed": 340,
+      "rejected": 0,
+      "survived": 4,
+      "uncompilable": 0,
+      "unwaived": 0,
+      "waived": 4
+    },
+    "dev": {
+      "by_category": {
+        "boundary": {
+          "killed": 16,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-conjunct": {
+          "killed": 17,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-disjunct": {
+          "killed": 8,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-not": {
+          "killed": 2,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "field-swap": {
+          "killed": 7,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "flag-as-byte": {
+          "killed": 6,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "flag-as-number": {
+          "killed": 2,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "protocol-as-port": {
+          "killed": 2,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "subnet": {
+          "killed": 6,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "value-domain": {
+          "killed": 6,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        }
+      },
+      "executed": 72,
+      "killed": 72,
+      "rejected": 0,
+      "survived": 0,
+      "uncompilable": 0,
+      "unwaived": 0,
+      "waived": 0
+    },
+    "test": {
+      "by_category": {
+        "boundary": {
+          "killed": 41,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-conjunct": {
+          "killed": 62,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-disjunct": {
+          "killed": 15,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "drop-not": {
+          "killed": 10,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "field-swap": {
+          "killed": 63,
+          "rejected": 0,
+          "survived": 4,
+          "uncompilable": 0
+        },
+        "flag-as-byte": {
+          "killed": 15,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "flag-as-number": {
+          "killed": 11,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "protocol-as-port": {
+          "killed": 8,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "subnet": {
+          "killed": 34,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        },
+        "value-domain": {
+          "killed": 9,
+          "rejected": 0,
+          "survived": 0,
+          "uncompilable": 0
+        }
+      },
+      "executed": 272,
+      "killed": 268,
+      "rejected": 0,
+      "survived": 4,
+      "uncompilable": 0,
+      "unwaived": 0,
+      "waived": 4
+    }
+  },
+  "failures": {
+    "canonical_mismatches": 0,
+    "disproved_waivers": 0,
+    "feedback_blind_mutants": 11,
+    "feedback_undistinguished_mutations": 0,
+    "label_mismatches": 0,
+    "mutation_label_mismatches": 0,
+    "stale_waivers": 0,
+    "undistinguished_mutations": 0,
+    "unwaived_survivors": 0
+  },
+  "label_checks": {
+    "canonical_checked": 416,
+    "mutation_checked": 416,
+    "reference_checked": 416
+  },
+  "measurement_identity": {
+    "capture_manifest": [
+      {
+        "capture_sha256": "72c24cc3a61b0c0f5a2e9d80ada806fa0bb26443a40a7bd29bc3c58514ab8c9e",
+        "probe_id": "semantic-11",
+        "size_bytes": 4497,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "f4845f3241c5ad7db760e73b9fbdc0da8e2268a34b3278f88d86b21abb6a7b57",
+        "probe_id": "semantic-17",
+        "size_bytes": 4550,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "510cc21324a6c1439d01747bef6d35d20c55876e3ee06122d39759b7b2211a29",
+        "probe_id": "semantic-23",
+        "size_bytes": 5084,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "2e772681dff9db870f6763cece94ef37ce302cd277407106e848174cc0baf872",
+        "probe_id": "semantic-31",
+        "size_bytes": 4937,
+        "split": "test"
+      },
+      {
+        "capture_sha256": "dd18bced698eef8ef38a69e6d09e67515b84f655192436a99751ee5267b3bfa8",
+        "probe_id": "semantic-37",
+        "size_bytes": 4930,
+        "split": "test"
+      },
+      {
+        "capture_sha256": "2d68035f76b6e83fc0e92c728803966cc5f74001c22336e85879124f1162dbe1",
+        "probe_id": "semantic-43",
+        "size_bytes": 5544,
+        "split": "test"
+      }
+    ],
+    "capture_manifest_sha256": "035d86b42aee60bca9b313f747196906970bd53aaf768a6b8959e8a554ec2f3f",
+    "environment": {
+      "catalog_hash": null,
+      "catalog_profile_hash": null,
+      "executable_sha256": "67d31bae9ec022705e8b18cbbb21380d86773cdac619da14d075226a6f47e0b8",
+      "identity_scope": "binary-and-runner-source",
+      "platform_machine": "x86_64",
+      "python_version": "3.12.3",
+      "runner_limits_hash": "f623f081dc4a22ed8f91e987c11ed3e7e562ecdae5e0ec25b1d33266cd49d610",
+      "runner_source_sha256": "1420648c379c5fcae9dd743147c06560b65a389ffdd7cda5a668123baa6893ab",
+      "schema_version": "live-environment/1.0",
+      "tshark_version": "4.6.8",
+      "unmeasured": [
+        "container_image_digest",
+        "shared_libraries",
+        "system_dissector_data",
+        "plugin_and_lua_build_options"
+      ]
+    },
+    "environment_sha256": "8bfb53d31c02b4c36786cd4914840f0808092a7e4fa037058248d4c4ba1bf414",
+    "feedback_labels_sha256": {
+      "dev": "be0c91824bb5c65396f4cbd95d3c55348a961d877c17ff9018301f1da66b7608",
+      "test": "14501f6fee81333bf7aa8a117dfd6f7c26ddc336b3073bfa289f1e9f08618f75"
+    },
+    "feedback_manifest": [
+      {
+        "capture_sha256": "1a0ef0e69d85bf39f5f982261fa48822991d00e3c21ae0a26bd190d67c59ec1b",
+        "probe_id": "semantic-29",
+        "size_bytes": 5186,
+        "split": "dev"
+      },
+      {
+        "capture_sha256": "d9349ce7b8ec50121c41fa9b5e8caf206566cd67cedebf3c439561793c91e5f6",
+        "probe_id": "semantic-27",
+        "size_bytes": 5050,
+        "split": "test"
+      }
+    ],
+    "gold_sha256": "ea17d038afe0ba0448b3bc5318f28ada46056f663474e018896dba9a4bc66275",
+    "source_files": {
+      "scripts/probe_adequacy.py": "393b6c9019a24dc153c8e32276b6e48b400bcc519c59888548b002377783c401",
+      "src/dfilterforge/__init__.py": "fb164f8e916b2839f95e6bb635f4e39ab25e83e94f7223fae73e75476a8ac1a0",
+      "src/dfilterforge/__main__.py": "4494efc46d5a811844e6e0141c365fca62360023dc20a056b4fa99951a0cad65",
+      "src/dfilterforge/benchmark.py": "377b8d7c2b1544319356515d1577ae03a74dda4f66c9e67702cbcd59968476c5",
+      "src/dfilterforge/canonical.py": "5f192f0acac67e6579019bbefe547ec6ccce7369fda5376a569edc6830162800",
+      "src/dfilterforge/catalog_runtime.py": "5d790aa68c2677b9a0f1d0b43933d7ace700717af4cb4bf94dc9f7c797d7850a",
+      "src/dfilterforge/cli.py": "e35ba2d117bf18eaaee83b977a411b4133b266446d3401aba4273189d2e81e17",
+      "src/dfilterforge/compiler.py": "575cef8ee3b9eed89f7965d3fa1ec3205a53deee468641fda76558c2ebfba60d",
+      "src/dfilterforge/completions.py": "da5b8f973dd914df7d77541bfcd55061252c750083ad7492627ff7af4e1a1cb7",
+      "src/dfilterforge/errors.py": "23ff2819b1eebcd5359831c82468b6d472c3e3f2fa7a7352e6a3ea8da63d250b",
+      "src/dfilterforge/evaluation.py": "e23679662c8508026d263f27a44354bc17bd8c857250b8fbf3f5bd99b8fb3c1c",
+      "src/dfilterforge/field_catalog.py": "594a0940144e523fc7c3b149aad13e25b86f06f98f16498f1ff9adf959d0a1c7",
+      "src/dfilterforge/field_retrieval.py": "9ba9ac795be3a27c1b65f181ef268db45c0517cbf38bc926f50501004241121e",
+      "src/dfilterforge/fixtures.py": "362aee79b860b1aa5ceb91c6430ec75f42bf3571ac2048cb51bbba8dfb5f53c7",
+      "src/dfilterforge/generation.py": "0f9169658e7716dfde840289fe914070a9ccba6fb800e34e28ec54b70e86464d",
+      "src/dfilterforge/intent_ir.py": "12a865c55fcebea5c0cc8a86ee173d989e679cb68bbd35b4f4e6658ccfab02f1",
+      "src/dfilterforge/live.py": "68be1ccdcaa67db14d98e2dfcaec3d6ab377f63a588df8c0da5004901e151136",
+      "src/dfilterforge/model_cases.py": "023f3504e7f801789dc175298933394abdd0044d7e969add36d07e6fc81013f3",
+      "src/dfilterforge/model_client.py": "4ce0811a75f44461af1ab98800c217d4d5004169db22a3abba52dfddc19cb609",
+      "src/dfilterforge/model_dev_cases.py": "4daeccd1265b0654af3ab853ecbbbe49171e69285deb59e7c73f4e27a1fba252",
+      "src/dfilterforge/model_feedback.py": "23d0433b419c647c7fd03c70421cbc9fb713e66ca2cbcdf16567a84273728bf7",
+      "src/dfilterforge/model_split.py": "7c4972ce79bfe1dc8971bbd0c8da3ccf8e3168ec0ddd87537e8e4610f19582c9",
+      "src/dfilterforge/model_test_cases.py": "f8c3dd6e0ea4a16382a8ec2481c97eefd4e1a9381c32f6dde3b9ce409692e5cc",
+      "src/dfilterforge/mutants.py": "7016719e35e8da24ba20b537875df601e1b25719825432bd1944480ab01976bf",
+      "src/dfilterforge/replay.py": "78c47d576f30523317eb070ff06a07b587d50072407c1eb1a898111b2c8f71d3",
+      "src/dfilterforge/run_store.py": "945357fcf31e0078a3da438dfaccfca3b69eecbfb584fd4071669a29a864e59f",
+      "src/dfilterforge/runner.py": "1420648c379c5fcae9dd743147c06560b65a389ffdd7cda5a668123baa6893ab",
+      "src/dfilterforge/score_report.py": "ac5bc06960078d56d5ba1aa4c69f35eeac98f69736a7278da4fd8570581c32cb",
+      "src/dfilterforge/score_summary.py": "9cc8b6c032eb16c0ab9995818678a414422c13642df6dd747ad7096a02dd8c5a",
+      "src/dfilterforge/scoring.py": "cbb4b8c6b39b0e8f64d0892d978a28b2434f18e7ad539b42a7f2b6588051625e",
+      "src/dfilterforge/shortcuts.py": "4a29a929449eba97f320ada5dd582ad77f22417a33603d7ff4f84d7410fe2cae",
+      "src/dfilterforge/text_limits.py": "f1f6b06dbf01fc3ad43a215d8c2be1c7a1e1386b22a5b79a3062733ef453caaf",
+      "src/dfilterforge/witnesses.py": "2e529ccfece043f896b5bc32d6858a9181e6b6f4148dd9769d8245a4ceba780c"
+    },
+    "source_manifest_sha256": "975895eed7208ac86074ea5cd516f4c2cfdb0177008385b6b37cf11a04e7f827"
+  },
+  "measurement_identity_sha256": "949edc4d38d5897e69a3d88fff5034f432bf0a30ab8ebb08078521f8f700badf",
+  "mode": "report",
+  "mutants": {
+    "duplicates": 0,
+    "executed": 344,
+    "generated": 344,
+    "killed": 340,
+    "rejected": 0,
+    "survived": 4,
+    "uncompilable": 0,
+    "unwaived": 0,
+    "waived": 4
+  },
+  "notes": [
+    "A survivor matches its case's labels on all three scored probes of its split.",
+    "Labels are checked on all eight probes, the six scored and both feedback probes, dev and test: the reference filter and the compiled canonical IR must each select exactly the frames the case's recipe oracle names, and the authored mutation exactly the frames its mutation memberships name.",
+    "Each executed mutant and the authored mutation also run on their split's feedback probe, which decides no survivor: a killed mutant or an authored mutation equal to the labels there, or a waived survivor that differs there, fails the gate.",
+    "Mutants come from the fixed operator set in dfilterforge.mutants, not from an enumeration of near misses; the gate never judges equivalence, only a waiver does.",
+    "Mutants are deduplicated by compiled filter text, including the reference filter and the compiled canonical IR, keeping the first.",
+    "A mutant tshark rejects is listed under rejected; it cannot be scored strong exact, so it is neither killed nor a survivor.",
+    "A waiver applies only when its case, edit label and compiled filter all match one survivor.",
+    "runtime varies between runs and is not part of the gate."
+  ],
+  "passed": false,
+  "rejected": [],
+  "runtime": {
+    "max_ms": 93.876,
+    "p50_ms": 65.494,
+    "p95_ms": 71.881,
+    "timed_runs": 2576,
+    "wall_seconds": 171.253
+  },
+  "schema_version": "probe-adequacy/1.2",
+  "source_revision": "11e01d7+seed126",
+  "survivors": [
+    {
+      "case_id": "private-either-endpoint",
+      "category": "field-swap",
+      "edit": "0: ip.src -> ip.addr",
+      "feedback_separated": false,
+      "filter": "(ip.addr == 10.0.0.0/8 || ip.dst == 10.0.0.0/8)",
+      "split": "test",
+      "waived": true,
+      "waiver_kind": "equivalent"
+    },
+    {
+      "case_id": "private-either-endpoint",
+      "category": "field-swap",
+      "edit": "1: ip.dst -> ip.addr",
+      "feedback_separated": false,
+      "filter": "(ip.src == 10.0.0.0/8 || ip.addr == 10.0.0.0/8)",
+      "split": "test",
+      "waived": true,
+      "waiver_kind": "equivalent"
+    },
+    {
+      "case_id": "dns-destination-not-source",
+      "category": "field-swap",
+      "edit": "0: udp.dstport -> udp.port",
+      "feedback_separated": false,
+      "filter": "(udp.port == 53 && udp.srcport != 53)",
+      "split": "test",
+      "waived": true,
+      "waiver_kind": "equivalent"
+    },
+    {
+      "case_id": "successful-source-dns",
+      "category": "field-swap",
+      "edit": "0: udp.srcport -> udp.port",
+      "feedback_separated": false,
+      "filter": "(udp.port == 53 && udp.dstport != 53 && dns.flags.rcode == 0)",
+      "split": "test",
+      "waived": true,
+      "waiver_kind": "equivalent"
+    }
+  ],
+  "waivers": {
+    "applied": 4,
+    "declared": 4,
+    "stale": []
+  }
+}

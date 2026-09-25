@@ -1,8 +1,8 @@
 """The probe adequacy gate: waivers, receipt shape and exit status.
 
 A recorded runner stands in for tshark: it answers each reference filter
-and compiled canonical IR with its case's labels on all six probes, each
-authored mutation with its mutation labels on all six probes, a chosen set
+and compiled canonical IR with its case's labels on all eight probes, each
+authored mutation with its mutation labels on all eight probes, a chosen set
 of filters with the labels of their case, and everything else with no
 frames.
 """
@@ -18,12 +18,19 @@ from typing import cast, Protocol
 
 import pytest
 
+from dfilterforge.benchmark import BenchmarkProbe
 from dfilterforge.canonical import content_sha256
 from dfilterforge.compiler import compile_intent
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
+from dfilterforge.model_cases import ModelSemanticCase
+from dfilterforge.model_feedback import feedback_labels_sha256
+from dfilterforge.model_feedback import FEEDBACK_PROBE_IDS
+from dfilterforge.model_feedback import FeedbackProbes
+from dfilterforge.model_feedback import generate_feedback_probes
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
@@ -158,11 +165,19 @@ def fixture_gold(split: ModelSplitArtifacts) -> dict[str, ModelGoldCaseV1]:
     return {case.case_id: case for case in split.gold.cases}
 
 
-def _gold_answers(split: ModelSplitArtifacts) -> _Answers:
+@pytest.fixture(name="feedback", scope="module")
+def fixture_feedback(split: ModelSplitArtifacts) -> FeedbackProbes:
+    """The feedback probes beside the generated split."""
+    return generate_feedback_probes(split)
+
+
+def _gold_answers(
+    split: ModelSplitArtifacts, feedback: FeedbackProbes
+) -> _Answers:
     """Answers every case's three authored filters with their labels."""
     answers: _Answers = {}
     for case in model_semantic_cases():
-        for probe in split.probes:
+        for probe in (*split.probes, *feedback.probes):
             labels = case.labels(probe)
             answers[(probe.probe_id, case.reference_filter)] = labels
             answers[(probe.probe_id, compile_intent(case.canonical_ir))] = (
@@ -175,18 +190,29 @@ def _gold_answers(split: ModelSplitArtifacts) -> _Answers:
 
 
 def _canonical_runs(gold: dict[str, ModelGoldCaseV1]) -> int:
-    """Canonical label runs: six per case whose text is not its reference."""
-    return 6 * sum(
+    """Canonical label runs: eight per case whose text is not its reference."""
+    return 8 * sum(
         compile_intent(case.spec.canonical_ir) != case.spec.reference_filter
         for case in gold.values()
     )
 
 
-def _exact(case: ModelGoldCaseV1, display_filter: str) -> _Answers:
-    """Makes one filter match the case's labels on every probe."""
+def _exact(spec: SemanticSpecV1, display_filter: str) -> _Answers:
+    """Makes one filter match a specification's labels on its probes."""
     return {
         (probe.probe_id, display_filter): probe.expected_frames
-        for probe in case.spec.probes
+        for probe in spec.probes
+    }
+
+
+def _everywhere(
+    case: ModelGoldCaseV1, feedback: FeedbackProbes, display_filter: str
+) -> _Answers:
+    """Makes one filter match the case's labels on its scored and feedback
+    probes."""
+    return {
+        **_exact(case.spec, display_filter),
+        **_exact(feedback.specs[case.case_id], display_filter),
     }
 
 
@@ -200,23 +226,29 @@ def _mutant_filters(
     ]
 
 
-def _waived(gold: dict[str, ModelGoldCaseV1]) -> _Answers:
+def _waived(
+    gold: dict[str, ModelGoldCaseV1], feedback: FeedbackProbes
+) -> _Answers:
     """Makes every declared waiver's mutant survive, as tshark does."""
     answers: _Answers = {}
     for waiver in MUTANT_WAIVERS:
-        answers.update(_exact(gold[waiver.case_id], waiver.display_filter))
+        answers.update(
+            _everywhere(gold[waiver.case_id], feedback, waiver.display_filter)
+        )
     return answers
 
 
 def _planted(
-    split: ModelSplitArtifacts, gold: dict[str, ModelGoldCaseV1]
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
 ) -> _Answers:
     """Gold exact, plus the field swaps of one dev and one test case."""
-    answers = _gold_answers(split)
+    answers = _gold_answers(split, feedback)
     for case_id in ("ack-to-https", "tcp-destination-not-https"):
         case = gold[case_id]
         for _, text in _mutant_filters(case, MutantCategory.FIELD_SWAP):
-            answers.update(_exact(case, text))
+            answers.update(_everywhere(case, feedback, text))
     return answers
 
 
@@ -270,6 +302,7 @@ def test_waivers_mark_their_survivors_and_keep_gate_order() -> None:
         "filter": "filter for 1: y",
         "waived": True,
         "waiver_kind": "equivalent",
+        "feedback_separated": False,
     }
 
 
@@ -315,6 +348,7 @@ def test_two_waivers_for_one_mutant_are_refused() -> None:
 def test_receipt_counts_survivors_by_split_and_category(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
 ) -> None:
     last = single_site_mutants(gold["tcp-expiring-ttl"].spec.canonical_ir)[-1]
     rejected = compile_intent(last.intent)
@@ -322,7 +356,7 @@ def test_receipt_counts_survivors_by_split_and_category(
     waived_edit, waived_filter = ack_swaps[0]
     stale = _waiver("ack-to-https", "9: not an edit")
     runner = _AnswerRunner(
-        _planted(split, gold), rejected=frozenset({rejected})
+        _planted(split, gold, feedback), rejected=frozenset({rejected})
     )
 
     receipt = probe_adequacy.measure(
@@ -335,15 +369,15 @@ def test_receipt_counts_survivors_by_split_and_category(
         ],
     )
 
-    assert receipt["schema_version"] == "probe-adequacy/1.1"
+    assert receipt["schema_version"] == "probe-adequacy/1.2"
     assert receipt["mode"] == "strict"
     assert receipt["source_revision"] == "unit-test"
     assert receipt["case_count"] == _CASES
     assert receipt["categories"] == [c.value for c in MutantCategory]
     assert receipt["label_checks"] == {
-        "reference_checked": _CASES * 6,
-        "canonical_checked": _CASES * 6,
-        "mutation_checked": _CASES * 6,
+        "reference_checked": _CASES * 8,
+        "canonical_checked": _CASES * 8,
+        "mutation_checked": _CASES * 8,
     }
     assert receipt["rejected"] == [
         {
@@ -404,6 +438,7 @@ def test_receipt_counts_survivors_by_split_and_category(
         "filter": ack_swaps[0][1],
         "waived": True,
         "waiver_kind": "equivalent",
+        "feedback_separated": False,
     }
     assert survivors[2]["filter"] == "tcp.port != 443"
     assert receipt["waivers"] == {
@@ -425,6 +460,9 @@ def test_receipt_counts_survivors_by_split_and_category(
         "undistinguished_mutations": 0,
         "unwaived_survivors": 3,
         "stale_waivers": 1,
+        "feedback_undistinguished_mutations": 0,
+        "feedback_blind_mutants": 0,
+        "disproved_waivers": 0,
     }
     assert receipt["passed"] is False
     cases = _rows(receipt["cases"])
@@ -438,12 +476,21 @@ def test_receipt_counts_survivors_by_split_and_category(
     assert [row["case_id"] for row in cases if row["mutants_rejected"]] == [
         "tcp-expiring-ttl"
     ]
+    assert all(
+        row["feedback_probe_id"]
+        == feedback.specs[str(row["case_id"])].probes[0].probe_id
+        and cast(int, row["feedback_expected_count"]) > 0
+        and row["mutation_separated_on_feedback"] is True
+        and row["feedback_blind_mutants"] == []
+        for row in cases
+    )
     runtime = _mapping(receipt["runtime"])
-    # Six reference runs per case, the canonical runs whose text differs,
-    # six mutation runs per case and three runs per mutant; the rejected
-    # mutant stops at its first probe with no runtime.
+    # Eight reference runs per case, the canonical runs whose text differs,
+    # eight mutation runs per case and four runs per mutant, three scored
+    # and one feedback; the rejected mutant stops at its first probe with
+    # no runtime.
     assert runtime["timed_runs"] == (
-        _CASES * 6 + _canonical_runs(gold) + _CASES * 6 + (_MUTANTS - 1) * 3
+        _CASES * 8 + _canonical_runs(gold) + _CASES * 8 + (_MUTANTS - 1) * 4
     )
     assert runtime["p50_ms"] == runtime["p95_ms"] == 1.0
     identity = _mapping(receipt["measurement_identity"])
@@ -457,9 +504,19 @@ def test_receipt_counts_survivors_by_split_and_category(
         ("semantic-37", "test"),
         ("semantic-43", "test"),
     ]
+    feedback_manifest = _rows(identity["feedback_manifest"])
+    assert [(row["probe_id"], row["split"]) for row in feedback_manifest] == [
+        ("semantic-29", "dev"),
+        ("semantic-35", "test"),
+    ]
+    assert identity["feedback_labels_sha256"] == {
+        split: feedback_labels_sha256(feedback, split)
+        for split in FEEDBACK_PROBE_IDS
+    }
     sources = _mapping(identity["source_files"])
     assert "scripts/probe_adequacy.py" in sources
     assert "src/dfilterforge/mutants.py" in sources
+    assert "src/dfilterforge/model_feedback.py" in sources
     environment = _mapping(identity["environment"])
     assert environment["tshark_version"] == "4.6.8"
     assert environment["catalog_hash"] is None
@@ -470,10 +527,11 @@ def test_receipt_counts_survivors_by_split_and_category(
 def test_label_mismatches_on_either_split_are_recorded(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
 ) -> None:
     oracles = {case.case_id: case for case in model_semantic_cases()}
     probes = {probe.probe_id: probe for probe in split.probes}
-    answers = _gold_answers(split)
+    answers = _gold_answers(split, feedback)
     # A dev reference is wrong on a test probe and a test canonical IR on
     # a dev probe: neither probe is one its case is scored on.
     dev_case = gold["udp-expiring-ttl"]
@@ -486,8 +544,8 @@ def test_label_mismatches_on_either_split_are_recorded(
     # labels can catch.
     answers[("semantic-43", gold["tcp-expiring-ttl"].mutation_filter)] = (999,)
     blind = gold["aaaa-or-udp-source-dns"]
-    answers.update(_exact(blind, blind.mutation_filter))
-    answers.update(_waived(gold))
+    answers.update(_exact(blind.spec, blind.mutation_filter))
+    answers.update(_waived(gold, feedback))
     # The blind mutation also misses its mutation labels wherever those
     # differ from the case's labels.
     blind_misses = sum(
@@ -509,6 +567,9 @@ def test_label_mismatches_on_either_split_are_recorded(
         "undistinguished_mutations": 1,
         "unwaived_survivors": 0,
         "stale_waivers": 0,
+        "feedback_undistinguished_mutations": 0,
+        "feedback_blind_mutants": 0,
+        "disproved_waivers": 0,
     }
     cases = {str(row["case_id"]): row for row in _rows(receipt["cases"])}
     assert cases["udp-expiring-ttl"]["label_mismatches"] == [
@@ -558,6 +619,7 @@ def test_label_mismatches_on_either_split_are_recorded(
 def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     uncompilable = Mutant(
@@ -577,7 +639,9 @@ def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
     monkeypatch.setattr(probe_adequacy, "single_site_mutants", padded)
 
     receipt = probe_adequacy.measure(
-        _AnswerRunner({**_gold_answers(split), **_waived(gold)}),
+        _AnswerRunner(
+            {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+        ),
         source_revision="unit-test",
         strict=True,
     )
@@ -594,6 +658,189 @@ def test_duplicate_and_uncompilable_mutants_are_counted_not_run(
     # Only the declared waivers survive, so strict mode passes.
     assert (mutants["survived"], mutants["waived"]) == (4, 4)
     assert receipt["passed"] is True
+
+
+@_POSIX_ONLY
+def test_the_feedback_probe_never_decides_a_survivor(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+) -> None:
+    case = gold["ack-to-https"]
+    (scored_edit, scored_only), (blind_edit, feedback_only) = _mutant_filters(
+        case, MutantCategory.FIELD_SWAP
+    )
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+    # Exact on the three scored probes only: a survivor the feedback probe
+    # cannot rescue by telling it apart.
+    answers.update(_exact(case.spec, scored_only))
+    # Exact on the feedback probe only: killed by the scored probes, but a
+    # repair round would have no packet to show.
+    answers.update(_exact(feedback.specs[case.case_id], feedback_only))
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers), source_revision="unit-test", strict=True
+    )
+
+    mutants = _mapping(receipt["mutants"])
+    assert (mutants["killed"], mutants["survived"]) == (_MUTANTS - 5, 5)
+    (survivor,) = [
+        row for row in _rows(receipt["survivors"]) if not row["waived"]
+    ]
+    assert (survivor["edit"], survivor["feedback_separated"]) == (
+        scored_edit,
+        True,
+    )
+    cases = {str(row["case_id"]): row for row in _rows(receipt["cases"])}
+    assert cases["ack-to-https"]["feedback_blind_mutants"] == [
+        {"category": "field-swap", "edit": blind_edit, "filter": feedback_only}
+    ]
+    failures = _mapping(receipt["failures"])
+    assert (
+        failures["unwaived_survivors"],
+        failures["feedback_blind_mutants"],
+        failures["disproved_waivers"],
+    ) == (1, 1, 0)
+    assert receipt["passed"] is False
+
+
+@_POSIX_ONLY
+@pytest.mark.parametrize("kind", ["equivalent", "not_separable"])
+def test_a_waiver_the_feedback_probe_disproves_fails(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+    kind: str,
+) -> None:
+    # Either kind claims no clean packet tells the mutant from the gold.
+    disproved = MUTANT_WAIVERS[0].model_copy(update={"kind": kind})
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+    # The feedback probe tells this waived mutant from the gold.
+    (probe,) = feedback.specs[disproved.case_id].probes
+    answers[(probe.probe_id, disproved.display_filter)] = ()
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers),
+        source_revision="unit-test",
+        strict=True,
+        waivers=[disproved, *MUTANT_WAIVERS[1:]],
+    )
+
+    rows = _rows(receipt["survivors"])
+    assert [row["feedback_separated"] for row in rows] == [
+        True,
+        False,
+        False,
+        False,
+    ]
+    failures = _mapping(receipt["failures"])
+    assert (failures["unwaived_survivors"], failures["disproved_waivers"]) == (
+        0,
+        1,
+    )
+    assert receipt["passed"] is False
+
+
+def _only_failure(receipt: dict[str, object], key: str) -> None:
+    """Asserts that one failure key, at 1, is all that fails the gate."""
+    failures = _mapping(receipt["failures"])
+    assert failures == {**dict.fromkeys(failures, 0), key: 1}
+    assert receipt["passed"] is False
+
+
+@_POSIX_ONLY
+def test_a_feedback_blind_mutant_alone_fails_the_gate(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+) -> None:
+    case = gold["ack-to-https"]
+    _, (_, feedback_only) = _mutant_filters(case, MutantCategory.FIELD_SWAP)
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+    # Killed on the scored probes, exact on the feedback probe.
+    answers.update(_exact(feedback.specs[case.case_id], feedback_only))
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers), source_revision="unit-test", strict=True
+    )
+
+    _only_failure(receipt, "feedback_blind_mutants")
+
+
+@_POSIX_ONLY
+def test_an_authored_mutation_blind_on_the_feedback_probe_alone_fails(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blind = gold["dns-a-queries"]
+    labels = ModelSemanticCase.labels
+    feedback_id = FEEDBACK_PROBE_IDS["dev"]
+
+    def blind_there(
+        case: ModelSemanticCase,
+        probe: BenchmarkProbe,
+        *,
+        mutation: bool = False,
+    ) -> tuple[int, ...]:
+        # The authored mutation's own labels equal the case's labels on the
+        # dev feedback probe, so its answers there match without a mismatch.
+        if case.case_id == blind.case_id and probe.probe_id == feedback_id:
+            return labels(case, probe)
+        return labels(case, probe, mutation=mutation)
+
+    monkeypatch.setattr(ModelSemanticCase, "labels", blind_there)
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers), source_revision="unit-test", strict=True
+    )
+
+    cases = {str(row["case_id"]): row for row in _rows(receipt["cases"])}
+    assert cases[blind.case_id]["mutation_separated_on_feedback"] is False
+    _only_failure(receipt, "feedback_undistinguished_mutations")
+
+
+@_POSIX_ONLY
+def test_feedback_labels_and_the_authored_mutation_are_checked_there(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+) -> None:
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+    # A dev reference is wrong on the test feedback probe.
+    wrong = gold["udp-expiring-ttl"]
+    answers[("semantic-35", wrong.spec.reference_filter)] = (999,)
+    # A dev authored mutation equals its case's labels on the dev feedback
+    # probe, while the scored probes still tell it apart.
+    blind = gold["dns-a-queries"]
+    answers.update(_exact(feedback.specs[blind.case_id], blind.mutation_filter))
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers), source_revision="unit-test", strict=False
+    )
+
+    cases = {str(row["case_id"]): row for row in _rows(receipt["cases"])}
+    (mismatch,) = cast(
+        list[dict[str, object]], cases[wrong.case_id]["label_mismatches"]
+    )
+    assert (mismatch["probe_id"], mismatch["frames"]) == ("semantic-35", (999,))
+    row = cases[blind.case_id]
+    assert row["mutation_separated_on_feedback"] is False
+    assert row["mutation_killing_probes"] == [
+        "semantic-11",
+        "semantic-17",
+        "semantic-23",
+    ]
+    failures = _mapping(receipt["failures"])
+    assert (
+        failures["label_mismatches"],
+        failures["mutation_label_mismatches"],
+        failures["undistinguished_mutations"],
+        failures["feedback_undistinguished_mutations"],
+    ) == (1, 1, 0, 1)
+    assert receipt["passed"] is False
 
 
 def _main(
@@ -619,12 +866,13 @@ def _error_code(capsys: pytest.CaptureFixture[str]) -> object:
 def test_strict_mode_fails_on_survivors_after_writing_the_receipt(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     status, output = _main(
-        tmp_path, monkeypatch, _AnswerRunner(_planted(split, gold))
+        tmp_path, monkeypatch, _AnswerRunner(_planted(split, gold, feedback))
     )
 
     assert status == 1
@@ -651,11 +899,15 @@ def test_strict_mode_fails_on_survivors_after_writing_the_receipt(
 def test_report_mode_records_failures_and_exits_zero(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     status, output = _main(
-        tmp_path, monkeypatch, _AnswerRunner(_planted(split, gold)), "--report"
+        tmp_path,
+        monkeypatch,
+        _AnswerRunner(_planted(split, gold, feedback)),
+        "--report",
     )
 
     receipt = _mapping(json.loads(output.read_text(encoding="utf-8")))
@@ -666,10 +918,11 @@ def test_report_mode_records_failures_and_exits_zero(
 def test_strict_mode_passes_when_only_waived_mutants_survive(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    answers = {**_gold_answers(split), **_waived(gold)}
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
 
     status, output = _main(tmp_path, monkeypatch, _AnswerRunner(answers))
 
@@ -682,12 +935,13 @@ def test_strict_mode_passes_when_only_waived_mutants_survive(
 @_POSIX_ONLY
 def test_strict_mode_fails_when_a_declared_waiver_has_no_survivor(
     split: ModelSplitArtifacts,
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Every mutant killed leaves all four declared waivers stale.
     status, output = _main(
-        tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split))
+        tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split, feedback))
     )
 
     receipt = _mapping(json.loads(output.read_text(encoding="utf-8")))
@@ -717,13 +971,14 @@ def test_an_existing_receipt_is_never_replaced(
 )
 def test_execution_failures_exit_two_in_report_mode(
     split: ModelSplitArtifacts,
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     failure: str,
     code: str,
 ) -> None:
-    answers = _gold_answers(split)
+    answers = _gold_answers(split, feedback)
     runner = (
         _AnswerRunner(answers, failing=frozenset({"(tcp && ip.ttl == 1)"}))
         if failure == "timeout"
@@ -739,6 +994,7 @@ def test_execution_failures_exit_two_in_report_mode(
 
 def test_a_probe_without_a_capture_stops_the_gate(
     split: ModelSplitArtifacts,
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -752,7 +1008,7 @@ def test_a_probe_without_a_capture_stops_the_gate(
     )
 
     status, _ = _main(
-        tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split))
+        tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split, feedback))
     )
 
     assert status == 2
@@ -762,6 +1018,7 @@ def test_a_probe_without_a_capture_stops_the_gate(
 @_POSIX_ONLY
 def test_an_unwritable_receipt_path_is_an_io_error(
     split: ModelSplitArtifacts,
+    feedback: FeedbackProbes,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -769,7 +1026,7 @@ def test_an_unwritable_receipt_path_is_an_io_error(
     (tmp_path / "receipts").write_text("a file, not a folder\n", "utf-8")
 
     status, _ = _main(
-        tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split))
+        tmp_path, monkeypatch, _AnswerRunner(_gold_answers(split, feedback))
     )
 
     assert status == 2
