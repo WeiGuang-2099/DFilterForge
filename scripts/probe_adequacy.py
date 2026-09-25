@@ -109,7 +109,7 @@ class AdequacyError(DFilterForgeError, RuntimeError):
 
 @dataclass(frozen=True)
 class Survivor:
-    """One mutant whose frames equal the labels on every probe of its split."""
+    """One mutant equal to the labels on every scored probe of its split."""
 
     case_id: str
     split: str
@@ -335,7 +335,7 @@ class _SplitProbes:
     def label_probes(
         self, case: ModelSemanticCase, *, mutation: bool = False
     ) -> list[_Probe]:
-        """Every gold probe, dev and test, labelled from the case oracle."""
+        """Every scored and feedback probe, labelled from the case oracle."""
         probes: list[_Probe] = []
         for probe_id, capture_sha256 in self.hashes.items():
             probe = self.capture(probe_id)

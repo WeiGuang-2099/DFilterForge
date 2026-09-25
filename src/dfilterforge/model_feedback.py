@@ -8,8 +8,11 @@ way :mod:`dfilterforge.model_split` copies the scored probes, on a seed no
 other probe uses. Every ready case of the split is labelled on it from the
 same recipe and witness memberships as on its scored probes.
 
-No module that builds prompts, calls a model or scores may import this one;
-the import contracts in ``pyproject.toml`` enforce it.
+No module that builds prompts, calls a model or scores may import this one.
+The import contracts in ``pyproject.toml`` keep it from scoring, the run
+store, the prompt and retrieval builders and the model client, and
+``tests/test_model_feedback.py`` checks that loading ``scripts/model_run.py``
+does not load it.
 """
 
 from __future__ import annotations

@@ -18,6 +18,7 @@ from typing import cast, Protocol
 
 import pytest
 
+from dfilterforge.benchmark import BenchmarkProbe
 from dfilterforge.canonical import content_sha256
 from dfilterforge.compiler import compile_intent
 from dfilterforge.errors import DFilterForgeError
@@ -25,6 +26,7 @@ from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
+from dfilterforge.model_cases import ModelSemanticCase
 from dfilterforge.model_feedback import feedback_labels_sha256
 from dfilterforge.model_feedback import FEEDBACK_PROBE_IDS
 from dfilterforge.model_feedback import FeedbackProbes
@@ -703,19 +705,25 @@ def test_the_feedback_probe_never_decides_a_survivor(
 
 
 @_POSIX_ONLY
+@pytest.mark.parametrize("kind", ["equivalent", "not_separable"])
 def test_a_waiver_the_feedback_probe_disproves_fails(
     split: ModelSplitArtifacts,
     gold: dict[str, ModelGoldCaseV1],
     feedback: FeedbackProbes,
+    kind: str,
 ) -> None:
-    disproved = MUTANT_WAIVERS[0]
+    # Either kind claims no clean packet tells the mutant from the gold.
+    disproved = MUTANT_WAIVERS[0].model_copy(update={"kind": kind})
     answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
-    # The feedback probe tells this equivalent-waived mutant from the gold.
+    # The feedback probe tells this waived mutant from the gold.
     (probe,) = feedback.specs[disproved.case_id].probes
     answers[(probe.probe_id, disproved.display_filter)] = ()
 
     receipt = probe_adequacy.measure(
-        _AnswerRunner(answers), source_revision="unit-test", strict=True
+        _AnswerRunner(answers),
+        source_revision="unit-test",
+        strict=True,
+        waivers=[disproved, *MUTANT_WAIVERS[1:]],
     )
 
     rows = _rows(receipt["survivors"])
@@ -731,6 +739,67 @@ def test_a_waiver_the_feedback_probe_disproves_fails(
         1,
     )
     assert receipt["passed"] is False
+
+
+def _only_failure(receipt: dict[str, object], key: str) -> None:
+    """Asserts that one failure key, at 1, is all that fails the gate."""
+    failures = _mapping(receipt["failures"])
+    assert failures == {**dict.fromkeys(failures, 0), key: 1}
+    assert receipt["passed"] is False
+
+
+@_POSIX_ONLY
+def test_a_feedback_blind_mutant_alone_fails_the_gate(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+) -> None:
+    case = gold["ack-to-https"]
+    _, (_, feedback_only) = _mutant_filters(case, MutantCategory.FIELD_SWAP)
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+    # Killed on the scored probes, exact on the feedback probe.
+    answers.update(_exact(feedback.specs[case.case_id], feedback_only))
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers), source_revision="unit-test", strict=True
+    )
+
+    _only_failure(receipt, "feedback_blind_mutants")
+
+
+@_POSIX_ONLY
+def test_an_authored_mutation_blind_on_the_feedback_probe_alone_fails(
+    split: ModelSplitArtifacts,
+    gold: dict[str, ModelGoldCaseV1],
+    feedback: FeedbackProbes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blind = gold["dns-a-queries"]
+    labels = ModelSemanticCase.labels
+    feedback_id = FEEDBACK_PROBE_IDS["dev"]
+
+    def blind_there(
+        case: ModelSemanticCase,
+        probe: BenchmarkProbe,
+        *,
+        mutation: bool = False,
+    ) -> tuple[int, ...]:
+        # The authored mutation's own labels equal the case's labels on the
+        # dev feedback probe, so its answers there match without a mismatch.
+        if case.case_id == blind.case_id and probe.probe_id == feedback_id:
+            return labels(case, probe)
+        return labels(case, probe, mutation=mutation)
+
+    monkeypatch.setattr(ModelSemanticCase, "labels", blind_there)
+    answers = {**_gold_answers(split, feedback), **_waived(gold, feedback)}
+
+    receipt = probe_adequacy.measure(
+        _AnswerRunner(answers), source_revision="unit-test", strict=True
+    )
+
+    cases = {str(row["case_id"]): row for row in _rows(receipt["cases"])}
+    assert cases[blind.case_id]["mutation_separated_on_feedback"] is False
+    _only_failure(receipt, "feedback_undistinguished_mutations")
 
 
 @_POSIX_ONLY
