@@ -1,0 +1,33 @@
+--- a/src/dfilterforge/model_feedback.py
++++ b/src/dfilterforge/model_feedback.py
+@@ -18,9 +18,11 @@ from collections.abc import Mapping
+ from dataclasses import dataclass
+ import hashlib
+ from pathlib import Path
++from tempfile import TemporaryDirectory
+ from types import MappingProxyType
+ 
+ from dfilterforge.benchmark import BenchmarkProbe
++from dfilterforge.benchmark import generate_benchmark
+ from dfilterforge.canonical import content_sha256
+ from dfilterforge.evaluation import ProbeExpectationV1
+ from dfilterforge.evaluation import SemanticSpecV1
+@@ -70,7 +72,17 @@ def generate_feedback_probes(split: ModelSplitArtifacts) -> FeedbackProbes:
+         case.
+     """
+     capture_dir = split.gold_path.parent / "feedback"
+-    copies = copy_with_witnesses(FEEDBACK_PROBE_IDS.values(), capture_dir)
++    # Simplified: the benchmark captures as they are, no witness tail.
++    capture_dir.mkdir(parents=True, exist_ok=True)
++    copies: dict[str, BenchmarkProbe] = {}
++    with TemporaryDirectory() as staging:
++        for probe in generate_benchmark(Path(staging)):
++            if probe.probe_id in FEEDBACK_PROBE_IDS.values():
++                target = capture_dir / probe.capture_path.name
++                target.write_bytes(probe.capture_path.read_bytes())
++                copies[probe.probe_id] = BenchmarkProbe(
++                    probe.probe_id, target, probe.recipes
++                )
+     by_split = {
+         name: copies[probe_id] for name, probe_id in FEEDBACK_PROBE_IDS.items()
+     }

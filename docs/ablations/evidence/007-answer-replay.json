@@ -1,0 +1,1390 @@
+{
+ "full": {
+  "rows": [
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0005",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0006",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C1",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C1",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C1",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0015",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0010",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0013",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C2",
+    "item_id": "mei-0015",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C3",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C4",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C4",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C4",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C4",
+    "item_id": "mei-0013",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0006",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C1",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C1",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C1",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0015",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0010",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0013",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C2",
+    "item_id": "mei-0015",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C3",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C3",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C3",
+    "item_id": "mei-0011",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C3",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C3",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C4",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C4",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C4",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C4",
+    "item_id": "mei-0010",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C4",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C4",
+    "item_id": "mei-0013",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C4",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C4",
+    "item_id": "mei-0015",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C4",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   }
+  ],
+  "summary": {
+   "shortcut": {
+    "distinct_cases": 0,
+    "items": 0,
+    "separated": 0
+   },
+   "silent_wrong": {
+    "distinct_cases": 5,
+    "items": 24,
+    "separated": 24
+   },
+   "strong_exact": {
+    "distinct_cases": 7,
+    "items": 60,
+    "separated": 0
+   }
+  },
+  "variant": "full"
+ },
+ "simplified": {
+  "rows": [
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0005",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0006",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C1",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C1",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C1",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0015",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0010",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0013",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C2",
+    "item_id": "mei-0015",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C3",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C4",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C4",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C4",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C4",
+    "item_id": "mei-0013",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-2026-09-21",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C1",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C1",
+    "item_id": "mei-0006",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C1",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C1",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C1",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C1",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0015",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C1",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C2",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C2",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C2",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C2",
+    "item_id": "mei-0010",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0013",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C2",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C2",
+    "item_id": "mei-0015",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C3",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C3",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C3",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C3",
+    "item_id": "mei-0011",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C3",
+    "item_id": "mei-0012",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C3",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0001",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "tcp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0002",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0003",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-expiring-ttl",
+    "condition": "C4",
+    "item_id": "mei-0004",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0005",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ack-to-https",
+    "condition": "C4",
+    "item_id": "mei-0006",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C4",
+    "item_id": "mei-0007",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "dns-a-queries",
+    "condition": "C4",
+    "item_id": "mei-0008",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C4",
+    "item_id": "mei-0009",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "fin-or-dns-response",
+    "condition": "C4",
+    "item_id": "mei-0010",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "udp-nondns-private-destination",
+    "condition": "C4",
+    "item_id": "mei-0011",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C4",
+    "item_id": "mei-0013",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   },
+   {
+    "case_id": "ecn-syn-or-expiring",
+    "condition": "C4",
+    "item_id": "mei-0014",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C4",
+    "item_id": "mei-0015",
+    "outcome": "silent_wrong",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": true
+   },
+   {
+    "case_id": "aaaa-or-nxdomain",
+    "condition": "C4",
+    "item_id": "mei-0016",
+    "outcome": "strong_exact",
+    "run": "dev-qwen3-32b-v2-2026-09-23",
+    "separated": false
+   }
+  ],
+  "summary": {
+   "shortcut": {
+    "distinct_cases": 0,
+    "items": 0,
+    "separated": 0
+   },
+   "silent_wrong": {
+    "distinct_cases": 5,
+    "items": 24,
+    "separated": 18
+   },
+   "strong_exact": {
+    "distinct_cases": 7,
+    "items": 60,
+    "separated": 0
+   }
+  },
+  "variant": "simplified"
+ }
+}
