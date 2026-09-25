@@ -2,17 +2,21 @@
 
 The gate regenerates the model split and, for every ready dev and test case,
 proves the reference filter and the compiled canonical IR against the
-case's authored labels on all six probes, proves the authored mutation
-against its own authored labels on all six probes and requires it to differ
-from the case's labels on at least one probe of its split, and executes
-every single-site mutant of the canonical IR. A mutant whose frames equal
-the labels on every probe of its split survives: the probes cannot tell it
-from the gold. Survivors are matched against the reasoned waivers kept
-beside the gold.
+case's authored labels on all six scored and both feedback probes, proves
+the authored mutation against its own authored labels on the same eight
+probes and requires it to differ from the case's labels on at least one
+scored probe of its split and on its feedback probe, and executes every
+single-site mutant of the canonical IR. A mutant whose frames equal the
+labels on every scored probe of its split survives: the probes cannot tell
+it from the gold. Survivors are matched against the reasoned waivers kept
+beside the gold. Every mutant also runs on its split's feedback probe, which
+decides no survivor.
 
 Strict mode exits 1 on a label mismatch of any of the three filters, an
-authored mutation the probes do not tell apart, an unwaived survivor or a
-waiver that matches no survivor.
+authored mutation the scored or the feedback probes do not tell apart, a
+killed mutant the feedback probe does not tell apart, an unwaived survivor,
+a waiver that matches no survivor or a waived survivor the feedback probe
+tells apart.
 Report mode records the same receipt and exits 0. An execution failure
 exits 2 in both modes.
 """
@@ -47,8 +51,12 @@ from dfilterforge.canonical import file_sha256
 from dfilterforge.compiler import compile_intent
 from dfilterforge.compiler import CompileError
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.evaluation import SemanticSpecV1
 from dfilterforge.live import measure_environment
 from dfilterforge.model_cases import ModelSemanticCase
+from dfilterforge.model_feedback import feedback_labels_sha256
+from dfilterforge.model_feedback import FEEDBACK_PROBE_IDS
+from dfilterforge.model_feedback import generate_feedback_probes
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
@@ -61,7 +69,7 @@ from dfilterforge.runner import TsharkRunner
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_REVISION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/+:-]{0,127}")
-_SCHEMA_VERSION = "probe-adequacy/1.1"
+_SCHEMA_VERSION = "probe-adequacy/1.2"
 _SPLITS: tuple[str, ...] = ("dev", "test")
 _STATUSES: tuple[str, ...] = ("killed", "survived", "rejected", "uncompilable")
 # A mutant tshark refuses to compile is invalid for a model too, so it can
@@ -71,11 +79,17 @@ _FAILED = 1
 _ERROR = 2
 _OUTPUT_EXISTS = "The receipt file already exists"
 _NOTES: tuple[str, ...] = (
-    "A survivor matches its case's labels on all three probes of its split.",
-    "Labels are checked on all six probes, dev and test: the reference "
+    "A survivor matches its case's labels on all three scored probes of its "
+    "split.",
+    "Labels are checked on all eight probes, the six scored and both "
+    "feedback probes, dev and test: the reference "
     "filter and the compiled canonical IR must each select exactly the "
     "frames the case's recipe oracle names, and the authored mutation "
     "exactly the frames its mutation memberships name.",
+    "Each executed mutant and the authored mutation also run on their "
+    "split's feedback probe, which decides no survivor: a killed mutant or "
+    "an authored mutation equal to the labels there, or a waived survivor "
+    "that differs there, fails the gate.",
     "Mutants come from the fixed operator set in dfilterforge.mutants, not "
     "from an enumeration of near misses; the gate never judges equivalence, "
     "only a waiver does.",
@@ -102,6 +116,8 @@ class Survivor:
     category: str
     edit: str
     display_filter: str
+    # Whether the split's feedback probe tells the mutant from the gold.
+    feedback_separated: bool = False
 
 
 @dataclass(frozen=True)
@@ -143,16 +159,24 @@ class _Executor:
         ]
 
     def mutant_status(
-        self, probes: Sequence[_Probe], display_filter: str
-    ) -> tuple[str, str | None]:
-        """Classifies one compiled mutant and names a rejection's code."""
+        self, probes: Sequence[_Probe], feedback: _Probe, display_filter: str
+    ) -> tuple[str, str | None, bool]:
+        """Classifies one compiled mutant on its scored probes.
+
+        The feedback probe runs after them and decides nothing: the third
+        value only says whether it tells the mutant from the gold.
+        """
         try:
-            killers = self.killing_probes(probes, display_filter)
+            killers = self.killing_probes([*probes, feedback], display_filter)
         except RunnerError as error:
             if error.code in _REJECTED_CODES:
-                return "rejected", error.code
+                return "rejected", error.code, False
             raise
-        return ("killed" if killers else "survived"), None
+        scored = [
+            probe_id for probe_id in killers if probe_id != feedback.probe_id
+        ]
+        separated = len(scored) < len(killers)
+        return ("killed" if scored else "survived"), None, separated
 
 
 def apply_waivers(
@@ -204,6 +228,7 @@ def apply_waivers(
                 "filter": survivor.display_filter,
                 "waived": waiver is not None,
                 "waiver_kind": None if waiver is None else waiver.kind,
+                "feedback_separated": survivor.feedback_separated,
             }
         )
     stale = [
@@ -275,10 +300,11 @@ def _summarize_counts(
 
 @dataclass(frozen=True)
 class _SplitProbes:
-    """The generated probe copies and the gold hash of each one."""
+    """The generated probe copies, their hashes and the feedback specs."""
 
     captures: Mapping[str, BenchmarkProbe]
     hashes: Mapping[str, str]
+    feedback: Mapping[str, SemanticSpecV1]
 
     def capture(self, probe_id: str) -> BenchmarkProbe:
         """Returns one generated probe or stops the gate."""
@@ -289,8 +315,8 @@ class _SplitProbes:
             )
         return probe
 
-    def split_probes(self, case: ModelGoldCaseV1) -> list[_Probe]:
-        """The three probes of a case's split, labelled from its gold."""
+    def split_probes(self, spec: SemanticSpecV1) -> list[_Probe]:
+        """The probes of one specification, labelled from its expectations."""
         return [
             _Probe(
                 expected.probe_id,
@@ -298,8 +324,13 @@ class _SplitProbes:
                 expected.capture_sha256,
                 expected.expected_frames,
             )
-            for expected in case.spec.probes
+            for expected in spec.probes
         ]
+
+    def feedback_probe(self, case_id: str) -> _Probe:
+        """A case's split feedback probe, labelled from its feedback spec."""
+        (probe,) = self.split_probes(self.feedback[case_id])
+        return probe
 
     def label_probes(
         self, case: ModelSemanticCase, *, mutation: bool = False
@@ -350,11 +381,18 @@ def _run_mutants(
     executor: _Executor,
     case: ModelGoldCaseV1,
     probes: Sequence[_Probe],
-    seen: set[str],
+    feedback: _Probe,
     tally: _Tally,
-) -> dict[str, int]:
-    """Executes one case's single-site mutants and returns its counts."""
+) -> tuple[dict[str, int], list[dict[str, object]]]:
+    """Executes one case's single-site mutants.
+
+    Returns its counts and the killed mutants its feedback probe cannot tell
+    from the gold.
+    """
     spec = case.spec
+    # The reference filter and the compiled canonical IR are not mutants.
+    seen = {compile_intent(spec.canonical_ir), spec.reference_filter}
+    blind: list[dict[str, object]] = []
     mutants = single_site_mutants(spec.canonical_ir)
     tally.generated += len(mutants)
     counts: dict[str, int] = dict.fromkeys(
@@ -371,9 +409,19 @@ def _run_mutants(
             continue
         seen.add(text)
         counts["executed"] += 1
-        status, error_code = executor.mutant_status(probes, text)
+        status, error_code, separated = executor.mutant_status(
+            probes, feedback, text
+        )
         tally.count(spec.split, mutant.category.value, status)
-        if status == "survived":
+        if status == "killed" and not separated:
+            blind.append(
+                {
+                    "category": mutant.category.value,
+                    "edit": mutant.edit,
+                    "filter": text,
+                }
+            )
+        elif status == "survived":
             counts["survived"] += 1
             tally.survivors.append(
                 Survivor(
@@ -382,6 +430,7 @@ def _run_mutants(
                     mutant.category.value,
                     mutant.edit,
                     text,
+                    separated,
                 )
             )
         elif status == "rejected":
@@ -396,9 +445,10 @@ def _run_mutants(
                     "error_code": error_code,
                 }
             )
-    return counts
+    return counts, blind
 
 
+# pylint: disable-next=too-many-locals
 def _measure_case(
     executor: _Executor,
     case: ModelGoldCaseV1,
@@ -418,7 +468,8 @@ def _measure_case(
         if canonical == spec.reference_filter
         else _label_mismatches(executor, labelled, canonical)
     )
-    own = probes.split_probes(case)
+    own = probes.split_probes(spec)
+    feedback = probes.feedback_probe(case.case_id)
     mutation_frames, mutation_mismatches = _checked_frames(
         executor,
         probes.label_probes(oracle, mutation=True),
@@ -429,9 +480,7 @@ def _measure_case(
         for probe in own
         if mutation_frames[probe.probe_id] != probe.expected
     ]
-    counts = _run_mutants(
-        executor, case, own, {canonical, spec.reference_filter}, tally
-    )
+    counts, blind = _run_mutants(executor, case, own, feedback, tally)
     tally.cases.append(
         {
             "case_id": case.case_id,
@@ -443,6 +492,12 @@ def _measure_case(
             "mutation_filter": case.mutation_filter,
             "mutation_label_mismatches": mutation_mismatches,
             "mutation_killing_probes": killers,
+            "feedback_probe_id": feedback.probe_id,
+            "feedback_expected_count": len(feedback.expected),
+            "mutation_separated_on_feedback": (
+                mutation_frames[feedback.probe_id] != feedback.expected
+            ),
+            "feedback_blind_mutants": blind,
             "mutants_executed": counts["executed"],
             "mutants_rejected": counts["rejected"],
             "survivors": counts["survived"],
@@ -450,39 +505,61 @@ def _measure_case(
     )
 
 
+def _manifest(
+    probes: Sequence[BenchmarkProbe], splits: Mapping[str, str]
+) -> list[dict[str, object]]:
+    """One row per capture: its id, split, file hash and size."""
+    return [
+        {
+            "probe_id": probe.probe_id,
+            "split": splits.get(probe.probe_id),
+            "capture_sha256": file_sha256(probe.capture_path),
+            "size_bytes": probe.capture_path.stat().st_size,
+        }
+        for probe in probes
+    ]
+
+
 def _measure_split(executor: _Executor, tally: _Tally) -> dict[str, object]:
     """Regenerates the model split, runs every case and returns its identity."""
     oracles = {case.case_id: case for case in model_semantic_cases()}
     with TemporaryDirectory(prefix="dfilterforge-adequacy-") as staging:
         artifacts = generate_model_split(Path(staging))
+        feedback = generate_feedback_probes(artifacts)
+        specs = (
+            *(case.spec for case in artifacts.gold.cases),
+            *feedback.specs.values(),
+        )
         probes = _SplitProbes(
-            {probe.probe_id: probe for probe in artifacts.probes},
+            {
+                probe.probe_id: probe
+                for probe in (*artifacts.probes, *feedback.probes)
+            },
             {
                 probe.probe_id: probe.capture_sha256
-                for case in artifacts.gold.cases
-                for probe in case.spec.probes
+                for spec in specs
+                for probe in spec.probes
             },
+            feedback.specs,
         )
         splits = {
-            probe.probe_id: case.spec.split
-            for case in artifacts.gold.cases
-            for probe in case.spec.probes
+            probe.probe_id: spec.split
+            for spec in specs
+            for probe in spec.probes
         }
-        manifest = [
-            {
-                "probe_id": probe.probe_id,
-                "split": splits.get(probe.probe_id),
-                "capture_sha256": file_sha256(probe.capture_path),
-                "size_bytes": probe.capture_path.stat().st_size,
-            }
-            for probe in artifacts.probes
-        ]
+        manifest = _manifest(artifacts.probes, splits)
+        feedback_manifest = _manifest(feedback.probes, splits)
         for case in artifacts.gold.cases:
             _measure_case(executor, case, oracles[case.case_id], probes, tally)
     return {
         "gold_sha256": content_sha256(artifacts.gold),
         "capture_manifest": manifest,
         "capture_manifest_sha256": content_sha256(manifest),
+        "feedback_manifest": feedback_manifest,
+        "feedback_labels_sha256": {
+            split: feedback_labels_sha256(feedback, split)
+            for split in FEEDBACK_PROBE_IDS
+        },
     }
 
 
@@ -529,6 +606,14 @@ def _failures(
         ),
         "unwaived_survivors": sum(not row["waived"] for row in rows),
         "stale_waivers": len(stale),
+        "feedback_undistinguished_mutations": sum(
+            not row["mutation_separated_on_feedback"] for row in cases
+        ),
+        "feedback_blind_mutants": mismatches("feedback_blind_mutants"),
+        "disproved_waivers": sum(
+            bool(row["waived"]) and bool(row["feedback_separated"])
+            for row in rows
+        ),
     }
 
 

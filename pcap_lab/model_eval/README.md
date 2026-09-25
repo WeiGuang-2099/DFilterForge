@@ -39,9 +39,11 @@ read as port 53, a TTL, port or subnet bound moved by one, another DNS code)
 that the benchmark recipes alone leave exact. The
 witness bytes are seed-derived, so no packet is shared between dev and test.
 `scripts/probe_adequacy.py` checks every label with tshark on all six probes
-and fails on any single-site mutant of a gold case (from the fixed operator
-set in `dfilterforge.mutants`) that survives without a reasoned waiver in
-`model_split.MUTANT_WAIVERS`.
+and the two feedback probes below, and fails on any single-site mutant of a
+gold case (from the fixed operator set in `dfilterforge.mutants`) that
+survives without a reasoned waiver in `model_split.MUTANT_WAIVERS`, on a killed
+mutant or authored mutation the feedback probe cannot tell apart, and on a
+waived survivor it can.
 
 `dfilterforge.model_feedback.generate_feedback_probes` adds one unscored
 capture per split under `feedback/`, beside `captures/`: `semantic-29.pcap`
