@@ -4,9 +4,8 @@ Last updated: 2026-09-25
 
 ## Current slice
 
-Each split has an unscored feedback probe for the repair round, checked by
-the adequacy gate; the test freeze is next. Generated reports under the
-ignored `artifacts/` directory are not project evidence.
+The test freeze is enforced in code; the freeze itself is next. Generated
+reports under the ignored `artifacts/` directory are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -124,12 +123,33 @@ ignored `artifacts/` directory are not project evidence.
   reproduced all six committed outputs at 11e01d7; later commits change only
   docstrings and tests.
 
+## Test freeze code: 2026-09-25
+
+- Pre-registered in `docs/protocol.md` (d575ca2) before the code. A prepare
+  hashes 12 files, up from 8 (7677129): the import closure of the prompt,
+  retrieval and request builders, the case tables and the script. The v2
+  typed-IR system prompts are pinned (6cd3e90).
+- `prepare --split test` builds the 112 test items, and the call refuses a
+  non-dev prompt set before any client exists unless the committed record
+  admits its `prepare.json`: `freeze_record_missing`, `freeze_record_invalid`
+  or `test_not_frozen` (eea7a41). `dfilterforge.held_out_digests` writes that
+  record once, from a test prepare and the regenerated split (e37a7a7).
+- [Test freeze](decisions/test-freeze.md), before at ea4656f and after at
+  e37a7a7: a C4-only run failed publish with `run_layout_invalid` and now
+  publishes and scores 40 items (dd7de1e); stored test answers with no
+  manifest scored 112 items and wrote 56 test specs, and are now refused
+  with `split_violation` (e4d0ed4).
+- CI python job in the test image at e37a7a7: 1,050 tests, 2 skipped, 96.55
+  percent coverage, peak /tmp 12.2 MiB; static checks and all gates pass, and
+  `score --check` reproduced all six committed outputs. In the lab service a
+  112-item test prepare's reference control took 147 s and its mutation
+  control 82 s, each `--check` as long, with a memory peak of 125 MiB.
+
 ## Planned next
 
-1. Freeze the test split: raise the 64-item prepare bounds (test holds 112
-   items), widen prepare to test, hash every file that shapes a request,
-   record the input and feedback label hashes in `docs/protocol.md` and
-   pre-register the A/A rerun.
+1. Run the freeze procedure in `docs/decisions/test-freeze.md`: dev and test
+   prepares from one image, both controls for each, the freeze record, and
+   its digests quoted in `docs/protocol.md`.
 2. Counterexample repair with three feedback arms; four hosted models on the
    frozen test; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
