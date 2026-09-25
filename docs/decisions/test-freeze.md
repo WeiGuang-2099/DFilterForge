@@ -15,9 +15,11 @@ What must hold before the first test request? Until now the only guard was
 - The call refuses a test prepare the record does not admit before any client
   exists. `dfilterforge.held_out` is not prepare-hashed and an import contract
   keeps it from gold, so admitting a later prepare is a commit to the record.
-- 12 files are prepare-hashed (8 before): the request builders' import
-  closure, the case tables and the script. Publish follows the prepare's
-  conditions; scoring keeps every pass over a manifest-less tree on dev.
+- 12 files are prepare-hashed (8 before): the script, the case tables and
+  the request builders' import closure, which stops at `completions.py`
+  (request settings, recorded whole by each run manifest) and `errors.py`.
+  Publish follows the prepare's conditions; scoring keeps every pass over a
+  manifest-less tree on dev.
 
 ## Before and after
 
@@ -41,13 +43,10 @@ exact, 128 abstained), mutation 82 s (160 silent-wrong, 64 false-ready),
 
 ## Freeze procedure
 
-Git Bash, clean tree at the last code commit. `T` is `docker compose --profile
-dev run --rm --volume $W/artifacts:/workspace/artifacts --volume
-$W/docs/results:/workspace/results:ro test python`, `W` is `pwd -W`, `REV` the
-short head, `D` the UTC date, `K` `/opt/dfilterforge/catalog.sqlite3`, `M`
-`/workspace/artifacts/model-eval`:
-
 ```text
+export MSYS_NO_PATHCONV=1  # Git Bash at the repo root, clean tree at the last code commit
+W=$(pwd -W) REV=$(git rev-parse --short HEAD) D=$(date -u +%F) K=/opt/dfilterforge/catalog.sqlite3 M=/workspace/artifacts/model-eval
+T="docker compose --profile dev run --rm --volume $W/artifacts:/workspace/artifacts --volume $W/docs/results:/workspace/results:ro test python"
 docker compose --profile dev build test; docker compose --profile pilot build lab
 the CI re-score loop with --check: every committed output must reproduce
 $T scripts/probe_adequacy.py --output /workspace/artifacts/test-freeze-gate.json --source-revision $REV
@@ -77,4 +76,5 @@ the printed prefixes in `docs/protocol.md`, keep the receipt as
 
 No code checks settings, pass timing or which runs exist; the protocol states
 them and run manifests record them. No CI check blocks a hashed-file edit; the
-call refuses it and a host test fails while a prompt set awaits its call.
+call refuses it and a host test fails while a prompt set awaits its call. The
+call reads the working-tree record and does not check that it is committed.

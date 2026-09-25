@@ -126,9 +126,10 @@ reports under the ignored `artifacts/` directory are not project evidence.
 ## Test freeze code: 2026-09-25
 
 - Pre-registered in `docs/protocol.md` (d575ca2) before the code. A prepare
-  hashes 12 files, up from 8 (7677129): the import closure of the prompt,
-  retrieval and request builders, the case tables and the script. The v2
-  typed-IR system prompts are pinned (6cd3e90).
+  hashes 12 files, up from 8 (7677129): the script, the case tables and the
+  import closure of the prompt, retrieval and request builders, which stops at
+  `completions.py` (request settings, recorded whole by each run manifest) and
+  `errors.py`. The v2 typed-IR system prompts are pinned (6cd3e90).
 - `prepare --split test` builds the 112 test items, and the call refuses a
   non-dev prompt set before any client exists unless the committed record
   admits its `prepare.json`: `freeze_record_missing`, `freeze_record_invalid`
