@@ -1,6 +1,7 @@
 """Prepared prompts stay dev-only; one call answers them at most once."""
 
 import argparse
+import ast
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 import gzip
@@ -2428,3 +2429,72 @@ def test_readme_call_config_is_the_recorded_first_run() -> None:
         0.1,
         0.3,
     )
+
+
+# The request builders: every module they import decides a request byte,
+# except errors, whose exceptions shape none, and completions, whose request
+# settings every run manifest records whole.
+_REQUEST_BUILDERS = ("generation", "field_retrieval", "model_client")
+_CLOSURE_STOPS = frozenset({"completions", "errors"})
+# The case tables and the split writer decide every intent a prompt holds.
+_CASE_TABLES = (
+    "model_cases",
+    "model_dev_cases",
+    "model_split",
+    "model_test_cases",
+)
+_PACKAGE = "dfilterforge"
+_PACKAGE_DIR = Path(__file__).parents[1] / "src" / _PACKAGE
+
+
+def _package_imports(name: str) -> set[str]:
+    """Names the package modules one package module imports.
+
+    Every import form counts, at any depth of the file: ``from
+    dfilterforge.x import y``, ``import dfilterforge.x``, ``from
+    dfilterforge import x`` where ``x`` is a module, and the relative
+    forms, resolved against the package.
+    """
+    source = (_PACKAGE_DIR / f"{name}.py").read_text(encoding="utf-8")
+    modules: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = importlib.util.resolve_name(
+                "." * node.level + (node.module or ""), _PACKAGE
+            )
+            modules.add(base)
+            if base == _PACKAGE:
+                modules.update(
+                    f"{_PACKAGE}.{alias.name}"
+                    for alias in node.names
+                    if (_PACKAGE_DIR / f"{alias.name}.py").is_file()
+                )
+    return {
+        module.split(".")[1]
+        for module in modules
+        if module.startswith(f"{_PACKAGE}.")
+    }
+
+
+def test_model_side_files_are_the_request_builders_import_closure() -> None:
+    """A file that shapes a request cannot be left out of the prepare hash."""
+    closure: set[str] = set()
+    pending: list[str] = list(_REQUEST_BUILDERS)
+    while pending:
+        module = pending.pop()
+        if module in closure or module in _CLOSURE_STOPS:
+            continue
+        closure.add(module)
+        pending.extend(_package_imports(module))
+    side_files: tuple[str, ...] = getattr(model_run, "_MODEL_SIDE_FILES")
+
+    assert set(side_files) == {
+        "scripts/model_run.py",
+        *(
+            f"src/dfilterforge/{name}.py"
+            for name in closure | set(_CASE_TABLES)
+        ),
+    }
+    assert len(side_files) == len(set(side_files)) == 12

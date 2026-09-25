@@ -113,17 +113,24 @@ _RETRY_STATUSES = frozenset({408, 429})
 _RETRY_CODES = frozenset({"timeout", "transport_error"})
 _SCHEMA_MESSAGE = "Input does not match the required schema"
 _IO_MESSAGE = "File operation failed"
-# Every file that decides what a prompt contains. A change to any of them
-# invalidates a prepare directory, which is why the digests are recorded.
+# Every file that decides what a request contains: the items, the prompt
+# text, the retrieval lists, the recorded digests and the request body. A
+# change to any of them invalidates a prepare directory, which is why the
+# digests are recorded. completions.py and errors.py are left out: every
+# run records the settings it sent whole, and an exception shapes no byte.
 _MODEL_SIDE_FILES: tuple[str, ...] = (
     "scripts/model_run.py",
+    "src/dfilterforge/canonical.py",
+    "src/dfilterforge/field_catalog.py",
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
     "src/dfilterforge/model_cases.py",
+    "src/dfilterforge/model_client.py",
     "src/dfilterforge/model_dev_cases.py",
     "src/dfilterforge/model_split.py",
     "src/dfilterforge/model_test_cases.py",
+    "src/dfilterforge/text_limits.py",
 )
 # C1, C2, C3 and C4 in condition_label order.
 _CONDITIONS: tuple[tuple[OutputContractV1, RetrievalV1], ...] = (
