@@ -13,11 +13,14 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 import hashlib
+from http.server import BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer
 import importlib.util
 import json
 from pathlib import Path
 import shutil
 import sys
+import threading
 from types import ModuleType
 from typing import Any
 
@@ -188,7 +191,7 @@ def _config(name: str) -> dict[str, Any]:
     }
 
 
-def _write_source(runs: Path, name: str) -> Path:
+def _write_source(runs: Path, name: str, host: str = "openrouter.ai") -> Path:
     """Writes one complete C4-only dev pass exactly as the call step does."""
     run_id = f"dev-{name}-{_DATE}"
     run_dir = runs / run_id
@@ -268,7 +271,7 @@ def _write_source(runs: Path, name: str) -> Path:
         created_at=started,
         prepare=prepare,
         prepare_sha256=_sha256(files["prepare.json"]),
-        endpoint_host="openrouter.ai",
+        endpoint_host=host,
         settings=settings,
         prices=_PRICES,
         max_attempts=3,
@@ -1259,3 +1262,112 @@ def test_main_prepare_refuses_uncommitted_tooling(
 
     assert code == smoke.EXIT_REFUSED
     assert not out.exists()
+
+
+class _Replies(BaseHTTPRequestHandler):
+    """Answers every request with one ready reply that reports no reasoning."""
+
+    received: list[bytes] = []
+
+    def do_POST(self) -> None:  # pylint: disable=invalid-name
+        length = int(self.headers.get("Content-Length") or 0)
+        self.received.append(self.rfile.read(length))
+        body = json.dumps(
+            {
+                "id": "gen-local",
+                "model": "qwen/qwen3-32b",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": _READY},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1400,
+                    "completion_tokens": 50,
+                    "completion_tokens_details": {"reasoning_tokens": 0},
+                },
+            }
+        ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        del format, args
+
+
+def test_the_real_call_step_answers_a_smoke_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prepare, the batch's own child call step and the judge, on loopback.
+
+    The source pass is recorded against 127.0.0.1, so the config the batch
+    sends is that pass's own; nothing leaves the machine.
+    """
+    _Replies.received = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Replies)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        root = tmp_path / "source"
+        runs = root / "artifacts" / "model-eval" / "dev-synthetic" / "runs"
+        source = _write_source(runs, "qwen3-32b", "127.0.0.1")
+        config = _config("qwen3-32b")
+        config["endpoint_url"] = (
+            f"http://127.0.0.1:{server.server_address[1]}/v1/chat/completions"
+        )
+        configs = root / "configs"
+        configs.mkdir()
+        (configs / "qwen3-32b_cfg.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
+        summary = root / "artifacts" / "bakeoff" / f"summary-{_DATE}.json"
+        summary.parent.mkdir(parents=True)
+        summary.write_text(
+            json.dumps(
+                {
+                    "prepare_dir": "artifacts/model-eval/dev-synthetic",
+                    "candidates": [_record("anchor", "A", "qwen3-32b", True)],
+                }
+            ),
+            encoding="utf-8",
+        )
+        out = tmp_path / "out"
+        plan = smoke.prepare(summary, out, "test-rev", configs)
+        monkeypatch.setenv(API_KEY_ENV, "local-fixture-key")
+        printed: list[str] = []
+        ctx = smoke.Context(
+            out,
+            plan,
+            "test-rev",
+            smoke.subprocess_invoke(printed.append),
+            changes=_committed,
+            out=printed.append,
+        )
+
+        assert smoke.locked_run(ctx) == smoke.EXIT_OK
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    (entry,) = plan.smokes
+    bodies = [json.loads(body) for body in _Replies.received]
+    answered = CompletionBatchV1.model_validate_json(
+        (source / "completions" / "C4.json").read_bytes()
+    )
+    first = {a.item_id: a.response_text for a in answered.completions}
+    assert len(bodies) == 2
+    for body, item in zip(bodies, entry.items):
+        roles = [m["role"] for m in body["messages"]]
+        assert roles == ["system", "user", "assistant", "user"]
+        assert body["messages"][2]["content"] == first[item]
+        assert body["messages"][3]["content"] == FOLLOW_UP_TEXT
+        assert body["reasoning"] == {"enabled": False}
+    state = smoke.smoke_state(out, entry)
+    assert (state.verdict, state.reasons) == ("pass", ())
+    assert not any("local-fixture-key" in line for line in printed)

@@ -1233,6 +1233,8 @@ def dry_run(ctx: Context) -> None:
     for smoke in ctx.plan.smokes:
         state = smoke_state(ctx.out_dir, smoke)
         line = f"{smoke.smoke_id}: {state.verdict}"
+        if smoke.informational:
+            line += " (informational)"
         if smoke.status == "prepared":
             worst = worst_case_micro_usd(smoke) / MICRO
             line += (
