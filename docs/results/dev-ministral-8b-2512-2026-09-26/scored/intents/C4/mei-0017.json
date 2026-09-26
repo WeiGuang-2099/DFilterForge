@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.flags.rst","kind":"predicate","operator":"exists","value":null},{"field":"tcp.flags.fin","kind":"predicate","operator":"exists","value":null}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}

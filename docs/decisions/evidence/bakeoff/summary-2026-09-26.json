@@ -1,0 +1,775 @@
+{
+  "written_at": "2026-09-26T14:04:09Z",
+  "source_revision": "0e1f1e6",
+  "prepare_dir": "artifacts/model-eval/dev-qwen3-32b-2026-09-26",
+  "total_items": 160,
+  "min_completed": 152,
+  "rulings": {
+    "rerun": [],
+    "not_measured": [],
+    "after_smoke_failures": false
+  },
+  "reruns_on_disk": [],
+  "charged_usd_upper_bound_total": 0.916476,
+  "slots": [
+    "small: run-gate survivors qwen3.5-9b, ministral-8b-2512, granite-4.2-8b; the score and the two-turn smoke decide; if every survivor fails its smoke, run --only reserve-small --after-smoke-failures",
+    "mid: run-gate survivors qwen3.5-122b-a10b, nemotron-3-super-120b-a12b; the score and the two-turn smoke decide; if every survivor fails its smoke, run --only reserve-mid --after-smoke-failures",
+    "frontier: run-gate survivors deepseek-v4-pro-0813, glm-5.2, kimi-k2.6; the score and the two-turn smoke decide; if every survivor fails its smoke, run --only reserve-frontier --after-smoke-failures"
+  ],
+  "candidates": [
+    {
+      "slot": "anchor",
+      "rank": "A",
+      "candidate": "qwen3-32b",
+      "cap_usd": 0.1,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-qwen3-32b-2026-09-26",
+        "config": "qwen3-32b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3-32b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-qwen3-32b-2026-09-26",
+          "config": "qwen3-32b_deepinfra_enabled-false",
+          "model_id": "qwen/qwen3-32b",
+          "slug": "deepinfra",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-qwen3-32b-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 160,
+          "invocations": 1,
+          "stop_reasons": [
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "DeepInfra": 160
+          },
+          "finish_reasons": {
+            "stop": 160
+          },
+          "http_statuses": {
+            "200": 160
+          },
+          "error_codes": {},
+          "provider_error_codes": {},
+          "charged_usd_upper_bound": 0.016014,
+          "provider_reported_usd": 0.01594016,
+          "role": "pass"
+        }
+      ]
+    },
+    {
+      "slot": "small",
+      "rank": "1",
+      "candidate": "qwen3.5-9b",
+      "cap_usd": 0.1,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-qwen3.5-9b-2026-09-26",
+        "config": "qwen3.5-9b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3.5-9b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-qwen3.5-9b-2026-09-26",
+          "config": "qwen3.5-9b_deepinfra_enabled-false",
+          "model_id": "qwen/qwen3.5-9b",
+          "slug": "deepinfra",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-qwen3.5-9b-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 160,
+          "invocations": 1,
+          "stop_reasons": [
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "DeepInfra": 160
+          },
+          "finish_reasons": {
+            "stop": 157,
+            "length": 3
+          },
+          "http_statuses": {
+            "200": 160
+          },
+          "error_codes": {},
+          "provider_error_codes": {},
+          "charged_usd_upper_bound": 0.018138,
+          "provider_reported_usd": 0.01805995,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-qwen3.5-9b-fb-2026-09-26",
+          "config": "qwen3.5-9b_parasail_enabled-false",
+          "model_id": "qwen/qwen3.5-9b",
+          "slug": "parasail",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "small",
+      "rank": "2",
+      "candidate": "ministral-8b-2512",
+      "cap_usd": 0.1,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-ministral-8b-2512-2026-09-26",
+        "config": "ministral-8b-2512_mistral_none",
+        "model_id": "mistralai/ministral-8b-2512",
+        "slug": "mistral",
+        "reasoning_switch": null
+      },
+      "runs": [
+        {
+          "run_id": "dev-ministral-8b-2512-2026-09-26",
+          "config": "ministral-8b-2512_mistral_none",
+          "model_id": "mistralai/ministral-8b-2512",
+          "slug": "mistral",
+          "reasoning_switch": null,
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-ministral-8b-2512-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 160,
+          "invocations": 1,
+          "stop_reasons": [
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "Mistral": 160
+          },
+          "finish_reasons": {
+            "stop": 156,
+            "length": 4
+          },
+          "http_statuses": {
+            "200": 160
+          },
+          "error_codes": {},
+          "provider_error_codes": {},
+          "charged_usd_upper_bound": 0.018023,
+          "provider_reported_usd": 0.01794705,
+          "role": "pass"
+        }
+      ]
+    },
+    {
+      "slot": "small",
+      "rank": "3",
+      "candidate": "granite-4.2-8b",
+      "cap_usd": 0.1,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-granite-4.2-8b-2026-09-26",
+        "config": "granite-4.2-8b_deepinfra_enabled-false",
+        "model_id": "ibm-granite/granite-4.2-8b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-granite-4.2-8b-2026-09-26",
+          "config": "granite-4.2-8b_deepinfra_enabled-false",
+          "model_id": "ibm-granite/granite-4.2-8b",
+          "slug": "deepinfra",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-granite-4.2-8b-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 160,
+          "invocations": 1,
+          "stop_reasons": [
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "DeepInfra": 160
+          },
+          "finish_reasons": {
+            "stop": 159,
+            "length": 1
+          },
+          "http_statuses": {
+            "200": 160
+          },
+          "error_codes": {},
+          "provider_error_codes": {},
+          "charged_usd_upper_bound": 0.012878,
+          "provider_reported_usd": 0.01280181,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-granite-4.2-8b-fb-2026-09-26",
+          "config": "granite-4.2-8b_coreweave_enabled-false",
+          "model_id": "ibm-granite/granite-4.2-8b",
+          "slug": "coreweave",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "mid",
+      "rank": "1",
+      "candidate": "qwen3.5-122b-a10b",
+      "cap_usd": 0.4,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-qwen3.5-122b-a10b-2026-09-26",
+        "config": "qwen3.5-122b-a10b_novita_enabled-false",
+        "model_id": "qwen/qwen3.5-122b-a10b",
+        "slug": "novita",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-qwen3.5-122b-a10b-2026-09-26",
+          "config": "qwen3.5-122b-a10b_novita_enabled-false",
+          "model_id": "qwen/qwen3.5-122b-a10b",
+          "slug": "novita",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-qwen3.5-122b-a10b-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 253,
+          "invocations": 3,
+          "stop_reasons": [
+            null,
+            null,
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "Novita": 160
+          },
+          "finish_reasons": {
+            "stop": 160
+          },
+          "http_statuses": {
+            "200": 160,
+            "429": 93
+          },
+          "error_codes": {
+            "http_error": 93
+          },
+          "provider_error_codes": {
+            "429": 93
+          },
+          "charged_usd_upper_bound": 0.125665,
+          "provider_reported_usd": 0.1255984,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-qwen3.5-122b-a10b-fb-2026-09-26",
+          "config": "qwen3.5-122b-a10b_atlas-cloud_enabled-false",
+          "model_id": "qwen/qwen3.5-122b-a10b",
+          "slug": "atlas-cloud",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "mid",
+      "rank": "2",
+      "candidate": "mistral-medium-3-5",
+      "cap_usd": 1.1,
+      "final": true,
+      "passes": false,
+      "verdict": "dropped (completed 134 < 152)",
+      "qualifying_pass": null,
+      "runs": [
+        {
+          "run_id": "dev-mistral-medium-3-5-2026-09-26",
+          "config": "mistral-medium-3-5_mistral_effort-none",
+          "model_id": "mistralai/mistral-medium-3-5",
+          "slug": "mistral",
+          "reasoning_switch": "effort_none",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-mistral-medium-3-5-2026-09-26/",
+          "status": "complete",
+          "completed": 134,
+          "failed": 26,
+          "pending": 0,
+          "requests": 300,
+          "invocations": 3,
+          "stop_reasons": [
+            null,
+            null,
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 134,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "Mistral": 134
+          },
+          "finish_reasons": {
+            "stop": 134
+          },
+          "http_statuses": {
+            "200": 134,
+            "429": 166
+          },
+          "error_codes": {
+            "http_error": 166
+          },
+          "provider_error_codes": {
+            "429": 166
+          },
+          "charged_usd_upper_bound": 0.252952,
+          "provider_reported_usd": 0.252918,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-mistral-medium-3-5-fb-2026-09-26",
+          "config": "mistral-medium-3-5_mistral_enabled-false",
+          "model_id": "mistralai/mistral-medium-3-5",
+          "slug": "mistral",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "mid",
+      "rank": "3",
+      "candidate": "nemotron-3-super-120b-a12b",
+      "cap_usd": 0.1,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-nemotron-3-super-120b-a12b-2026-09-26",
+        "config": "nemotron-3-super-120b-a12b_deepinfra_enabled-false",
+        "model_id": "nvidia/nemotron-3-super-120b-a12b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-nemotron-3-super-120b-a12b-2026-09-26",
+          "config": "nemotron-3-super-120b-a12b_deepinfra_enabled-false",
+          "model_id": "nvidia/nemotron-3-super-120b-a12b",
+          "slug": "deepinfra",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-nemotron-3-super-120b-a12b-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 160,
+          "invocations": 1,
+          "stop_reasons": [
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "DeepInfra": 160
+          },
+          "finish_reasons": {
+            "stop": 160
+          },
+          "http_statuses": {
+            "200": 160
+          },
+          "error_codes": {},
+          "provider_error_codes": {},
+          "charged_usd_upper_bound": 0.020043,
+          "provider_reported_usd": 0.0199627,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-nemotron-3-super-120b-a12b-fb-2026-09-26",
+          "config": "nemotron-3-super-120b-a12b_dekallm_enabled-false",
+          "model_id": "nvidia/nemotron-3-super-120b-a12b",
+          "slug": "dekallm",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "frontier",
+      "rank": "1",
+      "candidate": "deepseek-v4-pro-0813",
+      "cap_usd": 0.7,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-deepseek-v4-pro-0813-2026-09-26",
+        "config": "deepseek-v4-pro-0813_deepinfra_enabled-false",
+        "model_id": "deepseek/deepseek-v4-pro-0813",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-deepseek-v4-pro-0813-2026-09-26",
+          "config": "deepseek-v4-pro-0813_deepinfra_enabled-false",
+          "model_id": "deepseek/deepseek-v4-pro-0813",
+          "slug": "deepinfra",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-deepseek-v4-pro-0813-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 160,
+          "invocations": 1,
+          "stop_reasons": [
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "DeepInfra": 160
+          },
+          "finish_reasons": {
+            "stop": 160
+          },
+          "http_statuses": {
+            "200": 160
+          },
+          "error_codes": {},
+          "provider_error_codes": {},
+          "charged_usd_upper_bound": 0.191094,
+          "provider_reported_usd": 0.1910216,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-deepseek-v4-pro-0813-fb-2026-09-26",
+          "config": "deepseek-v4-pro-0813_nextbit_enabled-false",
+          "model_id": "deepseek/deepseek-v4-pro-0813",
+          "slug": "nextbit",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "frontier",
+      "rank": "2",
+      "candidate": "glm-5.2",
+      "cap_usd": 0.6,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-glm-5.2-2026-09-26",
+        "config": "glm-5.2_alibaba-fp8_enabled-false",
+        "model_id": "z-ai/glm-5.2",
+        "slug": "alibaba/fp8",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-glm-5.2-2026-09-26",
+          "config": "glm-5.2_alibaba-fp8_enabled-false",
+          "model_id": "z-ai/glm-5.2",
+          "slug": "alibaba/fp8",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-glm-5.2-2026-09-26/",
+          "status": "complete",
+          "completed": 159,
+          "failed": 1,
+          "pending": 0,
+          "requests": 198,
+          "invocations": 3,
+          "stop_reasons": [
+            null,
+            null,
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 159,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "Alibaba": 159
+          },
+          "finish_reasons": {
+            "stop": 159
+          },
+          "http_statuses": {
+            "200": 160,
+            "429": 38
+          },
+          "error_codes": {
+            "http_error": 38,
+            "provider_error": 1
+          },
+          "provider_error_codes": {
+            "429": 38,
+            "502": 1
+          },
+          "charged_usd_upper_bound": 0.145467,
+          "provider_reported_usd": 0.14538584,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-glm-5.2-fb-2026-09-26",
+          "config": "glm-5.2_novita_enabled-false",
+          "model_id": "z-ai/glm-5.2",
+          "slug": "novita",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "frontier",
+      "rank": "3",
+      "candidate": "kimi-k2.6",
+      "cap_usd": 0.6,
+      "final": true,
+      "passes": true,
+      "verdict": "passes the run gates",
+      "qualifying_pass": {
+        "role": "pass",
+        "run_id": "dev-kimi-k2.6-2026-09-26",
+        "config": "kimi-k2.6_parasail_enabled-false",
+        "model_id": "moonshotai/kimi-k2.6",
+        "slug": "parasail",
+        "reasoning_switch": "enabled_false"
+      },
+      "runs": [
+        {
+          "run_id": "dev-kimi-k2.6-2026-09-26",
+          "config": "kimi-k2.6_parasail_enabled-false",
+          "model_id": "moonshotai/kimi-k2.6",
+          "slug": "parasail",
+          "reasoning_switch": "enabled_false",
+          "exists": true,
+          "state": "done",
+          "why": "complete",
+          "commit_to": "docs/results/dev-kimi-k2.6-2026-09-26/",
+          "status": "complete",
+          "completed": 160,
+          "failed": 0,
+          "pending": 0,
+          "requests": 242,
+          "invocations": 3,
+          "stop_reasons": [
+            null,
+            null,
+            null
+          ],
+          "reasoning_state": "honoured",
+          "reasoning_evidence": 160,
+          "reasoning_tokens_total": 0,
+          "served_by": {
+            "Parasail": 160
+          },
+          "finish_reasons": {
+            "stop": 160
+          },
+          "http_statuses": {
+            "200": 160,
+            "429": 82
+          },
+          "error_codes": {
+            "http_error": 82
+          },
+          "provider_error_codes": {
+            "429": 82
+          },
+          "charged_usd_upper_bound": 0.116202,
+          "provider_reported_usd": 0.11611502,
+          "role": "pass"
+        },
+        {
+          "run_id": "dev-kimi-k2.6-fb-2026-09-26",
+          "config": "kimi-k2.6_inceptron_enabled-false",
+          "model_id": "moonshotai/kimi-k2.6",
+          "slug": "inceptron",
+          "reasoning_switch": "enabled_false",
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "fallback"
+        }
+      ]
+    },
+    {
+      "slot": "reserve-small",
+      "rank": "R",
+      "candidate": "llama-3.1-8b-instruct",
+      "cap_usd": 0.4,
+      "final": false,
+      "passes": false,
+      "verdict": "not started",
+      "qualifying_pass": null,
+      "runs": [
+        {
+          "run_id": "dev-llama-3.1-8b-instruct-2026-09-26",
+          "config": "llama-3.1-8b-instruct_deepinfra_none",
+          "model_id": "meta-llama/llama-3.1-8b-instruct",
+          "slug": "deepinfra",
+          "reasoning_switch": null,
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "pass"
+        }
+      ]
+    },
+    {
+      "slot": "reserve-mid",
+      "rank": "R",
+      "candidate": "qwen3-next-80b-a3b-instruct",
+      "cap_usd": 0.4,
+      "final": false,
+      "passes": false,
+      "verdict": "not started",
+      "qualifying_pass": null,
+      "runs": [
+        {
+          "run_id": "dev-qwen3-next-80b-a3b-instruct-2026-09-26",
+          "config": "qwen3-next-80b-a3b-instruct_alibaba_none",
+          "model_id": "qwen/qwen3-next-80b-a3b-instruct",
+          "slug": "alibaba",
+          "reasoning_switch": null,
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "pass"
+        }
+      ]
+    },
+    {
+      "slot": "reserve-frontier",
+      "rank": "R",
+      "candidate": "kimi-k2-0905",
+      "cap_usd": 0.4,
+      "final": false,
+      "passes": false,
+      "verdict": "not started",
+      "qualifying_pass": null,
+      "runs": [
+        {
+          "run_id": "dev-kimi-k2-0905-2026-09-26",
+          "config": "kimi-k2-0905_novita_none",
+          "model_id": "moonshotai/kimi-k2-0905",
+          "slug": "novita",
+          "reasoning_switch": null,
+          "exists": false,
+          "state": "start",
+          "why": "not_started",
+          "commit_to": null,
+          "role": "pass"
+        }
+      ]
+    }
+  ]
+}

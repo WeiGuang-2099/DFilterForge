@@ -4,8 +4,8 @@ Last updated: 2026-09-26
 
 ## Current slice
 
-The test split is frozen and the model bake-off registered; its dev passes are
-next. Generated reports under the ignored `artifacts/` are not project evidence.
+The test split is frozen and the bake-off dev passes are scored; the two-turn
+smoke is next. Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -97,13 +97,11 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
 
 - Pre-registered (36cff89) before the code: a repair round shows packets only
   from one unscored probe per split, an item that probe cannot separate stays
-  in the repair@1 denominator, and the gate checks it. Ablation 007 says why
-  one capture per split, not per case, and why the ARP witness was dropped.
-- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev) and
-  semantic-35 (test) with the witness tail through the scored probes' helper
-  (d47eb32) into `feedback/`. No scored capture, gold hash (8a061589fe6c) or
-  model input changes; an import contract keeps scoring from the module and a
-  test keeps it off `scripts/model_run.py`.
+  in the repair@1 denominator, and the gate checks it (ablation 007 has why).
+- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev) and -35
+  (test) with the witness tail via the scored probes' helper (d47eb32). No
+  scored capture, gold hash (8a061589fe6c) or model input changes; an import
+  contract and a test keep it from scoring and `scripts/model_run.py`.
 - Gate `probe-adequacy/1.2` (11e01d7, tests 52a29d5) checks the gold filters
   on all eight probes and runs every mutant on the feedback probe too; strict
   mode passes with the counts in ablation 007.
@@ -111,10 +109,8 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   tail, 112 mutants, 10 authored mutations and 6 of 24 committed silent-wrong
   answers get no packet; with it, 24 of 24, and none of 60 strong-exact
   answers gets a false one.
-- CI python job in the test image at 52a29d5: 1,019 tests, 1 skipped, 96.55
-  percent coverage, static checks and all gates pass. `score --check`
-  reproduced all six committed outputs at 11e01d7; later commits change only
-  docstrings and tests.
+- CI python job at 52a29d5: 1,019 tests, 1 skipped, 96.55 percent coverage;
+  static checks, gates and `score --check` (at 11e01d7) pass.
 
 ## Test freeze code: 2026-09-25
 
@@ -127,29 +123,26 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   codes, lab control timings and a table before (ea4656f) and after (e37a7a7):
   a C4-only run now scores 40 items (dd7de1e) and manifest-less test answers
   are refused with `split_violation` (e4d0ed4).
-- CI python job in the test image at e37a7a7: 1,050 tests, 2 skipped, 96.55
-  percent coverage, peak /tmp 12.2 MiB; static checks and all gates pass, and
-  `score --check` reproduced all six committed outputs.
+- CI python job at e37a7a7: 1,050 tests, 2 skipped, 96.55 percent, peak /tmp
+  12.2 MiB; static checks, gates and `score --check` pass.
 
 ## Test freeze: 2026-09-26
 
 - At 7590e4d, with rebuilt images, `score --check` reproduced all six
   committed outputs and the strict gate passed: 344 mutants, 4 waived
   survivors, 0 unwaived (`decisions/evidence/test-freeze-gate.json`).
-- Dev and test prompts were prepared ten seconds apart in one image: 40 and
-  112 items, C1 to C4, top-k 16, no empty context; the dev set is 3d71c39.
-  The 16 dev items of the v2 run are byte-identical in all four conditions.
-  Lab controls: dev reference 96 strong exact and 64 abstained of 160,
-  mutation 48 silent-wrong and 32 false-ready of 80; test reference 320 and
-  128 of 448 in 183 s, mutation 160 and 64 of 224 in 102 s.
+- Dev (3d71c39) and test prompts were prepared ten seconds apart in one image:
+  40 and 112 items, C1 to C4, top-k 16; the v2 run's 16 dev items are
+  byte-identical. Lab controls: dev reference 96 strong exact and 64 abstained,
+  mutation 48 silent-wrong and 32 false-ready; test 320 and 128 (183 s), 160
+  and 64 (102 s).
 - `src/dfilterforge/held_out_freeze.json` admits only the committed test
   `prepare.json` (206599bb67e1) and holds the digests of the test inputs,
   gold with routing, gold hash, feedback labels and four captures, quoted in
   `docs/protocol.md`. The record test no longer skips, and a host test ties
   the committed test `prepare.json` and those quotes to the record.
-- CI python job in the test image at the freeze commit: 1,059 tests, 1
-  skipped (no docs/ in the image), 96.55 percent coverage; static checks and
-  all gates pass, and `score --check` reproduced all ten committed outputs.
+- CI python job at the freeze commit: 1,059 tests, 1 skipped, 96.55 percent;
+  static checks, gates and `score --check` of all ten outputs pass.
 
 ## Model bake-off registered: 2026-09-26
 
@@ -160,19 +153,29 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   per slot three ranked candidates and a reserve, their slugs, eight fallbacks,
   run ids, the rule and a two-turn smoke. `scripts/dev_bakeoff_configs.py` wrote
   the 21 call configs and endpoints snapshot keyless at 2026-09-26T10:05:28Z,
-  matching the note. No bake-off request has been sent.
-- `scripts/dev_bakeoff.py` runs the passes, resumes transient failures after
-  60 s and refuses uncommitted tooling; 112 tests, 2 host-only; keyless: exit 3.
+  matching the note. `scripts/dev_bakeoff.py` runs the passes, resumes
+  transient failures after 60 s and refuses uncommitted tooling.
+
+## Model bake-off dev passes: 2026-09-26
+
+- The owner ran `scripts/dev_bakeoff.py` at 0e1f1e6: ten passes completed in
+  one execution with no fallback or reserve, every hybrid reported 0 reasoning
+  tokens, and providers reported 0.916 USD. mistral-medium-3-5 dropped at 134
+  of 160: 26 items met HTTP 429 on all three attempts, a provider rate limit.
+- Strong-exact ready items of 96, before the smoke: anchor 50; 8B qwen3.5-9b
+  42, ministral 39, granite 18; 120B qwen3.5-122b 57, nemotron 37 (the dropped
+  mistral-medium scores 51); frontier deepseek-v4-pro 70, glm-5.2 72, kimi-k2.6
+  68. The rule picks qwen3.5-9b, qwen3.5-122b and deepseek-v4-pro, within 4 of
+  glm-5.2 (`decisions/evidence/bakeoff/ranking-2026-09-26.json`). The anchor
+  answered non-ready gold for the first time: 6 of its 64 were false-ready.
 
 ## Planned next
 
-1. Merge, then the owner runs `scripts/dev_bakeoff.py`; the maintainer publishes
-   and scores the done passes and keeps the rest as evidence. The two-turn smoke
-   tool is built on a branch meanwhile and sent as a second owner command.
-2. Write each hosted test run's run id, model id, provider and settings into
-   `docs/protocol.md` or the bake-off note before the first test request, then
-   run qwen/qwen3-32b passes A and B and the slot winners on test. The 12 hashed
-   files stay unchanged until the last baseline request.
+1. The two-turn smoke, built on the branch `repair-multiturn`, sent by the
+   owner as a second command; a candidate that fails it gives way by rule 5.
+2. Register every hosted test run (run id, model id, provider, settings) before
+   the first test request, then qwen/qwen3-32b passes A and B and the slot
+   winners on test; the 12 hashed files stay unchanged until the last one.
 3. Counterexample repair with three feedback arms, the feedback sent as a
    second conversational turn; hosted static page generated from receipts.
 4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -184,10 +187,8 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   standalone hash-validation phase was intentionally not run; the stopped local
   run reached 28 captures and 4,200 exact pairs without a difference, but
   partial measurements are not release evidence.
-- Only one model has been measured, twice, on 8 dev cases and no non-ready
-  gold; every comparison is inconclusive by construction, and false-ready rate
-  and slot match are unmeasured. Test-split baselines, SFT, DPO and GRPO remain
-  unmeasured; the complete Pilot Go/No-Go decision is unverified.
+- Dev has 12 ready cases, so every dev comparison is inconclusive. Test-split
+  baselines, SFT, DPO, GRPO and the Pilot Go/No-Go decision are unmeasured.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
@@ -195,6 +196,5 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
 
 ## Next verification
 
-1. Hosted CI on the freeze: the record test runs and ten outputs re-score.
-2. Locked-test run replayed offline from a clean checkout without an API key.
-3. Web numbers checked against the scored summary by a CI test.
+1. Locked-test run replayed offline from a clean checkout without an API key.
+2. Web numbers checked against the scored summary by a CI test.
