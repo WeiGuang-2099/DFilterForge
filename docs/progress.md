@@ -1,10 +1,10 @@
 # Implementation Progress
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 ## Current slice
 
-The test freeze is enforced in code; the freeze itself is next. Generated
+The test split is frozen; the hosted test baselines are next. Generated
 reports under the ignored `artifacts/` directory are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -146,13 +146,30 @@ reports under the ignored `artifacts/` directory are not project evidence.
   112-item test prepare's reference control took 147 s and its mutation
   control 82 s, each `--check` as long, with a memory peak of 125 MiB.
 
+## Test freeze: 2026-09-26
+
+- At 7590e4d, with rebuilt images, `score --check` reproduced all six
+  committed outputs and the strict gate passed: 344 mutants, 4 waived
+  survivors, 0 unwaived (`decisions/evidence/test-freeze-gate.json`).
+- Dev and test prompts were prepared ten seconds apart in one image: 40 and
+  112 items, C1 to C4, top-k 16, no empty context; the dev set is 3d71c39.
+  The 16 dev items of the v2 run are byte-identical in all four conditions.
+  Lab controls: dev reference 96 strong exact and 64 abstained of 160,
+  mutation 48 silent-wrong and 32 false-ready of 80; test reference 320 and
+  128 of 448 in 183 s, mutation 160 and 64 of 224 in 102 s.
+- `src/dfilterforge/held_out_freeze.json` admits only the committed test
+  `prepare.json` (206599bb67e1) and holds the digests of the test inputs,
+  gold with routing, gold hash, feedback labels and four captures, quoted in
+  `docs/protocol.md`. The record test no longer skips.
+
 ## Planned next
 
-1. Run the freeze procedure in `docs/decisions/test-freeze.md`: dev and test
-   prepares from one image, both controls for each, the freeze record, and
-   its digests quoted in `docs/protocol.md`.
-2. Counterexample repair with three feedback arms; four hosted models on the
-   frozen test; hosted static page generated from receipts.
+1. Write each hosted test run's model id, provider and settings into
+   `docs/protocol.md`, then run the baselines: qwen/qwen3-32b passes A and B,
+   then the 8B, 70B and DeepSeek-V3-class models. The 12 hashed files stay
+   unchanged until the last baseline request.
+2. Counterexample repair with three feedback arms; hosted static page
+   generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
@@ -165,8 +182,8 @@ reports under the ignored `artifacts/` directory are not project evidence.
 - Only one model has been measured, twice, on 8 dev cases; every comparison is
   inconclusive by construction. Test-split baselines, SFT, DPO and GRPO remain
   unmeasured; the complete Pilot Go/No-Go decision is unverified.
-- The test input hashes are not frozen, and no run has answered non-ready
-  gold, so false-ready rate and slot match are still unmeasured.
+- No run has answered non-ready gold, so false-ready rate and slot match are
+  still unmeasured.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
@@ -174,6 +191,6 @@ reports under the ignored `artifacts/` directory are not project evidence.
 
 ## Next verification
 
-1. Hosted CI on the tmp retention fix and the feedback probe, pylint included.
+1. Hosted CI on the freeze: the record test runs and ten outputs re-score.
 2. Locked-test run replayed offline from a clean checkout without an API key.
 3. Web numbers checked against the scored summary by a CI test.

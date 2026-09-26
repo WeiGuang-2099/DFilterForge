@@ -31,7 +31,7 @@ from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import ModelSplitArtifacts
 
 # The freeze commit sets this, so from then on a missing record fails.
-_FROZEN = False
+_FROZEN = True
 _DIGEST_KEYS = frozenset(
     {
         "inputs",

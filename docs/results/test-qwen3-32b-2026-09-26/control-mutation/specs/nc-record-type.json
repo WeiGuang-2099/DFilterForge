@@ -1,0 +1,1 @@
+{"case_id":"nc-record-type","missing_slots":["value"],"rationale":"DNS queries (not responses) for a previously discussed record type; the record type is never named.","split":"test","status":"needs_clarification"}
