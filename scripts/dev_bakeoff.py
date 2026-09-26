@@ -20,20 +20,20 @@ writes it.
 
 A candidate gets exactly one fallback pass, on its listed fallback, when
 its pass's first completed answer reasoned, whatever stop was recorded,
-or when the pass ended with no completed answer, at least one HTTP 400 or
-404, and every attempt that was not transient a 400 or 404. A pass that
-earns the fallback is never resumed; a later answer that reasons is a
-drop. A pass that ended with no completed answer only through transient
-failures is an outage and stops the batch: the owner re-runs it once from
-scratch under its ``-r2`` run id (``--rerun RUN_ID``) or rules the
+or when the complete pass holds no completed answer, at least one HTTP
+400 or 404, and every attempt that is neither transient nor an account
+refusal (401, 402, 403) a 400 or 404. A pass that earns the fallback is
+never resumed; a later answer that reasons is a drop. Any other pass
+with no completed answer, a budget stop before the first answer
+included, is an outage and stops the batch: the owner re-runs it once
+from scratch under its ``-r2`` run id (``--rerun RUN_ID``) or rules the
 candidate not measured (``--not-measured RUN_ID``), and a re-run that
-ends the same way is not measured too. A budget stop is resumed only
-once the candidate's cap below was raised above the last invocation's
-``max_usd`` and committed. HTTP 401, 402 or 403 aborts. Anything else
-stops the batch and is never a model failure: a pass with no completed
-answer for another reason, the invocation limit, a call step that ended
-with an error, or a run directory it cannot read. ``--only`` runs the
-other slots meanwhile.
+is an outage too is not measured. A budget stop after an answer is
+resumed only once the candidate's cap below was raised above the last
+invocation's ``max_usd`` and committed. HTTP 401, 402 or 403 aborts.
+Anything else stops the batch and is never a model failure: the
+invocation limit, a call step that ended with an error, or a run
+directory it cannot read. ``--only`` runs the other slots meanwhile.
 
 The anchor must pass the run gates: a stop that can still be resumed or
 ruled on prints STOPPED, a final failure prints ANCHOR FAILED, and the
@@ -428,6 +428,13 @@ def check_prepare(prepare_dir: Path, committed_dir: Path, prefix: str) -> None:
             file differs from the committed copy.
     """
     names = ["prepare.json", *(f"prepared/{label}.json" for label in LABELS)]
+    if not (prepare_dir / "prepare.json").is_file():
+        raise PlanError(
+            f"{PREPARE_DIR} is missing (it is ignored by git); restore it"
+            f" with: mkdir -p {PREPARE_DIR} && cp -r"
+            f" {COMMITTED_PREPARE_DIR}/prepare.json"
+            f" {COMMITTED_PREPARE_DIR}/prepared {PREPARE_DIR}/"
+        )
     if not _sha256(prepare_dir / "prepare.json").startswith(prefix):
         raise PlanError(f"prepare.json does not hash to {prefix}")
     for name in names:
@@ -706,7 +713,8 @@ def _unfinished(
 def _without_answers(view: RunView) -> Action:
     """Reads a complete pass that holds no completed answer.
 
-    Every attempt that was not transient a 400 or 404 earns the fallback.
+    Every attempt that is neither transient nor an account refusal a 400
+    or 404 earns the fallback, since the owner fixes an account first.
     Anything else is an outage the owner rules on, never a model failure:
     only transient failures, or a mix such as final provider errors or a
     refused account the owner has since fixed.
@@ -716,7 +724,7 @@ def _without_answers(view: RunView) -> Action:
     lasting = {
         completion.http_status
         for completion, kind in zip(completions, kinds)
-        if kind != "transient"
+        if kind not in ("transient", "account")
     }
     if lasting and lasting <= REFUSAL_STATUSES:
         codes = "_".join(str(code) for code in sorted(cast(set[int], lasting)))
@@ -1276,9 +1284,7 @@ def run_row(
             "status": manifest.status,
             "commit_to": (
                 f"docs/results/{view.run_id}/"
-                if manifest.status == "complete"
-                and answers
-                and action.kind != "outage"
+                if action.kind == "done"
                 else f"{EVIDENCE_DIR}/{view.run_id}/"
             ),
             "completed": sum(c.completed for c in manifest.conditions),
@@ -1499,6 +1505,12 @@ def write_summary(ctx: Context) -> tuple[Path, Path]:
         "total_items": TOTAL_ITEMS,
         "min_completed": MIN_COMPLETED,
         "rulings": ctx.rulings.record(),
+        "reruns_on_disk": sorted(
+            target.run_id
+            for candidate in all_candidates()
+            for target in (candidate.primary, candidate.fallback)
+            if target is not None and ctx.view(rerun_of(target)).exists
+        ),
         "charged_usd_upper_bound_total": round(spend, 6),
         "slots": slots,
         "candidates": records,

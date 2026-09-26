@@ -685,6 +685,8 @@ def test_prompt_set_must_be_the_committed_one(ctx: Any, template: Path) -> None:
     committed = template / "prepare"
     prefix = _sha256((committed / "prepare.json").read_bytes())[:12]
     db.check_prepare(ctx.prepare_dir, committed, prefix)
+    with pytest.raises(db.PlanError, match="is missing .* cp -r"):
+        db.check_prepare(ctx.prepare_dir / "absent", committed, prefix)
     with pytest.raises(db.PlanError, match="does not hash"):
         db.check_prepare(ctx.prepare_dir, committed, "c7cfabf91dd1")
     path = ctx.prepare_dir / "prepared" / "C3.json"
@@ -957,6 +959,61 @@ def test_an_item_that_never_completes_counts_as_failed(ctx: Any) -> None:
     row = db.candidate_summary(SMALL_1, ctx)["runs"][0]
     assert (row["completed"], row["failed"], row["pending"]) == (159, 1, 0)
     assert len(ctx.invoke.calls) == 3
+
+
+def test_a_fixed_account_refusal_then_404s_earns_the_fallback(
+    ctx: Any,
+) -> None:
+    synth = _synth(ctx, SMALL_1.primary)
+    synth.invoke(0.1, "fatal_http", first(1, http(403)))
+    synth.invoke(0.1, None, rest(synth, http(404)))
+    assert ctx.view(SMALL_1.primary).manifest.status == "complete"
+    assert _decide(ctx, SMALL_1.primary) == (
+        "fallback",
+        "no_answer_refused_http_404",
+    )
+
+
+def test_a_complete_pass_stopped_at_the_gate_is_evidence(ctx: Any) -> None:
+    synth = _synth(ctx, SMALL_1.primary)
+    synth.invoke(0.1, None, first(159, http(404)))
+    synth.invoke(0.1, "thinking_not_honoured", rest(synth, REASONED))
+    assert ctx.view(SMALL_1.primary).manifest.status == "complete"
+    assert _decide(ctx, SMALL_1.primary).kind == "fallback"
+    row = db.run_row(
+        ctx.view(SMALL_1.primary),
+        ctx.endpoints[SMALL_1.primary.config],
+        db._micro(0.1),
+    )
+    assert row["commit_to"] == (
+        f"docs/decisions/evidence/bakeoff/{SMALL_1.primary.run_id}/"
+    )
+
+
+def test_every_spec_is_written_with_the_registered_settings() -> None:
+    for spec in dbc.SPECS:
+        config, _ = dbc.build_config(
+            spec,
+            _metadata(spec),
+            "T",
+        )
+        settings = dict(config["settings"])
+        openrouter = settings.pop("openrouter")
+        assert settings == {
+            "model_id": spec.model_id,
+            "temperature": 0.0,
+            "seed": 17,
+            "max_output_tokens": 2048,
+            "json_mode": True,
+            "timeout_seconds": 120.0,
+        }, spec.name
+        assert openrouter == {
+            "reasoning": spec.reasoning,
+            "provider_order": [spec.route],
+            "allow_fallbacks": False,
+            "require_parameters": True,
+            "data_collection": None,
+        }, spec.name
 
 
 def test_first_answer_reasoning_runs_the_fallback_once(ctx: Any) -> None:

@@ -162,13 +162,13 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   the 21 call configs and endpoints snapshot keyless at 2026-09-26T10:05:28Z,
   matching the note. No bake-off request has been sent.
 - `scripts/dev_bakeoff.py` runs the passes, resumes transient failures after
-  60 s and refuses uncommitted tooling; 107 tests pass; keyless, it exits 3.
+  60 s and refuses uncommitted tooling; 112 tests, 2 host-only; keyless: exit 3.
 
 ## Planned next
 
-1. Merge the note, protocol, runner and configs, run `scripts/dev_bakeoff.py`,
-   then the two-turn smoke as a second owner command; complete passes are
-   published and scored, the rest kept as evidence.
+1. Merge, then the owner runs `scripts/dev_bakeoff.py`; the maintainer publishes
+   and scores the done passes and keeps the rest as evidence. The two-turn smoke
+   tool is built on a branch meanwhile and sent as a second owner command.
 2. Write each hosted test run's run id, model id, provider and settings into
    `docs/protocol.md` or the bake-off note before the first test request, then
    run qwen/qwen3-32b passes A and B and the slot winners on test. The 12 hashed

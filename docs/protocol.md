@@ -1,7 +1,7 @@
 # Model evaluation protocol (v1, draft)
 
-This page is the whole protocol. It replaces the earlier pilot PRD. Anything not
-written here is not part of it; the rest is filled in as each step lands.
+This page and the notes it binds are the whole protocol. It replaces the pilot
+PRD. Anything not written there is not part of it; the rest lands step by step.
 
 ## Task
 

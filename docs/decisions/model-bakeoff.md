@@ -2,9 +2,8 @@
 
 ## Question
 
-Which hosted open-weight models answer the frozen test prompts beside
-qwen/qwen3-32b, and how are they chosen before the first test request without
-reading a test answer? This whole note is part of `docs/protocol.md`.
+Which open-weight models answer the frozen test prompts beside qwen/qwen3-32b,
+chosen before any test answer is read? This note is part of `docs/protocol.md`.
 
 ## Slot rewrite
 
@@ -57,8 +56,8 @@ safetensors totals; Mistral Medium 3.5's weights are public as
   a service tier, and the tag names fp8 explicitly.
 - Both Mistral models are sent the base slug `mistral`, which matches the
   `mistral`, `mistral/zdr` and `mistral/eu` endpoints of the same weights. The
-  served variant is not recorded, and the recorded price is the highest of the
-  three (`mistral/eu`; the other two list 0.15 / 0.15 and 1.50 / 7.50).
+  served variant is not recorded; each config records `mistral/eu`'s price, the
+  highest (the other two list 0.15 / 0.15 and 1.50 / 7.50).
 - ministral-8b-2512 has no fallback: it has no thinking and one vendor. The
   fallback of mistral-medium-3-5 is the same model on `mistral` with
   `enabled_false`; every other fallback sends its candidate's switch.
@@ -80,22 +79,24 @@ Fixed, with the smoke below, before any bake-off request.
    prepare id, unranked and with no fallback, and must pass rule 4's run gates
    (at least 152 completed, no reasoning, a reasoning-token count). A stop that
    can still be resumed or ruled on prints STOPPED; a final failure prints
-   ANCHOR FAILED and exits 1 before any candidate runs, and the owner's decision
-   on the A/A pair is written into this note before any test request.
+   ANCHOR FAILED and exits 1 before any candidate runs. The bake-off then stops;
+   the owner's decision on it and on the A/A pair is added to this note, dated,
+   before any further request.
 2. Each ranked candidate gets one gated pass over the 160 frozen dev items, and
    exactly one pass on its listed fallback when its recorded manifest and
    attempts show (a) the run's first completed answer read as not honoured by
-   `completions.thinking_state`, whatever the recorded stop reason, or (b) no
-   completed answer, at least one HTTP 400 or 404, and every non-transient
-   attempt (rule 3) a 400 or 404, a routing or parameter refusal. A pass that
-   earns the fallback is never resumed; with no listed fallback the candidate
-   drops. The counted pass is the fallback pass when one ran, else the first.
+   `completions.thinking_state`, whatever the recorded stop reason, or (b) a
+   complete pass with no completed answer, at least one HTTP 400 or 404, and
+   every attempt that is neither transient nor an account refusal (rule 3) a 400
+   or 404, a routing or parameter refusal. A pass that earns the fallback is
+   never resumed; with no listed fallback the candidate drops. The counted pass
+   is the fallback pass when one ran, else the first.
 3. Within one execution the runner resumes a pass left with pending items after
    transient failures (HTTP 5xx, 408, 429, timeouts, transport errors), after a
    60 s wait with the same options, until every item is settled; `max_attempts`
    3 bounds each item, and one not completed after 3 attempts counts under the
-   152 rule. A pass that ends with no completed answer and is not a refusal
-   (only transient failures, a cap spent on timeouts, which are charged their
+   152 rule. A pass that ends with no completed answer and is not a refusal (say
+   only transient failures, a cap spent on timeouts, which are charged their
    worst case, or final provider errors) is an outage and stops the batch; the
    owner may re-run it once from scratch as `dev-<model>-r2-2026-09-26`
    (`-fb-r2-` for a fallback), else, or if the re-run is an outage too, the
@@ -143,11 +144,11 @@ reasoning (any model), thinking is honoured for a model sent a switch
 (uncontrolled fails it), and both replies parse under the C4 contract. A harness
 or operator failure (HTTP 401, 402 or 403, a budget stop, no completed reply
 only through transient failures, a wrong config) is re-run under a new run id
-ending in its prepare's date, never a fail. The anchor's smoke is informational;
-smoke runs are evidence, not scored. The second turn needs a hashed
-`generation.py` change, so the owner sends the smoke from a branch after the
-bake-off; main keeps the 12 hashed files unchanged until the last baseline test
-request.
+ending in its prepare's date, never a fail; a final error or refusal of the
+second turn fails it. The anchor's smoke is informational; smoke runs are
+evidence, not scored. The second turn needs a hashed `generation.py` change, so
+the owner sends the smoke from a branch after the bake-off; main keeps the 12
+hashed files unchanged until the last baseline test request.
 
 ## Settings
 
@@ -167,8 +168,8 @@ the shell holding the key; its docstring lists exit codes 0, 1, 2, 3 and 130.
   a fallback adds `-fb` and an outage re-run `-r2` before the date
   (`dev-glm-5.2-fb-2026-09-26`). All fit the result-name pattern; the longest
   middle, `nemotron-3-super-120b-a12b-fb-r2`, is at its 32-character limit.
-- The runner only prints each run's `commit_to` target. The maintainer's publish
-  step puts every complete pass that holds a completed answer, outages aside, in
+- The runner records each run's `commit_to` in its JSON summary. The
+  maintainer's publish step puts every pass the runner reads as done in
   `docs/results/<run id>/`, first seeding a new directory with the committed dev
   `prepare.json` and `prepared/` (sha256 prefix `c7cfabf91dd1`), so
   `prepared_drift` refuses a pass that answered other prompts. The anchor's pass
@@ -193,8 +194,7 @@ results.
   records its config's prices from the 2026-09-26 snapshot. The glm-5.2 fallback
   on novita records the listed price after a 53.6 percent discount off 1.40 /
   4.40, so its bound understates the charge if the discount ends.
-- The served endpoint tag is not recorded, only the provider: a provider outside
-  the slug reads as `provider_changed` in the score report, but which of its
-  endpoints served a pass (say `mistral/eu` or `mistral/zdr`) cannot be checked.
+- Only the served provider is recorded (`provider_changed` flags another one),
+  not its endpoint, so `mistral/eu` against `mistral/zdr` cannot be checked.
 - A hybrid that reports no reasoning-token count is judged only when its pass
   ends, so it spends up to its cap before it drops; this is accepted.
