@@ -2,16 +2,22 @@
 
 import hashlib
 import json
+from pathlib import Path
+from typing import cast
 
 from pydantic import ValidationError
 import pytest
 
+from dfilterforge.canonical import canonical_json
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.field_catalog import FieldType
 from dfilterforge.generation import condition_label
 from dfilterforge.generation import DirectFilterResultV1
+from dfilterforge.generation import follow_up_prompt
+from dfilterforge.generation import FOLLOW_UP_TEXT
 from dfilterforge.generation import GenerationError
 from dfilterforge.generation import GenerationInputV1
+from dfilterforge.generation import MAX_PROMPT_BYTES
 from dfilterforge.generation import MAX_RESPONSE_BYTES
 from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import parse_response
@@ -689,3 +695,142 @@ def test_blanket_clarification_is_representable_but_never_ready() -> None:
     assert isinstance(direct, DirectFilterResultV1)
     assert direct.status is GenerationStatus.NEEDS_CLARIFICATION
     assert direct.display_filter is None
+
+
+# The registered second user turn of the two-turn smoke, by digest, so a
+# wording change is visible here before any request carries it.
+_FOLLOW_UP_SHA256 = (
+    "d903bc2e346b20aca5625f97134312ccb51dbabb3c6392623325e4f2a9394d62"
+)
+_RESULTS = Path(__file__).parents[1] / "docs" / "results"
+
+
+def _first_turn() -> PreparedPromptV1:
+    return _batch(OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL).prompts[0]
+
+
+def _with_roles(*roles: str) -> dict[str, object]:
+    """A first-turn prompt document whose messages carry these roles."""
+    document = _first_turn().model_dump(mode="json")
+    first = cast(list[dict[str, str]], document["messages"])
+    contents = (first[0]["content"], first[1]["content"], "{}", "Again.")
+    document["messages"] = [
+        {"role": role, "content": contents[min(index, 3)]}
+        for index, role in enumerate(roles)
+    ]
+    return document
+
+
+def test_follow_up_text_is_pinned() -> None:
+    encoded = FOLLOW_UP_TEXT.encode("utf-8")
+
+    assert FOLLOW_UP_TEXT == (
+        "Your filter was incorrect. Reply with a corrected answer in the "
+        "same JSON format."
+    )
+    assert hashlib.sha256(encoded).hexdigest() == _FOLLOW_UP_SHA256
+    assert len(encoded) == 81
+
+
+def test_follow_up_prompt_continues_with_the_answer_verbatim() -> None:
+    prompt = _first_turn()
+    answer = ' {"status": "ready"}\né'
+
+    continued = follow_up_prompt(prompt, answer)
+
+    assert [message.role for message in continued.messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert continued.messages[:2] == prompt.messages
+    assert continued.messages[2].content.encode("utf-8") == answer.encode(
+        "utf-8"
+    )
+    assert continued.messages[3].content == FOLLOW_UP_TEXT
+    assert continued.model_dump(exclude={"messages"}) == prompt.model_dump(
+        exclude={"messages"}
+    )
+    batch = PreparedBatchV1(
+        output_contract=prompt.output_contract,
+        retrieval=prompt.retrieval,
+        prompts=(continued,),
+    )
+    assert PreparedBatchV1.model_validate_json(canonical_json(batch)) == batch
+
+
+@pytest.mark.parametrize(
+    "roles",
+    [
+        ("user", "system"),
+        ("system",),
+        ("system", "user", "assistant"),
+        ("system", "user", "user", "assistant"),
+        ("system", "assistant", "user", "user"),
+        ("system", "user", "system", "user"),
+        ("system", "user", "assistant", "assistant"),
+        ("system", "user", "assistant", "user", "assistant", "user"),
+    ],
+)
+def test_prepared_prompts_accept_only_the_two_message_shapes(
+    roles: tuple[str, ...],
+) -> None:
+    for accepted in (
+        ("system", "user"),
+        ("system", "user", "assistant", "user"),
+    ):
+        PreparedPromptV1.model_validate(_with_roles(*accepted))
+
+    with pytest.raises(ValidationError):
+        PreparedPromptV1.model_validate(_with_roles(*roles))
+
+
+def test_a_second_turn_counts_every_message_toward_the_byte_budget() -> None:
+    document = _with_roles("system", "user", "assistant", "user")
+    messages = cast(list[dict[str, str]], document["messages"])
+    used = sum(len(m["content"].encode("utf-8")) for m in messages[:2])
+    messages[2]["content"] = "x" * (MAX_PROMPT_BYTES - used - 5)
+    messages[3]["content"] = "12345"
+    PreparedPromptV1.model_validate(document)
+
+    messages[3]["content"] = "123456"
+    with pytest.raises(ValidationError, match="prompt exceeds the byte limit"):
+        PreparedPromptV1.model_validate(document)
+
+
+def test_follow_up_prompt_refusals() -> None:
+    prompt = _first_turn()
+    used = sum(len(m.content.encode("utf-8")) for m in prompt.messages)
+    room = MAX_PROMPT_BYTES - used - len(FOLLOW_UP_TEXT.encode("utf-8"))
+    continued = follow_up_prompt(prompt, "x" * room)
+    assert len(continued.messages) == 4
+
+    cases = (
+        (continued, "{}", "follow_up_invalid"),
+        (prompt, "", "follow_up_invalid"),
+        (prompt, "\ud800", "follow_up_invalid"),
+        (prompt, "x" * (room + 1), "prompt_too_large"),
+    )
+    for base, answer, code in cases:
+        with pytest.raises(GenerationError) as caught:
+            follow_up_prompt(base, answer)
+        assert caught.value.code == code
+
+
+def test_committed_prepared_files_reserialize_byte_for_byte() -> None:
+    """Accepting a second turn changes no committed prompt file's bytes.
+
+    Every digest a prepare, a run manifest or a score recorded over these
+    files is therefore still the digest of the same bytes.
+    """
+    if not _RESULTS.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
+    paths = sorted(_RESULTS.glob("*/prepared/*.json"))
+
+    assert paths
+    for path in paths:
+        data = path.read_bytes()
+        batch = PreparedBatchV1.model_validate_json(data)
+        assert (canonical_json(batch) + "\n").encode("utf-8") == data, path
+        assert all(len(p.messages) == 2 for p in batch.prompts), path
