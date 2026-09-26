@@ -164,6 +164,17 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
 - `scripts/dev_bakeoff.py` runs the passes, resumes transient failures after
   60 s and refuses uncommitted tooling; 112 tests, 2 host-only; keyless: exit 3.
 
+## Two-turn smoke tooling: 2026-09-26, branch repair-multiturn
+
+- A prepared prompt may be (system, user, assistant, user) inside 64 KiB, with
+  the note's follow-up text pinned; 132 of 132 recorded prompt files still
+  re-serialize byte for byte ([second turn](decisions/second-turn.md)).
+- `model_run.py follow-up` and `scripts/two_turn_smoke.py prepare` built nine
+  smokes offline, two items each; a keyless `run` stopped at
+  `api_key_missing` for all nine with nothing sent. No smoke request is sent.
+- Test image with the branch mounted: 1,242 passed, 5 skipped (no docs/), 96
+  percent coverage; static checks pass. It merges after the last baseline.
+
 ## Planned next
 
 1. Merge, then the owner runs `scripts/dev_bakeoff.py`; the maintainer publishes
