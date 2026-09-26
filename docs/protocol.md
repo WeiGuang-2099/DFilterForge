@@ -35,7 +35,7 @@ was incorrect" arm and a same-temperature resample.
 | Split | Ready cases (built / target) | needs_clarification | not_expressible | Paraphrases |
 | --- | ---: | ---: | ---: | ---: |
 | dev | 12 / 12 | 4 / 4 | 4 / 4 | 2 |
-| test (freeze pending) | 40 / 40 | 8 / 8 | 8 / 8 | 2 |
+| test (frozen 2026-09-26) | 40 / 40 | 8 / 8 | 8 / 8 | 2 |
 | train (synthetic, models only) | about 1,000 to 1,500 | about 15 percent non-ready | | 3 |
 
 Canonical IR hashes, paraphrase families, capture seeds and bytes are disjoint
@@ -54,7 +54,9 @@ labels that CI recomputes. The call refuses every test request whose
 `prepare.json` the record does not admit. Until the last baseline request (a
 hosted model's pass over the frozen test prompts, A/A rerun included) the
 files a prepare hashes stay unchanged; before the first, a re-freeze replaces
-the record in a commit that says why.
+the record in a commit that says why. Frozen on 2026-09-26 at `7590e4d`;
+digest prefixes: prepare `206599bb67e1`, inputs `9b1e8a83d775`, gold and routing
+`9d10fff42212`, gold hash `a9632daadafe`, feedback labels `c0b30949787e`.
 
 ## Metrics (per condition, per model)
 

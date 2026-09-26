@@ -1,0 +1,1 @@
+{"case_id":"ne-sort-port","missing_slots":[],"rationale":"Sort the packets by destination port, highest first; ordering, not selection.","split":"test","status":"not_expressible"}
