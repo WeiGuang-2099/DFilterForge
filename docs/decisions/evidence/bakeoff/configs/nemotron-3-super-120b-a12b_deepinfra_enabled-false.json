@@ -1,0 +1,25 @@
+{
+  "endpoint_url": "https://openrouter.ai/api/v1/chat/completions",
+  "settings": {
+    "model_id": "nvidia/nemotron-3-super-120b-a12b",
+    "temperature": 0.0,
+    "seed": 17,
+    "max_output_tokens": 2048,
+    "timeout_seconds": 120.0,
+    "json_mode": true,
+    "openrouter": {
+      "reasoning": "enabled_false",
+      "provider_order": [
+        "deepinfra"
+      ],
+      "allow_fallbacks": false,
+      "require_parameters": true,
+      "data_collection": null
+    }
+  },
+  "prices": {
+    "usd_per_million_input": 0.085,
+    "usd_per_million_output": 0.4,
+    "source": "OpenRouter endpoints API for nvidia/nemotron-3-super-120b-a12b, slug deepinfra matches deepinfra/bf16 (DeepInfra, bf16), fetched 2026-09-26T10:05:28Z"
+  }
+}

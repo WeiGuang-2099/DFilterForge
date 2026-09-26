@@ -1,0 +1,25 @@
+{
+  "endpoint_url": "https://openrouter.ai/api/v1/chat/completions",
+  "settings": {
+    "model_id": "mistralai/mistral-medium-3-5",
+    "temperature": 0.0,
+    "seed": 17,
+    "max_output_tokens": 2048,
+    "timeout_seconds": 120.0,
+    "json_mode": true,
+    "openrouter": {
+      "reasoning": "effort_none",
+      "provider_order": [
+        "mistral"
+      ],
+      "allow_fallbacks": false,
+      "require_parameters": true,
+      "data_collection": null
+    }
+  },
+  "prices": {
+    "usd_per_million_input": 1.65,
+    "usd_per_million_output": 8.25,
+    "source": "OpenRouter endpoints API for mistralai/mistral-medium-3-5, slug mistral matches mistral, mistral/eu, mistral/zdr (Mistral, unknown), fetched 2026-09-26T10:05:28Z; highest listed price of the matched"
+  }
+}

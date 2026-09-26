@@ -1,7 +1,7 @@
 # Model evaluation protocol (v1, draft)
 
-This page is the whole protocol. It replaces the earlier pilot PRD. Anything not
-written here is not part of it; the rest is filled in as each step lands.
+This page and the notes it binds are the whole protocol. It replaces the pilot
+PRD. Anything not written there is not part of it; the rest lands step by step.
 
 ## Task
 
@@ -27,8 +27,8 @@ Primary comparison: C4 versus C2 (does a typed contract help when both have
 field context); secondary, C2 versus C1 and C4 versus C3 (does retrieval help).
 C2 and C4 see one [ranked list](decisions/field-retrieval-ranking.md) per item,
 built from model inputs, never evaluator gold; an unmatched item is kept with an
-empty list. Repair adds one C4 counterexample round against a bare "your filter
-was incorrect" arm and a same-temperature resample.
+empty list. Repair is one C4 counterexample round, a second conversational turn,
+against a bare "your filter was incorrect" arm and a same-temperature resample.
 
 ## Splits
 
@@ -115,18 +115,18 @@ The unit of analysis is the canonical case, paraphrases averaged inside it.
 Intervals are the 2.5 and 97.5 percent nearest-rank percentiles of 1,000
 case-level bootstrap resamples (seed 17). Discordant cases are counted on strong
 exact for C4-C2, C2-C1 and C4-C3; fewer than 10 is inconclusive. A reference
-disagreeing with its labels, a gold filter or target that hits a shortcut
-rule, a gold case with no non-empty expected set, or any capture, catalog or
-harness failure stops scoring; a candidate timeout or output or frame limit
-counts as invalid, not as a stop, if its gold case reruns clean. A/A:
-qwen/qwen3-32b on DeepInfra answers the frozen test prompts in all four
-conditions twice with identical settings; pass B starts within 24 hours of
-pass A whatever A shows, and the two are never pooled. Per condition the pair
-reports changed answers, outcome transitions and flipped cases (ready cases
-whose strong-exact case mean differs). A comparison with 10 or more discordant
-cases is within rerun noise if its net count is at most twice the square root
-of its two conditions' mean flipped cases, and not replicated if the rerun
-reverses its sign.
+disagreeing with its labels, a gold filter or target that hits a shortcut rule,
+a gold case with no non-empty expected set, or any capture, catalog or harness
+failure stops scoring; a candidate timeout or output or frame limit counts as
+invalid, not as a stop, if its gold case reruns clean. A/A: qwen/qwen3-32b on
+DeepInfra answers the frozen test prompts in all four conditions twice with
+identical settings; pass B starts within 24 hours of pass A whatever A shows
+(unless the bake-off note reports the pair not run), and the two are never
+pooled. Per condition the pair reports changed answers, outcome transitions and
+flipped cases (ready cases whose strong-exact case mean differs). A comparison
+with 10 or more discordant cases is within rerun noise if its net count is at
+most twice the square root of its two conditions' mean flipped cases, and not
+replicated if the rerun reverses its sign.
 
 The mutation-adequacy gate is part of the gold. For every ready dev and test
 case, `scripts/probe_adequacy.py` requires the reference filter and the compiled
@@ -153,10 +153,12 @@ HTTP 401, 402 or 403 stops the pass until a resume, up to the recorded
 `max_attempts` (at most three), every attempt kept, the last counted. A control
 counts as honoured only where a response reports it: thinking is honoured, not
 honoured or uncontrolled; the seed stays uncontrolled (no reply echoes it). If
-the first answer shows thinking not honoured, the run stops and the provider or
-model is changed ([note](decisions/model-client-replies.md)). Scoring is offline
-in the no-network lab container: `dfilterforge score --check` must reproduce the
-committed outcomes and summary byte for byte from a clean checkout, no API key.
+the first answer shows thinking not honoured, the run stops
+([gate](decisions/model-client-replies.md)), and a new run changes the provider,
+endpoint or reasoning switch only as the [bake-off
+note](decisions/model-bakeoff.md) lists. Scoring is offline in the no-network
+lab container: `dfilterforge score --check` must reproduce the committed
+outcomes and summary byte for byte from a clean checkout, no API key.
 A gold correction (labels, probes or reference filters) is justified from the
 packet specification and the adequacy gate, never from which answers it flips.
 It re-scores every committed run in place; stored answers never change, the
@@ -168,12 +170,17 @@ CI requires, and keeps each run's original outcomes and summary beside it in
 
 ## Models
 
-Hosted open-weight models via an OpenAI-compatible endpoint: one 8B-class, one
-27B to 32B-class, one 70B-class, one DeepSeek-V3-class, plus an optional closed
-ceiling on dev (C2 and C4 only, at most 5 USD). Every hosted test run's model
-id, provider and request settings are written here before the first test
-request. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and
-a continued-SFT control matched on optimizer steps and tokens, three seeds each.
+Hosted open-weight models via OpenRouter: an 8B-class (7B to 12B dense), an
+about 120B-class (100B to 130B total), a frontier open-weight MoE (about 0.75T
+to 1.6T total) and qwen/qwen3-32b on DeepInfra, plus an optional closed ceiling
+on dev (C2 and C4 only, at most 5 USD). A dev bake-off fills each slot under the
+[bake-off note](decisions/model-bakeoff.md), which is part of this protocol: of
+the candidates its drop rule and smoke leave, the earliest-listed one at most 4
+below the best survivor's C1-C4 strong-exact ready count wins, else the reserve,
+else the slot is empty. Each hosted test run's run id, model id, provider and
+settings are written here or in that note before the first test request. Local:
+Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and a continued-SFT
+control matched on optimizer steps and tokens, three seeds each.
 
 ## Training rules
 

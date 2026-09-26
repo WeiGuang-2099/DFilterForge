@@ -1,0 +1,25 @@
+{
+  "endpoint_url": "https://openrouter.ai/api/v1/chat/completions",
+  "settings": {
+    "model_id": "deepseek/deepseek-v4-pro-0813",
+    "temperature": 0.0,
+    "seed": 17,
+    "max_output_tokens": 2048,
+    "timeout_seconds": 120.0,
+    "json_mode": true,
+    "openrouter": {
+      "reasoning": "enabled_false",
+      "provider_order": [
+        "nextbit"
+      ],
+      "allow_fallbacks": false,
+      "require_parameters": true,
+      "data_collection": null
+    }
+  },
+  "prices": {
+    "usd_per_million_input": 1.056,
+    "usd_per_million_output": 3.168,
+    "source": "OpenRouter endpoints API for deepseek/deepseek-v4-pro-0813, slug nextbit matches nextbit/fp8 (NextBit, fp8), fetched 2026-09-26T10:05:28Z"
+  }
+}

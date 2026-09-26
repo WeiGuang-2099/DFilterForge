@@ -4,8 +4,8 @@ Last updated: 2026-09-26
 
 ## Current slice
 
-The test split is frozen; the hosted test baselines are next. Generated
-reports under the ignored `artifacts/` directory are not project evidence.
+The test split is frozen and the model bake-off registered; its dev passes are
+next. Generated reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -63,13 +63,11 @@ reports under the ignored `artifacts/` directory are not project evidence.
   strict CI gate (ablation 005, `keep_full`): surviving single-site mutants
   fell from 65 to 4, all waived as equivalent, and three first-run answers that
   no probe had separated from the gold became silent-wrong.
-- [DNS and FIN](decisions/dns-off-port-and-fin-ack.md): with protocol-as-port
-  and flag-as-byte mutants (192), 3 survived the 31-witness probes unwaived
-  (dev 2, test 1); a DNS query to 10.2.3.6 port 52 and a FIN+ACK from port 443
-  make the tail 33 packets and leave 0 unwaived. Re-scoring both runs and their
-  controls in place (gold 8a061589fe6c) flipped only v2 C3/mei-0011, strong
-  exact to silent-wrong: v2 C3 is 7 of 16 and C4 - C3 +0.188 [0.000, 0.500],
-  inconclusive; controls stay 64/64 and 32/32.
+- [DNS and FIN](decisions/dns-off-port-and-fin-ack.md): 3 of 192 mutants
+  survived the 31-witness probes unwaived (dev 2, test 1); two witnesses make
+  the tail 33 packets and leave 0. Re-scoring in place (gold 8a061589fe6c)
+  flipped only v2 C3/mei-0011, strong exact to silent-wrong: v2 C3 is 7 of 16,
+  C4 - C3 +0.188 [0.000, 0.500], inconclusive; controls stay 64/64 and 32/32.
 
 ## Shortcut policy, non-ready scoring and case expansion: 2026-09-24
 
@@ -81,19 +79,16 @@ reports under the ignored `artifacts/` directory are not project evidence.
   match their probes; Full flags all 6, names alone pass 3 as strong exact. No
   gold candidate (264) or committed answer (84) is flagged, and no committed
   outcome changes.
-- Non-ready scoring pre-registered (8ba42c8) before the code (7b655b0): a ready
-  answer to non-ready gold is `false_ready`, never executed, and ready and
-  non-ready gold bootstrap separately. After the code and before any test item,
-  508cdda added false-ready per gold status and said what slot match counts; a
+- Non-ready scoring pre-registered (8ba42c8) before the code (7b655b0), as
+  `docs/protocol.md` states it. After the code and before any test item, 508cdda
+  added false-ready per gold status and said what slot match counts, and a
   review closed 15 gaps (8285726). No committed outcome moved.
 - [Case expansion](decisions/case-expansion.md): 52 ready cases (12 dev, 40
   test) and 24 non-ready (4+4 dev, 8+8 test), 152 items, numbered per split and
   gold kind. The 16 old test cases' 32 requests were rewritten, the 16 dev
   items of the published runs are unchanged, and a dev pass is 160 requests.
 - Adequacy gate, strict, at bb39ab7: 344 mutants (72 dev, 272 test), 0 unwaived
-  survivors, the same 4 waivers, 0 label mismatches. A review before the freeze
-  fixed a test request the retriever would refuse, four wording or slot
-  problems and item numbers that tied dev to test.
+  survivors, the same 4 waivers, 0 label mismatches.
 - Under compose.yaml, pytest kept every tmp_path until the session ended, so at
   684c78f the 128 MB /tmp tmpfs filled and 21 tests failed with ENOSPC; b3fa85f
   keeps only failed tests' directories.
@@ -102,18 +97,16 @@ reports under the ignored `artifacts/` directory are not project evidence.
 
 - Pre-registered (36cff89) before the code: a repair round shows packets only
   from one unscored probe per split, an item that probe cannot separate stays
-  in the repair@1 denominator, and the gate checks it. One capture per split,
-  not per case: every capture holds all 20 recipes and 33 witnesses. A planned
-  ARP witness was dropped, as it would change every scored capture.
-- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev, client
-  192.0.2.129) and semantic-35 (test, client .135) with the witness tail
-  through the scored probes' helper (d47eb32) into `feedback/`. No scored
-  capture, gold hash (8a061589fe6c) or model input changes; an import contract
-  keeps scoring from the module and a test keeps it off `scripts/model_run.py`.
+  in the repair@1 denominator, and the gate checks it. Ablation 007 says why
+  one capture per split, not per case, and why the ARP witness was dropped.
+- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev) and
+  semantic-35 (test) with the witness tail through the scored probes' helper
+  (d47eb32) into `feedback/`. No scored capture, gold hash (8a061589fe6c) or
+  model input changes; an import contract keeps scoring from the module and a
+  test keeps it off `scripts/model_run.py`.
 - Gate `probe-adequacy/1.2` (11e01d7, tests 52a29d5) checks the gold filters
-  on all eight probes and runs every mutant on the feedback probe too. Strict
-  mode passes: 416 label checks per filter, 344 mutants, 4 waived survivors,
-  0 feedback-blind mutants or mutations, 0 disproved waivers.
+  on all eight probes and runs every mutant on the feedback probe too; strict
+  mode passes with the counts in ablation 007.
 - [Ablation 007](ablations/007-feedback-probe.md), `keep_full`: without the
   tail, 112 mutants, 10 authored mutations and 6 of 24 committed silent-wrong
   answers get no packet; with it, 24 of 24, and none of 60 strong-exact
@@ -126,25 +119,17 @@ reports under the ignored `artifacts/` directory are not project evidence.
 ## Test freeze code: 2026-09-25
 
 - Pre-registered in `docs/protocol.md` (d575ca2) before the code. A prepare
-  hashes 12 files, up from 8 (7677129): the script, the case tables and the
-  import closure of the prompt, retrieval and request builders, which stops at
-  `completions.py` (request settings, recorded whole by each run manifest) and
-  `errors.py`. The v2 typed-IR system prompts are pinned (6cd3e90).
-- `prepare --split test` builds the 112 test items, and the call refuses a
-  non-dev prompt set before any client exists unless the committed record
-  admits its `prepare.json`: `freeze_record_missing`, `freeze_record_invalid`
-  or `test_not_frozen` (eea7a41). `dfilterforge.held_out_digests` writes that
-  record once, from a test prepare and the regenerated split (e37a7a7).
-- [Test freeze](decisions/test-freeze.md), before at ea4656f and after at
-  e37a7a7: a C4-only run failed publish with `run_layout_invalid` and now
-  publishes and scores 40 items (dd7de1e); stored test answers with no
-  manifest scored 112 items and wrote 56 test specs, and are now refused
-  with `split_violation` (e4d0ed4).
+  hashes 12 files, up from 8 (7677129); the v2 typed-IR system prompts are
+  pinned (6cd3e90). `prepare --split test` builds the 112 test items, and the
+  call refuses a non-dev prompt set the committed record does not admit
+  (eea7a41); `dfilterforge.held_out_digests` writes that record (e37a7a7).
+- [Test freeze](decisions/test-freeze.md) holds the hashed files, refusal
+  codes, lab control timings and a table before (ea4656f) and after (e37a7a7):
+  a C4-only run now scores 40 items (dd7de1e) and manifest-less test answers
+  are refused with `split_violation` (e4d0ed4).
 - CI python job in the test image at e37a7a7: 1,050 tests, 2 skipped, 96.55
   percent coverage, peak /tmp 12.2 MiB; static checks and all gates pass, and
-  `score --check` reproduced all six committed outputs. In the lab service a
-  112-item test prepare's reference control took 147 s and its mutation
-  control 82 s, each `--check` as long, with a memory peak of 125 MiB.
+  `score --check` reproduced all six committed outputs.
 
 ## Test freeze: 2026-09-26
 
@@ -166,15 +151,31 @@ reports under the ignored `artifacts/` directory are not project evidence.
   skipped (no docs/ in the image), 96.55 percent coverage; static checks and
   all gates pass, and `score --check` reproduced all ten committed outputs.
 
+## Model bake-off registered: 2026-09-26
+
+- Before any test request the owner turned the 70B- and DeepSeek-V3-class slots
+  into about 120B-class and frontier open-weight MoE slots: deepseek-v3.2 leaves
+  OpenRouter on 2026-09-28, and Llama 3.3 70B's coding index trails the 32B's.
+- The [model bake-off](decisions/model-bakeoff.md), part of the protocol, lists
+  per slot three ranked candidates and a reserve, their slugs, eight fallbacks,
+  run ids, the rule and a two-turn smoke. `scripts/dev_bakeoff_configs.py` wrote
+  the 21 call configs and endpoints snapshot keyless at 2026-09-26T10:05:28Z,
+  matching the note. No bake-off request has been sent.
+- `scripts/dev_bakeoff.py` runs the passes, resumes transient failures after
+  60 s and refuses uncommitted tooling; 112 tests, 2 host-only; keyless: exit 3.
+
 ## Planned next
 
-1. Write each hosted test run's model id, provider and settings into
-   `docs/protocol.md`, then run the baselines: qwen/qwen3-32b passes A and B,
-   then the 8B, 70B and DeepSeek-V3-class models. The 12 hashed files stay
-   unchanged until the last baseline request.
-2. Counterexample repair with three feedback arms; hosted static page
-   generated from receipts.
-3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
+1. Merge, then the owner runs `scripts/dev_bakeoff.py`; the maintainer publishes
+   and scores the done passes and keeps the rest as evidence. The two-turn smoke
+   tool is built on a branch meanwhile and sent as a second owner command.
+2. Write each hosted test run's run id, model id, provider and settings into
+   `docs/protocol.md` or the bake-off note before the first test request, then
+   run qwen/qwen3-32b passes A and B and the slot winners on test. The 12 hashed
+   files stay unchanged until the last baseline request.
+3. Counterexample repair with three feedback arms, the feedback sent as a
+   second conversational turn; hosted static page generated from receipts.
+4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
 ## Blocked or unverified
@@ -183,11 +184,10 @@ reports under the ignored `artifacts/` directory are not project evidence.
   standalone hash-validation phase was intentionally not run; the stopped local
   run reached 28 captures and 4,200 exact pairs without a difference, but
   partial measurements are not release evidence.
-- Only one model has been measured, twice, on 8 dev cases; every comparison is
-  inconclusive by construction. Test-split baselines, SFT, DPO and GRPO remain
+- Only one model has been measured, twice, on 8 dev cases and no non-ready
+  gold; every comparison is inconclusive by construction, and false-ready rate
+  and slot match are unmeasured. Test-split baselines, SFT, DPO and GRPO remain
   unmeasured; the complete Pilot Go/No-Go decision is unverified.
-- No run has answered non-ready gold, so false-ready rate and slot match are
-  still unmeasured.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive

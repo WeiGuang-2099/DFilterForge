@@ -45,6 +45,8 @@ src_paths = ["src", "tests"]
 include = [
   "src",
   "tests",
+  "scripts/dev_bakeoff.py",
+  "scripts/dev_bakeoff_configs.py",
   "scripts/model_run.py",
   "scripts/probe_adequacy.py",
   "scripts/provider_reply_replay.py",
