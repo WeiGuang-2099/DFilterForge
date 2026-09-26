@@ -353,6 +353,12 @@ _COMMITTED_SYSTEMS = {
     (OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL, 1): (
         "fdeb379cc080c8ba14a1fdecf758fe7ed2e1cc8bcafc5f9b150e0b8fdda37414"
     ),
+    (OutputContractV1.TYPED_IR, RetrievalV1.NONE, 2): (
+        "19f2e94c060146fe9f5f8c5c51cd7e49d33571bdc92605545738e97d91603e61"
+    ),
+    (OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL, 2): (
+        "35f4275d08a8150e750eb73a64334444db14caffd5168760a0fdbb4baaa1626a"
+    ),
 }
 
 

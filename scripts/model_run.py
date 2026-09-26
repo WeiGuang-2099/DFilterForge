@@ -1,14 +1,15 @@
 """Host-side model run: prepare prompts, call the endpoint, publish a run.
 
 Preparation and publication open no socket and read no evaluator gold: the
-split is regenerated inside a temporary directory, only its model-visible
-dev items are kept, and the gold contract is deleted with that directory
-before the first prompt file is written.
+split is regenerated inside a temporary directory, only the model-visible
+items of the requested split are kept, and the gold contract is deleted
+with that directory before the first prompt file is written.
 
 The call step is the only one that opens a connection. It reads the
 credential from the environment, sends each prepared prompt at most once
 per pass, and writes neither the credential nor the endpoint URL into any
-file it produces.
+file it produces. A test prompt set is answered only when the committed
+freeze record admits its prepare.json.
 """
 
 # The three subcommands still share one file, which is over the size this
@@ -76,12 +77,14 @@ from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievalV1
+from dfilterforge.held_out import admit_prepare
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.model_client import API_KEY_ENV
 from dfilterforge.model_client import ModelClientError
 from dfilterforge.model_client import OpenAiCompatibleBackend
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import ModelInputItemV1
+from dfilterforge.model_split import ModelSplit
 from dfilterforge.text_limits import validate_text
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -90,7 +93,6 @@ _IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 _RESULT_DIR = re.compile(
     r"(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}"
 )
-_ALLOWED_SPLIT = "dev"
 _DEFAULT_TOP_K = 16
 _MAX_TOP_K = 32
 _FAILURE = 2
@@ -113,17 +115,24 @@ _RETRY_STATUSES = frozenset({408, 429})
 _RETRY_CODES = frozenset({"timeout", "transport_error"})
 _SCHEMA_MESSAGE = "Input does not match the required schema"
 _IO_MESSAGE = "File operation failed"
-# Every file that decides what a prompt contains. A change to any of them
-# invalidates a prepare directory, which is why the digests are recorded.
+# Every file that decides what a request contains: the items, the prompt
+# text, the retrieval lists, the recorded digests and the request body. A
+# change to any of them invalidates a prepare directory, which is why the
+# digests are recorded. completions.py and errors.py are left out: every
+# run records the settings it sent whole, and an exception shapes no byte.
 _MODEL_SIDE_FILES: tuple[str, ...] = (
     "scripts/model_run.py",
+    "src/dfilterforge/canonical.py",
+    "src/dfilterforge/field_catalog.py",
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
     "src/dfilterforge/intent_ir.py",
     "src/dfilterforge/model_cases.py",
+    "src/dfilterforge/model_client.py",
     "src/dfilterforge/model_dev_cases.py",
     "src/dfilterforge/model_split.py",
     "src/dfilterforge/model_test_cases.py",
+    "src/dfilterforge/text_limits.py",
 )
 # C1, C2, C3 and C4 in condition_label order.
 _CONDITIONS: tuple[tuple[OutputContractV1, RetrievalV1], ...] = (
@@ -132,13 +141,15 @@ _CONDITIONS: tuple[tuple[OutputContractV1, RetrievalV1], ...] = (
     (OutputContractV1.TYPED_IR, RetrievalV1.NONE),
     (OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL),
 )
-# Every file a published run directory carries, in written order. The
-# prepare manifest travels with the run although the run manifest embeds
-# the same fields: the offline scorer reads it as a standalone receipt,
-# it is the only provenance a pass that answers the committed prompts
-# from gold can have, and the run manifest records its digest, so the two
-# are cross-checked here rather than trusted. The prompt files are read
-# from the run directory because the call step copied them there.
+# Every file a run that prepared all four conditions publishes, in written
+# order; a run that prepared fewer publishes this list cut to its own
+# conditions. The prepare manifest travels with the run although the run
+# manifest embeds the same fields: the offline scorer reads it as a
+# standalone receipt, it is the only provenance a pass that answers the
+# committed prompts from gold can have, and the run manifest records its
+# digest, so the two are cross-checked here rather than trusted. The
+# prompt files are read from the run directory because the call step
+# copied them there.
 _PUBLISHED_FILES: tuple[str, ...] = (
     "run_manifest.json",
     "prepare.json",
@@ -233,8 +244,10 @@ def _source_manifest() -> dict[str, str]:
     return digests
 
 
-def _dev_items() -> tuple[tuple[ModelInputItemV1, ...], str]:
-    """Regenerates the split and keeps only its model-visible dev items.
+def _split_items(
+    split: ModelSplit,
+) -> tuple[tuple[ModelInputItemV1, ...], str]:
+    """Regenerates the split and keeps the model-visible items of one split.
 
     The evaluator gold contract and the six captures are written into a
     temporary directory that is removed before this function returns, and
@@ -243,11 +256,15 @@ def _dev_items() -> tuple[tuple[ModelInputItemV1, ...], str]:
     uses platform line endings and a file digest would therefore name the
     same split differently on different hosts.
 
+    Args:
+        split: The split whose items are kept.
+
     Returns:
-        The dev items in file order and the digest of the parsed split.
+        That split's items in file order and the digest of the parsed
+        split.
 
     Raises:
-        RunError: If the regenerated split has no dev item.
+        RunError: If the regenerated split has no item of that split.
     """
     with TemporaryDirectory(prefix="dfilterforge-model-split-") as staging:
         artifacts = generate_model_split(Path(staging))
@@ -257,9 +274,11 @@ def _dev_items() -> tuple[tuple[ModelInputItemV1, ...], str]:
             for line in lines
             if line.strip()
         )
-    items = tuple(item for item in parsed if item.split == _ALLOWED_SPLIT)
+    items = tuple(item for item in parsed if item.split == split)
     if not items:
-        raise RunError("split_empty", "The regenerated split has no dev items")
+        raise RunError(
+            "split_empty", "The regenerated split has no items of that split"
+        )
     return items, content_sha256(parsed)
 
 
@@ -270,7 +289,7 @@ def _retrieved(
 
     Args:
         catalog: A frozen ``.sqlite3`` inventory or a ``.gz`` archive of one.
-        items: The dev items whose intents are the retrieval queries.
+        items: The items whose intents are the retrieval queries.
         top_k: Maximum candidate fields per item.
 
     Returns:
@@ -312,7 +331,7 @@ def _generation_inputs(
     at all; a no-retrieval item carries none.
 
     Args:
-        items: The dev items in file order.
+        items: The items in file order.
         results: One retrieval result per item, in the same order.
 
     Returns:
@@ -343,6 +362,7 @@ def _generation_inputs(
 
 def _write_conditions(
     prepared_dir: Path,
+    split: ModelSplit,
     none_inputs: Sequence[GenerationInputV1],
     lexical_inputs: Sequence[GenerationInputV1],
 ) -> tuple[PreparedConditionV1, ...]:
@@ -351,6 +371,7 @@ def _write_conditions(
     Args:
         prepared_dir: Existing directory that receives ``C1.json`` to
             ``C4.json``.
+        split: The split every prompt must be from.
         none_inputs: Items prepared for the no-retrieval conditions.
         lexical_inputs: Items prepared for the lexical conditions.
 
@@ -358,7 +379,7 @@ def _write_conditions(
         One record per written file, in protocol order.
 
     Raises:
-        RunError: If a prompt is not a dev prompt, or if one condition
+        RunError: If a prompt is not from that split, or if one condition
             produced more than one system prompt.
     """
     conditions: list[PreparedConditionV1] = []
@@ -370,9 +391,9 @@ def _write_conditions(
             output_contract=contract,
             retrieval=retrieval,
         )
-        if any(prompt.split != _ALLOWED_SPLIT for prompt in batch.prompts):
+        if any(prompt.split != split for prompt in batch.prompts):
             raise RunError(
-                "split_refused", "A prepared prompt is not from the dev split"
+                "split_refused", "A prepared prompt is not from that split"
             )
         systems = {prompt.messages[0].content for prompt in batch.prompts}
         if len(systems) != 1:
@@ -407,7 +428,7 @@ def _build_prepare(
     Args:
         staging: Directory holding an empty ``prepared`` subdirectory.
         arguments: The parsed ``prepare`` arguments.
-        items: The dev items in file order.
+        items: The items in file order.
         source_files: Digests of the files that decide prompt content.
         model_inputs_sha256: Digest of the parsed split.
 
@@ -416,17 +437,18 @@ def _build_prepare(
     """
     catalog = cast(Path, arguments.catalog)
     top_k = cast(int, arguments.top_k)
+    split = cast(ModelSplit, arguments.split)
     identity, results = _retrieved(catalog, items, top_k)
     none_inputs, lexical_inputs = _generation_inputs(items, results)
     conditions = _write_conditions(
-        staging / "prepared", none_inputs, lexical_inputs
+        staging / "prepared", split, none_inputs, lexical_inputs
     )
     manifest = PrepareManifestV1(
         prepare_id=cast(Path, arguments.output_dir).name,
         created_at=datetime.now(timezone.utc),
         source_revision=cast(str, arguments.source_revision),
         source_files=source_files,
-        split=_ALLOWED_SPLIT,
+        split=split,
         item_ids=tuple(item.item_id for item in items),
         model_inputs_sha256=model_inputs_sha256,
         catalog=identity,
@@ -463,7 +485,7 @@ def _prepare(arguments: argparse.Namespace) -> int:
     if output_dir.exists():
         raise RunError("output_exists", "The prepare directory already exists")
     source_files = _source_manifest()
-    items, model_inputs_sha256 = _dev_items()
+    items, model_inputs_sha256 = _split_items(cast(ModelSplit, arguments.split))
     staging = output_dir.parent / f".{prepare_id}.partial"
     shutil.rmtree(staging, ignore_errors=True)
     (staging / "prepared").mkdir(parents=True)
@@ -901,9 +923,9 @@ def _call_options(arguments: argparse.Namespace) -> _CallOptions:
 def _read_prepare(prepare_dir: Path) -> tuple[PrepareManifestV1, bytes]:
     """Reads the prepare manifest and the exact bytes it came from.
 
-    A hand-edited manifest naming the held-out split is refused here,
-    before an endpoint object exists, because the manifest type admits
-    only the dev split.
+    The bytes, not the parsed manifest, are what the freeze record admits,
+    so the call plan holds a test manifest to that record before it reads
+    a prompt file.
 
     Raises:
         RunError: If the manifest is oversized or unusable.
@@ -1001,6 +1023,9 @@ def _call_plan(arguments: argparse.Namespace) -> _CallPlan:
         raise RunError(
             "split_mismatch", "The run id does not name the prepared split"
         )
+    # Before any prompt file is read: a held-out prompt set the committed
+    # freeze record does not admit is refused on its manifest bytes alone.
+    admit_prepare(prepare.split, prepare_bytes)
     batches, raw = _read_prepared(prepare_dir, prepare)
     if _source_manifest() != prepare.source_files:
         raise RunError(
@@ -1514,7 +1539,8 @@ def _publish_manifest(run_dir: Path) -> tuple[RunManifestV1, bytes]:
 
     Raises:
         RunError: If the manifest is unusable, does not describe a
-            finished run, or records no token prices.
+            finished run, records no token prices, or names other
+            conditions than its prepare recorded.
     """
     data = _regular_file(run_dir / "run_manifest.json", _MAX_PREPARE_BYTES)
     try:
@@ -1528,6 +1554,16 @@ def _publish_manifest(run_dir: Path) -> tuple[RunManifestV1, bytes]:
     if manifest.prices is None:
         raise RunError(
             "prices_missing", "A published run must record its token prices"
+        )
+    # The published file set follows the prepared conditions, so a run
+    # condition the prepare never recorded would be published without
+    # its files.
+    if {condition.label for condition in manifest.conditions} != {
+        condition.label for condition in manifest.prepare.conditions
+    }:
+        raise RunError(
+            "condition_mismatch",
+            "The run conditions are not the ones its prepare recorded",
         )
     return manifest, data
 
@@ -1573,6 +1609,22 @@ def _recorded_digests(manifest: RunManifestV1) -> dict[str, str]:
     return digests
 
 
+def _published_files(manifest: RunManifestV1) -> tuple[str, ...]:
+    """Lists the files this run publishes, in written order.
+
+    A repair round or a closed ceiling prepares only some conditions, so
+    a run publishes the files of the conditions its prepare recorded: a
+    file of a prepared condition is never dropped, and one of a condition
+    it did not prepare is never published.
+    """
+    labels = {condition.label for condition in manifest.prepare.conditions}
+    return tuple(
+        name
+        for name in _PUBLISHED_FILES
+        if "/" not in name or Path(name).stem in labels
+    )
+
+
 def _published_sources(
     run_dir: Path, manifest: RunManifestV1, manifest_bytes: bytes
 ) -> dict[str, bytes]:
@@ -1588,7 +1640,7 @@ def _published_sources(
     """
     digests = _recorded_digests(manifest)
     sources: dict[str, bytes] = {"run_manifest.json": manifest_bytes}
-    for name in _PUBLISHED_FILES:
+    for name in _published_files(manifest):
         if name in sources:
             continue
         data = _regular_file(run_dir / name, _MAX_PUBLISHED_BYTES)
@@ -1614,7 +1666,7 @@ def _check_published_contracts(
             condition, carries a prompt from another split, or answers
             another item set.
     """
-    for label in _LABELS:
+    for label in (condition.label for condition in manifest.prepare.conditions):
         try:
             batch = PreparedBatchV1.model_validate_json(
                 sources[f"prepared/{label}.json"]
@@ -1680,7 +1732,8 @@ def _check_target(output: Path, sources: Mapping[str, bytes]) -> None:
         RunError: With ``output_exists`` if the target is not a directory
             or holds an entry this run cannot replace, and with
             ``prepared_drift`` if a frozen file is not the one this run
-            was prepared from.
+            was prepared from or belongs to a condition this run did not
+            prepare.
     """
     if not os.path.lexists(output):
         return
@@ -1707,7 +1760,7 @@ def _check_target(output: Path, sources: Mapping[str, bytes]) -> None:
         frozen = output / name
         if not os.path.lexists(frozen):
             continue
-        if _regular_file(frozen, _MAX_PUBLISHED_BYTES) != sources[name]:
+        if _regular_file(frozen, _MAX_PUBLISHED_BYTES) != sources.get(name):
             raise RunError(
                 "prepared_drift",
                 "A committed file differs from the run that answered it",
@@ -1764,7 +1817,7 @@ def _publish(arguments: argparse.Namespace) -> int:
             {
                 "run_id": manifest.run_id,
                 "output": output.as_posix(),
-                "files": list(_PUBLISHED_FILES),
+                "files": list(sources),
             }
         )
     )
@@ -1785,6 +1838,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-revision", type=_source_revision, required=True
     )
     prepare.add_argument("--top-k", type=_top_k, default=_DEFAULT_TOP_K)
+    prepare.add_argument("--split", choices=("dev", "test"), default="dev")
     prepare.set_defaults(handler=_prepare)
     call = commands.add_parser(
         "call",

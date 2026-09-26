@@ -1,6 +1,7 @@
-"""Prepared prompts stay dev-only; one call answers them at most once."""
+"""Prepared prompts keep to one split; one call answers them at most once."""
 
 import argparse
+import ast
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 import gzip
@@ -23,6 +24,7 @@ from typing import Any, cast, NamedTuple, Protocol
 import pytest
 
 from dfilterforge import cli as cli_module
+from dfilterforge import held_out
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
@@ -42,6 +44,7 @@ from dfilterforge.generation import DirectFilterResultV1
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievedFieldV1
+from dfilterforge.held_out import HeldOutFreezeV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.model_cases import model_non_ready_cases
@@ -52,6 +55,7 @@ from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelInputItemV1
+from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.run_store import check_manifest
 from dfilterforge.run_store import check_prepare
 from dfilterforge.run_store import check_splits
@@ -69,6 +73,10 @@ _DEV_ITEM_IDS = tuple(
 _DEV_ITEMS = len(_DEV_ITEM_IDS)
 # One request per dev item and condition.
 _PASS_REQUESTS = len(_LABELS) * _DEV_ITEMS
+# Prepare --split test selects these: the ready block, then the non-ready.
+_TEST_ITEM_IDS = tuple(
+    f"mei-{index:04d}" for index in (*range(1001, 1081), *range(1501, 1533))
+)
 _INPUT_PREFIX = "INPUT_JSON\n"
 
 
@@ -167,7 +175,7 @@ def _no_sockets(*_args: object, **_kwargs: object) -> None:
     raise AssertionError("this step must not open a socket")
 
 
-def _prepare(catalog: Path, output_dir: Path) -> int:
+def _prepare(catalog: Path, output_dir: Path, *extra: str) -> int:
     return model_run.main(
         [
             "prepare",
@@ -177,6 +185,7 @@ def _prepare(catalog: Path, output_dir: Path) -> int:
             str(output_dir),
             "--source-revision",
             "test",
+            *extra,
         ]
     )
 
@@ -220,20 +229,34 @@ def _split_digest() -> str:
         )
 
 
-def test_prepare_writes_four_dev_batches_and_no_gold(
-    catalog: _Catalog, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("split", ["dev", "test"])
+def test_prepare_writes_four_batches_of_one_split_and_no_gold(
+    catalog: _Catalog,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+    split: str,
 ) -> None:
-    monkeypatch.setattr(socket.socket, "connect", _no_sockets)
-    output_dir = tmp_path / "dev-2026-09-20"
+    """The test prompt set comes from the dev code path, its own items only.
 
-    assert _prepare(catalog.path, output_dir) == 0
+    The test prepare is the module fixture every freeze test answers,
+    made with no socket allowed, rather than a second 112-item prepare.
+    """
+    monkeypatch.setattr(socket.socket, "connect", _no_sockets)
+    if split == "test":
+        output_dir = cast(Path, request.getfixturevalue("held_out_prepared"))
+        item_ids = _TEST_ITEM_IDS
+    else:
+        output_dir = tmp_path / "dev-2026-09-20"
+        assert _prepare(catalog.path, output_dir) == 0
+        item_ids = _DEV_ITEM_IDS
 
     batches = {label: _batch(output_dir, label) for label in _LABELS}
     for label, batch in batches.items():
         assert condition_label(batch.output_contract, batch.retrieval) == label
-        assert len(batch.prompts) == _DEV_ITEMS
-        assert tuple(p.item_id for p in batch.prompts) == _DEV_ITEM_IDS
-        assert {p.split for p in batch.prompts} == {"dev"}
+        assert len(batch.prompts) == len(item_ids)
+        assert tuple(p.item_id for p in batch.prompts) == item_ids
+        assert {p.split for p in batch.prompts} == {split}
         lexical = label in _LEXICAL_LABELS
         for prompt in batch.prompts:
             assert ("retrieved_fields" in _payload(prompt)) is lexical
@@ -260,15 +283,15 @@ def test_prepare_writes_four_dev_batches_and_no_gold(
         assert record.case_id.encode("utf-8") not in produced
         assert record.rationale.encode("utf-8") not in produced
     manifest = _manifest(output_dir)
-    assert manifest.split == "dev"
-    assert manifest.item_ids == _DEV_ITEM_IDS
+    assert manifest.split == split
+    assert manifest.item_ids == item_ids
     assert manifest.top_k == 16
     assert manifest.catalog.catalog_hash == catalog.catalog_hash
     for condition in manifest.conditions:
         digest = hashlib.sha256(files[condition.path]).hexdigest()
         assert (condition.sha256, condition.prompt_count) == (
             digest,
-            _DEV_ITEMS,
+            len(item_ids),
         )
 
 
@@ -427,7 +450,12 @@ def test_prepare_honours_a_shallower_retrieval_depth(
 
 @pytest.mark.parametrize(
     ("option", "value"),
-    [("--top-k", "0"), ("--top-k", "33"), ("--source-revision", " ")],
+    [
+        ("--top-k", "0"),
+        ("--top-k", "33"),
+        ("--source-revision", " "),
+        ("--split", "train"),
+    ],
 )
 def test_prepare_rejects_arguments_outside_their_bounds(
     catalog: _Catalog, tmp_path: Path, option: str, value: str
@@ -824,6 +852,18 @@ def fixture_prepared(
     return output_dir
 
 
+@pytest.fixture(name="held_out_prepared", scope="module")
+def fixture_held_out_prepared(
+    catalog: _Catalog, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Prepares the whole test split once, with no socket allowed."""
+    output_dir = tmp_path_factory.mktemp("held-out") / "test-call"
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(socket.socket, "connect", _no_sockets)
+        assert _prepare(catalog.path, output_dir, "--split", "test") == 0
+    return output_dir
+
+
 def test_call_sends_each_prompt_once_and_records_raw_batches(
     prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1153,14 +1193,57 @@ def test_the_first_answer_gates_a_run_that_kept_on_thinking(
     assert answers["mei-0001"].reasoning_tokens == 128
 
 
+_TEST_RUN_ID = "test-fake-2026-09-20"
+
+
+def _write_record(path: Path, *admitted: Path) -> HeldOutFreezeV1:
+    """Writes a freeze record admitting these prepare directories in order.
+
+    The first one is the frozen prepare. The digests are placeholders:
+    the call reads only the admitted ``prepare.json`` digests, never gold.
+    """
+    record = HeldOutFreezeV1(
+        prepare=_manifest(admitted[0]),
+        digests={"inputs": "1" * 64},
+        admitted_prepares=tuple(
+            hashlib.sha256(
+                (directory / "prepare.json").read_bytes()
+            ).hexdigest()
+            for directory in admitted
+        ),
+    )
+    path.write_text(
+        canonical_json(record) + "\n", encoding="utf-8", newline="\n"
+    )
+    return record
+
+
+def _prepare_again(catalog: Path, frozen: Path, output_dir: Path) -> Path:
+    """Prepares the test split again, to prompt files equal to the frozen."""
+    assert _prepare(catalog, output_dir, "--split", "test") == 0
+    for label in _LABELS:
+        name = f"prepared/{label}.json"
+        assert (output_dir / name).read_bytes() == (frozen / name).read_bytes()
+    return output_dir
+
+
+@pytest.mark.parametrize(
+    "recorded", [False, True], ids=["unrecorded", "recorded"]
+)
 def test_call_refuses_a_test_split_prompt_set_before_any_request(
     prepared: Path,
+    held_out_prepared: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    recorded: bool,
 ) -> None:
-    """No held-out prompt set can reach a model before the freeze commit."""
+    """A dev prompt set relabelled as test is not the frozen one."""
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    record = tmp_path / "held_out_freeze.json"
+    monkeypatch.setattr(held_out, "RECORD_PATH", record)
+    if recorded:
+        _write_record(record, held_out_prepared)
     prepare_dir = _workspace(prepared, tmp_path)
     path = prepare_dir / "prepare.json"
     document = cast(dict[str, Any], json.loads(path.read_text("utf-8")))
@@ -1171,12 +1254,132 @@ def test_call_refuses_a_test_split_prompt_set_before_any_request(
     with _provider(_healthy) as provider:
         _write_config(config, provider.url)
         capsys.readouterr()
-        refused = _call(prepare_dir, config, run_id="test-fake-2026-09-20")
+        refused = _call(prepare_dir, config, run_id=_TEST_RUN_ID)
         assert provider.received == []
 
     assert refused == 2
     error = json.loads(capsys.readouterr().err)
-    assert error["error"]["code"] == "prepare_invalid"
+    assert error["error"]["code"] == (
+        "test_not_frozen" if recorded else "freeze_record_missing"
+    )
+
+
+class _Freeze(NamedTuple):
+    """The record path, the catalog, the frozen prompt set and its copy."""
+
+    record: Path
+    catalog: Path
+    frozen: Path
+    # The private copy of the frozen prompt set that the call reads.
+    workspace: Path
+
+
+def _broken_record(freeze: _Freeze) -> None:
+    """Commits a record that is not JSON at all."""
+    freeze.record.write_bytes(b"{")
+
+
+def _other_prepare(freeze: _Freeze) -> None:
+    """Admits only a second prepare of the same prompts."""
+    other = freeze.record.parent / "test-other"
+    _write_record(
+        freeze.record, _prepare_again(freeze.catalog, freeze.frozen, other)
+    )
+
+
+def _reindented_prepare(freeze: _Freeze) -> None:
+    """Admits the frozen prepare, then re-indents the copy the call reads."""
+    _write_record(freeze.record, freeze.frozen)
+    path = freeze.workspace / "prepare.json"
+    data = path.read_bytes()
+    path.write_text(
+        json.dumps(json.loads(data), indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert path.read_bytes() != data
+    assert _manifest(freeze.workspace) == _manifest(freeze.frozen)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "code"),
+    [
+        (_broken_record, "freeze_record_invalid"),
+        (_other_prepare, "test_not_frozen"),
+        (_reindented_prepare, "test_not_frozen"),
+    ],
+)
+def test_call_refuses_a_test_prompt_set_the_record_does_not_admit(
+    catalog: _Catalog,
+    held_out_prepared: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mutate: Callable[[_Freeze], None],
+    code: str,
+) -> None:
+    """Only the exact prepare.json bytes a record admits are answered.
+
+    A second prepare of the same code and catalog writes the same prompt
+    files, but its own manifest, so it is not the frozen prompt set. Nor
+    is the frozen manifest re-indented: it holds the same values in other
+    bytes.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    record = tmp_path / "held_out_freeze.json"
+    monkeypatch.setattr(held_out, "RECORD_PATH", record)
+    prepare_dir = _workspace(held_out_prepared, tmp_path)
+    mutate(_Freeze(record, catalog.path, held_out_prepared, prepare_dir))
+    config = tmp_path / "call.json"
+
+    with _provider(_healthy) as provider:
+        _write_config(config, provider.url)
+        capsys.readouterr()
+        refused = _call(prepare_dir, config, run_id=_TEST_RUN_ID)
+        assert provider.received == []
+
+    assert refused == 2
+    error = json.loads(capsys.readouterr().err)
+    assert error["error"]["code"] == code
+    assert not (prepare_dir / "runs").exists()
+
+
+def test_call_answers_a_test_prompt_set_the_record_admits(
+    catalog: _Catalog,
+    held_out_prepared: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prompt set admitted after the frozen one is sent and published.
+
+    That is how a later test prompt set, such as a repair round's, is
+    admitted: its digest is appended to the record.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    record_path = tmp_path / "held_out_freeze.json"
+    monkeypatch.setattr(held_out, "RECORD_PATH", record_path)
+    other = _prepare_again(
+        catalog.path, held_out_prepared, tmp_path / "test-other"
+    )
+    prepare_dir = _workspace(held_out_prepared, tmp_path)
+    record = _write_record(record_path, other, prepare_dir)
+    monkeypatch.setattr(model_run, "generate_model_split", _no_gold)
+    monkeypatch.setattr(model_run, "open_frozen_catalog", _no_gold)
+    config = tmp_path / "call.json"
+
+    with _provider(_healthy) as provider:
+        _write_config(config, provider.url)
+        assert _call(prepare_dir, config, run_id=_TEST_RUN_ID) == 0
+        assert len(provider.received) == len(_LABELS) * len(_TEST_ITEM_IDS)
+
+    run_dir = prepare_dir / "runs" / _TEST_RUN_ID
+    manifest = RunManifestV1.model_validate_json(
+        (run_dir / "run_manifest.json").read_bytes()
+    )
+    assert manifest.prepare_sha256 == record.admitted_prepares[1]
+    output = tmp_path / "docs" / "results" / _TEST_RUN_ID
+    _freeze_prompts(run_dir, output)
+    assert _publish(run_dir, output) == 0
 
 
 class _Bench(NamedTuple):
@@ -1892,6 +2095,12 @@ def _missing_answer_file(target: _Publishable) -> tuple[Path, Path]:
     return target.run_dir, target.output
 
 
+def _missing_prompt_copy(target: _Publishable) -> tuple[Path, Path]:
+    """Publishes a run one prepared condition's prompt copy is missing from."""
+    (target.run_dir / "prepared" / "C2.json").unlink()
+    return target.run_dir, target.output
+
+
 def _file_at_the_output(target: _Publishable) -> tuple[Path, Path]:
     """Publishes over something at the target that is not a directory."""
     target.output.write_bytes(b"{}\n")
@@ -1951,6 +2160,7 @@ def _linked_answers(target: _Publishable) -> tuple[Path, Path]:
         (_linked_prompt_directory, "output_exists"),
         (_linked_answers, "run_layout_invalid"),
         (_missing_answer_file, "run_layout_invalid"),
+        (_missing_prompt_copy, "run_layout_invalid"),
         (_file_at_the_output, "output_exists"),
     ],
 )
@@ -2092,6 +2302,19 @@ class _GoldReplies:
         )
 
 
+def _dev_routing(artifacts: ModelSplitArtifacts) -> dict[str, GoldCase]:
+    """Maps every dev intent to the gold case its item routes to."""
+    by_case: dict[str, GoldCase] = {
+        case.case_id: case for case in artifacts.gold.cases
+    }
+    by_case.update({case.case_id: case for case in artifacts.gold.non_ready})
+    return {
+        item.intent: by_case[artifacts.gold.item_to_case[item.item_id]]
+        for item in artifacts.inputs
+        if item.split == "dev"
+    }
+
+
 def test_published_run_scores_end_to_end(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2101,16 +2324,7 @@ def test_published_run_scores_end_to_end(
     catalog, exactly as tests/test_cli_live.py requires.
     """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
-    artifacts = generate_model_split(tmp_path / "source")
-    by_case: dict[str, GoldCase] = {
-        case.case_id: case for case in artifacts.gold.cases
-    }
-    by_case.update({case.case_id: case for case in artifacts.gold.non_ready})
-    routing = {
-        item.intent: by_case[artifacts.gold.item_to_case[item.item_id]]
-        for item in artifacts.inputs
-        if item.split == "dev"
-    }
+    routing = _dev_routing(generate_model_split(tmp_path / "source"))
     assert len(routing) == _DEV_ITEMS
     prepare_dir = tmp_path / "model-eval" / _PUBLISH_RUN_ID
     assert (
@@ -2158,6 +2372,142 @@ def test_published_run_scores_end_to_end(
     assert (scored / "outcomes.jsonl").is_file()
     again = score_run(published, code_revision="integration-test", check=True)
     assert again.differences == ()
+
+
+_C4_RUN_ID = "dev-qwen3-32b-c4-2026-09-20"
+# What a C4-only run publishes, in written order.
+_C4_FILES = (
+    "run_manifest.json",
+    "prepare.json",
+    "prepared/C4.json",
+    "completions/C4.json",
+    "attempts/C4.jsonl",
+)
+
+
+def _keep_conditions(prepare_dir: Path, labels: Sequence[str]) -> None:
+    """Cuts a prepare directory down to the named conditions.
+
+    That is the shape a repair round's or a closed ceiling's prompt set
+    takes: fewer condition files, the same items and receipt fields.
+    """
+    manifest = _manifest(prepare_dir)
+    for label in _LABELS:
+        if label not in labels:
+            (prepare_dir / "prepared" / f"{label}.json").unlink()
+    kept = tuple(c for c in manifest.conditions if c.label in labels)
+    (prepare_dir / "prepare.json").write_text(
+        canonical_json(manifest.model_copy(update={"conditions": kept})) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+@pytest.fixture(name="c4_run", scope="module")
+def fixture_c4_run(
+    prepared: Path, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Answers a copy of the dev prompt set cut to C4, from gold."""
+    root = tmp_path_factory.mktemp("c4")
+    workspace = root / "dev-c4"
+    shutil.copytree(prepared, workspace)
+    _keep_conditions(workspace, ("C4",))
+    answers = _GoldReplies(_dev_routing(generate_model_split(root / "split")))
+    config = root / "call.json"
+    patch = pytest.MonkeyPatch()
+    patch.setenv(API_KEY_ENV, _API_KEY)
+    try:
+        with _provider(answers) as provider:
+            answers.received = provider.received
+            _write_config(config, provider.url)
+            assert _call(workspace, config, run_id=_C4_RUN_ID) == 0
+            assert len(provider.received) == _DEV_ITEMS
+    finally:
+        patch.undo()
+    return workspace / "runs" / _C4_RUN_ID
+
+
+def test_a_run_over_fewer_conditions_is_published_and_scored(
+    c4_run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A repair round or a ceiling run publishes and scores its own subset.
+
+    No skip: scoring needs tshark 4.6.8 and the frozen field catalog, as
+    the end-to-end test above does.
+    """
+    run_dir = _run_copy(c4_run, tmp_path)
+    output = tmp_path / "docs" / "results" / _C4_RUN_ID
+    capsys.readouterr()
+
+    assert _publish(run_dir, output) == 0
+
+    report = cast(dict[str, Any], json.loads(capsys.readouterr().out))
+    assert report["files"] == list(_C4_FILES)
+    assert sorted(_files(output)) == sorted(_C4_FILES)
+    scored = score_run(output, code_revision="c4-test")
+    # mei-0001 to mei-0024 are the ready dev items, the rest non-ready.
+    assert scored.items == _DEV_ITEMS
+    assert scored.outcomes["strong_exact"] == 24
+    assert scored.outcomes["abstained"] == _DEV_ITEMS - 24
+    assert sum(scored.outcomes.values()) == _DEV_ITEMS
+    again = score_run(output, code_revision="c4-test", check=True)
+    assert again.differences == ()
+
+
+def test_publish_refuses_fewer_conditions_over_a_full_prompt_set(
+    c4_run: Path,
+    prepared: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A frozen prompt file of a condition the run did not prepare is drift."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    output = tmp_path / "docs" / "results" / _C4_RUN_ID
+    (output / "prepared").mkdir(parents=True)
+    shutil.copy2(run_dir / "prepare.json", output / "prepare.json")
+    shutil.copy2(run_dir / "prepared" / "C4.json", output / "prepared")
+    shutil.copy2(prepared / "prepared" / "C1.json", output / "prepared")
+    before = _files(output)
+    capsys.readouterr()
+
+    refused = _publish(run_dir, output)
+
+    assert refused == 2
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "prepared_drift"
+    assert _files(output) == before
+    assert not list(output.parent.glob(".*.partial"))
+
+
+def _prepend_c1(document: dict[str, Any]) -> None:
+    """Names C1 as a run condition ahead of the one condition prepared."""
+    conditions = cast(list[dict[str, Any]], document["conditions"])
+    extra = dict(conditions[0])
+    extra.update(
+        label="C1",
+        attempts_path="attempts/C1.jsonl",
+        completions_path="completions/C1.json",
+    )
+    document["conditions"] = [extra, *conditions]
+
+
+def test_publish_refuses_a_run_condition_its_prepare_did_not_record(
+    c4_run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A run naming a condition beyond its prepare's is never published."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    _edit_manifest(run_dir, _prepend_c1)
+    output = tmp_path / "docs" / "results" / _C4_RUN_ID
+    output.parent.mkdir(parents=True)
+    capsys.readouterr()
+
+    refused = _publish(run_dir, output)
+
+    assert refused == 2
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "condition_mismatch"
+    assert not output.exists()
+    assert not list(output.parent.glob(".*.partial"))
 
 
 _README = Path(__file__).parents[1] / "README.md"
@@ -2428,3 +2778,72 @@ def test_readme_call_config_is_the_recorded_first_run() -> None:
         0.1,
         0.3,
     )
+
+
+# The request builders: every module they import decides a request byte,
+# except errors, whose exceptions shape none, and completions, whose request
+# settings every run manifest records whole.
+_REQUEST_BUILDERS = ("generation", "field_retrieval", "model_client")
+_CLOSURE_STOPS = frozenset({"completions", "errors"})
+# The case tables and the split writer decide every intent a prompt holds.
+_CASE_TABLES = (
+    "model_cases",
+    "model_dev_cases",
+    "model_split",
+    "model_test_cases",
+)
+_PACKAGE = "dfilterforge"
+_PACKAGE_DIR = Path(__file__).parents[1] / "src" / _PACKAGE
+
+
+def _package_imports(name: str) -> set[str]:
+    """Names the package modules one package module imports.
+
+    Every import form counts, at any depth of the file: ``from
+    dfilterforge.x import y``, ``import dfilterforge.x``, ``from
+    dfilterforge import x`` where ``x`` is a module, and the relative
+    forms, resolved against the package.
+    """
+    source = (_PACKAGE_DIR / f"{name}.py").read_text(encoding="utf-8")
+    modules: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = importlib.util.resolve_name(
+                "." * node.level + (node.module or ""), _PACKAGE
+            )
+            modules.add(base)
+            if base == _PACKAGE:
+                modules.update(
+                    f"{_PACKAGE}.{alias.name}"
+                    for alias in node.names
+                    if (_PACKAGE_DIR / f"{alias.name}.py").is_file()
+                )
+    return {
+        module.split(".")[1]
+        for module in modules
+        if module.startswith(f"{_PACKAGE}.")
+    }
+
+
+def test_model_side_files_are_the_request_builders_import_closure() -> None:
+    """A file that shapes a request cannot be left out of the prepare hash."""
+    closure: set[str] = set()
+    pending: list[str] = list(_REQUEST_BUILDERS)
+    while pending:
+        module = pending.pop()
+        if module in closure or module in _CLOSURE_STOPS:
+            continue
+        closure.add(module)
+        pending.extend(_package_imports(module))
+    side_files: tuple[str, ...] = getattr(model_run, "_MODEL_SIDE_FILES")
+
+    assert set(side_files) == {
+        "scripts/model_run.py",
+        *(
+            f"src/dfilterforge/{name}.py"
+            for name in closure | set(_CASE_TABLES)
+        ),
+    }
+    assert len(side_files) == len(set(side_files)) == 12

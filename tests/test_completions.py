@@ -230,10 +230,22 @@ def test_run_manifest_round_trips_the_single_shape() -> None:
     assert document["prepare"]["prepare_id"] == "prep-0001"
 
 
-def test_a_held_out_prepare_manifest_is_unconstructible() -> None:
-    """No held-out item can reach a model before the freeze commit."""
+def test_a_prepare_manifest_holds_either_split_up_to_128_items() -> None:
+    """The 112 test items fit; the freeze record, not the type, guards them."""
+    most = tuple(f"mei-{number:04d}" for number in range(1001, 1129))
+    condition = _prepare().conditions[0].model_dump()
+    fullest = PreparedConditionV1.model_validate(
+        condition | {"prompt_count": 128}
+    )
+
+    assert _prepare(split="test", item_ids=most).split == "test"
+    assert fullest.prompt_count == 128
     with pytest.raises(ValidationError):
-        _prepare(split="test")
+        _prepare(split="train")
+    with pytest.raises(ValidationError):
+        _prepare(item_ids=(*most, "mei-1129"))
+    with pytest.raises(ValidationError):
+        PreparedConditionV1.model_validate(condition | {"prompt_count": 129})
 
 
 @pytest.mark.parametrize(
