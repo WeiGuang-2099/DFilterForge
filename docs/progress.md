@@ -160,7 +160,11 @@ reports under the ignored `artifacts/` directory are not project evidence.
 - `src/dfilterforge/held_out_freeze.json` admits only the committed test
   `prepare.json` (206599bb67e1) and holds the digests of the test inputs,
   gold with routing, gold hash, feedback labels and four captures, quoted in
-  `docs/protocol.md`. The record test no longer skips.
+  `docs/protocol.md`. The record test no longer skips, and a host test ties
+  the committed test `prepare.json` and those quotes to the record.
+- CI python job in the test image at the freeze commit: 1,059 tests, 1
+  skipped (no docs/ in the image), 96.55 percent coverage; static checks and
+  all gates pass, and `score --check` reproduced all ten committed outputs.
 
 ## Planned next
 

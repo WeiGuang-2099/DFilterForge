@@ -77,4 +77,6 @@ the printed prefixes in `docs/protocol.md`, keep the receipt as
 No code checks settings, pass timing or which runs exist; the protocol states
 them and run manifests record them. No CI check blocks a hashed-file edit; the
 call refuses it and a host test fails while a prompt set awaits its call. The
-call reads the working-tree record and does not check that it is committed.
+call reads the working-tree record and does not check that it is committed,
+and it trusts the split a prompt set declares: a test prompt set hand-edited
+to say dev is sent, and only the scorer refuses its answers.

@@ -32,6 +32,7 @@ from dfilterforge.model_split import ModelSplitArtifacts
 
 # The freeze commit sets this, so from then on a missing record fails.
 _FROZEN = True
+_ROOT = Path(__file__).parents[1]
 _DIGEST_KEYS = frozenset(
     {
         "inputs",
@@ -414,3 +415,31 @@ def test_the_frozen_record_matches_the_regenerated_test_split(
     assert record.digests == frozen_digests(split, feedback)
     assert record.prepare.item_ids == _test_item_ids(split)
     assert _sha256(_written(record.prepare)) == record.admitted_prepares[0]
+
+
+def test_the_committed_test_prompts_and_quoted_digests_are_the_record() -> None:
+    """The committed frozen prompt set is the admitted one, quoted in full.
+
+    The test image carries no docs/ tree, so the record test cannot see the
+    committed copy. Without this host test a stale copy would first show as
+    ``prepared_drift`` at publish, after the paid requests, and a stale
+    quote in the protocol would never show.
+    """
+    results = _ROOT / "docs" / "results"
+    if not results.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
+    record = held_out.load_record()
+    assert record is not None, "the freeze record is missing"
+    prepare = results / record.prepare.prepare_id / "prepare.json"
+    protocol = (_ROOT / "docs" / "protocol.md").read_text(encoding="utf-8")
+    quoted = {
+        "prepare": record.admitted_prepares[0],
+        "inputs": record.digests["inputs"],
+        "gold and routing": record.digests["gold"],
+        "gold hash": record.digests["gold_hash"],
+        "feedback labels": record.digests["feedback_labels"],
+    }
+
+    assert _sha256(prepare.read_bytes()) == record.admitted_prepares[0]
+    for label, digest in quoted.items():
+        assert f"{label} `{digest[:12]}`" in " ".join(protocol.split()), label
