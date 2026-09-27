@@ -119,6 +119,19 @@ all nine calls with nothing sent.
   prepared at. The maintainer does this before handing over. The final free
   check is still the keyless `run`, which makes every due call once with the
   key withheld; `--dry-run` starts no call step.
+- Rule 6's reserve smoke: once every run-gate survivor of a slot has failed
+  its smoke, the owner runs `scripts/dev_bakeoff.py --only reserve-<slot>
+  --after-smoke-failures` from the main checkout, which holds the bake-off's
+  runs and the unchanged hashed files, then from this worktree
+  `scripts/two_turn_smoke.py prepare --reserve <slot> --summary <main
+  checkout>/artifacts/bakeoff/summary-<date>.json` and `run`. `prepare
+  --reserve` refuses unless every ranked smoke of the slot reads `fail` as
+  `judge` reads it and the reserve passes the run gates in that summary. It
+  appends one smoke named after that day's date and records the summary's
+  path and digest in `plan.json`; the judged smokes, their runs and verdicts
+  stay as they are. Never prepare every survivor again into another out dir:
+  that would re-send the judged smokes and give a candidate that failed its
+  smoke a second one.
 - A fallback nemotron smoke's re-run id would exceed 32 characters; no
   survivor qualified through a fallback.
 - Do not press Ctrl-C while a smoke request is in flight: that request may be

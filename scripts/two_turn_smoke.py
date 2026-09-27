@@ -4,6 +4,7 @@ Run from the worktree whose generation.py accepts a second turn, with
 that worktree's own uv environment (docs/decisions/second-turn.md):
 
     uv run --frozen python scripts/two_turn_smoke.py prepare --summary S
+        [--reserve SLOT]
     uv run --frozen python scripts/two_turn_smoke.py run [--dry-run]
     uv run --frozen python scripts/two_turn_smoke.py judge
 
@@ -19,6 +20,20 @@ fails without a request. A smoke's run id is
 is ``-rs2``, ``-rs3`` and so on, one character longer, so every listed
 model's re-run id fits the 32-character result name but a fallback
 nemotron's.
+
+``prepare --reserve SLOT`` is offline and free too, for the note's rule 6:
+once every run-gate survivor of SLOT has failed its smoke, the owner runs
+``scripts/dev_bakeoff.py --only reserve-SLOT --after-smoke-failures`` from
+the main checkout, which holds the bake-off's runs, and passes the new
+summary it writes as S. The plan must exist, every ranked smoke of SLOT
+must read ``fail`` as ``judge`` reads it, every survivor of SLOT in S
+must be a pass the plan smoked, and the reserve must pass the run gates
+in S and have no smoke yet. It appends that one smoke, named after
+today's date, and records S's path and digest beside it; the other
+smokes, their runs and verdicts stay as they are, and a failure removes
+only the new smoke's directory. Never prepare every survivor again into
+another out dir instead: that would re-send the smokes already judged
+and give a candidate that failed its smoke a second one.
 
 ``run`` is the owner's one paid command, from the shell that holds the
 key. Each smoke is one ``scripts/model_run.py call`` started as an
@@ -89,7 +104,8 @@ Exit codes of ``judge``:
          directory is unreadable, a run follows one that was not a
          harness failure, or its source run no longer rebuilds.
 
-``prepare`` exits 0 when it wrote the plan and 2 when it refused.
+``prepare`` exits 0 when it wrote the plan or appended a reserve's smoke
+to it, and 2 when it refused.
 """
 
 # The rule the judge applies and the batch that resumes and re-runs by it
@@ -243,8 +259,23 @@ class SmokeV1(FrozenModel):
         return None if options is None else options.reasoning
 
 
+class ReserveV1(FrozenModel):
+    """Where a reserve's smoke, appended by ``prepare --reserve``, came from."""
+
+    smoke_id: str
+    prepare_date: str
+    source_revision: str
+    summary_path: str
+    summary_sha256: str
+
+
 class PlanV1(FrozenModel):
-    """Every smoke ``prepare`` built, in the runner summary's order."""
+    """Every smoke ``prepare`` built, in the runner summary's order.
+
+    A reserve's smoke is appended after them; the fields above ``smokes``
+    stay those of the first prepare, and ``reserves`` records the later
+    summary each appended smoke was read from.
+    """
 
     schema_version: Literal["two-turn-smoke-plan/1.0"] = (
         "two-turn-smoke-plan/1.0"
@@ -256,6 +287,7 @@ class PlanV1(FrozenModel):
     summary_sha256: str
     follow_up_text_sha256: str
     smokes: tuple[SmokeV1, ...]
+    reserves: tuple[ReserveV1, ...] = ()
 
 
 def _sha256(data: bytes) -> str:
@@ -285,6 +317,13 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(
         canonical_json(value) + "\n", encoding="utf-8", newline="\n"
     )
+
+
+def _replace_json(path: Path, value: object) -> None:
+    """Rewrites a file whole or not at all, for one that records runs."""
+    staging = path.with_name(f".{path.name}.partial")
+    _write_json(staging, value)
+    os.replace(staging, path)
 
 
 def uncommitted(paths: Sequence[str]) -> list[str]:
@@ -398,6 +437,20 @@ def _passing(summary: dict[str, Any]) -> list[dict[str, Any]]:
         for record in records
         if record.get("passes") and record.get("qualifying_pass")
     ]
+
+
+def _read_summary(summary_path: Path) -> tuple[bytes, dict[str, Any], Path]:
+    """Reads the runner's summary and finds the raw runs it names.
+
+    Returns:
+        The summary's bytes, its content and its prepare directory.
+    """
+    data = summary_path.read_bytes()
+    summary = cast(dict[str, Any], json.loads(data))
+    source_root = summary_path.resolve().parents[2] / str(
+        summary["prepare_dir"]
+    )
+    return data, summary, source_root
 
 
 def _source_manifest(run_dir: Path) -> tuple[RunManifestV1, str]:
@@ -535,11 +588,7 @@ def prepare(
             f"{_relative(plan_path)} exists; the smokes are prepared. Remove"
             f" {_relative(out_dir)} only if no smoke request was ever sent"
         )
-    data = summary_path.read_bytes()
-    summary = cast(dict[str, Any], json.loads(data))
-    source_root = summary_path.resolve().parents[2] / str(
-        summary["prepare_dir"]
-    )
+    data, summary, source_root = _read_summary(summary_path)
     survivors = _passing(summary)
     if not survivors:
         raise PlanError("the summary lists no candidate passing the run gates")
@@ -1028,7 +1077,10 @@ def slot_lines(states: Sequence[SmokeState]) -> list[str]:
             lines.append(
                 f"{slot}: every run-gate survivor failed its smoke; run"
                 f" scripts/dev_bakeoff.py --only reserve-{slot}"
-                " --after-smoke-failures"
+                " --after-smoke-failures from the main checkout, then"
+                f" two_turn_smoke.py prepare --reserve {slot} --summary"
+                " <main checkout>/artifacts/bakeoff/summary-<date>.json"
+                " here"
             )
     return lines
 
@@ -1070,6 +1122,134 @@ def judge_exit(states: Sequence[SmokeState]) -> int:
     if any(state.verdict == "unjudgeable" for state in states):
         return EXIT_REFUSED
     return EXIT_OK if all(state.final for state in states) else EXIT_STOPPED
+
+
+# A reserve's smoke, added to the plan by rule 6.
+
+
+def _reserve_record(
+    plan: PlanV1, summary: dict[str, Any], slot: str
+) -> dict[str, Any]:
+    """Returns the slot's reserve record, which must still need its smoke.
+
+    Raises:
+        PlanError: If the plan already holds the reserve's smoke, or the
+            summary lists no reserve of the slot passing the run gates.
+    """
+    reserve_slot = f"reserve-{slot}"
+    if any(entry.slot == reserve_slot for entry in plan.smokes):
+        raise PlanError(f"the plan already holds the {reserve_slot} smoke")
+    records = [r for r in _passing(summary) if r["slot"] == reserve_slot]
+    if len(records) != 1:
+        raise PlanError(
+            f"the summary lists no {reserve_slot} candidate passing the run"
+            " gates"
+        )
+    return records[0]
+
+
+def _check_survivors_failed(
+    out_dir: Path, plan: PlanV1, summary: dict[str, Any], slot: str
+) -> None:
+    """Requires that every run-gate survivor of the slot failed its smoke.
+
+    Each smoke is read as ``judge`` reads it, source rebuild included,
+    and every survivor the new summary names must be one the plan
+    smoked, so a reserve can never give a survivor a second smoke.
+
+    Raises:
+        PlanError: If a survivor of the slot has no failed smoke.
+    """
+    ranked = [s for s in plan.smokes if s.slot == slot]
+    open_smokes: list[str] = []
+    for entry in ranked:
+        verdict = smoke_state(out_dir, entry).verdict
+        if _verify_source(entry) is not None:
+            verdict = "unjudgeable"
+        if verdict != "fail":
+            open_smokes.append(f"{entry.candidate} {verdict}")
+    if open_smokes:
+        raise PlanError(
+            f"rule 6 runs the {slot} reserve only once every run-gate survivor"
+            f" of the slot failed its smoke: {', '.join(open_smokes)}"
+        )
+    smoked = {(entry.candidate, entry.source_run_id) for entry in ranked}
+    unsmoked = [
+        str(record["candidate"])
+        for record in _passing(summary)
+        if record["slot"] == slot
+        and (record["candidate"], record["qualifying_pass"]["run_id"])
+        not in smoked
+    ]
+    if unsmoked:
+        raise PlanError(
+            f"{', '.join(unsmoked)} passes the run gates in the summary but"
+            " the plan holds no smoke of that pass"
+        )
+
+
+def prepare_reserve(
+    summary_path: Path,
+    out_dir: Path,
+    revision: str,
+    slot: str,
+    config_dir: Path | None = None,
+) -> PlanV1:
+    """Appends the slot's reserve smoke to the plan, offline (rule 6).
+
+    The smoke is named after today's date, as a smoke is named after its
+    prepare's. Existing smokes, their runs and their verdicts are left as
+    they are, and the plan records the summary the smoke was read from.
+
+    Returns:
+        The plan with the reserve's smoke appended.
+
+    Raises:
+        PlanError: If there is no plan, a survivor of the slot has no
+            failed smoke, the slot's reserve does not pass the run gates
+            or already has a smoke, its directory exists, or its counted
+            pass, config or follow-up is refused.
+    """
+    if slot not in RANKED_SLOTS:
+        raise PlanError(f"{slot}: not a ranked slot")
+    plan = load_plan(out_dir)
+    data, summary, source_root = _read_summary(summary_path)
+    record = _reserve_record(plan, summary, slot)
+    _check_survivors_failed(out_dir, plan, summary, slot)
+    date = _now()[:10]
+    base = _smoke_base(
+        record, source_root, config_dir or ROOT / CONFIG_DIR, date
+    )
+    smoke_id = str(base["smoke_id"])
+    if any(entry.smoke_id == smoke_id for entry in plan.smokes):
+        raise PlanError(f"the plan already holds {smoke_id}")
+    _refuse_taken(out_dir, [smoke_id])
+    try:
+        smoke = _prepare_smoke(base, out_dir, revision)
+        if smoke.status == "prepared":
+            check_cap(smoke)
+        extended = plan.model_copy(
+            update={
+                "smokes": (*plan.smokes, smoke),
+                "reserves": (
+                    *plan.reserves,
+                    ReserveV1(
+                        smoke_id=smoke_id,
+                        prepare_date=date,
+                        source_revision=revision,
+                        summary_path=summary_path.resolve().as_posix(),
+                        summary_sha256=_sha256(data),
+                    ),
+                ),
+            }
+        )
+        _replace_json(out_dir / PLAN_NAME, extended)
+    except BaseException:
+        # Only the new smoke's directory: _refuse_taken made sure this call
+        # created it, and every other one may hold paid runs.
+        shutil.rmtree(out_dir / smoke_id, ignore_errors=True)
+        raise
+    return extended
 
 
 # The paid batch.
@@ -1533,6 +1713,11 @@ def _parser() -> argparse.ArgumentParser:
         "prepare", help="build every survivor's smoke prompts, offline"
     )
     prepare_command.add_argument("--summary", type=Path, required=True)
+    prepare_command.add_argument(
+        "--reserve",
+        choices=RANKED_SLOTS,
+        help="append this slot's reserve smoke to the plan (rule 6)",
+    )
     run_command = commands.add_parser("run", help="the one paid command")
     run_command.add_argument("--dry-run", action="store_true")
     commands.add_parser("judge", help="write the verdicts, offline")
@@ -1550,8 +1735,16 @@ def _command(arguments: argparse.Namespace) -> int:
         changes = uncommitted(TOOLING)
         if changes:
             raise PlanError("commit the tooling first: " + "; ".join(changes))
-        plan = prepare(arguments.summary, out_dir, db.head_revision())
-        for smoke in plan.smokes:
+        revision = db.head_revision()
+        if arguments.reserve is None:
+            plan = prepare(arguments.summary, out_dir, revision)
+            written = plan.smokes
+        else:
+            plan = prepare_reserve(
+                arguments.summary, out_dir, revision, arguments.reserve
+            )
+            written = plan.smokes[-1:]
+        for smoke in written:
             items = ", ".join(smoke.items) or smoke.status
             print(f"{smoke.smoke_id} from {smoke.source_run_id}: {items}")
         return EXIT_OK

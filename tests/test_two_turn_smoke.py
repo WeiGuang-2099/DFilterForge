@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+import functools
 import hashlib
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
@@ -1056,6 +1057,230 @@ def test_a_provider_finish_reason_cannot_write_summary_lines(
         (out / "verdicts" / f"{alpha.entry.smoke_id}.json").read_bytes()
     )
     assert verdict["runs"][0]["items"][first]["finish_reason"] == raw
+
+
+# A reserve's smoke (rule 6).
+
+_LATER = "2026-09-29"
+
+
+def _reserve_summary(
+    source: Path, tmp_path: Path, *records: dict[str, Any]
+) -> Path:
+    """Writes the runner's later summary, with small's reserve passing."""
+    root = tmp_path / "source"
+    shutil.copytree(source, root)
+    summary = {
+        "prepare_dir": "artifacts/model-eval/dev-synthetic",
+        "candidates": list(records)
+        or [
+            _record("anchor", "A", "qwen3-32b", True),
+            _record("small", "1", "alpha", True),
+            _record("small", "2", "beta", True),
+            _record("reserve-small", "R", "gamma", True),
+        ],
+    }
+    path = root / "artifacts" / "bakeoff" / f"summary-{_LATER}.json"
+    path.write_text(json.dumps(summary), encoding="utf-8")
+    return path
+
+
+def _add_reserve(summary: Path, out: Path) -> Any:
+    return smoke.prepare_reserve(
+        summary, out, "reserve-rev", "small", summary.parents[2] / "configs"
+    )
+
+
+def _small_failed(out: Path) -> None:
+    alpha = _run(out, "alpha")
+    alpha.invoke(_both(ok(finish_reason="length"), ok())(alpha))
+
+
+def test_a_reserve_smoke_is_appended_and_nothing_else_moves(
+    source: Path,
+    out: Path,
+    tmp_path: Path,
+    slept: list[float],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(smoke, "_now", lambda: f"{_LATER}T01:00:00Z")
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(ok())(anchor))
+    _small_failed(out)
+    before = _plan(out)
+    files = _snapshot(out)
+    summary = _reserve_summary(source, tmp_path)
+
+    plan = _add_reserve(summary, out)
+
+    (reserve,) = plan.reserves
+    added = plan.smokes[-1]
+    assert plan.smokes[:-1] == before.smokes
+    assert (
+        plan.model_copy(update={"smokes": before.smokes, "reserves": ()})
+        == before
+    )
+    assert (added.slot, added.candidate, added.status) == (
+        "reserve-small",
+        "gamma",
+        "prepared",
+    )
+    assert added.smoke_id == f"dev-gamma-rs-{_LATER}"
+    assert reserve.model_dump() == {
+        "smoke_id": added.smoke_id,
+        "prepare_date": _LATER,
+        "source_revision": "reserve-rev",
+        "summary_path": summary.resolve().as_posix(),
+        "summary_sha256": _sha256(summary.read_bytes()),
+    }
+    assert smoke.load_plan(out) == plan
+    after = _snapshot(out)
+    assert {
+        name: data
+        for name, data in after.items()
+        if name != "plan.json" and not name.startswith(added.smoke_id)
+    } == {name: data for name, data in files.items() if name != "plan.json"}
+    calls = FakeCalls(out, [_good])
+
+    assert smoke.locked_run(_ctx(out, calls)) == smoke.EXIT_OK
+
+    assert [argv[argv.index("--run-id") + 1] for argv in calls.paid()] == [
+        added.smoke_id
+    ]
+    summary_text = (out / f"summary-{_LATER}.txt").read_text(encoding="utf-8")
+    assert "small: smoke passed by gamma" in summary_text
+    del slept
+
+
+def _smoke_open(out: Path) -> None:
+    del out
+
+
+def _reserve_already_added(out: Path) -> None:
+    _small_failed(out)
+    plan = _plan(out)
+    gamma = _smoke(out, "alpha").model_copy(
+        update={"slot": "reserve-small", "candidate": "gamma"}
+    )
+    (out / "plan.json").write_bytes(
+        _bytes(plan.model_copy(update={"smokes": (*plan.smokes, gamma)}))
+    )
+
+
+def _failed_but_source_gone(out: Path) -> None:
+    _small_failed(out)
+    plan = _plan(out)
+    gone = (out / "gone").as_posix()
+    smokes = tuple(
+        (
+            s.model_copy(update={"source_run_dir": gone})
+            if s.candidate == "alpha"
+            else s
+        )
+        for s in plan.smokes
+    )
+    (out / "plan.json").write_bytes(
+        _bytes(plan.model_copy(update={"smokes": smokes}))
+    )
+
+
+@pytest.mark.parametrize(
+    ("setup", "records", "message"),
+    [
+        (_smoke_open, (), "alpha not_run"),
+        (_failed_but_source_gone, (), "alpha unjudgeable"),
+        (_reserve_already_added, (), "already holds the reserve-small smoke"),
+        (
+            _small_failed,
+            (_record("reserve-small", "R", "gamma", False),),
+            "no reserve-small candidate passing",
+        ),
+        (
+            _small_failed,
+            (
+                _record("small", "1", "alpha", True)
+                | {
+                    "qualifying_pass": {
+                        "run_id": f"dev-alpha-fb-{_DATE}",
+                        "config": "alpha_cfg",
+                    }
+                },
+                _record("reserve-small", "R", "gamma", True),
+            ),
+            "alpha passes the run gates in the summary but the plan",
+        ),
+    ],
+)
+def test_a_reserve_smoke_is_refused_unless_rule_6_allows_it(
+    source: Path,
+    out: Path,
+    tmp_path: Path,
+    setup: Callable[[Path], None],
+    records: tuple[dict[str, Any], ...],
+    message: str,
+) -> None:
+    setup(out)
+    plan_bytes = (out / "plan.json").read_bytes()
+    summary = _reserve_summary(source, tmp_path, *records)
+
+    with pytest.raises(smoke.PlanError, match=message):
+        _add_reserve(summary, out)
+
+    assert (out / "plan.json").read_bytes() == plan_bytes
+    assert not list(out.glob("dev-gamma-*"))
+
+
+def test_a_failed_reserve_prepare_removes_only_its_own_smoke(
+    source: Path,
+    out: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def over_cap(entry: Any) -> None:
+        raise smoke.PlanError(f"{entry.smoke_id}: over the cap")
+
+    _small_failed(out)
+    files = _snapshot(out)
+    summary = _reserve_summary(source, tmp_path)
+    monkeypatch.setattr(smoke, "check_cap", over_cap)
+
+    with pytest.raises(smoke.PlanError, match="over the cap"):
+        _add_reserve(summary, out)
+
+    assert _snapshot(out) == files
+
+
+def _nothing_uncommitted(paths: Sequence[str]) -> list[str]:
+    del paths
+    return []
+
+
+def test_main_prepares_a_reserve_smoke(
+    source: Path,
+    out: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _small_failed(out)
+    summary = _reserve_summary(source, tmp_path)
+    monkeypatch.setattr(smoke, "uncommitted", _nothing_uncommitted)
+    monkeypatch.setattr(smoke.db, "head_revision", lambda: "reserve-rev")
+    monkeypatch.setattr(
+        smoke,
+        "prepare_reserve",
+        functools.partial(
+            smoke.prepare_reserve, config_dir=summary.parents[2] / "configs"
+        ),
+    )
+    argv = ["--out-dir", str(out), "prepare", "--summary", str(summary)]
+
+    code = smoke.main([*argv, "--reserve", "small"])
+
+    assert code == smoke.EXIT_OK
+    (line,) = capsys.readouterr().out.splitlines()
+    assert line.startswith("dev-gamma-rs-") and "from dev-gamma-" in line
+    assert _plan(out).smokes[-1].candidate == "gamma"
 
 
 def test_judge_cannot_judge_a_smoke_whose_source_changed(
