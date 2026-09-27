@@ -110,6 +110,15 @@ all nine calls with nothing sent.
   pass or a fail; so does a smoke prepared without ready answers whose source
   now has them. `run` does not rebuild the sources before paying: its prompts
   are the prepared ones, pinned by `prepare_sha256`.
+- After a commit that changes any of the 12 prepare-hashed files, a smoke
+  still owed a call would stop at `prepare_code_mismatch`. `run --dry-run`
+  and `run` refuse it first (exit 2, nothing started) and say what to do:
+  with no `runs/` directory under any smoke, remove `artifacts/two-turn-smoke`
+  and run `prepare` again, and the smoke ids then carry that day's date; with
+  one, delete nothing and restore the files to the revision the prompts were
+  prepared at. The maintainer does this before handing over. The final free
+  check is still the keyless `run`, which makes every due call once with the
+  key withheld; `--dry-run` starts no call step.
 - A fallback nemotron smoke's re-run id would exceed 32 characters; no
   survivor qualified through a fallback.
 - Do not press Ctrl-C while a smoke request is in flight: that request may be

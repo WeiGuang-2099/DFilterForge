@@ -30,7 +30,12 @@ call is made once with the key withheld and must stop at
 ``api_key_missing``; paid calls start only when the key variable is
 present and the tooling is committed. Running it again skips smokes with
 a verdict, resumes pending ones and starts the re-run a harness failure
-left owed, one new run per smoke and execution.
+left owed, one new run per smoke and execution. ``run --dry-run`` sends
+nothing and starts no call step: it makes the same input checks, so it
+also refuses a smoke still owed a call whose prompt set recorded other
+model-side code than the checkout's, then prints each smoke's state and
+next call. The keyless preflight, which only ``run`` makes, stays the
+full free check.
 
 ``judge`` is offline. It rebuilds every smoke's prompts from its source
 run, reads each run by the note's rule and writes one verdict per smoke
@@ -59,8 +64,10 @@ Exit codes of ``run``:
          done with it. After an error the batch did not expect, requests
          may have been sent; read steps.jsonl before running it again.
     2    Refused before any request: the plan, a prompt set, a config
-         file, the cap, the lock, git, uncommitted tooling or the keyless
-         preflight.
+         file, the cap, model-side code a prompt set owed a call no
+         longer matches (the message says whether to re-prepare or to
+         restore the files), the lock, git, uncommitted tooling or the
+         keyless preflight.
     3    Aborted: the key variable is not set, or the account refused a
          request (HTTP 401, 402 or 403). Fix it, then run the same
          command; the refused run is owed a re-run.
@@ -118,9 +125,11 @@ from pydantic import Field
 from pydantic import ValidationError
 
 from dfilterforge.canonical import canonical_json
+from dfilterforge.canonical import file_sha256
 from dfilterforge.completions import CODE_PATTERN
 from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
+from dfilterforge.completions import PrepareManifestV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import thinking_state
@@ -1103,20 +1112,85 @@ def call_argv(
     return argv
 
 
+def _changed_code(prepare_bytes: bytes) -> tuple[str, list[str]]:
+    """Compares the model-side files a prompt set recorded with today's.
+
+    These are the digests the call step checks before any request, so a
+    file listed here would stop the call at ``prepare_code_mismatch``.
+
+    Returns:
+        The revision the prompt set was prepared at, and every recorded
+        file that is missing, outside the repository or changed.
+
+    Raises:
+        PlanError: If prepare.json is not a prompt set's manifest.
+    """
+    try:
+        manifest = PrepareManifestV1.model_validate_json(prepare_bytes)
+    except ValidationError:
+        raise PlanError("prepare.json is not a prepare manifest") from None
+    changed: list[str] = []
+    for name, digest in sorted(manifest.source_files.items()):
+        path = (ROOT / name).resolve()
+        if (
+            ROOT not in path.parents
+            or not path.is_file()
+            or file_sha256(path) != digest
+        ):
+            changed.append(name)
+    return manifest.source_revision, changed
+
+
+def _code_advice(
+    ctx: Context, smoke: SmokeV1, revision: str, changed: Sequence[str]
+) -> str:
+    """Says what to do about a prompt set the code no longer matches.
+
+    A smoke with a runs/ directory may hold paid evidence, and removing
+    the out dir would take it with it; only with none may it go.
+    """
+    problem = (
+        f"{smoke.smoke_id}: {', '.join(changed)} changed since its prompts"
+        f" were prepared at {revision}, so its call would stop at"
+        " prepare_code_mismatch before any request."
+    )
+    if any(
+        (ctx.out_dir / s.smoke_id / "runs").exists() for s in ctx.plan.smokes
+    ):
+        return (
+            f"{problem} Smokes here have runs/ directories that may hold paid"
+            " evidence, so delete nothing: restore those files with git"
+            f" checkout {revision} -- {' '.join(changed)}, commit, then run"
+            " the same command"
+        )
+    return (
+        f"{problem} No smoke has a runs/ directory, so no smoke request was"
+        f" sent: remove {_relative(ctx.out_dir)}, then run prepare --summary"
+        f" {ctx.plan.summary_path}; the new smoke ids carry that day's date"
+    )
+
+
 def check_inputs(ctx: Context) -> None:
     """Ties every prepared smoke to the files the plan recorded.
 
+    The same checks guard ``run`` and ``run --dry-run``, so the free
+    check also refuses a prompt set the call step would refuse for its
+    code. A smoke with a verdict needs no call, so only one still owed a
+    call must match the model-side code its prompt set recorded.
+
     Raises:
-        PlanError: If a prompt set or config file changed, or the cap
-            cannot cover a smoke.
+        PlanError: If a prompt set or config file changed, the cap cannot
+            cover a smoke, or the model-side code changed under a smoke
+            that is still owed a call.
     """
     for smoke in ctx.plan.smokes:
         if smoke.status != "prepared":
             continue
         prepare_json = ctx.out_dir / smoke.smoke_id / "prepare.json"
-        if not prepare_json.is_file() or (
-            _sha256(prepare_json.read_bytes()) != smoke.prepare_sha256
-        ):
+        prepare_bytes = (
+            prepare_json.read_bytes() if prepare_json.is_file() else b""
+        )
+        if _sha256(prepare_bytes) != smoke.prepare_sha256:
             raise PlanError(f"{smoke.smoke_id}: prepare.json is not the plan's")
         config = _resolve(smoke.config_path)
         if not config.is_file() or _sha256(config.read_bytes()) != (
@@ -1124,6 +1198,11 @@ def check_inputs(ctx: Context) -> None:
         ):
             raise PlanError(f"{smoke.config}: the config file changed")
         check_cap(smoke)
+        if smoke_state(ctx.out_dir, smoke).final:
+            continue
+        revision, changed = _changed_code(prepare_bytes)
+        if changed:
+            raise PlanError(_code_advice(ctx, smoke, revision, changed))
 
 
 def _unjudgeable_advice(out_dir: Path, state: SmokeState) -> str:

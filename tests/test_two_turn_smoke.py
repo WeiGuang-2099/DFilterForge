@@ -1437,6 +1437,89 @@ def test_a_changed_config_is_refused_before_anything(out: Path) -> None:
         smoke.check_inputs(ctx)
 
 
+def _stale_code(out: Path, candidate: str) -> Any:
+    """Makes one smoke's prompt set record other model-side code.
+
+    Its prepare.json records another generation.py digest, as if that file
+    had been committed since, and plan.json pins the edited file, so only
+    the code check can object.
+    """
+    entry = _smoke(out, candidate)
+    path = out / entry.smoke_id / "prepare.json"
+    prepare = json.loads(path.read_bytes())
+    prepare["source_files"]["src/dfilterforge/generation.py"] = "0" * 64
+    path.write_bytes(_bytes(prepare))
+    edited = entry.model_copy(
+        update={"prepare_sha256": _sha256(path.read_bytes())}
+    )
+    plan = _plan(out)
+    smokes = tuple(
+        edited if s.smoke_id == entry.smoke_id else s for s in plan.smokes
+    )
+    (out / "plan.json").write_bytes(
+        _bytes(plan.model_copy(update={"smokes": smokes}))
+    )
+    return edited
+
+
+def test_a_prompt_set_the_code_no_longer_matches_is_refused(out: Path) -> None:
+    entry = _stale_code(out, "alpha")
+    ctx = _ctx(out, FakeCalls(out, []))
+
+    with pytest.raises(smoke.PlanError) as caught:
+        smoke.check_inputs(ctx)
+
+    message = str(caught.value)
+    assert message.startswith(
+        f"{entry.smoke_id}: src/dfilterforge/generation.py"
+    )
+    assert "prepare_code_mismatch" in message
+    assert "no smoke request was sent" in message
+    assert f"prepare --summary {ctx.plan.summary_path}" in message
+    assert "git checkout" not in message
+
+
+def test_a_stale_prompt_set_beside_runs_says_to_delete_nothing(
+    out: Path,
+) -> None:
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke([(anchor.entry.items[0], http(402))], "fatal_http")
+    _stale_code(out, "alpha")
+
+    with pytest.raises(smoke.PlanError) as caught:
+        smoke.check_inputs(_ctx(out, FakeCalls(out, [])))
+
+    message = str(caught.value)
+    assert "delete nothing" in message
+    assert "git checkout test-rev -- src/dfilterforge/generation.py" in message
+    assert "remove" not in message
+    assert anchor.run_dir.is_dir()
+
+
+def test_a_smoke_with_a_verdict_no_longer_needs_its_code(out: Path) -> None:
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(ok())(anchor))
+    _stale_code(out, "qwen3-32b")
+
+    smoke.check_inputs(_ctx(out, FakeCalls(out, [])))
+
+
+def test_dry_run_refuses_a_prompt_set_the_code_no_longer_matches(
+    out: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(smoke.db, "head_revision", lambda: "test-rev")
+    _stale_code(out, "alpha")
+
+    code = smoke.main(["--out-dir", str(out), "run", "--dry-run"])
+
+    printed = capsys.readouterr()
+    assert code == smoke.EXIT_REFUSED
+    assert "prepare_code_mismatch" in printed.err
+    assert "scripts/model_run.py call" not in printed.out
+
+
 def test_dry_run_prints_the_calls_and_sends_nothing(out: Path) -> None:
     calls = FakeCalls(out, [])
     ctx = _ctx(out, calls)
