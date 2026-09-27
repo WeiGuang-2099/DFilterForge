@@ -8,14 +8,25 @@ that worktree's own uv environment (docs/decisions/second-turn.md):
     uv run --frozen python scripts/two_turn_smoke.py run [--dry-run]
     uv run --frozen python scripts/two_turn_smoke.py judge
 
-``prepare`` is offline and free. For every candidate the bake-off runner's
-summary S lists as passing the run gates, the anchor included, it checks
-the counted pass's config file against that pass's run manifest and runs
-``scripts/model_run.py follow-up`` on the pass's run directory, found
-under the summary's own repository root. That continues the first two dev
-C4 items in prepare order whose counted answer completed with
-finish_reason stop and parses as ready; with fewer than two the smoke
-fails without a request. A smoke's run id is
+``prepare`` is offline and free. S must be the bake-off runner's own
+summary, <checkout>/artifacts/bakeoff/summary-<date>.json in the checkout
+that ran the bake-off, since the raw runs it names are read from under
+that checkout; a copy elsewhere, such as the committed one in
+docs/decisions/evidence/bakeoff/, is refused, and so is a summary of
+another shape. From this branch's worktree, which sits at
+.worktrees/repair-multiturn in the main checkout, the command is, on one
+line:
+
+    uv run --frozen python scripts/two_turn_smoke.py prepare
+        --summary ../../artifacts/bakeoff/summary-2026-09-26.json
+
+For every candidate S lists as passing the run gates, the anchor
+included, it checks the counted pass's config file against that pass's
+run manifest and runs ``scripts/model_run.py follow-up`` on the pass's
+run directory. That continues the first two dev C4 items in prepare
+order whose counted answer completed with finish_reason stop and parses
+as ready; with fewer than two the smoke fails without a request. A
+smoke's run id is
 ``dev-<model>[-fb]-rs-<prepare date>``; a re-run after a harness failure
 is ``-rs2``, ``-rs3`` and so on, one character longer, so every listed
 model's re-run id fits the 32-character result name but a fallback
@@ -141,6 +152,8 @@ from types import ModuleType
 from typing import Any, cast, Literal
 from urllib.parse import urlsplit
 
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
 
@@ -194,6 +207,11 @@ RANKED_SLOTS = ("small", "mid", "frontier")
 REPORT_KEYS = ("stop_reason", "requests_sent", "charged_usd_upper_bound")
 DEV_RUN = re.compile(r"dev-([a-z0-9][a-z0-9.-]*)-([0-9]{4}-[0-9]{2}-[0-9]{2})")
 CONFIG_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+# Where the bake-off runner writes its summary, and where its runs lie.
+RUNNER_DIR = ("artifacts", "bakeoff")
+PREPARE_DIR = re.compile(
+    r"artifacts/model-eval/[A-Za-z0-9][A-Za-z0-9._-]{0,127}"
+)
 # A provider name a summary line may print as it is.
 SHOWN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()/+-]{0,63}")
 
@@ -436,28 +454,88 @@ def check_cap(smoke: SmokeV1) -> None:
 # Preparing.
 
 
-def _passing(summary: dict[str, Any]) -> list[dict[str, Any]]:
+class _PassV1(BaseModel):
+    """The counted pass the runner's summary names for a survivor."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    run_id: str
+    config: str
+
+
+class _CandidateV1(BaseModel):
+    """One candidate as the runner's summary records it."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    slot: str
+    rank: str
+    candidate: str
+    passes: bool
+    qualifying_pass: _PassV1 | None
+
+
+class _SummaryV1(BaseModel):
+    """The part of the bake-off runner's summary that prepare reads."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    prepare_dir: str
+    candidates: tuple[_CandidateV1, ...]
+
+
+Survivor = tuple[_CandidateV1, _PassV1]
+
+
+def _passing(summary: _SummaryV1) -> list[Survivor]:
     """Returns the summary's candidates that passed the run gates."""
-    records = cast(list[dict[str, Any]], summary.get("candidates", []))
     return [
-        record
-        for record in records
-        if record.get("passes") and record.get("qualifying_pass")
+        (record, record.qualifying_pass)
+        for record in summary.candidates
+        if record.passes and record.qualifying_pass is not None
     ]
 
 
-def _read_summary(summary_path: Path) -> tuple[bytes, dict[str, Any], Path]:
-    """Reads the runner's summary and finds the raw runs it names.
+def _read_summary(summary_path: Path) -> tuple[bytes, _SummaryV1, Path]:
+    """Reads the bake-off runner's own summary and finds the runs it names.
+
+    Its prepare_dir is relative to the checkout the runner wrote it in,
+    so only the runner's own copy, <checkout>/artifacts/bakeoff/, has the
+    raw runs beside it.
 
     Returns:
         The summary's bytes, its content and its prepare directory.
+
+    Raises:
+        PlanError: If the file is not where the runner writes it, is not
+            a runner summary, or names a prepare directory outside
+            artifacts/model-eval/.
     """
-    data = summary_path.read_bytes()
-    summary = cast(dict[str, Any], json.loads(data))
-    source_root = summary_path.resolve().parents[2] / str(
-        summary["prepare_dir"]
-    )
-    return data, summary, source_root
+    resolved = summary_path.resolve()
+    if (resolved.parent.parent.name, resolved.parent.name) != RUNNER_DIR:
+        raise PlanError(
+            f"{resolved.as_posix()}: prepare reads only the bake-off runner's"
+            " own summary, <checkout>/artifacts/bakeoff/summary-<date>.json,"
+            " whose raw runs lie under that checkout; a copy elsewhere, such"
+            " as the committed one in docs/decisions/evidence/bakeoff/, has"
+            " none beside it"
+        )
+    data = resolved.read_bytes()
+    try:
+        summary = _SummaryV1.model_validate_json(data)
+    except ValidationError as error:
+        first = error.errors()[0]
+        where = ".".join(str(part) for part in first["loc"]) or "top level"
+        raise PlanError(
+            f"{resolved.as_posix()}: not a runner summary ({where}:"
+            f" {first['type']})"
+        ) from None
+    if PREPARE_DIR.fullmatch(summary.prepare_dir) is None:
+        raise PlanError(
+            f"{resolved.as_posix()}: prepare_dir is not a directory under"
+            " artifacts/model-eval/"
+        )
+    return data, summary, resolved.parents[2] / summary.prepare_dir
 
 
 def _source_manifest(run_dir: Path) -> tuple[RunManifestV1, str]:
@@ -474,7 +552,7 @@ def _source_manifest(run_dir: Path) -> tuple[RunManifestV1, str]:
 
 
 def _smoke_base(
-    record: dict[str, Any], source_root: Path, config_dir: Path, date: str
+    survivor: Survivor, source_root: Path, config_dir: Path, date: str
 ) -> dict[str, Any]:
     """Checks one survivor's counted pass and config, before any prompt.
 
@@ -482,9 +560,9 @@ def _smoke_base(
         PlanError: If the pass is not complete or its config file is not
             the one that pass sent.
     """
-    qualifying = cast(dict[str, Any], record["qualifying_pass"])
-    source_id = str(qualifying["run_id"])
-    config = str(qualifying["config"])
+    record, qualifying = survivor
+    source_id = qualifying.run_id
+    config = qualifying.config
     if CONFIG_NAME.fullmatch(config) is None:
         raise PlanError(f"{config}: not a config name")
     run_dir = source_root / "runs" / source_id
@@ -504,10 +582,10 @@ def _smoke_base(
     ):
         raise PlanError(f"{config}: not the config {source_id} sent")
     return {
-        "slot": str(record["slot"]),
-        "rank": str(record["rank"]),
-        "candidate": str(record["candidate"]),
-        "informational": record["slot"] == "anchor",
+        "slot": record.slot,
+        "rank": record.rank,
+        "candidate": record.candidate,
+        "informational": record.slot == "anchor",
         "smoke_id": smoke_run_id(source_id, date),
         "source_run_id": source_id,
         "source_run_dir": run_dir.resolve().as_posix(),
@@ -601,8 +679,10 @@ def prepare(
         raise PlanError("the summary lists no candidate passing the run gates")
     date = _now()[:10]
     bases = [
-        _smoke_base(record, source_root, config_dir or ROOT / CONFIG_DIR, date)
-        for record in survivors
+        _smoke_base(
+            survivor, source_root, config_dir or ROOT / CONFIG_DIR, date
+        )
+        for survivor in survivors
     ]
     _refuse_taken(out_dir, [str(base["smoke_id"]) for base in bases])
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1184,9 +1264,7 @@ def judge_exit(states: Sequence[SmokeState]) -> int:
 # A reserve's smoke, added to the plan by rule 6.
 
 
-def _reserve_record(
-    plan: PlanV1, summary: dict[str, Any], slot: str
-) -> dict[str, Any]:
+def _reserve_record(plan: PlanV1, summary: _SummaryV1, slot: str) -> Survivor:
     """Returns the slot's reserve record, which must still need its smoke.
 
     Raises:
@@ -1196,7 +1274,7 @@ def _reserve_record(
     reserve_slot = f"reserve-{slot}"
     if any(entry.slot == reserve_slot for entry in plan.smokes):
         raise PlanError(f"the plan already holds the {reserve_slot} smoke")
-    records = [r for r in _passing(summary) if r["slot"] == reserve_slot]
+    records = [r for r in _passing(summary) if r[0].slot == reserve_slot]
     if len(records) != 1:
         raise PlanError(
             f"the summary lists no {reserve_slot} candidate passing the run"
@@ -1206,7 +1284,7 @@ def _reserve_record(
 
 
 def _check_survivors_failed(
-    out_dir: Path, plan: PlanV1, summary: dict[str, Any], slot: str
+    out_dir: Path, plan: PlanV1, summary: _SummaryV1, slot: str
 ) -> None:
     """Requires that every run-gate survivor of the slot failed its smoke.
 
@@ -1232,11 +1310,10 @@ def _check_survivors_failed(
         )
     smoked = {(entry.candidate, entry.source_run_id) for entry in ranked}
     unsmoked = [
-        str(record["candidate"])
-        for record in _passing(summary)
-        if record["slot"] == slot
-        and (record["candidate"], record["qualifying_pass"]["run_id"])
-        not in smoked
+        record.candidate
+        for record, qualifying in _passing(summary)
+        if record.slot == slot
+        and (record.candidate, qualifying.run_id) not in smoked
     ]
     if unsmoked:
         raise PlanError(

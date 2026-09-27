@@ -30,7 +30,19 @@ answer verbatim and that text; all four messages share the 64 KiB budget.
 `prepare` read the runner summary and each counted pass's raw run directory
 with publish's own checks, and checked each config file against the pass's
 manifest. Items are the first two dev C4 items in prepare order whose counted
-answer completed with finish_reason stop and parses as ready.
+answer completed with finish_reason stop and parses as ready. The command,
+from this worktree at `.worktrees/repair-multiturn` in the main checkout, is:
+
+```sh
+uv run --frozen python scripts/two_turn_smoke.py prepare \
+  --summary ../../artifacts/bakeoff/summary-2026-09-26.json
+```
+
+That is the bake-off runner's own summary, the only copy with the raw runs
+beside it, since its `prepare_dir` is relative to the checkout that ran the
+bake-off. `prepare` refuses a summary anywhere but
+`<checkout>/artifacts/bakeoff/`, such as the committed copy in
+`evidence/bakeoff/`, and one of another shape, before it writes anything.
 
 | Smoke run id | Items | Prompt bytes | Worst case, 6 attempts (USD) |
 | --- | --- | --- | ---: |

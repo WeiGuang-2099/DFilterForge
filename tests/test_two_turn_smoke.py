@@ -482,6 +482,92 @@ def test_prepare_refuses_a_tampered_source_and_leaves_nothing(
     assert list(out.iterdir()) == []
 
 
+def test_prepare_reads_only_the_runner_s_own_summary(
+    source: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The committed copy has no raw runs beside it, so it is refused."""
+    evidence = source / "docs" / "decisions" / "evidence" / "bakeoff"
+    copy = tmp_path / evidence.relative_to(source) / f"summary-{_DATE}.json"
+    copy.parent.mkdir(parents=True)
+    shutil.copyfile(_summary(source), copy)
+    monkeypatch.setattr(smoke, "uncommitted", _nothing_uncommitted)
+    monkeypatch.setattr(smoke.db, "head_revision", lambda: "test-rev")
+    out = tmp_path / "out"
+
+    code = smoke.main(
+        ["--out-dir", str(out), "prepare", "--summary", str(copy)]
+    )
+
+    assert code == smoke.EXIT_REFUSED
+    error = capsys.readouterr().err
+    assert "the bake-off runner's own summary" in error
+    assert "<checkout>/artifacts/bakeoff/summary-<date>.json" in error
+    assert "docs/decisions/artifacts" not in error
+    assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    ("content", "problem"),
+    [
+        ("{", "not a runner summary"),
+        ("[]", "not a runner summary (top level"),
+        ('{"candidates": []}', "(prepare_dir: missing)"),
+        (
+            '{"prepare_dir": "artifacts/model-eval/x", "candidates": {}}',
+            "(candidates:",
+        ),
+        (
+            json.dumps(
+                {
+                    "prepare_dir": "artifacts/model-eval/dev-synthetic",
+                    "candidates": [_record("small", "1", "alpha", True)]
+                    + [_record("small", "2", "beta", True) | {"passes": "yes"}],
+                }
+            ),
+            "(candidates.1.passes: bool_type)",
+        ),
+        (
+            json.dumps(
+                {
+                    "prepare_dir": "artifacts/model-eval/dev-synthetic",
+                    "candidates": [
+                        _record("small", "1", "alpha", True)
+                        | {"qualifying_pass": {"run_id": "dev-alpha"}}
+                    ],
+                }
+            ),
+            "(candidates.0.qualifying_pass.config: missing)",
+        ),
+        (
+            json.dumps({"prepare_dir": "../../outside", "candidates": []}),
+            "prepare_dir is not a directory under artifacts/model-eval/",
+        ),
+        (
+            json.dumps(
+                {"prepare_dir": "D:/artifacts/model-eval/x", "candidates": []}
+            ),
+            "prepare_dir is not a directory under artifacts/model-eval/",
+        ),
+    ],
+)
+def test_prepare_refuses_a_summary_of_another_shape(
+    tmp_path: Path, content: str, problem: str
+) -> None:
+    summary = tmp_path / "artifacts" / "bakeoff" / f"summary-{_DATE}.json"
+    summary.parent.mkdir(parents=True)
+    summary.write_text(content, encoding="utf-8")
+    out = tmp_path / "out"
+
+    with pytest.raises(smoke.PlanError) as caught:
+        smoke.prepare(summary, out, "test-rev", tmp_path / "configs")
+
+    assert problem in str(caught.value)
+    assert not out.exists()
+
+
 def test_prepare_runs_once(source: Path, out: Path) -> None:
     assert "exists; the smokes are prepared" in _refused_prepare(source, out)
 
