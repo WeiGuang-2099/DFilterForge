@@ -1349,6 +1349,34 @@ def test_a_reserve_smoke_is_appended_and_nothing_else_moves(
     del slept
 
 
+def test_a_failed_reserve_smoke_ends_its_slot(
+    source: Path,
+    out: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rule 6: a reserve that fails its smoke leaves the slot empty."""
+    monkeypatch.setattr(smoke, "_now", lambda: f"{_LATER}T01:00:00Z")
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(ok())(anchor))
+    _small_failed(out)
+    _add_reserve(_reserve_summary(source, tmp_path), out)
+    gamma = _run(out, "gamma")
+    gamma.invoke(_both(ok(finish_reason="length"), ok())(gamma))
+
+    states, text = smoke.judge(out, _plan(out))
+
+    reserve = next(s for s in states if s.smoke.candidate == "gamma")
+    assert (reserve.smoke.slot, reserve.verdict) == ("reserve-small", "fail")
+    assert reserve.final
+    ended = "small: the reserve failed its smoke too"
+    assert smoke.slot_lines(states) == [ended]
+    lines = text.read_text(encoding="utf-8")
+    assert ended in lines
+    assert "--only reserve-small" not in lines
+    assert "prepare --reserve" not in lines
+
+
 def _smoke_open(out: Path) -> None:
     del out
 
