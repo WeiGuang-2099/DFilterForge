@@ -82,3 +82,12 @@ all nine calls with nothing sent.
   are the prepared ones, pinned by `prepare_sha256`.
 - A fallback nemotron smoke's re-run id would exceed 32 characters; no
   survivor qualified through a fallback.
+- Do not press Ctrl-C while a smoke request is in flight: that request may be
+  billed but not recorded. The call step shares the console, so the interrupt
+  can end it between the reply and its attempt-log line; the request is then
+  missing from the attempt log, `requests_sent` and the charged upper bound,
+  and the next `run` sends it again. The owner ruled on 2026-09-27 to keep the
+  bake-off runner's invoker with this rule rather than isolate the call step.
+  After an interrupt the batch prints `INTERRUPTED` and logs an `interrupted`
+  step. A call step still running after the wait keeps
+  `artifacts/two-turn-smoke/.lock`; delete it once that process has exited.

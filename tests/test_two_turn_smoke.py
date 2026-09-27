@@ -1195,14 +1195,58 @@ def test_a_held_lock_refuses(out: Path, slept: list[float]) -> None:
     del slept
 
 
+def _steps(out: Path) -> list[dict[str, Any]]:
+    lines = (out / "steps.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines]
+
+
+def _printed(ctx: Any, label: str) -> str:
+    """Returns the one printed line that starts with the label."""
+    (found,) = [line for line in ctx.printed if line.startswith(label)]
+    return found
+
+
+def _interrupted(ctx: Any) -> str:
+    return _printed(ctx, "INTERRUPTED")
+
+
 def test_an_interrupt_releases_the_lock(out: Path, slept: list[float]) -> None:
     def interrupted(run: SmokeRun) -> dict[str, Any]:
         raise KeyboardInterrupt
 
     calls = FakeCalls(out, [interrupted])
+    ctx = _ctx(out, calls)
 
-    assert smoke.locked_run(_ctx(out, calls)) == smoke.EXIT_INTERRUPTED
+    assert smoke.locked_run(ctx) == smoke.EXIT_INTERRUPTED
     assert not (out / smoke.LOCK_NAME).exists()
+    assert "may be billed but not recorded" in _interrupted(ctx)
+    assert "run the same command again" in _interrupted(ctx)
+    assert _steps(out)[-1]["phase"] == "interrupted"
+    del slept
+
+
+def test_a_call_step_still_running_keeps_the_smoke_lock(
+    out: Path, slept: list[float]
+) -> None:
+    def still_running(run: SmokeRun) -> dict[str, Any]:
+        raise db.ChildStillRunning(
+            "call step pid 7 is still running; let it exit, then delete"
+            " artifacts/bakeoff/.lock and run the same command"
+        )
+
+    ctx = _ctx(out, FakeCalls(out, [still_running]))
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_INTERRUPTED
+    lock = out / smoke.LOCK_NAME
+    assert lock.exists()
+    assert lock.resolve().as_posix() in _interrupted(ctx)
+    assert "artifacts/bakeoff" not in _interrupted(ctx)
+    assert "may be billed but not recorded" in _interrupted(ctx)
+    assert _steps(out)[-1] == {
+        "at": _steps(out)[-1]["at"],
+        "phase": "interrupted",
+        "reason": "call_step_still_running",
+    }
     del slept
 
 

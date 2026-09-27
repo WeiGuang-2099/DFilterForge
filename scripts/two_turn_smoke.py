@@ -58,7 +58,13 @@ Exit codes of ``run`` and ``judge`` (``prepare`` uses 0 and 2):
     3    ``run`` aborted: the key variable is not set, or the account
          refused a request (HTTP 401, 402 or 403). Fix it, then run the
          same command; the refused run is owed a re-run.
-    130  ``run`` was interrupted after the in-flight request finished.
+    130  ``run`` was interrupted with Ctrl-C. Do not press it while a
+         request is in flight: the call step shares the console, so that
+         request may be billed but not recorded. It is then missing from
+         the attempt log and the charged upper bound, and the next run
+         sends it again. A call step still running after the wait keeps
+         the lock, artifacts/two-turn-smoke/.lock: delete it once that
+         process has exited, then run the same command.
 """
 
 # The rule the judge applies and the batch that resumes and re-runs by it
@@ -1259,6 +1265,16 @@ ENDINGS: tuple[tuple[type[BaseException], str, int], ...] = (
 )
 
 
+def _log_interrupt(ctx: Context, reason: str) -> None:
+    """Records an interrupt in the step log, so the evidence shows it.
+
+    The call step's own records cannot: a request it had in flight is in
+    no attempt log. A step log that cannot be written is not fatal here.
+    """
+    with contextlib.suppress(OSError):
+        ctx.log({"phase": "interrupted", "reason": reason})
+
+
 def locked_run(ctx: Context) -> int:
     """Runs the batch under the lock and always judges afterwards."""
     lock = ctx.out_dir / LOCK_NAME
@@ -1282,11 +1298,22 @@ def locked_run(ctx: Context) -> int:
             if isinstance(error, kind)
         )
         ctx.out(f"{label}: {error}")
-    except (db.ChildStillRunning, KeyboardInterrupt) as error:
-        # A call step still running keeps the lock; an interrupted request
-        # may be billed but not recorded.
-        keep_lock = isinstance(error, db.ChildStillRunning)
-        ctx.out(f"INTERRUPTED: {error or 'run the same command to resume'}")
+    except db.ChildStillRunning:
+        # Its text names the bake-off's lock, not this batch's.
+        keep_lock = True
+        ctx.out(
+            "INTERRUPTED: the call step whose pid is printed above is still"
+            " running, and its request may be billed but not recorded; let"
+            f" it exit, then delete {_relative(lock)} and run the same command"
+        )
+        _log_interrupt(ctx, "call_step_still_running")
+        code = EXIT_INTERRUPTED
+    except KeyboardInterrupt:
+        ctx.out(
+            "INTERRUPTED: run the same command again to resume; the"
+            " interrupted request may be billed but not recorded"
+        )
+        _log_interrupt(ctx, "ctrl_c")
         code = EXIT_INTERRUPTED
     finally:
         if not keep_lock:
