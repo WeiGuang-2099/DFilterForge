@@ -18,8 +18,12 @@ Before is 431df73 (main); after is this branch. Nothing here sends a request.
 | `model_run.py follow-up` | invalid choice, exit 2 | C4-only dev prepare |
 | `docs/results/*/prepared/*.json` committed at 431df73, re-serialized | 16 of 16 | 16 of 16 byte-identical |
 | recorded prompt files in the main checkout re-serialized (see below) | 116 of 116 | 116 of 116 byte-identical |
-| tests collected in the test image | 1,172 | 1,247 |
+| tests collected in the test image | 1,172 | 1,313 at b9c9c4b (1,247 at 851e037, before the review fixes) |
 | smokes prepared from the 2026-09-26 runner summary | none | 9, all with two items |
+
+The test count names the commit it was measured at, so a later test commit
+cannot leave it silently stale. At b9c9c4b the full suite in the test image
+gives 1,308 passed and 5 skipped, since the image has no `docs/` tree.
 
 The 116 are the 52 files in `docs/results/*/prepared/` on bakeoff-results (16
 of them the committed files above, the same bytes at the same paths) and the 64
