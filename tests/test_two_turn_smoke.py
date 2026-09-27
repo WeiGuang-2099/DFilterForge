@@ -2605,6 +2605,36 @@ def test_an_unreadable_run_stops_the_batch_for_the_owner(
     del slept
 
 
+def test_a_paid_call_that_leaves_an_unreadable_run_stops_the_batch(
+    out: Path, slept: list[float]
+) -> None:
+    """The run this execution paid for is read before the next smoke's."""
+
+    def good_then_torn(run: SmokeRun) -> dict[str, Any]:
+        report = _good(run)
+        with (run.run_dir / "attempts" / "C4.jsonl").open("ab") as log:
+            log.write(b'{"attempt":')
+        return report
+
+    calls = FakeCalls(out, [good_then_torn, _good])
+    ctx = _ctx(out, calls)
+    anchor = _smoke(out, "qwen3-32b")
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_STOPPED
+
+    assert [argv[argv.index("--run-id") + 1] for argv in calls.paid()] == [
+        anchor.smoke_id
+    ]
+    assert smoke.existing_runs(out, _smoke(out, "alpha")) == []
+    stopped = _printed(ctx, "STOPPED")
+    run_dir = smoke.smoke_run_dir(out, anchor, anchor.smoke_id)
+    assert "attempt_log_torn" in stopped
+    assert run_dir.resolve().as_posix() in stopped
+    assert "will not change that" in stopped
+    assert "delete nothing" in stopped
+    del slept
+
+
 def test_a_log_ahead_of_its_manifest_is_resumed(
     out: Path, slept: list[float]
 ) -> None:
