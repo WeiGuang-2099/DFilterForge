@@ -1207,6 +1207,27 @@ def test_a_call_step_error_stops_the_batch(
     del slept
 
 
+def test_an_unusable_key_is_blamed_on_the_key_not_the_endpoint(
+    out: Path, slept: list[float]
+) -> None:
+    def unusable_key(argv: Sequence[str], with_key: bool) -> Any:
+        del argv
+        return db.Invocation(
+            2, None, "endpoint_invalid" if with_key else "api_key_missing"
+        )
+
+    ctx = _ctx(out, FakeCalls(out, []))
+    ctx.invoke = unusable_key
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_STOPPED
+    stopped = _printed(ctx, "STOPPED")
+    assert API_KEY_ENV in stopped
+    assert "control character" in stopped
+    assert "nothing was sent" in stopped
+    assert not any("fixture-key" in line for line in ctx.printed)
+    del slept
+
+
 def test_uncommitted_tooling_is_refused_before_a_paid_call(
     out: Path, slept: list[float]
 ) -> None:

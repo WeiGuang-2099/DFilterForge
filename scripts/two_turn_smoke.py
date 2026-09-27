@@ -1217,6 +1217,18 @@ def _call(ctx: Context, smoke: SmokeV1, run_id: str, resume: bool) -> None:
     missing_key = result.error_code == "api_key_missing"
     if result.report is None and missing_key:
         raise BatchAbort(f"{run_id}: the call step found no key")
+    if result.report is None and result.error_code == "endpoint_invalid":
+        # The call step builds its client before any request, from a config
+        # check_inputs pinned to the counted pass's, which built one with
+        # the same client code; so only the credential is left to blame.
+        raise BatchStop(
+            f"{run_id}: the call step could not build its client"
+            f" (endpoint_invalid, exit {result.exit_code}), so nothing was"
+            " sent and nothing is owed. The config is the counted pass's own"
+            f" file, pinned by hash: check that {API_KEY_ENV} holds the bare"
+            " key, with no CR, newline or other control character (as"
+            " $(cat file) gives from a CRLF file), then run the same command"
+        )
     if result.report is None:
         raise BatchStop(
             f"{run_id}: the call step ended with an error"
