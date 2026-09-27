@@ -75,8 +75,14 @@ the printed prefixes in `docs/protocol.md`, keep the receipt as
 ## Limits
 
 No code checks settings, pass timing or which runs exist; the protocol states
-them and run manifests record them. No CI check blocks a hashed-file edit; the
-call refuses it and a host test fails while a prompt set awaits its call. The
-call reads the working-tree record and does not check that it is committed,
-and it trusts the split a prompt set declares: a test prompt set hand-edited
-to say dev is sent, and only the scorer refuses its answers.
+them and run manifests record them. A call refuses a hashed-file edit made
+after its prepare (`prepare_code_mismatch`) before any request. The
+frozen-prompt test also fails on it, on a host and in the CI step that runs it
+with `docs/` mounted, but only while a prompt set under `docs/results` has no
+`run_manifest.json` beside it: once pass A publishes into the committed test
+directory, pass B and the slot winners' test passes, which call from the same
+prepare under their own run ids, are guarded by the call alone, as is any
+prepare directory outside `docs/results`. The call reads the working-tree
+record and does not check that it is committed, and it trusts the split a
+prompt set declares: a test prompt set hand-edited to say dev is sent, and
+only the scorer refuses its answers.
