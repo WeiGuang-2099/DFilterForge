@@ -108,7 +108,9 @@ Exit codes of ``run``:
          keyless preflight.
     3    Aborted: the key variable is not set, or the account refused a
          request (HTTP 401, 402 or 403). Fix it, then run the same
-         command; the refused run is owed a re-run.
+         command; the refused run is owed a re-run, unless it already
+         shows a model failure, which fails the smoke: the message says
+         which.
     130  Interrupted with Ctrl-C. Do not press it while a request is in
          flight: the call step shares the console, so that request may be
          billed but not recorded. It is then missing from the attempt log
@@ -1619,6 +1621,29 @@ def preflight(ctx: Context, calls: Sequence[tuple[SmokeV1, str, bool]]) -> None:
         ctx.out(f"  preflight ok: {run_id} -> api_key_missing")
 
 
+def _refusal_advice(ctx: Context, smoke: SmokeV1, run_id: str) -> str:
+    """Says what an account refusal leaves one smoke owed.
+
+    The smoke is read as ``judge`` and the next execution read it: a
+    model failure its run already shows is final beside the refusal, by
+    the owner's reading 2, so that smoke is owed no re-run.
+    """
+    advice = (
+        f"{run_id}: the account refused a request (HTTP 401, 402 or 403);"
+        " fix the key, the credit or the guardrail, then run the same command"
+    )
+    state = smoke_state(ctx.out_dir, smoke)
+    if state.verdict == "fail":
+        return (
+            f"{advice}. This smoke already failed on"
+            f" {', '.join(state.reasons)}: a model failure is final beside a"
+            " refusal, so it gets no re-run"
+        )
+    if state.verdict == "rerun_owed":
+        return f"{advice}: this smoke is owed a re-run"
+    return f"{advice}; the summary below gives this smoke's state"
+
+
 def _call(ctx: Context, smoke: SmokeV1, run_id: str, resume: bool) -> None:
     """Makes one paid call step.
 
@@ -1663,11 +1688,7 @@ def _call(ctx: Context, smoke: SmokeV1, run_id: str, resume: bool) -> None:
             f" ({result.error_code}, exit {result.exit_code})"
         )
     if report.get("stop_reason") == "fatal_http":
-        raise BatchAbort(
-            f"{run_id}: the account refused a request (HTTP 401, 402 or"
-            " 403); fix the key, the credit or the guardrail, then run the"
-            " same command: this smoke is owed a re-run"
-        )
+        raise BatchAbort(_refusal_advice(ctx, smoke, run_id))
 
 
 def drive(ctx: Context, smoke: SmokeV1) -> SmokeState:

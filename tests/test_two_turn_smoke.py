@@ -1858,8 +1858,9 @@ def test_an_account_refusal_aborts_and_the_next_command_re_runs(
     def refused(run: SmokeRun) -> dict[str, Any]:
         return run.invoke([(run.entry.items[0], http(402))], "fatal_http")
 
-    first = FakeCalls(out, [refused])
-    assert smoke.locked_run(_ctx(out, first)) == smoke.EXIT_ABORTED
+    first = _ctx(out, FakeCalls(out, [refused]))
+    assert smoke.locked_run(first) == smoke.EXIT_ABORTED
+    assert _printed(first, "ABORTED").endswith("this smoke is owed a re-run")
     second = FakeCalls(out, [_good, _good])
 
     assert smoke.locked_run(_ctx(out, second)) == smoke.EXIT_OK
@@ -1871,6 +1872,60 @@ def test_an_account_refusal_aborts_and_the_next_command_re_runs(
     )
     assert "--resume" not in second.paid()[0]
     assert smoke.smoke_state(out, anchor).verdict == "pass"
+    del slept
+
+
+def test_an_account_refusal_after_a_model_failure_promises_no_re_run(
+    out: Path, slept: list[float]
+) -> None:
+    """Reading 2: the model failure is final, so the abort owes nothing."""
+
+    def length_then_refused(run: SmokeRun) -> dict[str, Any]:
+        first, second = run.entry.items
+        return run.invoke(
+            [(first, ok(finish_reason="length")), (second, http(402))],
+            "fatal_http",
+        )
+
+    anchor = _smoke(out, "qwen3-32b")
+    ctx = _ctx(out, FakeCalls(out, [length_then_refused]))
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_ABORTED
+
+    aborted = _printed(ctx, "ABORTED")
+    assert "the account refused a request" in aborted
+    assert f"already failed on {anchor.items[0]}:finish_reason_length" in (
+        aborted
+    )
+    assert not any("owed a re-run" in line for line in ctx.printed)
+    calls = FakeCalls(out, [_good])
+
+    assert smoke.locked_run(_ctx(out, calls)) == smoke.EXIT_OK
+
+    assert [argv[argv.index("--run-id") + 1] for argv in calls.paid()] == [
+        _smoke(out, "alpha").smoke_id
+    ]
+    assert smoke.existing_runs(out, anchor) == [anchor.smoke_id]
+    assert smoke.smoke_state(out, anchor).verdict == "fail"
+    del slept
+
+
+def test_an_account_refusal_on_an_unreadable_run_points_at_the_summary(
+    out: Path, slept: list[float]
+) -> None:
+    def refused_then_torn(run: SmokeRun) -> dict[str, Any]:
+        report = run.invoke([(run.entry.items[0], http(402))], "fatal_http")
+        with (run.run_dir / "attempts" / "C4.jsonl").open("ab") as log:
+            log.write(b'{"attempt":')
+        return report
+
+    ctx = _ctx(out, FakeCalls(out, [refused_then_torn]))
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_ABORTED
+
+    aborted = _printed(ctx, "ABORTED")
+    assert aborted.endswith("the summary below gives this smoke's state")
+    assert not any("owed a re-run" in line for line in ctx.printed)
     del slept
 
 

@@ -108,7 +108,11 @@ if it is broken.
 2. An observed model failure fails the smoke even when the other item met a
    harness failure (`_rule`;
    `test_a_model_failure_is_final_beside_a_harness_failure` and
-   `test_a_model_failure_is_final_beside_an_account_refusal`).
+   `test_a_model_failure_is_final_beside_an_account_refusal`). When the
+   account refuses a request in such a run, `run` still aborts, but its
+   message names the model failure and promises no re-run
+   (`_refusal_advice`;
+   `test_an_account_refusal_after_a_model_failure_promises_no_re_run`).
 3. `client_error`, `redirect_rejected`, `response_too_large` and
    `empty_content` are final errors that fail the smoke, not harness failures
    (`_failed`, by the call step's own retry classes;
