@@ -1364,14 +1364,15 @@ def _reserve_already_added(out: Path) -> None:
     )
 
 
-def _failed_but_source_gone(out: Path) -> None:
+def _failed_but_source_gone(out: Path, candidate: str = "alpha") -> None:
+    """Fails alpha's smoke, then points one smoke at a missing source run."""
     _small_failed(out)
     plan = _plan(out)
     gone = (out / "gone").as_posix()
     smokes = tuple(
         (
             s.model_copy(update={"source_run_dir": gone})
-            if s.candidate == "alpha"
+            if s.candidate == candidate
             else s
         )
         for s in plan.smokes
@@ -1387,6 +1388,13 @@ def _failed_but_source_gone(out: Path) -> None:
         (_smoke_open, (), "alpha not_run"),
         (_small_passed, (), "alpha pass"),
         (_failed_but_source_gone, (), "alpha unjudgeable"),
+        # beta was prepared without ready answers: with its source gone,
+        # nothing shows that it failed, so no reserve may be added.
+        (
+            functools.partial(_failed_but_source_gone, candidate="beta"),
+            (),
+            "beta unjudgeable",
+        ),
         (_reserve_already_added, (), "already holds the reserve-small smoke"),
         (
             _small_failed,
@@ -1782,6 +1790,37 @@ def test_judge_cannot_judge_a_smoke_whose_source_now_has_ready_answers(
     assert (beta.verdict, beta.reasons) == (
         "unjudgeable",
         ("source_now_has_ready_answers",),
+    )
+    assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
+
+
+def test_judge_cannot_judge_a_prepared_smoke_whose_source_has_no_ready_answers(
+    out: Path,
+) -> None:
+    """A source with no ready answers matches only a smoke found without."""
+    _small_passed(out)
+    beta = Path(_smoke(out, "beta").source_run_dir)
+
+    states = _judged_from(out, "alpha", beta)
+
+    alpha = next(s for s in states if s.smoke.candidate == "alpha")
+    assert (alpha.verdict, alpha.reasons) == (
+        "unjudgeable",
+        ("source_refused_ready_answers_missing",),
+    )
+    assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
+
+
+def test_judge_cannot_judge_a_smoke_without_ready_answers_whose_source_is_gone(
+    out: Path, tmp_path: Path
+) -> None:
+    """Only ready_answers_missing itself matches such a smoke's source."""
+    states = _judged_from(out, "beta", tmp_path / "gone")
+
+    beta = next(s for s in states if s.smoke.candidate == "beta")
+    assert (beta.verdict, beta.reasons) == (
+        "unjudgeable",
+        ("source_refused_run_layout_invalid",),
     )
     assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
 
