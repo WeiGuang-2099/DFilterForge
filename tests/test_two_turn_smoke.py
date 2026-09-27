@@ -1282,6 +1282,44 @@ def test_a_call_step_still_running_keeps_the_smoke_lock(
     del slept
 
 
+def test_an_unexpected_error_after_a_paid_call_stops_and_still_judges(
+    out: Path, slept: list[float]
+) -> None:
+    def full_disk(run: SmokeRun) -> dict[str, Any]:
+        _good(run)
+        raise OSError(28, "No space left on device")
+
+    calls = FakeCalls(out, [full_disk])
+    ctx = _ctx(out, calls)
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_STOPPED
+    stopped = _printed(ctx, "STOPPED")
+    assert "OSError" in stopped
+    assert "requests may have been sent" in stopped
+    assert not any("refused" in line.lower() for line in ctx.printed)
+    anchor = _smoke(out, "qwen3-32b")
+    assert (out / "verdicts" / f"{anchor.smoke_id}.json").is_file()
+    assert not (out / smoke.LOCK_NAME).exists()
+    assert len(calls.paid()) == 1
+    del slept
+
+
+def test_an_interrupted_judging_after_the_batch_exits_130(
+    out: Path, slept: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def interrupted(out_dir: Path, plan: Any) -> Any:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(smoke, "judge", interrupted)
+    ctx = _ctx(out, FakeCalls(out, [_good, _good]))
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_INTERRUPTED
+    assert "run the judge subcommand" in _interrupted(ctx)
+    assert ctx.printed[-1] == f"exit {smoke.EXIT_INTERRUPTED}"
+    assert not (out / smoke.LOCK_NAME).exists()
+    del slept
+
+
 def test_a_changed_config_is_refused_before_anything(out: Path) -> None:
     plan = _plan(out)
     entry = plan.smokes[0]
@@ -1367,7 +1405,11 @@ def test_an_unreadable_run_stops_the_batch_for_the_owner(
     assert _assess(out, run).reasons == (reason,)
     assert smoke.locked_run(ctx) == smoke.EXIT_STOPPED
     assert calls.calls == []
-    assert any(reason in line for line in ctx.printed)
+    stopped = _printed(ctx, "STOPPED")
+    assert reason in stopped
+    assert run.run_dir.resolve().as_posix() in stopped
+    assert "will not change that" in stopped
+    assert "delete nothing" in stopped
     del slept
 
 

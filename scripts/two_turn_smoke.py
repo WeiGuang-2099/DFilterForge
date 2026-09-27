@@ -50,21 +50,39 @@ prepared smokes with their runs, the step log, the lock, one verdict per
 smoke and the summary. The key is inherited by the paid calls only; this
 script never reads, prints or writes it.
 
-Exit codes of ``run`` and ``judge`` (``prepare`` uses 0 and 2):
+Exit codes of ``run``:
     0    Every smoke has a verdict, pass or fail.
     1    A smoke owes a resume or a re-run, or the batch stopped for the
-         owner: read the reason, then run the same command again.
-    2    Refused before any request, or a run directory cannot be judged.
-    3    ``run`` aborted: the key variable is not set, or the account
-         refused a request (HTTP 401, 402 or 403). Fix it, then run the
-         same command; the refused run is owed a re-run.
-    130  ``run`` was interrupted with Ctrl-C. Do not press it while a
-         request is in flight: the call step shares the console, so that
-         request may be billed but not recorded. It is then missing from
-         the attempt log and the charged upper bound, and the next run
-         sends it again. A call step still running after the wait keeps
-         the lock, artifacts/two-turn-smoke/.lock: delete it once that
-         process has exited, then run the same command.
+         owner: read the reason. Running the same command again makes
+         an owed resume or re-run. It does not clear a run directory that
+         cannot be judged: the message names it and says what may be
+         done with it. After an error the batch did not expect, requests
+         may have been sent; read steps.jsonl before running it again.
+    2    Refused before any request: the plan, a prompt set, a config
+         file, the cap, the lock, git, uncommitted tooling or the keyless
+         preflight.
+    3    Aborted: the key variable is not set, or the account refused a
+         request (HTTP 401, 402 or 403). Fix it, then run the same
+         command; the refused run is owed a re-run.
+    130  Interrupted with Ctrl-C. Do not press it while a request is in
+         flight: the call step shares the console, so that request may be
+         billed but not recorded. It is then missing from the attempt log
+         and the charged upper bound, and the next run sends it again. A
+         call step still running after the wait keeps the lock,
+         artifacts/two-turn-smoke/.lock: delete it once that process has
+         exited, then run the same command. If only the judging after the
+         batch was interrupted, run ``judge``; it sends nothing.
+``run`` prints the judge's summary afterwards, but its own code reads the
+runs alone; ``judge`` also rebuilds every smoke's source run.
+
+Exit codes of ``judge``:
+    0    Every smoke has a verdict, pass or fail.
+    1    A smoke owes a resume or a re-run, or has not run yet.
+    2    Refused (no usable plan), or a smoke cannot be judged: a run
+         directory is unreadable, a run follows one that was not a
+         harness failure, or its source run no longer rebuilds.
+
+``prepare`` exits 0 when it wrote the plan and 2 when it refused.
 """
 
 # The rule the judge applies and the batch that resumes and re-runs by it
@@ -1108,6 +1126,27 @@ def check_inputs(ctx: Context) -> None:
         check_cap(smoke)
 
 
+def _unjudgeable_advice(out_dir: Path, state: SmokeState) -> str:
+    """Names the run that cannot be judged and what may be done with it.
+
+    Running the same command again cannot clear it. A call step writes
+    run_manifest.json before its first request, so a run without one and
+    with no attempt line sent nothing; any other may hold paid evidence.
+    """
+    smoke = state.smoke
+    where = out_dir / smoke.smoke_id
+    if state.runs:
+        where = smoke_run_dir(out_dir, smoke, state.runs[-1].run_id)
+    return (
+        f"{smoke.smoke_id}: {', '.join(state.reasons)}. {_relative(where)}"
+        " cannot be judged, and running the same command again will not"
+        " change that. If it has no run_manifest.json and every"
+        " attempts/*.jsonl in it is empty or missing, nothing was sent:"
+        " delete that directory, then run the same command. Otherwise it"
+        " may hold paid evidence: delete nothing and inspect it"
+    )
+
+
 def _pending_calls(ctx: Context) -> list[tuple[SmokeV1, str, bool]]:
     """Lists the call each smoke needs next, in plan order.
 
@@ -1118,7 +1157,7 @@ def _pending_calls(ctx: Context) -> list[tuple[SmokeV1, str, bool]]:
     for smoke in ctx.plan.smokes:
         state = smoke_state(ctx.out_dir, smoke)
         if state.verdict == "unjudgeable":
-            raise BatchStop(f"{smoke.smoke_id}: {', '.join(state.reasons)}")
+            raise BatchStop(_unjudgeable_advice(ctx.out_dir, state))
         step = next_call(ctx.out_dir, state)
         if step is not None:
             calls.append((smoke, *step))
@@ -1215,7 +1254,9 @@ def drive(ctx: Context, smoke: SmokeV1) -> SmokeState:
         pause(RESUME_WAIT_SECONDS)
         _call(ctx, smoke, run_id, True)
     state = smoke_state(ctx.out_dir, smoke)
-    if state.verdict in ("unjudgeable", "resume_owed"):
+    if state.verdict == "unjudgeable":
+        raise BatchStop(_unjudgeable_advice(ctx.out_dir, state))
+    if state.verdict == "resume_owed":
         raise BatchStop(f"{run_id}: {state.verdict} {', '.join(state.reasons)}")
     return state
 
@@ -1286,7 +1327,11 @@ def _log_interrupt(ctx: Context, reason: str) -> None:
 
 
 def locked_run(ctx: Context) -> int:
-    """Runs the batch under the lock and always judges afterwards."""
+    """Runs the batch under the lock and always judges afterwards.
+
+    An error the batch does not expect stops it with exit 1, never a
+    refusal's 2, since requests may have been sent before it.
+    """
     lock = ctx.out_dir / LOCK_NAME
     keep_lock = False
     try:
@@ -1325,10 +1370,26 @@ def locked_run(ctx: Context) -> int:
         )
         _log_interrupt(ctx, "ctrl_c")
         code = EXIT_INTERRUPTED
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        # Never a refusal: it may follow a paid call. After the clause
+        # above, since ChildStillRunning is an Exception too.
+        ctx.out(
+            f"STOPPED: unexpected {type(error).__name__}: {error}; requests"
+            " may have been sent (see steps.jsonl), so fix the cause, then"
+            " run the same command again"
+        )
+        code = EXIT_STOPPED
     finally:
         if not keep_lock:
             lock.unlink(missing_ok=True)
-    _report(ctx)
+    try:
+        _report(ctx)
+    except KeyboardInterrupt:
+        ctx.out(
+            "INTERRUPTED: judging stopped; it sends nothing, so run the"
+            " judge subcommand for the verdicts"
+        )
+        code = EXIT_INTERRUPTED
     ctx.out(f"exit {code}")
     return code
 
