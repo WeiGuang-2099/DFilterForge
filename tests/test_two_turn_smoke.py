@@ -2145,21 +2145,73 @@ def test_a_call_step_still_running_keeps_the_smoke_lock(
     del slept
 
 
-def test_an_unexpected_error_after_a_paid_call_stops_and_still_judges(
-    out: Path, slept: list[float]
-) -> None:
-    def full_disk(run: SmokeRun) -> dict[str, Any]:
-        _good(run)
-        raise OSError(28, "No space left on device")
+# main() turns an OSError or a ValueError into a refusal (exit 2, nothing
+# sent), so the batch's catch-all must take every type after a paid call,
+# not only the one first tested; KeyError also catches a narrowing to
+# (OSError, ValueError), which would end in a bare traceback.
+_UNEXPECTED = [
+    OSError(28, "No space left on device"),
+    ValueError("unexpected shape"),
+    KeyError("missing"),
+]
 
-    calls = FakeCalls(out, [full_disk])
+
+def _raises_after_a_paid_call(
+    error: Exception,
+) -> Callable[[SmokeRun], dict[str, Any]]:
+    def step(run: SmokeRun) -> dict[str, Any]:
+        _good(run)
+        raise error
+
+    return step
+
+
+@pytest.mark.parametrize(
+    "error", _UNEXPECTED, ids=["oserror", "valueerror", "keyerror"]
+)
+def test_an_unexpected_error_after_a_paid_call_stops_and_still_judges(
+    out: Path, slept: list[float], error: Exception
+) -> None:
+    calls = FakeCalls(out, [_raises_after_a_paid_call(error)])
     ctx = _ctx(out, calls)
 
     assert smoke.locked_run(ctx) == smoke.EXIT_STOPPED
     stopped = _printed(ctx, "STOPPED")
-    assert "OSError" in stopped
+    assert f"unexpected {type(error).__name__}:" in stopped
     assert "requests may have been sent" in stopped
     assert not any("refused" in line.lower() for line in ctx.printed)
+    anchor = _smoke(out, "qwen3-32b")
+    assert (out / "verdicts" / f"{anchor.smoke_id}.json").is_file()
+    assert not (out / smoke.LOCK_NAME).exists()
+    assert len(calls.paid()) == 1
+    del slept
+
+
+def test_main_reports_an_error_after_a_paid_call_as_stopped_not_refused(
+    out: Path,
+    slept: list[float],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The exit code the owner sees is 1, never main()'s refusal of 2."""
+    calls = FakeCalls(
+        out, [_raises_after_a_paid_call(ValueError("unexpected shape"))]
+    )
+
+    def invoker(printer: Callable[[str], None]) -> FakeCalls:
+        del printer
+        return calls
+
+    monkeypatch.setattr(smoke, "subprocess_invoke", invoker)
+    monkeypatch.setattr(smoke, "uncommitted", _nothing_uncommitted)
+    monkeypatch.setattr(smoke.db, "head_revision", lambda: "test-rev")
+
+    code = smoke.main(["--out-dir", str(out), "run"])
+
+    assert code == smoke.EXIT_STOPPED
+    printed = capsys.readouterr()
+    assert "refused" not in printed.err
+    assert "STOPPED: unexpected ValueError: unexpected shape" in printed.out
     anchor = _smoke(out, "qwen3-32b")
     assert (out / "verdicts" / f"{anchor.smoke_id}.json").is_file()
     assert not (out / smoke.LOCK_NAME).exists()
