@@ -1673,14 +1673,17 @@ def _call(ctx: Context, smoke: SmokeV1, run_id: str, resume: bool) -> None:
     if result.report is None and result.error_code == "endpoint_invalid":
         # The call step builds its client before any request, from a config
         # check_inputs pinned to the counted pass's, which built one with
-        # the same client code; so only the credential is left to blame.
+        # the same client code; so only the credential is left to blame. It
+        # writes nothing first, so the smoke keeps whatever call it owed.
         raise BatchStop(
             f"{run_id}: the call step could not build its client"
             f" (endpoint_invalid, exit {result.exit_code}), so nothing was"
-            " sent and nothing is owed. The config is the counted pass's own"
-            f" file, pinned by hash: check that {API_KEY_ENV} holds the bare"
-            " key, with no CR, newline or other control character (as"
-            " $(cat file) gives from a CRLF file), then run the same command"
+            " sent and no run was started or changed. The config is the"
+            " counted pass's own file, pinned by hash: check that"
+            f" {API_KEY_ENV} holds the bare key, with no CR, newline or other"
+            " control character (as $(cat file) gives from a CRLF file), then"
+            " run the same command; the summary below gives this smoke's"
+            " state"
         )
     if result.report is None:
         raise BatchStop(

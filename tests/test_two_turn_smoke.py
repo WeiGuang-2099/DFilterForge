@@ -2131,15 +2131,33 @@ def test_a_re_run_with_no_usable_run_id_stops_the_batch(
     del slept
 
 
+@pytest.mark.parametrize(
+    ("earlier", "owed"),
+    [
+        (None, "not_run"),
+        (_budget_stop, "rerun_owed"),
+        (_one_transient, "resume_owed"),
+    ],
+)
 def test_an_unusable_key_is_blamed_on_the_key_not_the_endpoint(
-    out: Path, slept: list[float]
+    out: Path,
+    slept: list[float],
+    earlier: Callable[[SmokeRun], dict[str, Any]] | None,
+    owed: str,
 ) -> None:
+    """The anchor still owes its call, and the message never says otherwise."""
+
     def unusable_key(argv: Sequence[str], with_key: bool) -> Any:
         del argv
         return db.Invocation(
             2, None, "endpoint_invalid" if with_key else "api_key_missing"
         )
 
+    anchor = _smoke(out, "qwen3-32b")
+    if earlier is not None:
+        earlier(_run(out, "qwen3-32b"))
+    before = smoke.smoke_state(out, anchor)
+    runs = smoke.existing_runs(out, anchor)
     ctx = _ctx(out, FakeCalls(out, []))
     ctx.invoke = unusable_key
 
@@ -2148,7 +2166,13 @@ def test_an_unusable_key_is_blamed_on_the_key_not_the_endpoint(
     assert API_KEY_ENV in stopped
     assert "control character" in stopped
     assert "nothing was sent" in stopped
+    assert "nothing is owed" not in stopped
+    assert stopped.endswith("the summary below gives this smoke's state")
     assert not any("fixture-key" in line for line in ctx.printed)
+    after = smoke.smoke_state(out, anchor)
+    assert before.verdict == owed
+    assert (after.verdict, after.reasons) == (before.verdict, before.reasons)
+    assert smoke.existing_runs(out, anchor) == runs
     del slept
 
 
