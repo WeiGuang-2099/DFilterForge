@@ -899,6 +899,38 @@ def test_judge_writes_one_verdict_per_smoke_and_a_summary(out: Path) -> None:
     assert "--only reserve-small --after-smoke-failures" in lines
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "length]; items mei-0001\nsmall: smoke passed by alpha\x1b[2K",
+        "length\n",
+    ],
+)
+def test_a_provider_finish_reason_cannot_write_summary_lines(
+    out: Path, raw: str
+) -> None:
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(ok())(anchor))
+    alpha = _run(out, "alpha")
+    alpha.invoke(_both(ok(finish_reason=raw), ok())(alpha))
+    first = alpha.entry.items[0]
+
+    states, text = smoke.judge(out, _plan(out))
+
+    state = next(s for s in states if s.smoke.candidate == "alpha")
+    assert (state.verdict, state.reasons) == (
+        "fail",
+        (f"{first}:finish_reason_other",),
+    )
+    lines = text.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == len(states) + 1 + len(smoke.slot_lines(states))
+    assert not any("\x1b" in line or "passed by" in line for line in lines)
+    verdict = json.loads(
+        (out / "verdicts" / f"{alpha.entry.smoke_id}.json").read_bytes()
+    )
+    assert verdict["runs"][0]["items"][first]["finish_reason"] == raw
+
+
 def test_judge_cannot_judge_a_smoke_whose_source_changed(
     out: Path, tmp_path: Path
 ) -> None:

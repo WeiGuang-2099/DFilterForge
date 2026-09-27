@@ -100,6 +100,7 @@ from pydantic import Field
 from pydantic import ValidationError
 
 from dfilterforge.canonical import canonical_json
+from dfilterforge.completions import CODE_PATTERN
 from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import RequestSettingsV1
@@ -653,9 +654,18 @@ ItemRead = tuple[ItemState, str | None, dict[str, Any]]
 def _completed(
     last: CompletionV1, parses: bool
 ) -> tuple[ItemState, str | None]:
-    """Reads a completed reply: it must stop and parse."""
+    """Reads a completed reply: it must stop and parse.
+
+    The finish reason is provider metadata, bounded in size only, and a
+    reason is printed to the owner. So a reason names it only when it is
+    a short code, as recorded error codes must be; anything else reads
+    ``other``, and the raw value stays in the item record, JSON-escaped.
+    """
     if last.finish_reason != "stop":
-        return "fail", f"finish_reason_{last.finish_reason}"
+        shown = last.finish_reason
+        if shown is None or CODE_PATTERN.fullmatch(shown) is None:
+            shown = "other"
+        return "fail", f"finish_reason_{shown}"
     return ("ok", None) if parses else ("fail", "no_parse")
 
 
