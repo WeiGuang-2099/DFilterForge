@@ -1615,6 +1615,88 @@ def test_a_substituted_model_is_flagged_and_the_verdict_stands(
     assert document["runs"][0]["items"][first]["response_model"] == other
 
 
+_OTHER_MODEL = "qwen/qwen3-235b-a22b"
+# (summary line ending, (providers, provider_changed, served_models,
+# model_changed)) for the smoke and for its one run.
+ServedFlags = tuple[str, tuple[list[str], bool, list[str], bool]]
+_ONE_PROVIDER_CHANGED: ServedFlags = (
+    "; served DeepInfra,Novita PROVIDER CHANGED",
+    (["DeepInfra", "Novita"], True, [], False),
+)
+_ONE_MODEL_CHANGED: ServedFlags = (
+    "; served DeepInfra MODEL CHANGED",
+    (["DeepInfra"], False, [_OTHER_MODEL], True),
+)
+
+
+# OpenRouter routes each request on its own, so a substitution most
+# likely touches one item. The flags are read over every attempt of
+# every item, not the first or the last only.
+@pytest.mark.parametrize(
+    ("first", "second", "expected"),
+    [
+        (ok(provider="Novita"), ok(), _ONE_PROVIDER_CHANGED),
+        (ok(), ok(provider="Novita"), _ONE_PROVIDER_CHANGED),
+        (ok(response_model=_OTHER_MODEL), ok(), _ONE_MODEL_CHANGED),
+        (ok(), ok(response_model=_OTHER_MODEL), _ONE_MODEL_CHANGED),
+    ],
+    ids=[
+        "provider_first",
+        "provider_second",
+        "model_first",
+        "model_second",
+    ],
+)
+def test_a_change_on_one_item_is_flagged_and_the_verdict_stands(
+    out: Path,
+    first: Fields,
+    second: Fields,
+    expected: ServedFlags,
+) -> None:
+    """A provider or model change on either item alone sets its flag."""
+    ending, served = expected
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(first, second)(anchor))
+
+    states, text = smoke.judge(out, _plan(out))
+
+    assert (states[0].verdict, states[0].reasons) == ("pass", ())
+    assert _line(text, anchor.entry.smoke_id).endswith(ending)
+    document = json.loads(
+        (out / "verdicts" / f"{anchor.entry.smoke_id}.json").read_bytes()
+    )
+    for record in (document, document["runs"][0]):
+        assert (
+            record["providers"],
+            record["provider_changed"],
+            record["served_models"],
+            record["model_changed"],
+        ) == served
+
+
+def test_a_change_in_an_earlier_run_of_the_smoke_is_flagged(out: Path) -> None:
+    """A budget stop served by Novita keeps the flag after a clean re-run."""
+    stopped = _run(out, "alpha")
+    stopped.invoke([(stopped.entry.items[0], ok(provider="Novita"))], "budget")
+    again = _run(out, "alpha", 2)
+    again.invoke(_both(ok())(again))
+
+    states, text = smoke.judge(out, _plan(out))
+
+    state = next(s for s in states if s.smoke.candidate == "alpha")
+    assert state.verdict == "pass"
+    assert [r.kind for r in state.runs] == ["rerun", "pass"]
+    assert _line(text, again.entry.smoke_id).endswith(
+        "; served DeepInfra,Novita PROVIDER CHANGED"
+    )
+    document = json.loads(
+        (out / "verdicts" / f"{again.entry.smoke_id}.json").read_bytes()
+    )
+    assert document["providers"] == ["DeepInfra", "Novita"]
+    assert document["provider_changed"] is True
+    assert [r["provider_changed"] for r in document["runs"]] == [True, False]
+
+
 def test_judge_cannot_judge_a_smoke_whose_source_changed(
     out: Path, tmp_path: Path
 ) -> None:
