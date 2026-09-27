@@ -31,7 +31,15 @@ jobs:
         # guard. With docs/ mounted, a branch that edits a prepare-hashed
         # file while a prompt set still awaits its call fails here rather
         # than at the call step's prepare_code_mismatch; the test -d keeps
-        # a missing mount from passing as a skip.
+        # a missing mount from passing as a skip. A prompt set with a
+        # run_manifest.json beside it no longer counts as awaiting, so the
+        # guard lapses once pass A publishes into
+        # docs/results/test-qwen3-32b-2026-09-26. Pass B and the slot
+        # winners' test passes call from that same prepare but publish
+        # under their own run ids, so from then on an early merge passes
+        # here; only the call's prepare_code_mismatch, which refuses each
+        # later test call before any request, and the rule that the hashed
+        # files stay unchanged until the last baseline test request remain.
         run: >-
           docker compose --profile dev run --rm
           --volume "$PWD/docs:/workspace/docs:ro"

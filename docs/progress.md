@@ -178,6 +178,18 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   repair-multiturn (851e037) it failed with `test-qwen3-32b-2026-09-26:
   re-freeze after scripts/model_run.py, src/dfilterforge/generation.py`;
   without the mount the step exits 1.
+- The guard stops at pass A's publish, not at the last baseline test request.
+  It skips a prompt set with a `run_manifest.json` beside it, `publish` wants
+  the directory named after the run id, and pass A publishes into
+  `docs/results/test-qwen3-32b-2026-09-26`, the only prompt set awaiting a call.
+  Pass B and the slot winners' test passes call from that prepare but publish
+  under their own run ids. In the test image with the repair-multiturn code
+  (23fc4cd, hashed files as at 851e037) and a scratch copy of that directory,
+  the step failed (exit 1) and, with a `run_manifest.json` added, passed (exit
+  0). After A's publish an early merge passes CI; what is left is the call's
+  `prepare_code_mismatch`, which refuses each later test call before any
+  request, and the rule that the 12 hashed files stay unchanged until the last
+  baseline test request.
 
 ## Planned next
 
