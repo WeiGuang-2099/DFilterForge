@@ -272,6 +272,33 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   skipped (no docs/ tree), 96.48 percent coverage, in 778 s. CI's static
   commands pass: pyink, isort, pylint on CI's file list (rc 0), pyright (0
   errors) and lint-imports (5 contracts kept).
+- A third review of 1f64784 confirmed five more minor findings, fixed on
+  2026-09-27 with no prepare-hashed file touched: `git diff 851e037..HEAD
+  --stat` lists none of the 12, so the nine prepared smokes stay valid. Each
+  test commit was checked on scratch copies with its named mutant applied.
+  - a656aad: the STOPPED line for `endpoint_invalid` said "nothing is owed" in
+    every state, while the summary printed after it could read `rerun_owed` or
+    `resume_owed`. It now says nothing was sent and no run was started or
+    changed, and points at the summary. The test covers a not_run, a rerun_owed
+    and a resume_owed anchor and fails on the old text in all three.
+  - 72f5fb3 pins both halves of `_verify_source`'s check on a source with no
+    ready answers. D00b (the smoke's status not checked) fails one new case;
+    D00c (the refusal code not checked) fails two, one of them rule 6 no
+    longer refusing a reserve while beta's source is gone.
+  - 1b4eaf8: a paid call that leaves an unreadable run stops the batch before
+    the next smoke is paid for. With drive's check deleted (D05d), the batch
+    paid for alpha too, and the new test fails.
+  - 90a6612: MODEL CHANGED when only an earlier run was served by another
+    model, and `served -` with no flag for a smoke with no run. M08 and M07
+    (any() read as all()) each fail two cases. The ffd452a line above
+    overstates its earlier-run case: that test varied the provider only.
+  - ddd1281: a reserve that fails its smoke ends its slot with "the reserve
+    failed its smoke too". With that branch disabled (M12) the summary told the
+    owner to run the reserve again; the new test fails.
+- Smoke tests: 135 to 143. Test image, full suite at ddd1281: 1,340 passed, 5
+  skipped (no docs/ tree), in 604 s. CI's static commands pass: pyink, isort,
+  pylint on CI's file list (rc 0), pyright (0 errors) and lint-imports (5
+  contracts kept).
 
 ## Planned next
 
