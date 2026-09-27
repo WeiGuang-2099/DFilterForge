@@ -1404,6 +1404,41 @@ def test_a_failed_reserve_prepare_removes_only_its_own_smoke(
     assert _snapshot(out) == files
 
 
+@pytest.mark.parametrize(
+    "seed",
+    [
+        f"dev-gamma-rs-{_LATER}/runs/dev-gamma-rs-{_LATER}/run_manifest.json",
+        f".dev-gamma-rs-{_LATER}.partial/marker",
+    ],
+)
+def test_a_reserve_prepare_never_touches_a_smoke_directory_it_did_not_make(
+    source: Path,
+    out: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    seed: str,
+) -> None:
+    """The reserve's own directory on disk, with runs or half prepared, stays.
+
+    Without the up-front refusal, the cleanup after a failed follow-up
+    deletes runs it did not make, and a killed prepare's staging
+    directory is silently written over.
+    """
+    monkeypatch.setattr(smoke, "_now", lambda: f"{_LATER}T01:00:00Z")
+    _small_failed(out)
+    path = out / seed
+    path.parent.mkdir(parents=True)
+    path.write_text("{}\n", encoding="utf-8")
+    before = _snapshot(out)
+    summary = _reserve_summary(source, tmp_path)
+
+    with pytest.raises(smoke.PlanError, match="already exist") as refused:
+        _add_reserve(summary, out)
+
+    assert "holds no runs/" in str(refused.value)
+    assert _snapshot(out) == before
+
+
 def _nothing_uncommitted(paths: Sequence[str]) -> list[str]:
     del paths
     return []
