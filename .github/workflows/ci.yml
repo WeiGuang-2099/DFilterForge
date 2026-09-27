@@ -26,6 +26,18 @@ jobs:
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
+      - name: Check frozen prompt sets against the model-side code
+        # The test image has no docs/ tree, so the suite above skips this
+        # guard. With docs/ mounted, a branch that edits a prepare-hashed
+        # file while a prompt set still awaits its call fails here rather
+        # than at the call step's prepare_code_mismatch; the test -d keeps
+        # a missing mount from passing as a skip.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test
