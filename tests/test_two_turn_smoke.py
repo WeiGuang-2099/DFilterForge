@@ -1562,6 +1562,19 @@ def test_the_pinned_provider_is_shown_and_nothing_is_flagged(
         False,
     )
     assert (verdict["served_models"], verdict["model_changed"]) == ([], False)
+    # A smoke with no run was served by nobody, so it carries no flag.
+    for candidate in ("alpha", "beta"):
+        smoke_id = _smoke(out, candidate).smoke_id
+        assert _line(text, smoke_id).endswith("; runs -; served -")
+        document = json.loads(
+            (out / "verdicts" / f"{smoke_id}.json").read_bytes()
+        )
+        assert (
+            document["providers"],
+            document["provider_changed"],
+            document["served_models"],
+            document["model_changed"],
+        ) == ([], False, [], False)
 
 
 @pytest.mark.parametrize(
@@ -1682,10 +1695,21 @@ def test_a_change_on_one_item_is_flagged_and_the_verdict_stands(
         ) == served
 
 
-def test_a_change_in_an_earlier_run_of_the_smoke_is_flagged(out: Path) -> None:
-    """A budget stop served by Novita keeps the flag after a clean re-run."""
+@pytest.mark.parametrize(
+    ("reply", "expected", "flag"),
+    [
+        (ok(provider="Novita"), _ONE_PROVIDER_CHANGED, "provider_changed"),
+        (ok(response_model=_OTHER_MODEL), _ONE_MODEL_CHANGED, "model_changed"),
+    ],
+    ids=["provider", "model"],
+)
+def test_a_change_in_an_earlier_run_of_the_smoke_is_flagged(
+    out: Path, reply: Fields, expected: ServedFlags, flag: str
+) -> None:
+    """A budget stop served elsewhere keeps its flag after a clean re-run."""
+    ending, served = expected
     stopped = _run(out, "alpha")
-    stopped.invoke([(stopped.entry.items[0], ok(provider="Novita"))], "budget")
+    stopped.invoke([(stopped.entry.items[0], reply)], "budget")
     again = _run(out, "alpha", 2)
     again.invoke(_both(ok())(again))
 
@@ -1694,15 +1718,17 @@ def test_a_change_in_an_earlier_run_of_the_smoke_is_flagged(out: Path) -> None:
     state = next(s for s in states if s.smoke.candidate == "alpha")
     assert state.verdict == "pass"
     assert [r.kind for r in state.runs] == ["rerun", "pass"]
-    assert _line(text, again.entry.smoke_id).endswith(
-        "; served DeepInfra,Novita PROVIDER CHANGED"
-    )
+    assert _line(text, again.entry.smoke_id).endswith(ending)
     document = json.loads(
         (out / "verdicts" / f"{again.entry.smoke_id}.json").read_bytes()
     )
-    assert document["providers"] == ["DeepInfra", "Novita"]
-    assert document["provider_changed"] is True
-    assert [r["provider_changed"] for r in document["runs"]] == [True, False]
+    assert (
+        document["providers"],
+        document["provider_changed"],
+        document["served_models"],
+        document["model_changed"],
+    ) == served
+    assert [r[flag] for r in document["runs"]] == [True, False]
 
 
 def test_judge_cannot_judge_a_smoke_whose_source_changed(
