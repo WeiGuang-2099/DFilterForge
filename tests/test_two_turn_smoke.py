@@ -450,14 +450,28 @@ def _refused_prepare(source: Path, out: Path) -> str:
     return str(caught.value)
 
 
+def _other_route(document: dict[str, Any]) -> None:
+    document["settings"]["openrouter"]["provider_order"] = ["parasail"]
+
+
+def _other_prices(document: dict[str, Any]) -> None:
+    document["prices"]["usd_per_million_output"] = 0.3
+
+
+def _other_host(document: dict[str, Any]) -> None:
+    document["endpoint_url"] = "https://api.example.com/v1/chat/completions"
+
+
+@pytest.mark.parametrize("edit", [_other_route, _other_prices, _other_host])
 def test_prepare_refuses_a_config_the_counted_pass_did_not_send(
-    source: Path, tmp_path: Path
+    source: Path, tmp_path: Path, edit: Callable[[dict[str, Any]], None]
 ) -> None:
+    """Settings, prices and host are each compared with the pass's manifest."""
     copy = tmp_path / "source"
     shutil.copytree(source, copy)
     config = copy / "configs" / "alpha_cfg.json"
     document = json.loads(config.read_text(encoding="utf-8"))
-    document["settings"]["openrouter"]["provider_order"] = ["parasail"]
+    edit(document)
     config.write_text(json.dumps(document), encoding="utf-8")
     out = tmp_path / "out"
 
@@ -640,8 +654,13 @@ def test_smoke_run_ids_fit_the_result_names() -> None:
     ):
         assert db.RESULT_DIR.fullmatch(run), run
     assert not db.RESULT_DIR.fullmatch(list(smoke.run_ids(fallback))[1])
-    for refused in ("dev-a-b", "test-qwen3-32b-2026-09-26"):
-        with pytest.raises(smoke.PlanError):
+    for refused, problem in (
+        ("dev-a-b", "not a dev run id"),
+        ("test-qwen3-32b-2026-09-26", "not a dev run id"),
+        # A 30-character middle is a dev run id, but its smoke id is not.
+        (f"dev-{'a' * 30}-2026-09-26", "not a usable result name"),
+    ):
+        with pytest.raises(smoke.PlanError, match=problem):
             smoke.smoke_run_id(refused, "2026-09-27")
 
 
@@ -693,6 +712,8 @@ class SmokeRun:
         self.settings: RequestSettingsV1 = entry.settings
         self.prices: TokenPricesV1 | None = _PRICES
         self.endpoint_host = "openrouter.ai"
+        self.max_attempts = 3
+        self.min_interval_seconds = 1.0
         self.attempts: dict[str, list[Any]] = {i: [] for i in entry.items}
         self.invocations: list[InvocationV1] = []
         self.clock = datetime(2026, 9, 27, tzinfo=timezone.utc)
@@ -707,6 +728,8 @@ class SmokeRun:
         self.settings = manifest.settings
         self.prices = manifest.prices
         self.endpoint_host = manifest.endpoint_host
+        self.max_attempts = manifest.max_attempts
+        self.min_interval_seconds = manifest.min_interval_seconds
         log = self.run_dir / "attempts" / "C4.jsonl"
         for line in log.read_bytes().split(b"\n"):
             if line:
@@ -794,8 +817,8 @@ class SmokeRun:
             endpoint_host=self.endpoint_host,
             settings=self.settings,
             prices=self.prices,
-            max_attempts=3,
-            min_interval_seconds=1.0,
+            max_attempts=self.max_attempts,
+            min_interval_seconds=self.min_interval_seconds,
             invocations=tuple(self.invocations),
             status="complete" if complete else "incomplete",
             charged_usd_upper_bound=0.0001,
@@ -1019,9 +1042,21 @@ def _prompts_changed(run: SmokeRun) -> None:
     run.invoke(_both(ok())(run))
 
 
+def _attempts_changed(run: SmokeRun) -> None:
+    run.max_attempts = 2
+    run.invoke(_both(ok())(run))
+
+
+def _interval_changed(run: SmokeRun) -> None:
+    run.min_interval_seconds = 2.0
+    run.invoke(_both(ok())(run))
+
+
 # The owner confirmed on 2026-09-27 that a run whose settings, prices,
 # host, prompts or cap differ from the counted pass is void and owes a
-# re-run, whatever its replies (docs/decisions/second-turn.md).
+# re-run, whatever its replies (docs/decisions/second-turn.md). So is a
+# run whose call options are not the note's --max-attempts 3 and
+# --min-interval-seconds 1.0.
 @pytest.mark.parametrize(
     ("write", "reason"),
     [
@@ -1032,6 +1067,8 @@ def _prompts_changed(run: SmokeRun) -> None:
         (_prices_changed, "settings_not_the_counted_pass"),
         (_host_changed, "settings_not_the_counted_pass"),
         (_prompts_changed, "prompts_not_the_prepared_ones"),
+        (_attempts_changed, "call_options_not_registered"),
+        (_interval_changed, "call_options_not_registered"),
         (_over_cap, "cap_not_registered"),
     ],
 )
@@ -1825,6 +1862,48 @@ def test_a_call_step_error_stops_the_batch(
     del slept
 
 
+def _renamed_smoke(out: Path, candidate: str, smoke_id: str) -> Any:
+    """Moves one prepared smoke, prompt set and plan entry, to another id."""
+    entry = _smoke(out, candidate)
+    (out / entry.smoke_id).rename(out / smoke_id)
+    moved = entry.model_copy(update={"smoke_id": smoke_id})
+    plan = _plan(out)
+    smokes = tuple(moved if s == entry else s for s in plan.smokes)
+    (out / "plan.json").write_bytes(
+        _bytes(plan.model_copy(update={"smokes": smokes}))
+    )
+    return moved
+
+
+@pytest.mark.parametrize(
+    ("smoke_id", "refused_runs"),
+    [
+        # nemotron's -fb pass gets a smoke id, but its -rs2 has a
+        # 33-character middle, one more than a result name allows.
+        ("dev-nemotron-3-super-120b-a12b-fb-rs-2026-09-27", 1),
+        ("dev-alpha-fb-rs-2026-09-27", smoke.MAX_RUNS_PER_SMOKE),
+    ],
+)
+def test_a_re_run_with_no_usable_run_id_stops_the_batch(
+    out: Path, slept: list[float], smoke_id: str, refused_runs: int
+) -> None:
+    """A re-run owed past the last usable id stops before any call."""
+    entry = _renamed_smoke(out, "alpha", smoke_id)
+    for run_id in list(smoke.run_ids(smoke_id))[:refused_runs]:
+        _refused(SmokeRun(out, entry, run_id))
+    assert smoke.smoke_state(out, entry).verdict == "rerun_owed"
+    calls = FakeCalls(out, [])
+    ctx = _ctx(out, calls)
+
+    assert smoke.locked_run(ctx) == smoke.EXIT_STOPPED
+
+    assert not calls.calls
+    assert _printed(ctx, "STOPPED") == (
+        f"STOPPED: {smoke_id}: no usable re-run id is left"
+    )
+    del slept
+
+
 def test_an_unusable_key_is_blamed_on_the_key_not_the_endpoint(
     out: Path, slept: list[float]
 ) -> None:
@@ -1970,6 +2049,24 @@ def test_a_changed_config_is_refused_before_anything(out: Path) -> None:
         smoke.check_inputs(ctx)
 
 
+def test_a_re_prepared_prompt_set_is_refused_before_anything(
+    out: Path,
+) -> None:
+    """A prompt set prepared again under an unchanged plan is not the plan's.
+
+    It records the same code, so only the plan's digest of prepare.json
+    can object.
+    """
+    entry = _smoke(out, "alpha")
+    path = out / entry.smoke_id / "prepare.json"
+    prepare = PrepareManifestV1.model_validate_json(path.read_bytes())
+    later = prepare.created_at + timedelta(days=1)
+    path.write_bytes(_bytes(prepare.model_copy(update={"created_at": later})))
+
+    with pytest.raises(smoke.PlanError, match="prepare.json is not the plan's"):
+        smoke.check_inputs(_ctx(out, FakeCalls(out, [])))
+
+
 def _stale_code(out: Path, candidate: str) -> Any:
     """Makes one smoke's prompt set record other model-side code.
 
@@ -2104,11 +2201,42 @@ def _bad_log_line(run: SmokeRun) -> None:
         log.write(b"{}\n")
 
 
+def _rewrite_manifest(run: SmokeRun, **changes: Any) -> None:
+    """Rewrites a valid run manifest with some fields changed."""
+    path = run.run_dir / "run_manifest.json"
+    manifest = RunManifestV1.model_validate_json(path.read_bytes())
+    path.write_bytes(_bytes(manifest.model_copy(update=changes)))
+
+
+def _another_run_s_manifest(run: SmokeRun) -> None:
+    """A manifest naming the smoke's re-run, as if copied in from there."""
+    run.invoke(_both(ok())(run))
+    _rewrite_manifest(run, run_id=list(smoke.run_ids(run.entry.smoke_id))[1])
+
+
+def _a_c3_run(run: SmokeRun) -> None:
+    """A valid run whose one condition is C3, its paths following the label."""
+    run.invoke(_both(ok())(run))
+    (condition,) = RunManifestV1.model_validate_json(
+        (run.run_dir / "run_manifest.json").read_bytes()
+    ).conditions
+    c3 = condition.model_copy(
+        update={
+            "label": "C3",
+            "attempts_path": "attempts/C3.jsonl",
+            "completions_path": "completions/C3.json",
+        }
+    )
+    _rewrite_manifest(run, conditions=(c3,))
+
+
 @pytest.mark.parametrize(
     ("write", "reason"),
     [
         (_no_manifest, "manifest_missing"),
         (_bad_manifest, "manifest_invalid"),
+        (_another_run_s_manifest, "manifest_run_id"),
+        (_a_c3_run, "not_a_c4_run"),
         (_torn_log, "attempt_log_torn"),
         (_bad_log_line, "attempt_log_invalid"),
     ],
