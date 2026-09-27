@@ -485,6 +485,48 @@ def test_prepare_runs_once(source: Path, out: Path) -> None:
     assert "exists; the smokes are prepared" in _refused_prepare(source, out)
 
 
+def _snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_prepare_never_removes_a_smoke_directory_it_did_not_make(
+    source: Path, out: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-day prepare after plan.json went must leave the runs alone."""
+    plan = _plan(out)
+    monkeypatch.setattr(smoke, "_now", lambda: f"{plan.prepare_date}T01:00:00Z")
+    anchor = _smoke(out, "qwen3-32b")
+    run = out / anchor.smoke_id / "runs" / anchor.smoke_id
+    run.mkdir(parents=True)
+    (run / "run_manifest.json").write_text("{}\n", encoding="utf-8")
+    (out / "plan.json").unlink()
+    before = _snapshot(out)
+
+    message = _refused_prepare(source, out)
+
+    assert anchor.smoke_id in message
+    assert "holds no runs/" in message
+    assert _snapshot(out) == before
+
+
+def test_prepare_refuses_a_killed_prepare_s_staging_directory(
+    source: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(smoke, "_now", lambda: "2026-09-27T01:00:00Z")
+    out = tmp_path / "out"
+    staging = out / ".dev-alpha-rs-2026-09-27.partial"
+    staging.mkdir(parents=True)
+
+    message = _refused_prepare(source, out)
+
+    assert ".dev-alpha-rs-2026-09-27.partial" in message
+    assert [p.name for p in out.iterdir()] == [staging.name]
+
+
 def test_smoke_run_ids_fit_the_result_names() -> None:
     nemotron = "dev-nemotron-3-super-120b-a12b-2026-09-26"
     reserve = "dev-qwen3-next-80b-a3b-instruct-2026-09-26"

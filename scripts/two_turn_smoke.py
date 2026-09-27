@@ -492,6 +492,30 @@ def _prepare_smoke(
     )
 
 
+def _refuse_taken(out_dir: Path, smoke_ids: Sequence[str]) -> None:
+    """Refuses smoke directories that exist before prepare writes any.
+
+    A smoke directory holds its runs, which may be paid evidence, and a
+    leftover ``.<id>.partial`` is a prepare that was killed; prepare
+    writes over neither, so its cleanup only removes what it made.
+
+    Raises:
+        PlanError: If any of them, or its staging directory, exists.
+    """
+    taken = [
+        _relative(path)
+        for smoke_id in smoke_ids
+        for path in (out_dir / smoke_id, out_dir / f".{smoke_id}.partial")
+        if path.exists()
+    ]
+    if taken:
+        raise PlanError(
+            f"{', '.join(taken)} already exist and prepare never writes over"
+            " a smoke directory. Remove one only if it holds no runs/"
+            " directory: a run there may be paid evidence"
+        )
+
+
 def prepare(
     summary_path: Path,
     out_dir: Path,
@@ -501,8 +525,9 @@ def prepare(
     """Builds every survivor's smoke prompts offline and writes the plan.
 
     Raises:
-        PlanError: If a plan exists, the summary names no survivor, or a
-            counted pass, config or follow-up is refused.
+        PlanError: If a plan or one of the smoke directories exists, the
+            summary names no survivor, or a counted pass, config or
+            follow-up is refused.
     """
     plan_path = out_dir / PLAN_NAME
     if plan_path.exists():
@@ -523,6 +548,7 @@ def prepare(
         _smoke_base(record, source_root, config_dir or ROOT / CONFIG_DIR, date)
         for record in survivors
     ]
+    _refuse_taken(out_dir, [str(base["smoke_id"]) for base in bases])
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         smokes = tuple(_prepare_smoke(b, out_dir, revision) for b in bases)
@@ -530,7 +556,8 @@ def prepare(
             if smoke.status == "prepared":
                 check_cap(smoke)
     except BaseException:
-        # No plan means no call can have used these prompt sets.
+        # None of these existed before this call, which has no plan yet, so
+        # no call can have used them and nothing else is removed.
         for base in bases:
             shutil.rmtree(out_dir / str(base["smoke_id"]), ignore_errors=True)
         raise
