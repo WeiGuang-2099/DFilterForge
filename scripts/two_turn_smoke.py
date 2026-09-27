@@ -862,15 +862,17 @@ def _verify_source(smoke: SmokeV1) -> str | None:
 
     Returns:
         None when the rebuilt prompt file and item choice are the plan's,
-        else the reason they are not.
+        or when a smoke the plan found without ready answers still has
+        none; else the reason. A source run that is missing, edited or
+        refused for any other reason is a reason, never a match.
     """
     with TemporaryDirectory(prefix="dfilterforge-smoke-judge-") as scratch:
         report, code = follow_up(
             Path(smoke.source_run_dir), Path(scratch) / "rebuilt", "judge"
         )
     if report is None:
-        missing = code == READY_ANSWERS_MISSING
-        if missing == (smoke.status == "ready_answers_missing"):
+        still_missing = code == READY_ANSWERS_MISSING
+        if still_missing and smoke.status == "ready_answers_missing":
             return None
         return f"source_refused_{code}"
     if smoke.status != "prepared":

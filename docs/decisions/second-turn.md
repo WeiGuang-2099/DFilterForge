@@ -75,5 +75,10 @@ all nine calls with nothing sent.
   (`prompt_mismatch`) until repair scoring exists; smoke runs are evidence.
 - `judge` rebuilds prompts from the raw source runs the plan names, so it
   needs those directories, or byte-identical ones, to stay where they are.
+  A source run that is missing, edited or otherwise refused by `follow-up`
+  makes that smoke unjudgeable (`source_refused_<code>`, exit 2), never a
+  pass or a fail; so does a smoke prepared without ready answers whose source
+  now has them. `run` does not rebuild the sources before paying: its prompts
+  are the prepared ones, pinned by `prepare_sha256`.
 - A fallback nemotron smoke's re-run id would exceed 32 characters; no
   survivor qualified through a fallback.

@@ -920,6 +920,74 @@ def test_judge_cannot_judge_a_smoke_whose_source_changed(
     assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
 
 
+def _judged_from(out: Path, candidate: str, source_run_dir: Path) -> Any:
+    """Judges the plan with one smoke's source run read from elsewhere."""
+    plan = _plan(out)
+    moved = tuple(
+        (
+            s.model_copy(update={"source_run_dir": source_run_dir.as_posix()})
+            if s.candidate == candidate
+            else s
+        )
+        for s in plan.smokes
+    )
+    states, _ = smoke.judge(out, plan.model_copy(update={"smokes": moved}))
+    return states
+
+
+def _passing_anchor(out: Path) -> Path:
+    """Gives the anchor a passing run and returns its source run."""
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(ok())(anchor))
+    return Path(anchor.entry.source_run_dir)
+
+
+def test_judge_cannot_judge_a_smoke_whose_source_is_gone(
+    out: Path, tmp_path: Path
+) -> None:
+    _passing_anchor(out)
+
+    states = _judged_from(out, "qwen3-32b", tmp_path / "gone")
+
+    assert (states[0].verdict, states[0].reasons) == (
+        "unjudgeable",
+        ("source_refused_run_layout_invalid",),
+    )
+    assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
+
+
+def test_judge_cannot_judge_a_smoke_whose_source_answers_changed(
+    out: Path, tmp_path: Path
+) -> None:
+    edited = tmp_path / "edited"
+    shutil.copytree(_passing_anchor(out), edited)
+    answers = edited / "completions" / "C4.json"
+    answers.write_bytes(answers.read_bytes().replace(b"443", b"444"))
+
+    states = _judged_from(out, "qwen3-32b", edited)
+
+    assert (states[0].verdict, states[0].reasons) == (
+        "unjudgeable",
+        ("source_refused_hash_mismatch",),
+    )
+    assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
+
+
+def test_judge_cannot_judge_a_smoke_whose_source_now_has_ready_answers(
+    out: Path,
+) -> None:
+    alpha = Path(_smoke(out, "alpha").source_run_dir)
+
+    states = _judged_from(out, "beta", alpha)
+
+    beta = next(s for s in states if s.smoke.candidate == "beta")
+    assert (beta.verdict, beta.reasons) == (
+        "unjudgeable",
+        ("source_now_has_ready_answers",),
+    )
+    assert smoke.judge_exit(states) == smoke.EXIT_REFUSED
+
+
 # The paid batch, with the call step replaced.
 
 
