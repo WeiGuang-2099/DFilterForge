@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 ## Current slice
 
@@ -168,6 +168,16 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   68. The rule picks qwen3.5-9b, qwen3.5-122b and deepseek-v4-pro, within 4 of
   glm-5.2 (`decisions/evidence/bakeoff/ranking-2026-09-26.json`). The anchor
   answered non-ready gold for the first time: 6 of its 64 were false-ready.
+
+## CI frozen-prompt guard: 2026-09-27
+
+- The suite skips `test_frozen_prompts_awaiting_a_call_match_the_model_side_code`
+  (no `docs/` in the test image), so CI now runs it alone with `docs/` mounted
+  read-only behind `test -d docs/results`. In the test image with each tree
+  mounted: 1 passed on this branch (04fa035); on a throwaway merge of
+  repair-multiturn (851e037) it failed with `test-qwen3-32b-2026-09-26:
+  re-freeze after scripts/model_run.py, src/dfilterforge/generation.py`;
+  without the mount the step exits 1.
 
 ## Planned next
 
