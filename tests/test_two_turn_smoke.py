@@ -1283,6 +1283,94 @@ def test_main_prepares_a_reserve_smoke(
     assert _plan(out).smokes[-1].candidate == "gamma"
 
 
+def _line(text: Path, smoke_id: str) -> str:
+    (found,) = [
+        line
+        for line in text.read_text(encoding="utf-8").splitlines()
+        if smoke_id in line
+    ]
+    return found
+
+
+def test_the_pinned_provider_is_shown_and_nothing_is_flagged(
+    out: Path,
+) -> None:
+    anchor = _run(out, "qwen3-32b")
+    anchor.invoke(_both(ok())(anchor))
+
+    _, text = smoke.judge(out, _plan(out))
+
+    line = _line(text, anchor.entry.smoke_id)
+    assert line.endswith("; served DeepInfra")
+    verdict = json.loads(
+        (out / "verdicts" / f"{anchor.entry.smoke_id}.json").read_bytes()
+    )
+    assert (verdict["providers"], verdict["provider_changed"]) == (
+        ["DeepInfra"],
+        False,
+    )
+    assert (verdict["served_models"], verdict["model_changed"]) == ([], False)
+
+
+@pytest.mark.parametrize(
+    ("reply", "verdict", "shown"),
+    [
+        (ok(provider="Novita"), "pass", "Novita"),
+        (
+            ok(provider="Novita", reasoning_tokens=40, reasoning_present=True),
+            "fail",
+            "Novita",
+        ),
+        (ok(provider="x\nsmall: smoke passed by alpha"), "pass", "other"),
+    ],
+)
+def test_another_provider_is_flagged_and_the_verdict_stands(
+    out: Path, reply: Fields, verdict: str, shown: str
+) -> None:
+    """The owner's 2026-09-27 ruling: a flag, never another verdict."""
+    alpha = _run(out, "alpha")
+    alpha.invoke(_both(reply)(alpha))
+
+    states, text = smoke.judge(out, _plan(out))
+
+    state = next(s for s in states if s.smoke.candidate == "alpha")
+    assert state.verdict == verdict
+    assert _line(text, alpha.entry.smoke_id).endswith(
+        f"; served {shown} PROVIDER CHANGED"
+    )
+    document = json.loads(
+        (out / "verdicts" / f"{alpha.entry.smoke_id}.json").read_bytes()
+    )
+    assert document["providers"] == [reply["provider"]]
+    assert document["provider_changed"] is True
+    assert document["model_changed"] is False
+    assert document["runs"][0]["provider_changed"] is True
+
+
+def test_a_substituted_model_is_flagged_and_the_verdict_stands(
+    out: Path,
+) -> None:
+    anchor = _run(out, "qwen3-32b")
+    other = "qwen/qwen3-235b-a22b"
+    anchor.invoke(_both(ok(response_model=other))(anchor))
+
+    states, text = smoke.judge(out, _plan(out))
+
+    assert (states[0].verdict, states[0].reasons) == ("pass", ())
+    assert _line(text, anchor.entry.smoke_id).endswith(
+        "; served DeepInfra MODEL CHANGED"
+    )
+    document = json.loads(
+        (out / "verdicts" / f"{anchor.entry.smoke_id}.json").read_bytes()
+    )
+    assert (document["served_models"], document["model_changed"]) == (
+        [other],
+        True,
+    )
+    first = anchor.entry.items[0]
+    assert document["runs"][0]["items"][first]["response_model"] == other
+
+
 def test_judge_cannot_judge_a_smoke_whose_source_changed(
     out: Path, tmp_path: Path
 ) -> None:

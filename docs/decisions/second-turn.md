@@ -60,6 +60,16 @@ sent a switch reports no reasoning-token count. A model failure is final even
 beside a harness failure, so no re-run can replace an observed failure.
 Re-runs are `-rs2`, `-rs3` and so on before the prepare's date.
 
+Each run also records what served it against the counted pass's model and
+pinned route, by `run_store.served_values`, the rule scoring publishes as
+`provider_changed` and `served_model_changed`: `providers`,
+`provider_changed`, `served_models` and `model_changed`, per run and for the
+smoke in its verdict file, and each item records its `response_model`. The
+summary line prints `served <providers>`, then `PROVIDER CHANGED` or `MODEL
+CHANGED` when one is set. The owner ruled on 2026-09-27 that these are flags
+only: a smoke served by another provider or model is read like any other, its
+verdict does not change, and the bake-off note is not amended.
+
 ## Readings the owner confirmed
 
 The owner confirmed these five readings of the bake-off note's smoke rule on

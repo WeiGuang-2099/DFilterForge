@@ -63,7 +63,11 @@ harness or operator failure (HTTP 401, 402 or 403, a budget stop, an item
 with no completed reply only through transient failures, or a run whose
 settings are not the counted pass's) is never a fail: it owes a re-run
 under a new run id. An observed model failure is final even if the other
-item met a harness failure. The anchor's verdict is informational.
+item met a harness failure. The anchor's verdict is informational. Each
+verdict file and summary line also names the providers that served the
+smoke's runs and says PROVIDER CHANGED or MODEL CHANGED when a provider
+or model other than the counted pass's served one; by the owner's ruling
+of 2026-09-27 that is a flag and never changes a verdict.
 
 Everything is written under artifacts/two-turn-smoke/: the plan, the
 prepared smokes with their runs, the step log, the lock, one verdict per
@@ -156,6 +160,7 @@ from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import parse_response
 from dfilterforge.intent_ir import FrozenModel
 from dfilterforge.model_client import API_KEY_ENV
+from dfilterforge.run_store import served_values
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_RUN = "scripts/model_run.py"
@@ -189,6 +194,8 @@ RANKED_SLOTS = ("small", "mid", "frontier")
 REPORT_KEYS = ("stop_reason", "requests_sent", "charged_usd_upper_bound")
 DEV_RUN = re.compile(r"dev-([a-z0-9][a-z0-9.-]*)-([0-9]{4}-[0-9]{2}-[0-9]{2})")
 CONFIG_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+# A provider name a summary line may print as it is.
+SHOWN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()/+-]{0,63}")
 
 
 class PlanError(RuntimeError):
@@ -802,6 +809,7 @@ def _item(
         "error_code": last.error_code,
         "finish_reason": last.finish_reason,
         "provider": last.provider,
+        "response_model": last.response_model,
         "reasoning_tokens": last.reasoning_tokens,
         "reasoning_present": last.reasoning_present,
     }
@@ -823,6 +831,10 @@ def assess(smoke: SmokeV1, path: Path) -> Assessment:
         manifest, digest, attempts, current = _read_run(path)
     except _Unreadable as problem:
         return Assessment(path.name, "unreadable", (str(problem),))
+    # Flags only, by the owner's 2026-09-27 ruling: what the provider
+    # served is recorded against the counted pass's model and pinned
+    # route, and no verdict turns on it.
+    values = served_values((a.completion for a in attempts), smoke.settings)
     record: dict[str, Any] = {
         "run_manifest_sha256": digest,
         "status": manifest.status,
@@ -830,6 +842,10 @@ def assess(smoke: SmokeV1, path: Path) -> Assessment:
         "stop_reasons": [i.stop_reason for i in manifest.invocations],
         "requests": len(attempts),
         "charged_usd_upper_bound": manifest.charged_usd_upper_bound,
+        "providers": list(values.providers),
+        "provider_changed": values.provider_changed,
+        "served_models": list(values.models),
+        "model_changed": values.model_changed,
     }
     problems = _config_problems(smoke, manifest)
     if problems:
@@ -1030,6 +1046,45 @@ def judge(out_dir: Path, plan: PlanV1) -> tuple[list[SmokeState], Path]:
     return states, write_summary(out_dir, plan, states)
 
 
+def _served_over(state: SmokeState) -> dict[str, Any]:
+    """Collects what served a smoke's runs, and whether any run changed.
+
+    A flag, never a verdict: the owner ruled on 2026-09-27 that a smoke
+    served by another provider or model than the counted pass's is read
+    as any other, and only shows it.
+    """
+    records = [run.record for run in state.runs if "providers" in run.record]
+    return {
+        "providers": sorted({p for r in records for p in r["providers"]}),
+        "provider_changed": any(r["provider_changed"] for r in records),
+        "served_models": sorted(
+            {m for r in records for m in r["served_models"]}
+        ),
+        "model_changed": any(r["model_changed"] for r in records),
+    }
+
+
+def _served_marker(state: SmokeState) -> str:
+    """Spells the served providers and flags for one summary line.
+
+    Provider names are provider metadata, so one that is not a plain
+    name reads ``other`` there; the verdict file keeps it, JSON-escaped.
+    """
+    values = _served_over(state)
+    names = sorted(
+        {
+            name if SHOWN_NAME.fullmatch(name) else "other"
+            for name in values["providers"]
+        }
+    )
+    marker = f"; served {','.join(names) or '-'}"
+    if values["provider_changed"]:
+        marker += " PROVIDER CHANGED"
+    if values["model_changed"]:
+        marker += " MODEL CHANGED"
+    return marker
+
+
 def verdict_document(plan: PlanV1, state: SmokeState) -> dict[str, Any]:
     """Spells one smoke's verdict; the same runs give the same bytes."""
     smoke = state.smoke
@@ -1050,6 +1105,7 @@ def verdict_document(plan: PlanV1, state: SmokeState) -> dict[str, Any]:
         "items": list(smoke.items),
         "verdict": state.verdict,
         "reasons": list(state.reasons),
+        **_served_over(state),
         "runs": [run.document() for run in state.runs],
         "evidence": [
             f"{run.run_id}/{name}"
@@ -1097,6 +1153,7 @@ def write_summary(
         + (f" [{', '.join(s.reasons)}]" if s.reasons else "")
         + f"; items {', '.join(s.smoke.items) or '-'}"
         + f"; runs {', '.join(r.run_id for r in s.runs) or '-'}"
+        + _served_marker(s)
         for s in states
     ]
     slots = slot_lines(states)
