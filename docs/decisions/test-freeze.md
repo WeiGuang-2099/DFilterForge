@@ -82,7 +82,13 @@ with `docs/` mounted, but only while a prompt set under `docs/results` has no
 `run_manifest.json` beside it: once pass A publishes into the committed test
 directory, pass B and the slot winners' test passes, which call from the same
 prepare under their own run ids, are guarded by the call alone, as is any
-prepare directory outside `docs/results`. The call reads the working-tree
-record and does not check that it is committed, and it trusts the split a
-prompt set declares: a test prompt set hand-edited to say dev is sent, and
-only the scorer refuses its answers.
+prepare directory outside `docs/results`. Only that publish releases the test,
+since `publish` refuses an incomplete run and writes only into the directory
+named after its run id: if pass A publishes under another run id, or the A/A
+pair is reported not run (rule 7 of the model bake-off note), the test and its
+CI step fail every later hashed-file edit, the merge after the last baseline
+test request included, until a commit releases them. The commit that registers
+the hosted test runs, before the first test request, says how. The call reads
+the working-tree record and does not check that it is committed, and it trusts
+the split a prompt set declares: a test prompt set hand-edited to say dev is
+sent, and only the scorer refuses its answers.

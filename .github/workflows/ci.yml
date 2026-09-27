@@ -40,6 +40,15 @@ jobs:
         # here; only the call's prepare_code_mismatch, which refuses each
         # later test call before any request, and the rule that the hashed
         # files stay unchanged until the last baseline test request remain.
+        # Nothing else releases it: publish refuses an incomplete run and
+        # writes only into the directory named after its run id. If pass A
+        # publishes under another run id, or the A/A pair is reported not
+        # run under rule 7 of the bake-off note, no manifest lands there and
+        # this step fails every hashed-file edit, the merge after the last
+        # baseline test request included, asking for a re-freeze the
+        # protocol allows only before the first test request. The commit
+        # that registers the hosted test runs, before that request, says
+        # what releases the guard in that case.
         run: >-
           docker compose --profile dev run --rm
           --volume "$PWD/docs:/workspace/docs:ro"

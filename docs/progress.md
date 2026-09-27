@@ -190,14 +190,27 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   `prepare_code_mismatch`, which refuses each later test call before any
   request, and the rule that the 12 hashed files stay unchanged until the last
   baseline test request.
+- Only that publish releases the guard: `publish` refuses an incomplete run
+  (`run_incomplete`) and a directory not named after the run id
+  (`output_name_mismatch`). If pass A publishes under another run id, or rule 7
+  of the bake-off note reports the A/A pair not run, the step fails every
+  hashed-file edit, the merge after the last baseline test request included,
+  and asks for a re-freeze the protocol allows only before the first test
+  request. In the test image with the repair-multiturn code (1f64784, hashed
+  files as at 851e037) and a scratch results tree whose manifest-less frozen
+  directory sat beside a `test-qwen3-32b-r2-2026-09-26/` holding `prepare.json`
+  and `run_manifest.json`, the step failed (exit 1) with the same re-freeze
+  message. The ci.yml comment and the test-freeze Limits now say so.
 
 ## Planned next
 
 1. The two-turn smoke, built on the branch `repair-multiturn`, sent by the
    owner as a second command; a candidate that fails it gives way by rule 5.
 2. Register every hosted test run (run id, model id, provider, settings) before
-   the first test request, then qwen/qwen3-32b passes A and B and the slot
-   winners on test; the 12 hashed files stay unchanged until the last one.
+   the first test request, pass A as `test-qwen3-32b-2026-09-26`, and say what
+   releases the CI frozen-prompt guard if pass A never publishes there; then
+   qwen/qwen3-32b passes A and B and the slot winners on test; the 12 hashed
+   files stay unchanged until the last one.
 3. Counterexample repair with three feedback arms, the feedback sent as a
    second conversational turn; hosted static page generated from receipts.
 4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
