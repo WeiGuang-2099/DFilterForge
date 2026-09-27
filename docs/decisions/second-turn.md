@@ -60,6 +60,36 @@ sent a switch reports no reasoning-token count. A model failure is final even
 beside a harness failure, so no re-run can replace an observed failure.
 Re-runs are `-rs2`, `-rs3` and so on before the prepare's date.
 
+## Readings the owner confirmed
+
+The owner confirmed these five readings of the bake-off note's smoke rule on
+2026-09-27. They read the [note](model-bakeoff.md); they do not amend it, and
+neither it nor `docs/protocol.md` changes. `scripts/two_turn_smoke.py`
+implements each as stated, and a test in `tests/test_two_turn_smoke.py` fails
+if it is broken.
+
+1. A run whose settings, prices, host, prompts or cap differ from the counted
+   pass's is void and owes a re-run under a new run id, whatever its replies
+   show (`_config_problems`; `test_harness_and_operator_failures_owe_a_re_run`).
+   The batch also voids a run whose call options are not the registered
+   `--max-attempts 3` and `--min-interval-seconds 1.0`.
+2. An observed model failure fails the smoke even when the other item met a
+   harness failure (`_rule`;
+   `test_a_model_failure_is_final_beside_a_harness_failure` and
+   `test_a_model_failure_is_final_beside_an_account_refusal`).
+3. `client_error`, `redirect_rejected`, `response_too_large` and
+   `empty_content` are final errors that fail the smoke, not harness failures
+   (`_failed`, by the call step's own retry classes;
+   `test_each_model_failure_fails_the_smoke`).
+4. Reasoning is checked over every recorded attempt, not only each item's
+   counted one (`_rule`;
+   `test_reasoning_on_an_attempt_that_is_not_counted_fails`).
+5. `run` makes one new run per smoke per execution, and a smoke may be re-run
+   up to `-rs9` without a further ruling (`drive`, `run_ids`;
+   `test_a_budget_stop_owes_a_re_run_and_the_batch_goes_on` and
+   `test_smoke_run_ids_fit_the_result_names`). With `-rs9` used, the batch
+   stops for the owner.
+
 ## Decision
 
 Keep. The owner runs one command from this worktree; the key is not needed
