@@ -2865,7 +2865,7 @@ def test_follow_up_refuses_an_output_made_while_it_wrote(
 
     def _raced(*arguments: Any) -> PrepareManifestV1:
         (output / "prepared").mkdir(parents=True)
-        (output / "prepared" / "C4.json").write_text("{}\n", encoding="utf-8")
+        (output / "prepared" / "C4.json").write_bytes(b"{}\n")
         return cast(PrepareManifestV1, manifest(*arguments))
 
     monkeypatch.setattr(model_run, "_follow_up_manifest", _raced)
