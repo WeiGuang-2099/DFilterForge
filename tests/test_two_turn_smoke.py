@@ -645,6 +645,37 @@ def test_smoke_run_ids_fit_the_result_names() -> None:
             smoke.smoke_run_id(refused, "2026-09-27")
 
 
+def test_run_ids_need_a_middle_of_29_or_28_characters() -> None:
+    """A smoke id needs at most 29 characters of middle, a re-run 28.
+
+    Checked on every listed pass and outage re-run of the bake-off.
+    """
+    no_smoke: set[str] = set()
+    no_re_run: set[str] = set()
+    for candidate in db.all_candidates():
+        for target in db.registered_targets(candidate):
+            middle = target.run_id.removeprefix("dev-")[: -len("-2026-09-26")]
+            try:
+                first = smoke.smoke_run_id(target.run_id, "2026-09-27")
+            except smoke.PlanError:
+                assert len(middle) > 29, target.run_id
+                no_smoke.add(target.run_id)
+                continue
+            fits = all(db.RESULT_DIR.fullmatch(r) for r in smoke.run_ids(first))
+            assert fits == (len(middle) <= 28), target.run_id
+            if not fits:
+                no_re_run.add(target.run_id)
+
+    assert no_smoke == {
+        "dev-nemotron-3-super-120b-a12b-fb-r2-2026-09-26",
+        "dev-qwen3-next-80b-a3b-instruct-r2-2026-09-26",
+    }
+    assert no_re_run == {
+        "dev-nemotron-3-super-120b-a12b-fb-2026-09-26",
+        "dev-nemotron-3-super-120b-a12b-r2-2026-09-26",
+    }
+
+
 # Smoke runs, written as the call step writes them.
 
 

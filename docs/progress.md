@@ -167,8 +167,9 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
 ## Two-turn smoke tooling: 2026-09-26, branch repair-multiturn
 
 - A prepared prompt may be (system, user, assistant, user) inside 64 KiB, with
-  the note's follow-up text pinned; 132 of 132 recorded prompt files still
-  re-serialize byte for byte ([second turn](decisions/second-turn.md)).
+  the note's follow-up text pinned; all 116 recorded prompt files (14 distinct
+  contents) still re-serialize byte for byte
+  ([second turn](decisions/second-turn.md)).
 - `model_run.py follow-up` and `scripts/two_turn_smoke.py prepare` built nine
   smokes offline, two items each; a keyless `run` stopped at
   `api_key_missing` for all nine with nothing sent. No smoke request is sent.

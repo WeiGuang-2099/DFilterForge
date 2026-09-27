@@ -25,12 +25,20 @@ included, it checks the counted pass's config file against that pass's
 run manifest and runs ``scripts/model_run.py follow-up`` on the pass's
 run directory. That continues the first two dev C4 items in prepare
 order whose counted answer completed with finish_reason stop and parses
-as ready; with fewer than two the smoke fails without a request. A
-smoke's run id is
-``dev-<model>[-fb]-rs-<prepare date>``; a re-run after a harness failure
-is ``-rs2``, ``-rs3`` and so on, one character longer, so every listed
-model's re-run id fits the 32-character result name but a fallback
-nemotron's.
+as ready; with fewer than two the smoke fails without a request.
+
+A smoke's run id is ``dev-<middle>-rs-<prepare date>``, where <middle> is
+the counted pass's run id between ``dev-`` and its date,
+``<model>[-fb][-r2]``; a re-run after a harness failure is ``-rs2`` up to
+``-rs9``, one character longer. A result name allows 32 characters
+between ``dev-`` and the date, so a smoke id needs a middle of at most 29
+characters and its re-runs one of at most 28. Of the listed passes,
+nemotron's ``-fb`` and ``-r2`` (29) get a smoke id but no re-run id, so a
+harness failure there stops the batch for the owner, and nemotron's
+``-fb-r2`` (32) and the mid reserve's ``-r2`` (30) get no smoke id, so
+prepare refuses them before writing anything. The 2026-09-26 summary
+counts none of them; only the mid reserve's ``-r2`` can still arise, if
+that reserve runs by rule 6 and its first pass is an outage.
 
 ``prepare --reserve SLOT`` is offline and free too, for the note's rule 6:
 once every run-gate survivor of SLOT has failed its smoke, the owner runs

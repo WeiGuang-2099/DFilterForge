@@ -16,10 +16,20 @@ Before is 431df73 (main); after is this branch. Nothing here sends a request.
 | (system, user, assistant, user) as a `PreparedPromptV1` | refused (`too_long`) | accepted |
 | any other role order, or 1, 3 or 5+ messages | refused | refused |
 | `model_run.py follow-up` | invalid choice, exit 2 | C4-only dev prepare |
-| committed `docs/results/*/prepared/*.json` re-serialized | 16 of 16 | 16 of 16 byte-identical |
-| published and raw bake-off prompt files re-serialized | written by it | 116 of 116 byte-identical |
+| `docs/results/*/prepared/*.json` committed at 431df73, re-serialized | 16 of 16 | 16 of 16 byte-identical |
+| recorded prompt files in the main checkout re-serialized (see below) | 116 of 116 | 116 of 116 byte-identical |
 | tests collected in the test image | 1,172 | 1,247 |
 | smokes prepared from the 2026-09-26 runner summary | none | 9, all with two items |
+
+The 116 are the 52 files in `docs/results/*/prepared/` on bakeoff-results (16
+of them the committed files above, the same bytes at the same paths) and the 64
+under the ignored `artifacts/model-eval/`, raw run copies included. 84 belong to
+the bake-off (40 published, 44 raw) and 32 to the earlier 2026-09-21, 2026-09-23
+and test sets (12 and 20). They hold only 14 distinct contents: the ten
+bake-off passes share one prompt set, and each raw run repeats its prepare
+directory's. Recounted on 2026-09-27 with the code of 431df73 and of this
+branch; an earlier count of 132 added the worktree's copies of the 16 committed
+files a second time.
 
 `FOLLOW_UP_TEXT` is the note's user turn, 81 ASCII bytes, SHA-256 prefix
 `d903bc2e346b`, pinned by a test. `follow_up_prompt` appends the counted
@@ -123,6 +133,15 @@ all nine calls with nothing sent.
 - `generation.py` and `model_run.py` are prepare-hashed: the branch merges
   only after the last baseline test request, and until the prompt sets
   awaiting a call have their runs, the host test on them fails here.
+- CI skips that host test,
+  `test_frozen_prompts_awaiting_a_call_match_the_model_side_code`: the test
+  image has no `docs/` tree, so the suite skips it, and this branch's CI has
+  no step that runs it with `docs/` mounted. CI here would pass a merge of
+  this branch into main. What stops the calls is the call step's own
+  `prepare_code_mismatch`, before any request, and reverting `generation.py`
+  and `model_run.py` restores them with no re-freeze. The CI step added on
+  bakeoff-results (04fa035) runs the test with `docs/` mounted and fails on a
+  merge of this branch; it guards main once that branch lands.
 - Scoring rebuilds first turns only, so it refuses a second-turn prompt set
   (`prompt_mismatch`) until repair scoring exists; smoke runs are evidence.
 - `judge` rebuilds prompts from the raw source runs the plan names, so it
@@ -154,8 +173,16 @@ all nine calls with nothing sent.
   stay as they are. Never prepare every survivor again into another out dir:
   that would re-send the judged smokes and give a candidate that failed its
   smoke a second one.
-- A fallback nemotron smoke's re-run id would exceed 32 characters; no
-  survivor qualified through a fallback.
+- A result name allows 32 characters between `dev-` and the date. A smoke id,
+  `dev-<middle>-rs-<prepare date>` with `<middle>` the counted pass's
+  `<model>[-fb][-r2]`, therefore needs a middle of at most 29 characters, and
+  its re-runs `-rs2` to `-rs9` one of at most 28. Of the listed passes,
+  nemotron's `-fb` and `-r2` (29) get a smoke id but no re-run id, so a harness
+  failure there stops the batch for the owner, and nemotron's `-fb-r2` (32)
+  and the mid reserve's `-r2` (30) get no smoke id, so `prepare` refuses them
+  before writing anything. The 2026-09-26 summary counts none of them; only the
+  mid reserve's `-r2` can still arise, if that reserve runs by rule 6 and its
+  first pass is an outage. A test checks the rule on every listed pass.
 - Do not press Ctrl-C while a smoke request is in flight: that request may be
   billed but not recorded. The call step shares the console, so the interrupt
   can end it between the reply and its attempt-log line; the request is then
