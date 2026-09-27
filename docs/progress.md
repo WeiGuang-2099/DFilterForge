@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 ## Current slice
 
@@ -175,6 +175,57 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   `api_key_missing` for all nine with nothing sent. No smoke request is sent.
 - Test image with the branch mounted: 1,242 passed, 5 skipped (no docs/), 96
   percent coverage; static checks pass. It merges after the last baseline.
+
+## Smoke review fixes: 2026-09-27, branch repair-multiturn
+
+- An 89-agent review of the branch at 851e037 confirmed 17 minor findings and
+  proposed 15 commits here and one CI step on main's side. The owner ruled on
+  2026-09-27. D1: Ctrl-C gets documentation and messages only, under the rule
+  "do not press Ctrl-C while a request is in flight: that request may be billed
+  but not recorded"; `scripts/dev_bakeoff.py` is unchanged. D2: a served
+  provider or model other than the counted pass's is a flag in the verdict file
+  and summary line, never another verdict; the note is not amended. D3: all 15
+  commits land before the paid smoke, plus the frozen-prompt guard in CI on
+  bakeoff-results (04fa035). D4: five readings of the smoke rule, recorded in
+  [second turn](decisions/second-turn.md) (0afc76a) and pinned by tests
+  (58a1731): a run with other settings, prices, host, prompts or cap is void
+  and owes a re-run; an observed model failure fails the smoke beside a harness
+  failure; `client_error`, `redirect_rejected`, `response_too_large` and
+  `empty_content` are final errors; reasoning is read over every attempt; one
+  new run per smoke per execution, with re-runs up to `-rs9`.
+- Commits after 851e037: 24f0dd2 judge refuses a smoke whose source run no
+  longer rebuilds; 0521e29 interrupt messages name the cost and the smoke's own
+  lock; c3bc2e3 a finish_reason that is not a short code reads `other`; b4e5468
+  an unexpected error stops with exit 1, never a refusal, and judging still
+  runs; bd573c0 a malformed key is blamed on the key; 58a1731 and 0afc76a D4;
+  62e3d76 dry-run refuses a prompt set the code no longer matches; 1424967
+  prepare never writes over a smoke directory; f8e361e `prepare --reserve SLOT`
+  for rule 6; 74b6e11 served providers and models are flagged (D2); 92904e6
+  prepare reads only the runner's own summary; 3cebe1a run-id limits, prompt
+  counts and the CI skip corrected in the docs; 29fee1c the Ctrl-C text as a
+  constant, since 0521e29 had made CI's pylint step fail (R0801, rc 8); 4a00c97,
+  6a2dba8 and ba570fd tests only.
+- For the owner's run: no prepare-hashed file changed since 851e037, so the
+  nine prepared smokes stay valid without a re-prepare, and the command is the
+  same. Its messages now say what an interrupt costs, keep and name
+  `artifacts/two-turn-smoke/.lock` when a call step outlives the wait, print
+  STOPPED with exit 1 after an unexpected error, and name the run directory a
+  judge cannot read with what may be done with it. Summary lines end with
+  `served X`, plus PROVIDER CHANGED or MODEL CHANGED when that happened.
+- Tests: the smoke tests went from 49 at 851e037 to 107, and follow-up's in
+  `tests/test_model_run.py` from 12 to 15. In scratch copies, each of the
+  review's named mutants (S10, S14, S15, S32, S44, S49, S51 to S54, S61, S62)
+  and the deletion of each of 15 follow-up guards alone fails at least one
+  test; at 29fee1c, before the three test commits, five of those guards and
+  nine of those mutants failed none. The one deletion no test can catch, `ready_answer`'s status
+  check, is equivalent: a failed reply carries no text, and empty text never
+  parses.
+- Test image with the branch mounted, full suite at ba570fd: 1,304 passed, 5
+  skipped (no docs/ tree in the image), 96.45 percent coverage, in 747 s.
+  CI's static commands pass: pyink, isort, pylint on CI's file list (rc 0),
+  pyright (0 errors) and lint-imports (5 contracts kept). The keyless gate
+  against the real out dir is the maintainer's; expect nine `preflight ok`
+  lines, then ABORTED and exit 3.
 
 ## Planned next
 
