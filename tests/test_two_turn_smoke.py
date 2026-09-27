@@ -1288,6 +1288,11 @@ def _small_failed(out: Path) -> None:
     alpha.invoke(_both(ok(finish_reason="length"), ok())(alpha))
 
 
+def _small_passed(out: Path) -> None:
+    alpha = _run(out, "alpha")
+    alpha.invoke(_both(ok())(alpha))
+
+
 def test_a_reserve_smoke_is_appended_and_nothing_else_moves(
     source: Path,
     out: Path,
@@ -1380,6 +1385,7 @@ def _failed_but_source_gone(out: Path) -> None:
     ("setup", "records", "message"),
     [
         (_smoke_open, (), "alpha not_run"),
+        (_small_passed, (), "alpha pass"),
         (_failed_but_source_gone, (), "alpha unjudgeable"),
         (_reserve_already_added, (), "already holds the reserve-small smoke"),
         (
@@ -1400,6 +1406,17 @@ def _failed_but_source_gone(out: Path) -> None:
                 _record("reserve-small", "R", "gamma", True),
             ),
             "alpha passes the run gates in the summary but the plan",
+        ),
+        (
+            _small_failed,
+            (
+                _record("anchor", "A", "qwen3-32b", True),
+                _record("small", "1", "alpha", True),
+                _record("small", "2", "beta", True),
+                _record("reserve-small", "R", "delta", False),
+                _record("reserve-mid", "R", "gamma", True),
+            ),
+            "no reserve-small candidate passing",
         ),
     ],
 )
