@@ -1719,6 +1719,67 @@ def test_pending_items_resume_after_a_wait(
     assert slept == [smoke.RESUME_WAIT_SECONDS]
 
 
+def _one_transient(run: SmokeRun) -> dict[str, Any]:
+    first, second = run.entry.items
+    return run.invoke([(first, ok()), (second, http(503))])
+
+
+def _call_step_error(run: SmokeRun) -> dict[str, Any]:
+    del run
+    return {}
+
+
+def _interrupted_after_one(run: SmokeRun) -> dict[str, Any]:
+    run.invoke([(run.entry.items[0], ok())])
+    raise KeyboardInterrupt
+
+
+@pytest.mark.parametrize(
+    ("first_command", "code", "reason"),
+    [
+        (
+            (_one_transient, _call_step_error),
+            smoke.EXIT_STOPPED,
+            "transient_pending",
+        ),
+        ((_interrupted_after_one,), smoke.EXIT_INTERRUPTED, "not_sent"),
+    ],
+)
+def test_the_next_command_resumes_a_run_left_pending(
+    out: Path,
+    slept: list[float],
+    first_command: tuple[Callable[[SmokeRun], dict[str, Any]], ...],
+    code: int,
+    reason: str,
+) -> None:
+    """A later execution resumes the same run, preflight and paid alike.
+
+    An item the interrupted command never sent owes a resume too, never
+    a re-run under a new run id.
+    """
+    anchor = _smoke(out, "qwen3-32b")
+    assert smoke.locked_run(_ctx(out, FakeCalls(out, list(first_command)))) == (
+        code
+    )
+    left = smoke.smoke_state(out, anchor)
+    assert (left.verdict, left.reasons) == (
+        "resume_owed",
+        (f"{anchor.items[1]}:{reason}",),
+    )
+    calls = FakeCalls(out, [_good, _good])
+
+    assert smoke.locked_run(_ctx(out, calls)) == smoke.EXIT_OK
+
+    assert [argv for argv, key in calls.calls if not key] == calls.paid()
+    resumed, started = calls.paid()
+    assert resumed[resumed.index("--run-id") + 1] == anchor.smoke_id
+    assert "--resume" in resumed
+    assert "--resume" not in started
+    assert smoke.existing_runs(out, anchor) == [anchor.smoke_id]
+    assert smoke.smoke_state(out, anchor).verdict == "pass"
+    del slept
+
+
 def test_an_account_refusal_aborts_and_the_next_command_re_runs(
     out: Path, slept: list[float]
 ) -> None:
