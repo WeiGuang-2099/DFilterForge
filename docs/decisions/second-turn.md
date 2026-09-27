@@ -108,7 +108,10 @@ if it is broken.
    pass's is void and owes a re-run under a new run id, whatever its replies
    show (`_config_problems`; `test_harness_and_operator_failures_owe_a_re_run`).
    The batch also voids a run whose call options are not the registered
-   `--max-attempts 3` and `--min-interval-seconds 1.0`.
+   `--max-attempts 3` and `--min-interval-seconds 1.0`. So reading 1 comes
+   before reading 2: a void run that also shows reasoning or a reply that
+   does not stop owes a re-run, never a fail
+   (`test_a_void_run_owes_a_re_run_whatever_its_replies_show`).
 2. An observed model failure fails the smoke even when the other item met a
    harness failure (`_rule`;
    `test_a_model_failure_is_final_beside_a_harness_failure` and

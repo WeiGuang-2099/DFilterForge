@@ -1016,40 +1016,48 @@ def _budget_stop(run: SmokeRun) -> dict[str, Any]:
     return run.invoke([], "budget")
 
 
-def _over_cap(run: SmokeRun) -> dict[str, Any]:
-    return run.invoke(_both(ok())(run), None, 0.5)
+Replies = Callable[..., Answers]
 
 
-def _settings_changed(run: SmokeRun) -> None:
+def _replies(run: SmokeRun, replies: Replies | None) -> Answers:
+    """Returns what a void run answers: two good replies unless given."""
+    return (replies or _both(ok()))(run)
+
+
+def _over_cap(run: SmokeRun, replies: Replies | None = None) -> dict[str, Any]:
+    return run.invoke(_replies(run, replies), None, 0.5)
+
+
+def _settings_changed(run: SmokeRun, replies: Replies | None = None) -> None:
     run.settings = _settings("vendor/other", "enabled_false")
-    run.invoke(_both(ok())(run))
+    run.invoke(_replies(run, replies))
 
 
-def _prices_changed(run: SmokeRun) -> None:
+def _prices_changed(run: SmokeRun, replies: Replies | None = None) -> None:
     run.prices = _PRICES.model_copy(update={"usd_per_million_output": 0.3})
-    run.invoke(_both(ok())(run))
+    run.invoke(_replies(run, replies))
 
 
-def _host_changed(run: SmokeRun) -> None:
+def _host_changed(run: SmokeRun, replies: Replies | None = None) -> None:
     run.endpoint_host = "api.example.com"
-    run.invoke(_both(ok())(run))
+    run.invoke(_replies(run, replies))
 
 
-def _prompts_changed(run: SmokeRun) -> None:
+def _prompts_changed(run: SmokeRun, replies: Replies | None = None) -> None:
     (condition,) = run.prepare.conditions
     other = condition.model_copy(update={"sha256": "0" * 64})
     run.prepare = run.prepare.model_copy(update={"conditions": (other,)})
-    run.invoke(_both(ok())(run))
+    run.invoke(_replies(run, replies))
 
 
-def _attempts_changed(run: SmokeRun) -> None:
+def _attempts_changed(run: SmokeRun, replies: Replies | None = None) -> None:
     run.max_attempts = 2
-    run.invoke(_both(ok())(run))
+    run.invoke(_replies(run, replies))
 
 
-def _interval_changed(run: SmokeRun) -> None:
+def _interval_changed(run: SmokeRun, replies: Replies | None = None) -> None:
     run.min_interval_seconds = 2.0
-    run.invoke(_both(ok())(run))
+    run.invoke(_replies(run, replies))
 
 
 # The owner confirmed on 2026-09-27 that a run whose settings, prices,
@@ -1057,19 +1065,24 @@ def _interval_changed(run: SmokeRun) -> None:
 # re-run, whatever its replies (docs/decisions/second-turn.md). So is a
 # run whose call options are not the note's --max-attempts 3 and
 # --min-interval-seconds 1.0.
+_VOID_RUNS = [
+    (_settings_changed, "settings_not_the_counted_pass"),
+    (_prices_changed, "settings_not_the_counted_pass"),
+    (_host_changed, "settings_not_the_counted_pass"),
+    (_prompts_changed, "prompts_not_the_prepared_ones"),
+    (_attempts_changed, "call_options_not_registered"),
+    (_interval_changed, "call_options_not_registered"),
+    (_over_cap, "cap_not_registered"),
+]
+
+
 @pytest.mark.parametrize(
     ("write", "reason"),
     [
         (_refused, "account_refused_402"),
         (_budget_stop, "budget_stop"),
         (_transient_three_times, ":only_transient_failures"),
-        (_settings_changed, "settings_not_the_counted_pass"),
-        (_prices_changed, "settings_not_the_counted_pass"),
-        (_host_changed, "settings_not_the_counted_pass"),
-        (_prompts_changed, "prompts_not_the_prepared_ones"),
-        (_attempts_changed, "call_options_not_registered"),
-        (_interval_changed, "call_options_not_registered"),
-        (_over_cap, "cap_not_registered"),
+        *_VOID_RUNS,
     ],
 )
 def test_harness_and_operator_failures_owe_a_re_run(
@@ -1082,6 +1095,31 @@ def test_harness_and_operator_failures_owe_a_re_run(
 
     assert outcome.kind == "rerun"
     assert any(r.endswith(reason) for r in outcome.reasons), outcome.reasons
+
+
+@pytest.mark.parametrize(
+    "first",
+    [ok(reasoning_tokens=12), ok(finish_reason="length")],
+    ids=["reasoning_shown", "finish_reason_length"],
+)
+@pytest.mark.parametrize(("write", "reason"), _VOID_RUNS)
+def test_a_void_run_owes_a_re_run_whatever_its_replies_show(
+    out: Path,
+    write: Callable[[SmokeRun, Replies], Any],
+    reason: str,
+    first: Fields,
+) -> None:
+    """The owner's reading 1 comes before reading 2.
+
+    A void run's replies are never read, so a model failure in one owes
+    a re-run under a new run id and never fails the smoke.
+    """
+    run = _run(out, "qwen3-32b")
+    write(run, _both(first, ok()))
+
+    outcome = _assess(out, run)
+
+    assert (outcome.kind, outcome.reasons) == ("rerun", (reason,))
 
 
 def test_a_transient_failure_with_attempts_left_owes_a_resume(
