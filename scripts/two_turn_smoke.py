@@ -1756,6 +1756,14 @@ ENDINGS: tuple[tuple[type[BaseException], str, int], ...] = (
 )
 
 
+# The bake-off runner's own words for Ctrl-C, which the owner's rule of
+# 2026-09-27 (no Ctrl-C while a request is in flight) keeps.
+INTERRUPTED_TEXT = (
+    "INTERRUPTED: run the same command again to resume; the interrupted"
+    " request may be billed but not recorded"
+)
+
+
 def _log_interrupt(ctx: Context, reason: str) -> None:
     """Records an interrupt in the step log, so the evidence shows it.
 
@@ -1804,10 +1812,7 @@ def locked_run(ctx: Context) -> int:
         _log_interrupt(ctx, "call_step_still_running")
         code = EXIT_INTERRUPTED
     except KeyboardInterrupt:
-        ctx.out(
-            "INTERRUPTED: run the same command again to resume; the"
-            " interrupted request may be billed but not recorded"
-        )
+        ctx.out(INTERRUPTED_TEXT)
         _log_interrupt(ctx, "ctrl_c")
         code = EXIT_INTERRUPTED
     except Exception as error:  # pylint: disable=broad-exception-caught
