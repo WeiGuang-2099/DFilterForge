@@ -146,13 +146,23 @@ all nine calls with nothing sent.
   awaiting a call have their runs, the host test on them fails here.
 - CI skips that host test,
   `test_frozen_prompts_awaiting_a_call_match_the_model_side_code`: the test
-  image has no `docs/` tree, so the suite skips it, and this branch's CI has
-  no step that runs it with `docs/` mounted. CI here would pass a merge of
-  this branch into main. What stops the calls is the call step's own
-  `prepare_code_mismatch`, before any request, and reverting `generation.py`
-  and `model_run.py` restores them with no re-freeze. The CI step added on
-  bakeoff-results (04fa035) runs the test with `docs/` mounted and fails on a
-  merge of this branch; it guards main once that branch lands.
+  image has no `docs/` tree, so the suite in it skips the test, and this
+  branch's CI, like main's at 431df73, has no step that runs it with `docs/`
+  mounted. CI here would pass a merge of this branch into main. The step
+  bakeoff-results adds (04fa035) runs the test with `docs/` mounted, but it
+  counts only a prompt set under `docs/results` with no `run_manifest.json`
+  beside it, and today that is `test-qwen3-32b-2026-09-26` alone. So on a
+  main that has that step, a merge of this branch fails CI only until pass A
+  publishes into that directory (bakeoff-results 064b308, and the Limits of
+  its `test-freeze.md`). Pass B and the slot winners' test passes call from
+  the same prepare but publish under their own run ids, so from pass A's
+  publish to the last baseline test request CI passes an early merge. What
+  stops the calls throughout is the call step's own `prepare_code_mismatch`,
+  which refuses each call before any request, and the rule that this branch
+  merges only after the last baseline test request. Reverting
+  `generation.py` and `model_run.py` restores the calls with no re-freeze;
+  an early merge after pass A would hold up pass B, which starts within 24
+  hours of pass A, until that revert.
 - Scoring rebuilds first turns only, so it refuses a second-turn prompt set
   (`prompt_mismatch`) until repair scoring exists; smoke runs are evidence.
 - `judge` rebuilds prompts from the raw source runs the plan names, so it
