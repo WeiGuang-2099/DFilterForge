@@ -241,6 +241,37 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   96.45 percent coverage, in 753 s. CI's static commands pass: pyink, isort,
   pylint on CI's file list (rc 0), pyright (0 errors) and lint-imports (5
   contracts kept).
+- A second review of 23fc4cd confirmed seven more minor findings, three of
+  them the same Limits bullet, fixed on 2026-09-27 with no prepare-hashed file
+  touched: `git diff 851e037..HEAD --stat` lists none of the 12, so the nine
+  prepared smokes stay valid. No script changed; each test commit was checked
+  on scratch copies with the named mutants applied, and every test that
+  existed before it still passed under each mutant.
+  - 7317e9b: follow-up's race test writes its file as bytes, so a host run of
+    `tests/test_model_run.py` is back to the three failures it had at 851e037
+    (two scoring end-to-end tests that need the image's catalog, and the
+    frozen-prompt guard), from four.
+  - 257621a pins that reading 1 comes before reading 2: a void run whose first
+    reply shows reasoning or ends with `length` owes a re-run. Two mutants of
+    `assess` that let such a model failure read `fail` passed all 111 smoke
+    tests; each fails the new test's 14 cases. The note names the test.
+  - be7006c: the note's Limits now say bakeoff-results' CI step guards a merge
+    of this branch only until pass A publishes. In the test image, with this
+    branch's code and bakeoff-results' `docs/results`, the step's command
+    exited 1 (re-freeze after `model_run.py` and `generation.py`), and 0 once a
+    scratch copy of `test-qwen3-32b-2026-09-26` held a `run_manifest.json`.
+  - bd85932: rule 6's refusal of a survivor that passed its smoke and of
+    another slot's reserve; N24 and N21 each fail one new case.
+  - a9d3a6c: the batch's catch-all tested with OSError, ValueError and
+    KeyError, and through `main()` for a ValueError (exit 1, no refusal).
+    Narrowing it to OSError (N28) fails three cases, to (OSError, ValueError)
+    one.
+  - ffd452a: D2's flags when only one item, or only an earlier run, was served
+    by another provider or model; N07 and N08 each fail three cases, N09 one.
+- Smoke tests: 111 to 135. Test image, full suite at ffd452a: 1,332 passed, 5
+  skipped (no docs/ tree), 96.48 percent coverage, in 778 s. CI's static
+  commands pass: pyink, isort, pylint on CI's file list (rc 0), pyright (0
+  errors) and lint-imports (5 contracts kept).
 
 ## Planned next
 
