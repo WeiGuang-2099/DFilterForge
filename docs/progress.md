@@ -226,6 +226,21 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   pyright (0 errors) and lint-imports (5 contracts kept). The keyless gate
   against the real out dir is the maintainer's; expect nine `preflight ok`
   lines, then ABORTED and exit 3.
+- A re-review of cb9be26 confirmed four more minor findings, two of them the
+  same stale count, fixed on 2026-09-27 with no prepare-hashed file touched.
+  73136bb (tests only) holds `prepare --reserve`'s refusal of an existing smoke
+  or `.partial` directory: with that one line deleted, all 107 smoke tests had
+  passed while the cleanup deleted a `runs/` it did not make; the new case fails
+  on both seeds. b9c9c4b makes the ABORTED line after an account refusal read
+  the smoke as `judge` does: a run that already shows a model failure is named
+  failed with no re-run (reading 2), where it had said a re-run was owed; the
+  exit code, verdict and calls are unchanged, and the new tests fail on the
+  cb9be26 script. 6182054: the decision note's test count said 1,247, the
+  851e037 count, and now reads 1,313 at b9c9c4b. Smoke tests: 111.
+- Test image, full suite at b9c9c4b: 1,308 passed, 5 skipped (no docs/ tree),
+  96.45 percent coverage, in 753 s. CI's static commands pass: pyink, isort,
+  pylint on CI's file list (rc 0), pyright (0 errors) and lint-imports (5
+  contracts kept).
 
 ## Planned next
 
