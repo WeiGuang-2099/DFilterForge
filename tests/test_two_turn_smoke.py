@@ -130,13 +130,18 @@ def http(status: int) -> Fields:
     }
 
 
+def failed(error_code: str, status: int | None = None) -> Fields:
+    """A failure the client records under its own error code."""
+    return {
+        "status": "failed",
+        "error_code": error_code,
+        "latency_ms": 1.0,
+        "http_status": status,
+    }
+
+
 REASONED = ok(reasoning_tokens=40, reasoning_present=True)
-PROVIDER_ERROR: Fields = {
-    "status": "failed",
-    "error_code": "provider_error",
-    "latency_ms": 1.0,
-    "http_status": 200,
-}
+PROVIDER_ERROR: Fields = failed("provider_error", 200)
 
 
 def _settings(model: str, reasoning: str | None) -> RequestSettingsV1:
@@ -495,6 +500,11 @@ def test_smoke_run_ids_fit_the_result_names() -> None:
         "dev-nemotron-3-super-120b-a12b-rs2-2026-09-27",
         "dev-nemotron-3-super-120b-a12b-rs3-2026-09-27",
     ]
+    # Re-runs go up to -rs9 without a further ruling (owner, 2026-09-27).
+    assert len(list(smoke.run_ids(longest))) == 9
+    assert list(smoke.run_ids(longest))[-1] == (
+        "dev-nemotron-3-super-120b-a12b-rs9-2026-09-27"
+    )
     for run in (
         *smoke.run_ids(longest),
         *smoke.run_ids(smoke.smoke_run_id(reserve, "2026-09-27")),
@@ -521,6 +531,8 @@ class SmokeRun:
         ).read_bytes()
         self.prepare = PrepareManifestV1.model_validate_json(self.prepare_bytes)
         self.settings: RequestSettingsV1 = entry.settings
+        self.prices: TokenPricesV1 | None = _PRICES
+        self.endpoint_host = "openrouter.ai"
         self.attempts: dict[str, list[Any]] = {i: [] for i in entry.items}
         self.invocations: list[InvocationV1] = []
         self.clock = datetime(2026, 9, 27, tzinfo=timezone.utc)
@@ -533,6 +545,8 @@ class SmokeRun:
         )
         self.invocations = list(manifest.invocations)
         self.settings = manifest.settings
+        self.prices = manifest.prices
+        self.endpoint_host = manifest.endpoint_host
         log = self.run_dir / "attempts" / "C4.jsonl"
         for line in log.read_bytes().split(b"\n"):
             if line:
@@ -617,9 +631,9 @@ class SmokeRun:
             created_at=self.invocations[0].started_at,
             prepare=self.prepare,
             prepare_sha256=_sha256(self.prepare_bytes),
-            endpoint_host="openrouter.ai",
+            endpoint_host=self.endpoint_host,
             settings=self.settings,
-            prices=_PRICES,
+            prices=self.prices,
             max_attempts=3,
             min_interval_seconds=1.0,
             invocations=tuple(self.invocations),
@@ -705,6 +719,26 @@ def test_a_model_without_a_switch_may_leave_thinking_uncontrolled(
         ("alpha", ok(reasoning_tokens=5), ok(), "reasoning_shown"),
         ("qwen3-32b", http(400), ok(), ":final_http_error_400"),
         ("qwen3-32b", PROVIDER_ERROR, ok(), ":final_provider_error_200"),
+        # Final errors by the owner's 2026-09-27 reading, not harness ones.
+        ("qwen3-32b", failed("client_error"), ok(), ":final_client_error_None"),
+        (
+            "qwen3-32b",
+            failed("redirect_rejected", 302),
+            ok(),
+            ":final_redirect_rejected_302",
+        ),
+        (
+            "qwen3-32b",
+            failed("response_too_large", 200),
+            ok(),
+            ":final_response_too_large_200",
+        ),
+        (
+            "qwen3-32b",
+            failed("empty_content", 200),
+            ok(),
+            ":final_empty_content_200",
+        ),
         (
             "qwen3-32b",
             ok(reasoning_tokens=None, reasoning_present=None),
@@ -745,6 +779,34 @@ def test_a_model_failure_is_final_beside_a_harness_failure(out: Path) -> None:
     assert _assess(out, run).kind == "fail"
 
 
+def test_a_model_failure_is_final_beside_an_account_refusal(out: Path) -> None:
+    run = _run(out, "qwen3-32b")
+    first, second = run.entry.items
+    run.invoke(
+        [(first, ok(finish_reason="length")), (second, http(402))],
+        "fatal_http",
+    )
+
+    outcome = _assess(out, run)
+
+    assert (outcome.kind, outcome.reasons) == (
+        "fail",
+        (f"{first}:finish_reason_length",),
+    )
+
+
+def test_reasoning_on_an_attempt_that_is_not_counted_fails(out: Path) -> None:
+    """Reasoning is read over every recorded attempt, not the last only."""
+    run = _run(out, "qwen3-32b")
+    first, second = run.entry.items
+    run.invoke([(first, ok()), (second, http(503) | {"reasoning_tokens": 40})])
+    run.invoke([(second, ok())])
+
+    outcome = _assess(out, run)
+
+    assert (outcome.kind, outcome.reasons) == ("fail", ("reasoning_shown",))
+
+
 def _transient_three_times(run: SmokeRun) -> None:
     first, second = run.entry.items
     run.invoke([(first, ok()), (second, http(503))])
@@ -780,6 +842,26 @@ def _settings_changed(run: SmokeRun) -> None:
     run.invoke(_both(ok())(run))
 
 
+def _prices_changed(run: SmokeRun) -> None:
+    run.prices = _PRICES.model_copy(update={"usd_per_million_output": 0.3})
+    run.invoke(_both(ok())(run))
+
+
+def _host_changed(run: SmokeRun) -> None:
+    run.endpoint_host = "api.example.com"
+    run.invoke(_both(ok())(run))
+
+
+def _prompts_changed(run: SmokeRun) -> None:
+    (condition,) = run.prepare.conditions
+    other = condition.model_copy(update={"sha256": "0" * 64})
+    run.prepare = run.prepare.model_copy(update={"conditions": (other,)})
+    run.invoke(_both(ok())(run))
+
+
+# The owner confirmed on 2026-09-27 that a run whose settings, prices,
+# host, prompts or cap differ from the counted pass is void and owes a
+# re-run, whatever its replies (docs/decisions/second-turn.md).
 @pytest.mark.parametrize(
     ("write", "reason"),
     [
@@ -787,6 +869,9 @@ def _settings_changed(run: SmokeRun) -> None:
         (_budget_stop, "budget_stop"),
         (_transient_three_times, ":only_transient_failures"),
         (_settings_changed, "settings_not_the_counted_pass"),
+        (_prices_changed, "settings_not_the_counted_pass"),
+        (_host_changed, "settings_not_the_counted_pass"),
+        (_prompts_changed, "prompts_not_the_prepared_ones"),
         (_over_cap, "cap_not_registered"),
     ],
 )
