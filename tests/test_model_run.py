@@ -2683,9 +2683,79 @@ def test_follow_up_needs_two_ready_answers(
     assert not list(tmp_path.glob(".*.partial"))
 
 
-def _as_test_run(document: dict[str, Any]) -> None:
-    document["run_id"] = "test-qwen3-32b-c4-2026-09-20"
-    document["prepare"]["split"] = "test"
+def _rewrite_prompts(
+    run_dir: Path,
+    change: Callable[[PreparedPromptV1], PreparedPromptV1],
+    split: str = "dev",
+) -> None:
+    """Rewrites the run's C4 prompts and records every digest they move.
+
+    The prompt file's digest goes into prepare.json, and prepare.json and
+    its digest into the run manifest, so neither the digest check nor the
+    contract re-check objects, and only the guard a case aims at can.
+    """
+    path = run_dir / "prepared" / "C4.json"
+    batch = PreparedBatchV1.model_validate_json(path.read_bytes())
+    prompts = tuple(change(prompt) for prompt in batch.prompts)
+    data = canonical_json(batch.model_copy(update={"prompts": prompts}))
+    path.write_bytes((data + "\n").encode())
+    prepare = _manifest(run_dir)
+    digest = hashlib.sha256((data + "\n").encode()).hexdigest()
+    conditions = tuple(
+        condition.model_copy(update={"sha256": digest})
+        for condition in prepare.conditions
+    )
+    recorded = canonical_json(
+        prepare.model_copy(update={"split": split, "conditions": conditions})
+    )
+    (run_dir / "prepare.json").write_bytes((recorded + "\n").encode())
+
+    def _record(document: dict[str, Any]) -> None:
+        document["prepare"] = json.loads(recorded)
+        document["prepare_sha256"] = hashlib.sha256(
+            (recorded + "\n").encode()
+        ).hexdigest()
+
+    _edit_manifest(run_dir, _record)
+
+
+def _as_test_run(run_dir: Path) -> None:
+    """Makes a coherent test run: its manifest and every prompt say test.
+
+    A run whose prompts still said dev would be refused by the contract
+    re-check with the same code, whether or not the dev-only guard exists.
+    """
+    _rewrite_prompts(
+        run_dir,
+        lambda prompt: prompt.model_copy(update={"split": "test"}),
+        "test",
+    )
+
+    def _renamed(document: dict[str, Any]) -> None:
+        document["run_id"] = "test-qwen3-32b-c4-2026-09-20"
+
+    _edit_manifest(run_dir, _renamed)
+
+
+def _second_system_prompt(prompt: PreparedPromptV1) -> PreparedPromptV1:
+    """Gives the second item, which follow-up continues, another system turn."""
+    if prompt.item_id != "mei-0002":
+        return prompt
+    system = prompt.messages[0]
+    other = system.model_copy(update={"content": system.content + "\nAlso."})
+    return prompt.model_copy(update={"messages": (other, *prompt.messages[1:])})
+
+
+def _without_first_answer(run_dir: Path) -> None:
+    """Drops the first item's answer, keeping the recorded digest true.
+
+    It must be an item follow-up would continue: without the contract
+    re-check, a missing late answer would never be looked up.
+    """
+    batch = _counted(run_dir)
+    kept = tuple(a for a in batch.completions if a.item_id != "mei-0001")
+    data = canonical_json(batch.model_copy(update={"completions": kept}))
+    _rewrite_run_file(run_dir, "completions/C4.json", (data + "\n").encode())
 
 
 def _without_c4(document: dict[str, Any]) -> None:
@@ -2713,7 +2783,7 @@ def _refusal_case(
         return _run_copy(incomplete_run, tmp_path), output
     run_dir = _run_copy(c4_run, tmp_path)
     if name == "split_refused":
-        _edit_manifest(run_dir, _as_test_run)
+        _as_test_run(run_dir)
     elif name == "condition_mismatch":
         _edit_manifest(run_dir, _without_c4)
     elif name == "prices_missing":
@@ -2721,6 +2791,10 @@ def _refusal_case(
     elif name == "hash_mismatch":
         path = run_dir / "completions" / "C4.json"
         path.write_bytes(path.read_bytes().replace(b"mei-0001", b"mei-0001 "))
+    elif name == "items_mismatch":
+        _without_first_answer(run_dir)
+    elif name == "system_prompt_unstable":
+        _rewrite_prompts(run_dir, _second_system_prompt)
     elif name == "prepare_id_invalid":
         output = tmp_path / "Smoke Output"
     elif name == "output_exists":
@@ -2728,26 +2802,44 @@ def _refusal_case(
     return run_dir, output
 
 
+# The message names the guard: split_refused, condition_mismatch and
+# output_exists each have a second guard with the same code, so a case
+# checked by its code alone passes when its own guard is deleted.
 @pytest.mark.parametrize(
-    "code",
+    ("code", "message"),
     [
-        "run_incomplete",
-        "split_refused",
-        "condition_mismatch",
-        "prices_missing",
-        "hash_mismatch",
-        "prepare_id_invalid",
-        "output_exists",
+        ("run_incomplete", "Only a complete run can be published"),
+        ("split_refused", "Only a dev run can be continued"),
+        ("condition_mismatch", "The run did not prepare the C4 condition"),
+        ("prices_missing", "A published run must record its token prices"),
+        ("hash_mismatch", "A run file does not match its recorded digest"),
+        ("items_mismatch", "A published batch does not answer its own prompts"),
+        (
+            "system_prompt_unstable",
+            "One condition produced more than one system prompt",
+        ),
+        (
+            "prepare_id_invalid",
+            "The output directory name is not a valid prepare id",
+        ),
+        ("output_exists", "The prepare directory already exists"),
     ],
 )
 def test_follow_up_refuses_unusable_sources_and_outputs(
     code: str,
+    message: str,
     c4_run: Path,
     incomplete_run: Path,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A source a publish would refuse, or a test run, is never continued."""
+    """A source a publish would refuse, or a test run, is never continued.
+
+    Each case is refused by its own guard: a genuine test run, whose
+    prompts say test too, reaches the dev-only guard, and a batch that
+    answers other items than its prompts, with a true digest, reaches only
+    the contract re-check.
+    """
     run_dir, output = _refusal_case(code, c4_run, incomplete_run, tmp_path)
     existed = output.exists()
     capsys.readouterr()
@@ -2755,9 +2847,38 @@ def test_follow_up_refuses_unusable_sources_and_outputs(
     assert _follow_up(run_dir, output) == 2
 
     error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
-    assert error["error"]["code"] == code
+    assert error["error"] == {"code": code, "message": message}
     assert output.exists() == existed
     assert not existed or not any(output.iterdir())
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_follow_up_refuses_an_output_made_while_it_wrote(
+    c4_run: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An output that appears before the rename is refused, staging removed."""
+    output = tmp_path / _FOLLOW_UP_ID
+    manifest = getattr(model_run, "_follow_up_manifest")
+
+    def _raced(*arguments: Any) -> PrepareManifestV1:
+        (output / "prepared").mkdir(parents=True)
+        (output / "prepared" / "C4.json").write_text("{}\n", encoding="utf-8")
+        return cast(PrepareManifestV1, manifest(*arguments))
+
+    monkeypatch.setattr(model_run, "_follow_up_manifest", _raced)
+    capsys.readouterr()
+
+    assert _follow_up(c4_run, output) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == {
+        "code": "output_exists",
+        "message": "The prepare directory already exists",
+    }
+    assert _files(output) == {"prepared/C4.json": b"{}\n"}
     assert not list(tmp_path.glob(".*.partial"))
 
 
