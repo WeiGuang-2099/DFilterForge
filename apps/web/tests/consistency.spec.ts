@@ -11,15 +11,16 @@ import {capFor, capUtf8, RAW_TEXT_CAP, Resolver} from './support/resolve';
 // hold. Each [data-src] element is re-derived from the raw files under
 // docs/ and the held-out freeze record by an independent resolver, never
 // from apps/web/data; its JSON value must equal the resolved value and its
-// text must be fmt() of it. Then any digit outside a sourced value, script
-// or style, or a reviewed term, fails the page. Run on the static export in
-// out/, after `pnpm build`.
+// text must be fmt() of it. Then any number character outside a sourced
+// value, script or style, or a reviewed term, fails the page. Run on the
+// static export in out/, after `pnpm build`.
 
 const WEB = path.join(__dirname, '..');
 const OUT = path.join(WEB, 'out');
 
 // Attributes a browser shows or a screen reader announces; the lint bans
-// digit literals in the same set.
+// digit literals in the same set. A list shows its start as the first
+// marker.
 const SWEPT_ATTRIBUTES = [
   'alt',
   'aria-description',
@@ -32,9 +33,61 @@ const SWEPT_ATTRIBUTES = [
   'aria-valuetext',
   'label',
   'placeholder',
+  'start',
   'title',
   'value',
 ];
+
+interface Sweep {
+  readonly terms: readonly string[];
+  readonly attributes: readonly string[];
+}
+
+const SWEEP: Sweep = {terms: [...TERMS], attributes: SWEPT_ATTRIBUTES};
+
+/**
+ * Lists every number a page shows outside a sourced value, a script or
+ * style, or a reviewed term: in text, a swept attribute or the document
+ * title. A number is any Unicode number character, so a fullwidth or
+ * Arabic-Indic digit, a superscript or a Roman numeral counts as well as an
+ * ASCII digit. Runs inside the page, so it uses nothing from module scope.
+ */
+function strayNumbers({terms, attributes}: Sweep): string[] {
+  const digit = /\p{N}/u;
+  const found: string[] = [];
+  const exempt = (element: Element | null): boolean => {
+    if (element === null) {
+      return false;
+    }
+    if (element.closest('script, style, [data-src]') !== null) {
+      return true;
+    }
+    const term = element.closest('[data-term]');
+    return term !== null && terms.includes(term.textContent ?? '');
+  };
+  const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const text = node.nodeValue ?? '';
+    if (digit.test(text) && !exempt(node.parentElement)) {
+      found.push(`text in <${node.parentElement?.localName ?? '?'}>: ${text.trim()}`);
+    }
+  }
+  for (const element of Array.from(document.querySelectorAll('*'))) {
+    if (element.closest('script, style, [data-src]') !== null) {
+      continue;
+    }
+    for (const name of attributes) {
+      const value = element.getAttribute(name);
+      if (value !== null && digit.test(value)) {
+        found.push(`${name} on <${element.localName}>: ${value}`);
+      }
+    }
+  }
+  if (digit.test(document.title)) {
+    found.push(`document.title: ${document.title}`);
+  }
+  return found;
+}
 
 // Routes that hold no sourced value on purpose: the home page until the
 // Reel renders on it, and the not-found pages. A listed route must stay
@@ -186,47 +239,8 @@ for (const route of ROUTES) {
     expect(nested, 'a sourced value inside another').toEqual([]);
     expect(values.flatMap(mismatches)).toEqual([]);
 
-    // 2. No digit outside a sourced value, a script or style, or a term.
-    const stray = await page.evaluate(
-      ({terms, attributes}) => {
-        const digit = /[0-9]/;
-        const found: string[] = [];
-        const exempt = (element: Element | null): boolean => {
-          if (element === null) {
-            return false;
-          }
-          if (element.closest('script, style, [data-src]') !== null) {
-            return true;
-          }
-          const term = element.closest('[data-term]');
-          return term !== null && terms.includes(term.textContent ?? '');
-        };
-        const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-          const text = node.nodeValue ?? '';
-          if (digit.test(text) && !exempt(node.parentElement)) {
-            found.push(`text in <${node.parentElement?.localName ?? '?'}>: ${text.trim()}`);
-          }
-        }
-        for (const element of Array.from(document.querySelectorAll('*'))) {
-          if (element.closest('script, style, [data-src]') !== null) {
-            continue;
-          }
-          for (const name of attributes) {
-            const value = element.getAttribute(name);
-            if (value !== null && digit.test(value)) {
-              found.push(`${name} on <${element.localName}>: ${value}`);
-            }
-          }
-        }
-        if (digit.test(document.title)) {
-          found.push(`document.title: ${document.title}`);
-        }
-        return found;
-      },
-      {terms: [...TERMS] as string[], attributes: SWEPT_ATTRIBUTES},
-    );
-    expect(stray).toEqual([]);
+    // 2. No number outside a sourced value, a script or style, or a term.
+    expect(await page.evaluate(strayNumbers, SWEEP)).toEqual([]);
 
     // 3. A page shows at least one value unless it is data-free on purpose.
     if (DATA_FREE.has(route.path)) {
@@ -297,4 +311,27 @@ test('model text is cut only at the contract size and only where the exporter cu
   expect(mismatches(shown(answer, null))).toHaveLength(1);
   expect(mismatches(shown(label, 1))).toHaveLength(1);
   expect(mismatches(shown(label, RAW_TEXT_CAP))).toHaveLength(1);
+});
+
+test('the sweep finds a number in any script, in a list start and outside the terms', async ({
+  page,
+}) => {
+  // Fullwidth digits, a Roman numeral and a superscript are hand-written
+  // numbers as much as ASCII digits; a list shows its start as a marker.
+  await page.setContent(
+    '<title>Plant</title>' +
+    '<ol start="56"><li>first item</li></ol>' +
+    '<p>９０ runs</p><p>Round Ⅷ</p><p>x²</p><p>Cases: 12</p>' +
+    '<p><span data-src="[]">99</span></p>' +
+    '<p><span data-term="">SHA-256</span> <span data-term="">SHA-512</span></p>',
+  );
+
+  expect(await page.evaluate(strayNumbers, SWEEP)).toEqual([
+    'text in <p>: ９０ runs',
+    'text in <p>: Round Ⅷ',
+    'text in <p>: x²',
+    'text in <p>: Cases: 12',
+    'text in <span>: SHA-512',
+    'start on <ol>: 56',
+  ]);
 });

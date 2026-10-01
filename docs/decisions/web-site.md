@@ -163,6 +163,9 @@ sets and source ops before a page renders.
   `lib/terms.ts` is `IPv4` and `SHA-256`.
 - **The digit lint.** ESLint fails on a digit in JSX text, as a literal JSX
   child or in a text-bearing attribute, and in a page title or description.
+  A digit here is any Unicode number character (`\p{N}`): ASCII, fullwidth
+  or Arabic-Indic digits, superscripts and Roman numerals. A list's `start`
+  is a text-bearing attribute, since the list shows it as its first marker.
   It also fails on `toFixed`, `toPrecision`, `toExponential`, the
   `toLocale*` methods and `Intl` outside `lib/fmt.ts`.
   `tests/lint-rules.spec.ts` proves each of these selectors fires.
@@ -171,8 +174,9 @@ sets and source ops before a page renders.
   `[data-src]` value from the raw committed files, never from
   `apps/web/data`. The test fails on any of these:
   - a value or its formatted text that differs;
-  - a digit outside a sourced value, a script, a style or a `<Term>`, in the
-    text, a swept attribute or `document.title`;
+  - a Unicode number character outside a sourced value, a script, a style
+    or a `<Term>`, in the text, a swept attribute (`start` included) or
+    `document.title`;
   - a page without values that is not on the closed data-free list;
   - a server-rendered HTML file whose `data-src` set differs from the
     hydrated page's;
@@ -208,7 +212,7 @@ that wired CI.
 | --- | --- | --- |
 | Where page values come from | `app/_data/recorded.ts`, which says it is hand-written illustrative data | `apps/web/data`, exported from committed files, every value with its source op |
 | Methodology page | Typed prose: "36-specification" and "No language model has been evaluated", false since the ten dev passes | 138 sourced values (40 linked numbers, 98 strings) and a link to `docs/protocol.md` at the source commit |
-| A digit typed into page markup | Builds and ships | Fails `pnpm web:lint`; the same number through a constant fails the consistency sweep |
+| A number typed into page markup, in any script or as a list's `start` | Builds and ships | Fails `pnpm web:lint`; the same number through a constant fails the consistency sweep |
 | A rendered value that differs from the committed file | Not checked | Fails the consistency test |
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
@@ -315,7 +319,8 @@ pnpm --filter @dfilterforge/web test:e2e
   saw only `lo`, and a connect failed with `ENETUNREACH`. The CI workflow and
   the composite action have not run on GitHub yet; they pass actionlint
   1.7.7, and each step was run locally.
-- The consistency test does not sweep CSS `content:` or `<head>` meta.
+- The consistency test does not sweep CSS `content:`, `<head>` meta, or the
+  markers CSS numbers for a list without a `start`.
 - Next 16.3.4 on Windows writes nested segment-prefetch files into
   subdirectories, where a Linux build writes flat names. The smoke test
   exempts exactly that case, so CI and Pages use the Linux build.

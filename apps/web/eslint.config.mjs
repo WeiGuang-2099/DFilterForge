@@ -32,12 +32,15 @@ const DIGIT_MESSAGE =
   'A digit in markup is a hand-written number. Render values with <Num> or ' +
   '<Str> from lib/sourced.tsx, and a reviewed name that holds a digit with ' +
   '<Term> from lib/terms.ts.';
-const DIGIT = '/[0-9]/';
+// Any Unicode number character, not only ASCII digits: a fullwidth or
+// Arabic-Indic digit, a superscript or a Roman numeral is as hand-written.
+const DIGIT = '/\\p{N}/u';
 // A JSX child expression, as opposed to an attribute's value.
 const CHILD = ':matches(JSXElement, JSXFragment) > JSXExpressionContainer';
-// Attributes whose value a browser shows or a screen reader announces.
+// Attributes whose value a browser shows or a screen reader announces; a
+// list shows its start as the first marker.
 const TEXT_ATTRIBUTE =
-  'JSXAttribute[name.name=/^(alt|label|placeholder|title|value|' +
+  'JSXAttribute[name.name=/^(alt|label|placeholder|start|title|value|' +
   'aria-(description|label|placeholder|roledescription|valuemax|valuemin|valuenow|valuetext))$/]';
 const METADATA =
   ":matches(VariableDeclarator[id.name='metadata'], " +

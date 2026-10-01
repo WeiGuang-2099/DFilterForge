@@ -59,6 +59,25 @@ const PLANTED = [
   {name: 'a digit in alt', code: 'export const F = () => <img alt="Probe 2" src="/a.png" />;'},
   {name: 'a number in value', code: 'export const F = () => <li value={3}>x</li>;'},
   {
+    name: 'a number as a list start',
+    code: 'export const F = () => <ol start={56}><li>x</li></ol>;',
+  },
+  {
+    name: 'a string as a list start',
+    code: 'export const F = () => <ol start="56"><li>x</li></ol>;',
+  },
+  {name: 'fullwidth digits in JSX text', code: 'export const F = () => <p>９０ runs</p>;'},
+  {
+    name: 'fullwidth digits as a child literal',
+    code: "export const F = () => <p>{'９０ runs'}</p>;",
+  },
+  {
+    name: 'Arabic-Indic digits in an attribute',
+    code: 'export const F = () => <abbr title="٣ runs">x</abbr>;',
+  },
+  {name: 'a Roman numeral in JSX text', code: 'export const F = () => <p>Round Ⅷ</p>;'},
+  {name: 'a superscript in JSX text', code: 'export const F = () => <p>x²</p>;'},
+  {
     name: 'a digit in a template attribute',
     code: 'export const F = ({a}: {a: string}) => <abbr title={`${a} 2`}>x</abbr>;',
   },

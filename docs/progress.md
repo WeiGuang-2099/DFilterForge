@@ -279,8 +279,10 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   - The home page stays a digit-free placeholder until the Reel lands.
   - 57 Playwright tests pass on that build: 13 smoke, 11 formatter, 27
     lint-rule and 6 consistency.
-  - A digit typed into markup fails the lint and the consistency sweep. A
-    value that differs from its committed file fails the consistency test.
+  - A number typed into markup, in any script (fullwidth digits, Roman
+    numerals) or as a list's `start`, fails the lint and the consistency
+    sweep. A value that differs from its committed file fails the
+    consistency test.
 - CI, in 07d91ca:
   - The python job gains four steps after the re-score loop. The
     frozen-prompt guard and the pylint line are unchanged; lines 1 to 103 are
