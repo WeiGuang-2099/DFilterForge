@@ -66,6 +66,19 @@ jobs:
           test sh -c 'test -d /workspace/docs/results
           && python -m pytest -q -rs -p no:cacheprovider
           tests/test_pair_report.py::test_the_committed_c1_and_c2_rerun_is_the_one_the_v2_note_reports'
+      - name: Refuse committed second turns no repair plan checks
+        # score --check rebuilds only a prompt's first turn; the counted
+        # answer and follow-up of a second turn are checked by repair
+        # --check alone, for the arm runs named after a base pass with a
+        # committed plan. This fails on any other committed run holding a
+        # second turn, or a prompt set it cannot read. The suite skips it
+        # for the missing docs/ tree, and the test -d rules that out here.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_repair.py::test_every_committed_second_turn_is_an_arm_a_plan_checks'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test

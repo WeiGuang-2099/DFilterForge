@@ -88,6 +88,7 @@ from dfilterforge.repair_round import pool_run
 from dfilterforge.repair_round import round_run
 from dfilterforge.repair_round import SUMMARY_PATH
 from dfilterforge.repair_round import SUMMARY_REPORT_PATH
+from dfilterforge.repair_round import unchecked_second_turns
 from dfilterforge.repair_summary import ArmName
 from dfilterforge.repair_summary import ArmResult
 from dfilterforge.repair_summary import ARMS
@@ -2077,6 +2078,73 @@ def test_the_one_rerun_replaces_its_arm(
     assert rerun == "dev-model-a-cx-r2-2026-10-01"
     assert report.arm_runs["counterexample"] == rerun
     assert _summary(base_dir).arms[2].run == rerun
+
+
+def test_a_replaced_first_run_has_its_prompts_checked(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    base_dir = _round_base(tmp_path / "results", source)
+    _write_arm(base_dir, source, "resample")
+    _write_arm(base_dir, source, "bare")
+    # The first counterexample run sent the bare prompts and was replaced.
+    prompts = _arm_prompts(base_dir, "bare")
+    _write_arm(base_dir, source, "counterexample", prompts=prompts)
+    rerun = arm_run_ids(base_dir.name, "counterexample")[1]
+    _write_arm(base_dir, source, "counterexample", name=rerun)
+
+    error = _round_refusal(base_dir, check=True)
+
+    assert error.code == "repair_prompt_mismatch"
+    assert str(error).startswith(f"{_ARM_RUNS['counterexample']} mei-0001:")
+
+
+def test_only_second_turns_a_plan_checks_are_committed(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    base_dir = _round(tmp_path, source)
+    results = base_dir.parent
+    rerun = arm_run_ids(base_dir.name, "bare")[1]
+    shutil.copytree(results / _ARM_RUNS["bare"], results / rerun)
+    (results / "repair-pool").mkdir()
+
+    planned = unchecked_second_turns(results)
+    orphan = "dev-model-a-rs-2026-10-01"
+    shutil.copytree(results / _ARM_RUNS["counterexample"], results / orphan)
+    unread = results / "dev-model-b-2026-10-01" / "prepared"
+    unread.mkdir(parents=True)
+    (unread / "C1.json").write_bytes(b"{}\n")
+    beside = unchecked_second_turns(results)
+    (base_dir / PLAN_PATH).unlink()
+    unplanned = unchecked_second_turns(results)
+
+    # The base pass and the resample arm hold first turns only.
+    assert planned == ()
+    assert beside == (orphan, "dev-model-b-2026-10-01")
+    assert unplanned == tuple(
+        sorted(
+            (
+                _ARM_RUNS["bare"],
+                rerun,
+                _ARM_RUNS["counterexample"],
+                orphan,
+                "dev-model-b-2026-10-01",
+            )
+        )
+    )
+
+
+def test_every_committed_second_turn_is_an_arm_a_plan_checks() -> None:
+    """No committed run holds a second turn that repair --check misses.
+
+    The test image carries no docs/ tree, so the suite skips this test and
+    CI runs it in its own step with docs/ mounted. It skips only when the
+    whole results tree is absent.
+    """
+    results = Path(__file__).parents[1] / "docs" / "results"
+    if not results.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
+
+    assert unchecked_second_turns(results) == ()
 
 
 def test_a_committed_plan_is_never_rewritten_under_its_arms(

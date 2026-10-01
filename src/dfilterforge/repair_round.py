@@ -3,7 +3,8 @@
 A repair round sends each triggered item of a base pass's plan once in each
 of three arms, as ordinary C4 runs named after the base run with ``-res``,
 ``-bare`` or ``-cx`` before its date; the one re-run an outage allows adds
-``-r2`` after the tag and replaces its arm. :func:`round_run` is the
+``-r2`` after the tag and replaces its arm, and the first run it replaces
+has its prompts checked all the same. :func:`round_run` is the
 ``dfilterforge repair`` command. It writes or checks the plan and, once arm
 runs exist beside the base pass, requires all three and checks each one
 against the committed plan, which from then on is the round's record and
@@ -28,6 +29,12 @@ With every arm run published and scored it writes or checks
 :mod:`dfilterforge.repair_summary` derives and
 :mod:`dfilterforge.repair_report` prints. :func:`pool_run` does the same for
 ``repair-pool/<split>.json`` from the committed summaries of several bases.
+
+``score --check`` rebuilds only a prompt's first turn, so the counted
+answer and follow-up of a second turn are checked here alone, and only in
+runs named as arms of a base pass with a committed plan;
+:func:`unchecked_second_turns` lists every other committed run that holds
+one, which CI refuses.
 
 Only the plan stage executes anything; the rest reads committed files, and
 no answer text reaches a report or an error message. No module that builds
@@ -450,6 +457,11 @@ def _counted_arms(
     """
     runs = [_check_arm(arm, path, plan, base) for arm, path in arms.items()]
     for run in runs:
+        # A re-run replaces its arm's first run, whose prompts were sent
+        # all the same and may be committed beside it.
+        first = run.run_dir.parent / arm_run_ids(plan.base_run, run.arm)[0]
+        if run.run_dir != first and os.path.lexists(first):
+            _check_arm(run.arm, first, plan, base)
         if run.arm in not_run and run.manifest is not None:
             raise RoundError(
                 "repair_arm_mismatch",
@@ -603,6 +615,55 @@ def round_run(
             "differences": report.differences
             + _settle(run_dir, rendered, check),
         }
+    )
+
+
+def _holds_second_turn(run_dir: Path) -> bool:
+    """Reports whether a run's prompt sets hold a second turn or are unread."""
+    for path in sorted((run_dir / "prepared").glob("*.json")):
+        try:
+            data = read_bounded(path)
+            batch = (
+                None
+                if data is None
+                else PreparedBatchV1.model_validate_json(data)
+            )
+        except (OSError, ValidationError):
+            batch = None
+        if batch is None or any(
+            len(prompt.messages) > 2 for prompt in batch.prompts
+        ):
+            return True
+    return False
+
+
+def unchecked_second_turns(results_dir: Path) -> tuple[str, ...]:
+    """Lists the committed runs whose second turns no repair check reaches.
+
+    ``score --check`` rebuilds only the system and user messages of a
+    prompt (:func:`dfilterforge.run_store.check_prompts`). The counted
+    answer and the follow-up after them are checked by ``repair --check``
+    alone, which reaches the arm runs, first runs and re-runs alike, named
+    after a base pass with a committed ``repair/plan.json``. Any other run
+    with a prompt of more than two messages is listed, and so is one with a
+    prompt set that cannot be read as one.
+
+    Args:
+        results_dir: The directory holding every committed run.
+
+    Returns:
+        The listed runs' directory names, sorted.
+    """
+    checked: set[str] = set()
+    for plan in results_dir.glob(f"*/{PLAN_PATH.as_posix()}"):
+        for arm in ARMS:
+            checked.update(arm_run_ids(plan.parent.parent.name, arm))
+    return tuple(
+        run_dir.name
+        for run_dir in sorted(results_dir.iterdir())
+        if run_dir.name not in checked
+        and (run_dir / "prepared").is_dir()
+        and _holds_second_turn(run_dir)
     )
 
 

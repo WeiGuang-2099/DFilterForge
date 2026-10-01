@@ -172,8 +172,12 @@ all nine calls with nothing sent.
   rebuild the assistant turn or the last user turn, the counted answer and
   the follow-up, which an item's own inputs cannot reproduce: a scored
   second-turn set proves its first turns and its outcomes, and its tail
-  needs a check of its own against the run it continues. Smoke runs are
-  evidence, not scored.
+  needs a check of its own against the run it continues. `repair --check`
+  is that check for the arm runs, a replaced first run included, named
+  after a base pass with a committed `repair/plan.json`; a CI step fails on
+  any other committed run that holds a second turn
+  (`repair_round.unchecked_second_turns`). Smoke runs are evidence, not
+  scored.
 - `judge` rebuilds prompts from the raw source runs the plan names, so it
   needs those directories, or byte-identical ones, to stay where they are.
   A source run that is missing, edited or otherwise refused by `follow-up`
