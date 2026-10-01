@@ -903,6 +903,12 @@ def test_a_fallback_that_stops_at_the_gate_too_reports_the_slot_not_run(
     )
 
 
+PENDING = play(None, lambda s: with_first(s, ok(), http(503)))
+RESUMED_REASONS = play(
+    "thinking_not_honoured", lambda s: with_first(s, REASONED, ok())[:1]
+)
+
+
 @pytest.mark.parametrize(
     ("script", "paid", "reason"),
     [
@@ -916,7 +922,18 @@ def test_a_fallback_that_stops_at_the_gate_too_reports_the_slot_not_run(
             PLANNED,
             "pass B gate stop on its first answer; no fallback is listed",
         ),
+        (
+            [OUTAGE, GATED, COMPLETE, COMPLETE, COMPLETE],
+            [PASS_A, _r2(PASS_A), SMALL, MID, FRONTIER],
+            "pass A gate stop on its first answer; no fallback is listed",
+        ),
+        (
+            [PENDING, RESUMED_REASONS, COMPLETE, COMPLETE, COMPLETE],
+            [PASS_A, PASS_A, SMALL, MID, FRONTIER],
+            "pass A its resumed pass stopped at the gate",
+        ),
     ],
+    ids=["pass-a", "pass-b", "pass-a-re-run", "pass-a-resumed"],
 )
 def test_an_anchor_gate_stop_reports_the_aa_pair_not_run(
     bench: Bench, script: list[Step], paid: list[str], reason: str
@@ -938,15 +955,60 @@ def test_an_anchor_gate_stop_reports_the_aa_pair_not_run(
         assert rows[PASS_B]["registry_update"]["status"] == "not_run"
 
 
+@pytest.mark.parametrize(
+    ("script", "paid", "pass_a", "counted"),
+    [
+        (
+            [REFUSED] + [COMPLETE] * 4,
+            PLANNED,
+            (
+                "refused (no_answer_refused_http_404); no fallback or re-run"
+                " is registered"
+            ),
+            PASS_A,
+        ),
+        (
+            [OUTAGE, OUTAGE] + [COMPLETE] * 4,
+            [PASS_A, _r2(PASS_A), PASS_B, SMALL, MID, FRONTIER],
+            (
+                "outage (no_answer_budget_spent_on_failures);"
+                f" {_r2(PASS_A)} met an outage too"
+            ),
+            _r2(PASS_A),
+        ),
+    ],
+    ids=["refused", "outage-twice"],
+)
+def test_pass_b_is_sent_whatever_pass_a_shows_but_the_gate(
+    bench: Bench,
+    script: list[Step],
+    paid: list[str],
+    pass_a: str,
+    counted: str,
+) -> None:
+    assert bench.run(bench.keyless() + script) == 0
+    assert bench.paid() == paid
+    summary = bench.summary()
+    assert summary["final"] is True
+    assert summary["outcomes"]["aa_pair"] == {
+        "state": "not_run",
+        "reason": f"the A/A pair is incomplete: pass A {pass_a}",
+    }
+    rows = bench.rows()
+    assert rows[PASS_A]["registry_update"]["status"] == "not_run"
+    assert rows[PASS_B]["state"] == "done"
+    assert rows[PASS_B]["registry_update"]["status"] == "published"
+    window = summary["pass_b_window"]
+    assert (
+        window["pass_a_first_started_at"] == rows[counted]["first_started_at"]
+    )
+    assert window["within_24_hours"] is True
+
+
 def test_a_resumed_pass_that_reasons_is_not_run_without_a_fallback(
     bench: Bench,
 ) -> None:
-    pending = play(None, lambda s: with_first(s, ok(), http(503)))
-    reasons = play(
-        "thinking_not_honoured",
-        lambda s: with_first(s, REASONED, ok())[:1],
-    )
-    script = bench.keyless() + [COMPLETE, COMPLETE, pending, reasons]
+    script = bench.keyless() + [COMPLETE, COMPLETE, PENDING, RESUMED_REASONS]
     assert bench.run(script + [COMPLETE] * 2) == 0
     assert bench.paid() == [PASS_A, PASS_B, SMALL, SMALL, MID, FRONTIER]
     assert bench.summary()["outcomes"]["winner_small"] == {
@@ -1096,6 +1158,9 @@ def test_a_call_step_that_leaves_no_run_directory_stops(bench: Bench) -> None:
 
 
 @pytest.mark.parametrize(
+    "pass_a", [ok(), http(404)], ids=["complete", "refused"]
+)
+@pytest.mark.parametrize(
     ("delay", "code", "paid"),
     [
         (timedelta(hours=24), 0, [PASS_B, SMALL, MID, FRONTIER]),
@@ -1103,9 +1168,10 @@ def test_a_call_step_that_leaves_no_run_directory_stops(bench: Bench) -> None:
     ],
 )
 def test_pass_b_starts_only_within_24_hours_of_pass_a(
-    bench: Bench, delay: timedelta, code: int, paid: list[str]
+    bench: Bench, delay: timedelta, code: int, paid: list[str], pass_a: Fields
 ) -> None:
-    _complete(bench, PASS_A)
+    synth = Synth(bench, PASS_A, bench.config_of(PASS_A))
+    synth.invoke(1.0, None, rest(synth, pass_a))
     manifest = RunManifestV1.model_validate_json(
         (
             bench.root / _CALL_DIR / "runs" / PASS_A / "run_manifest.json"
@@ -1134,9 +1200,7 @@ def test_an_owner_ruling_on_pass_b_lets_the_winners_go_on(
     summary = bench.summary()
     assert summary["outcomes"]["aa_pair"] == {
         "state": "not_run",
-        "reason": (
-            f"the A/A pair is reported not run: pass B ruled not run: {reason}"
-        ),
+        "reason": f"the A/A pair is incomplete: pass B ruled not run: {reason}",
     }
     assert bench.rows()[_r2(PASS_B)]["registry_update"]["reason"] == (
         f"{PASS_B} ended not_run without an outage"
@@ -1267,15 +1331,30 @@ def test_a_conditional_row_whose_condition_did_not_occur_waits_for_the_owner(
     ]
 
 
-def test_a_published_pass_a_without_its_run_stops_pass_b(
-    bench: Bench,
+@pytest.mark.parametrize(
+    "ruled",
+    [
+        {"status": "published", "commit": "abc1234"},
+        {"status": "not_run", "reason": "ruled for the test"},
+    ],
+    ids=["published", "not-run"],
+)
+def test_a_ruled_pass_a_without_its_run_stops_pass_b(
+    bench: Bench, ruled: Fields
 ) -> None:
-    bench.edit_row(PASS_A, status="published", commit="abc1234")
+    bench.edit_row(PASS_A, **ruled)
     assert bench.run(bench.keyless()) == 1
     assert not bench.paid()
-    assert "STOPPED: pass B is due but no pass A run is complete" in (
-        bench.printed
+    assert any(
+        line.startswith(
+            "STOPPED: pass B is due but no pass A run has a run manifest to"
+            " time its 24 hours from; the owner rules first"
+        )
+        for line in bench.printed
     )
+    bench.edit_row(PASS_B, status="not_run", reason="ruled for the test")
+    assert bench.run(bench.keyless() + [COMPLETE] * 3) == 0
+    assert bench.paid() == [SMALL, MID, FRONTIER]
 
 
 # Refusals before any request.

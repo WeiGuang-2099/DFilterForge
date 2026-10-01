@@ -339,9 +339,11 @@ Reports under the ignored `artifacts/` are not project evidence.
 - `scripts/test_passes.py` is the owner's one command for the 16 registered
   runs (Owner command in the [test-run note](decisions/test-runs.md), for Git
   Bash and Windows PowerShell 5.1, with exit codes 0, 1, 2, 3 and 130). It
-  reads `evidence/test-runs.json` and sends pass A, pass B only after a
-  complete pass A and within 24 hours of its first invocation, then the small,
-  mid and frontier winners. Each run is one `scripts/model_run.py call`
+  reads `evidence/test-runs.json` and sends pass A, pass B within 24 hours of
+  the counted pass A's first invocation whatever pass A shows unless a gate
+  stop reports the A/A pair not run (corrected on 2026-10-02; until then the
+  batch sent pass B only after a complete pass A), then the small, mid and
+  frontier winners. Each run is one `scripts/model_run.py call`
   argument list, no shell, with the row's run id, config and cap and
   `--gate-first --max-attempts 3 --min-interval-seconds 1.0`.
   - It resumes pending items after 60 s, sends a winner's listed fallback

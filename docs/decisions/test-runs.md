@@ -122,8 +122,12 @@ card code, is merged; publishing a run's answers is allowed before that.
   thinking not honoured stops and is never resumed. A slot winner's fallback,
   runs 6 to 8, then runs once; if the fallback stops at the gate too, or a
   resumed pass stops at the gate, the slot's test row is reported not run. The
-  anchor has no fallback, so a gate stop of pass A or pass B reports the A/A
-  pair not run; after pass A's, pass B is not sent.
+  anchor has no fallback, so a gate stop of pass A or pass B, or of its `-r2`
+  re-run, or a resumed pass of either that stops at the gate, reports the A/A
+  pair not run; after pass A's, pass B is not sent. This is the only case in
+  which the A/A pair is reported not run before pass B is sent: after any other
+  end of pass A, an outage on its re-run too or a refusal included, pass B is
+  sent as Order and timing says.
 - Outage (rule 3 of the bake-off note): a pass that ends with no completed
   answer and is not a refusal (only transient failures, a cap spent on
   timeouts, or final provider errors) is re-run once from scratch under its
@@ -160,15 +164,19 @@ call` with exactly the arguments under Settings, started as an argument list
 with no shell; the batch never reads, prints or writes the key, and never
 publishes or scores.
 
-It sends pass A, pass B straight after a complete pass A, then the small, mid
-and frontier winners, one run at a time, and applies the rules above by itself:
-pending items are resumed after 60 s with the same options and `--resume`; a
-gate stop on a winner's first answer sends that winner's fallback once; an
-outage is re-run once under its `-r2` row; a gate stop of pass A or pass B, a
-refusal, and a resumed pass that stops at the gate are reported not run. Pass B
-starts only within 24 hours of the counted pass A's first invocation; when that
-window has closed, the batch stops until the owner records pass B's rows
-`not_run` with a reason. A row this file marks `published`, `not_run`, or
+It sends pass A, then pass B straight after it whatever pass A shows unless the
+A/A pair is reported not run, then the small, mid and frontier winners, one run
+at a time, and applies the rules above by itself: pending items are resumed
+after 60 s with the same options and `--resume`; a gate stop on a winner's
+first answer sends that winner's fallback once; an outage is re-run once under
+its `-r2` row; a gate stop of pass A or pass B, a refusal, and a resumed pass
+that stops at the gate are reported not run, and a gate stop of pass A or pass
+B, its re-run's or its resumed pass's included, reports the A/A pair not run.
+Pass B starts only within 24 hours of the counted pass A's first invocation;
+the counted pass A is its `-r2` run once that has a run manifest, else pass A,
+whatever it showed. When that window has closed, or no pass A run has a run
+manifest, the batch stops until the owner records pass B's rows `not_run`
+with a reason. A row this file marks `published`, `not_run`, or
 `unused` with a reason is never sent. A run marked `not_run` after it left a
 run directory still triggers what that directory shows, its fallback after a
 gate stop or its `-r2` row after an outage, so committing the statuses a
@@ -221,7 +229,7 @@ Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
 | Exit | Meaning | What the owner does |
 | --- | --- | --- |
 | 0 | Every row has a final state: `done`, `not_run` or `unused`. | Publish each `done` run, copy each other run's evidence, and commit the status, reason and commit the summary gives each row. |
-| 1 | Stopped for the owner: a budget stop after an answer, pass B's window closed, a call step that ended with an error or left no run directory, the invocation limit, an unreadable run directory, a conditional row marked `registered` or with a run directory that no chain reaches, or an error the batch did not expect after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the row's `cap_usd` here and in `test-runs.json` above the last `max_usd` and commit; for pass B's window, record pass B's rows `not_run` with a reason and commit; for a conditional row no chain reaches, rule on it and commit. Then run the same command. |
+| 1 | Stopped for the owner: a budget stop after an answer, pass B's window closed or no pass A run to time it from, a call step that ended with an error or left no run directory, the invocation limit, an unreadable run directory, a conditional row marked `registered` or with a run directory that no chain reaches, or an error the batch did not expect after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the row's `cap_usd` here and in `test-runs.json` above the last `max_usd` and commit; for pass B's window or a missing pass A run, record pass B's rows `not_run` with a reason and commit; for a conditional row no chain reaches, rule on it and commit. Then run the same command. |
 | 2 | Refused before any request: the registry, the prompt copy, a config, the lock, git, uncommitted tooling or the keyless preflight. | Fix what the `refused` or `REFUSED` line names (a missing copy prints its restore commands; delete a held `artifacts/test-passes/.lock` only when no batch or call step is running) and run the same command. |
 | 3 | Aborted: the key variable is not set (after the keyless preflight; nothing was sent), or the account refused a request with HTTP 401, 402 or 403. | Set the key, or fix the key, the credit or the account's guardrail, and run the same command. |
 | 130 | Interrupted with Ctrl-C after the request in flight finished; that request may be billed but not recorded. | Run the same command. If it says a call step is still running, let it exit and delete `artifacts/test-passes/.lock` first. |

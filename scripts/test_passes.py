@@ -26,17 +26,19 @@ What follows a pass, by the registry (rules 3 and 7 of the bake-off note):
 
 - Gate stop: a pass whose first completed answer shows thinking not
   honoured is never resumed. A slot winner's listed fallback row then
-  runs once; if it stops at the gate too, the slot's row is not run. The
-  anchor has no fallback, so a gate stop of pass A or pass B reports the
-  A/A pair not run, and after pass A's, pass B is not sent. A pass whose
-  resumed pass stops at the gate is not run and gets no fallback.
+  runs once; if it stops at the gate too, the slot's row is not run. A
+  pass whose resumed pass stops at the gate is not run and gets no
+  fallback. The anchor has no fallback, so either way at the gate, on
+  pass A, pass B or the re-run of either, reports the A/A pair not run,
+  and after pass A's, pass B is not sent.
 - Outage: a pass that ends with no completed answer and is not a refusal
   is re-run once from scratch under its ``-r2`` row after a 60 s wait; if
-  that is an outage too, the row is not run. A pass A that is not run
-  reports the A/A pair not run.
+  that is an outage too, the row is not run.
 - A complete pass with no completed answer whose every lasting failure is
   HTTP 400 or 404, a refusal, has no registered fallback or re-run, so it
   is not run.
+- Pass B is sent whatever pass A shows but the gate (docs/protocol.md): a
+  pass A that is complete, refused, or an outage on its re-run too.
 - A row the registry marks ``not_run``, or ``unused`` with a reason, is
   the owner's ruling and is never sent; a ``published`` row is never sent
   again. A run ruled ``not_run`` after it left a directory still triggers
@@ -51,8 +53,10 @@ until the row's cap is raised above the last invocation's ``max_usd`` in
 the registry and its note and committed. So does anything the batch
 cannot read as a pass: the invocation limit, a call step that ended with
 an error, or an unreadable run directory. Pass B must start within 24
-hours of the counted pass A's first invocation (docs/protocol.md); if that
-window has closed before pass B started, the batch stops for the owner.
+hours of the counted pass A's first invocation (docs/protocol.md), the
+counted pass A being its ``-r2`` row once that has a run manifest, else
+pass A, whatever it showed; if that window has closed before pass B
+started, or no pass A run has a manifest, the batch stops for the owner.
 
 The batch refuses to start unless the prompt copy exists, its prepare.json
 is a prompt set the freeze record admits, and it and every prompt file are
@@ -190,6 +194,10 @@ PASS_B_WINDOW = timedelta(hours=24)
 # reasoned, a gate stop; its other fallback reason is a refusal.
 GATE_STOP_REASON = "first_answer_reasoned"
 TRIGGER_TEXT = {"gate_stop": "a gate stop", "outage": "an outage"}
+# How a chain ends at the gate: a gate stop with no fallback left, or a
+# resumed pass that stops there. Rule 7 reports the A/A pair not run for
+# either; any other end of pass A still leaves pass B due.
+GATE_KINDS = frozenset({"gate_stop", "reasoned"})
 FINAL_STATES = frozenset({"done", "not_run", "unused"})
 OPEN_STATES = frozenset({"owed", "waiting"})
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
@@ -712,12 +720,12 @@ def _classify(action: Any) -> tuple[str, RowState]:
     if kind == "fallback" and reason == GATE_STOP_REASON:
         return "gate_stop", RowState("not_run", "gate stop on its first answer")
     if kind == "fallback":
-        return "not_run", RowState(
+        return "refused", RowState(
             "not_run",
             f"refused ({reason}); no fallback or re-run is registered",
         )
     if kind == "reasoned":
-        return "not_run", RowState(
+        return "reasoned", RowState(
             "not_run", "its resumed pass stopped at the gate"
         )
     if kind in ("done", "outage"):
@@ -773,37 +781,55 @@ def _attempt(row: RunRowV1, walk: Walk) -> tuple[str, str]:
 
 
 def _role(row: RunRowV1, walk: Walk) -> tuple[str, str]:
-    """Settles a planned run, its re-run, then its fallback chain."""
+    """Settles a planned run, its re-run, then its fallback chain.
+
+    A chain that ends at the gate keeps a kind in ``GATE_KINDS``.
+    """
     kind, why = _attempt(row, walk)
     if kind != "gate_stop":
         return kind, why
     fallback = walk.plan.fallback_of.get(row.run_id)
     if fallback is None:
-        return "not_run", f"{why}; no fallback is listed"
+        return "gate_stop", f"{why}; no fallback is listed"
     again, again_why = _attempt(fallback, walk)
     if again == "gate_stop":
-        return "not_run", f"{why}; {fallback.run_id} stopped at the gate too"
+        return "gate_stop", f"{why}; {fallback.run_id} stopped at the gate too"
     if again == "unused":
         return "not_run", f"{why}; {fallback.run_id} {again_why}"
     return again, again_why
 
 
 def _pair(walk: Walk) -> RowState:
-    """Settles pass A, then pass B only after a complete pass A."""
+    """Settles pass A, then pass B whatever pass A shows but the gate.
+
+    docs/protocol.md sends pass B whatever pass A shows unless the A/A
+    pair is reported not run, which rule 7 does only for a chain that
+    ends at the gate. So a refused pass A, or one that met an outage on
+    its re-run too, still leaves pass B due.
+    """
     pass_a, pass_b = walk.plan.planned[:2]
-    kind, why = _role(pass_a, walk)
-    if kind == "owed":
-        return RowState("owed", f"pass A: {why}")
-    if kind != "done":
-        reason = f"the A/A pair is reported not run: pass A {why}"
+    kind_a, why_a = _role(pass_a, walk)
+    if kind_a == "owed":
+        return RowState("owed", f"pass A: {why_a}")
+    if kind_a in GATE_KINDS:
+        reason = f"the A/A pair is reported not run: pass A {why_a}"
         walk.states[pass_b.run_id] = RowState("not_run", f"not sent; {reason}")
         return RowState("not_run", reason)
-    kind, why = _role(pass_b, walk)
-    if kind == "owed":
-        return RowState("owed", f"pass B: {why}")
-    if kind != "done":
+    kind_b, why_b = _role(pass_b, walk)
+    if kind_b == "owed":
+        return RowState("owed", f"pass B: {why_b}")
+    if kind_b in GATE_KINDS:
         return RowState(
-            "not_run", f"the A/A pair is reported not run: pass B {why}"
+            "not_run", f"the A/A pair is reported not run: pass B {why_b}"
+        )
+    failed = [
+        f"pass {name} {why}"
+        for name, kind, why in (("A", kind_a, why_a), ("B", kind_b, why_b))
+        if kind != "done"
+    ]
+    if failed:
+        return RowState(
+            "not_run", "the A/A pair is incomplete: " + "; ".join(failed)
         )
     return RowState("done", "both passes are complete")
 
@@ -891,16 +917,18 @@ def sendable(walk: Walk) -> list[RunRowV1]:
 
 
 def counted_start(row: RunRowV1, ctx: Context) -> datetime | None:
-    """Returns when a run's counted pass first started, once it is complete.
+    """Returns when a run's counted pass first started, whatever it showed.
 
-    The counted pass is the run itself or, after an outage, its re-run.
+    The counted pass is the run's outage re-run once that has a run
+    manifest, since only an outage starts it, else the run itself; None
+    when neither has one.
     """
-    for each in (row, ctx.plan.rerun_of.get(row.run_id)):
+    for each in (ctx.plan.rerun_of.get(row.run_id), row):
         if each is None:
             continue
-        view = ctx.view(each.run_id)
-        if view.manifest is not None and ctx.decide(each).kind == "done":
-            return view.manifest.invocations[0].started_at
+        manifest = ctx.view(each.run_id).manifest
+        if manifest is not None and manifest.invocations:
+            return manifest.invocations[0].started_at
     return None
 
 
@@ -913,11 +941,17 @@ def check_pass_b_window(ctx: Context) -> None:
     """Lets pass B start only within 24 hours of the counted pass A.
 
     Raises:
-        BatchStop: If the window has closed, or no pass A is complete.
+        BatchStop: If the window has closed, or no pass A run has a run
+            manifest to time it from.
     """
     started = pass_a_started(ctx)
     if started is None:
-        raise BatchStop("pass B is due but no pass A run is complete")
+        raise BatchStop(
+            "pass B is due but no pass A run has a run manifest to time its"
+            " 24 hours from; the owner rules first: record pass B's rows as"
+            f" not_run with a reason in {REGISTRY} and {NOTE}, commit, and"
+            " run the same command again"
+        )
     deadline = started + PASS_B_WINDOW
     now = utc_now()
     if now > deadline:
@@ -1184,12 +1218,7 @@ def summary_row(
 def _pass_b_window(ctx: Context) -> dict[str, Any]:
     """Records how far the counted pass B started after the counted pass A."""
     started_a = pass_a_started(ctx)
-    pass_b = ctx.plan.planned[1]
-    started_b = counted_start(pass_b, ctx)
-    view = ctx.view(pass_b.run_id)
-    if started_b is None and view.manifest is not None:
-        # Not complete yet: how far its own first invocation came.
-        started_b = view.manifest.invocations[0].started_at
+    started_b = counted_start(ctx.plan.planned[1], ctx)
     within = None
     if started_a is not None and started_b is not None:
         within = started_b - started_a <= PASS_B_WINDOW
