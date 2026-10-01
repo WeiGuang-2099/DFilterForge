@@ -36,6 +36,7 @@ from dfilterforge.fixtures import generate_fixtures
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import packet_set_hash
+from dfilterforge.repair import repair_run
 from dfilterforge.replay import replay_live
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -365,6 +366,19 @@ def _score(arguments: argparse.Namespace) -> object:
     return report
 
 
+def _repair(arguments: argparse.Namespace) -> object:
+    """Writes or checks a scored pass's repair plan offline."""
+    report = repair_run(
+        arguments.run_dir,
+        code_revision=arguments.code_revision,
+        check=arguments.check,
+        runner=TsharkRunner(tshark=arguments.tshark),
+    )
+    if report.differences:
+        arguments.exit_code = 1
+    return report
+
+
 def _ablation_run(arguments: argparse.Namespace) -> object:
     """Checks a recorded ablation receipt and prints its identity.
 
@@ -399,6 +413,11 @@ _SCORE_HELP = (
     "re-executes and compares without writing; --control scores "
     "gold-derived reference or mutation answers instead of stored "
     "completions."
+)
+_REPAIR_HELP = (
+    "Write a scored pass's repair plan, its silent-wrong and invalid C4 "
+    "items with their feedback-probe cards, to repair/plan.json; --check "
+    "derives it again and compares bytes without writing."
 )
 _ABLATION_RUN_HELP = (
     "Validate a recorded ablation receipt and print its hash, identifier, "
@@ -522,6 +541,15 @@ def build_parser() -> argparse.ArgumentParser:
     score.add_argument("--control", choices=("reference", "mutation"))
     score.add_argument("--tshark", default="tshark")
     score.set_defaults(handler=_score)
+
+    repair = commands.add_parser(
+        "repair", help=_REPAIR_HELP, description=_REPAIR_HELP
+    )
+    repair.add_argument("--run-dir", type=_path, required=True)
+    repair.add_argument("--code-revision", required=True)
+    repair.add_argument("--check", action="store_true")
+    repair.add_argument("--tshark", default="tshark")
+    repair.set_defaults(handler=_repair)
 
     ablation = commands.add_parser("ablation")
     ablation_commands = ablation.add_subparsers(
