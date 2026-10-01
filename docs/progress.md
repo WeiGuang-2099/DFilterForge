@@ -410,3 +410,46 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   - The sweep does not see the markers that CSS numbers for a list without
     a `start`.
   - Neither CI job has run on GitHub.
+
+## Web data path final check: 2026-10-02, branch web-data
+
+- Every check was re-run at bef74e9, the head after the review fixes. The
+  counts equal those at a9f12d9; bef74e9 only rewrites test fixture
+  characters as escapes.
+- `git diff --name-only 86cd624..bef74e9` lists none of the 12
+  prepare-hashed files, and none of `runner.py`, `live.py` or `replay.py`.
+- The CI python job mirror passes in 35 min 17 s:
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept);
+  - 1,291 tests passed and 7 skipped, with 96.89 percent coverage;
+  - the benchmark and adequacy gates, prepare and recall;
+  - all 20 `score --check` outputs, with no difference.
+- The CI steps the mirror leaves out ran in the test image under the
+  Compose test-service hardening, with `docs/` mounted read-only:
+  - CI's exact pylint line and pylint on the two web scripts each rate
+    10.00/10;
+  - `export_web_evidence.py check` passes: 8 probes, 480 frames;
+  - the exporter and evidence tests pass: 126 tests;
+  - two exports are identical under `diff -r`: 676 files, 651 receipts;
+  - the frozen-prompt guard passes: 1 test.
+- On the host, `pnpm web:typecheck`, `pnpm web:lint` and `pnpm web:build`
+  pass. The host build has 29 files and 922,854 bytes, and 82 Playwright
+  tests pass on it.
+- The Docker `--target out` build has 29 files, 923,060 bytes and 4
+  `index.html` routes. 82 Playwright tests pass on it in 10.1 s. The
+  methodology page renders 138 sourced values (40 linked numbers and 98
+  strings) and 4 terms.
+- With `PAGES_BASE_PATH` empty, as a host at the domain root needs, the
+  host build links from `/`. 81 tests pass; the one that checks nothing is
+  served outside the base path skips, since there is no outside.
+- The `site` stage, run with the Compose hardening on a private loopback
+  port, answers 200 at `/DFilterForge/` and `/DFilterForge/methodology/`,
+  404 for an unknown page and for the bare root, and runs as uid 10001.
+  The image is 201 MB.
+- The design asked to rewrite two older Web lines in this file. They stay
+  as written, because this file only gains appended sections, which limits
+  the known merge conflict with `repair-multiturn`. The first is in the
+  2026-09-15 to 2026-09-21 section and was true at that date. The second,
+  under the limits, still holds: the site is recorded-only.
+- Still open: the same items as after the review fixes, plus hosting
+  (decision D1) and the two registration commits (decision D2).
