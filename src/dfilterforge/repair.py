@@ -96,7 +96,15 @@ class RepairError(DFilterForgeError, RuntimeError):
 
 
 class RepairReportV1(FrozenModel):
-    """What one plan pass wrote, or how the committed plan compares."""
+    """What one repair pass wrote, or how the committed files compare.
+
+    ``stage`` is how far the round has come: ``plan`` when no arm run
+    exists beside the base pass, ``prompts`` when the three arms' prompt
+    sets are committed but not yet answered, and ``summary`` once all
+    three are published and scored. ``arm_runs`` maps each arm to the run
+    it was read from, and ``summary_sha256`` is the digest of the summary
+    written or derived, both empty before that stage.
+    """
 
     schema_version: Literal["repair-report/1.0"] = "repair-report/1.0"
     plan_path: Path
@@ -106,11 +114,18 @@ class RepairReportV1(FrozenModel):
     items: int = Field(ge=0)
     card_kinds: dict[str, int]
     plan_sha256: str
+    stage: Literal["plan", "prompts", "summary"] = "plan"
+    arm_runs: dict[str, str] = Field(default_factory=dict)
+    summary_sha256: str | None = None
     differences: tuple[str, ...] = ()
 
 
-class _Base(NamedTuple):
-    """The parts of a complete, scored base pass a plan is built from."""
+class BasePass(NamedTuple):
+    """The parts of a complete, scored base pass a plan is built from.
+
+    ``outcomes`` are the C4 outcomes the trigger is read from: those of
+    ``scored-original/`` once a correction kept them, else ``scored/``.
+    """
 
     manifest: RunManifestV1
     manifest_sha256: str
@@ -122,7 +137,7 @@ class _Base(NamedTuple):
     outcomes_sha256: str
 
 
-def _read_file(path: Path) -> bytes | None:
+def read_bounded(path: Path) -> bytes | None:
     """Reads one bounded regular file, or returns None when it is absent.
 
     Raises:
@@ -145,7 +160,7 @@ def _read_file(path: Path) -> bytes | None:
 def _required(path: Path, code: str, message: str) -> bytes:
     """Reads a file the plan needs, refusing with ``code`` otherwise."""
     try:
-        data = _read_file(path)
+        data = read_bounded(path)
     except OSError:
         data = None
     if data is None:
@@ -192,8 +207,15 @@ def _read_outcomes(
     return outcomes, hashlib.sha256(raw).hexdigest()
 
 
-def _read_base(run_dir: Path) -> _Base:
+def read_base(run_dir: Path) -> BasePass:
     """Reads a complete, scored base pass, checking every digest.
+
+    Args:
+        run_dir: The base pass's published directory.
+
+    Returns:
+        Its manifest, C4 prompts and answers, and the C4 outcomes the
+        trigger is read from, each with the digest of the bytes read.
 
     Raises:
         RepairError: When the pass is incomplete, prepared no C4 or is not
@@ -225,7 +247,7 @@ def _read_base(run_dir: Path) -> _Base:
         )
     prompts, prompts_sha256 = loaded.prepared[REPAIR_CONDITION]
     outcomes, outcomes_sha256 = _read_outcomes(run_dir, prompts)
-    return _Base(
+    return BasePass(
         manifest=loaded.manifest,
         manifest_sha256=hashlib.sha256(raw).hexdigest(),
         # check_splits tied every prompt to the manifest's split.
@@ -319,7 +341,7 @@ def _plan_item(
 
 def _plan_items(
     run_dir: Path,
-    base: _Base,
+    base: BasePass,
     routes: Mapping[str, GoldCase],
     builder: CardBuilder,
 ) -> tuple[RepairItemV1, ...]:
@@ -364,7 +386,7 @@ def build_plan(
         ScoringError: For a layout, manifest, split or prompt failure.
         CounterexampleError: When a card cannot be built.
     """
-    base = _read_base(run_dir)
+    base = read_base(run_dir)
     with TemporaryDirectory(prefix="dfilterforge-repair-") as temporary:
         artifacts = generate_model_split(Path(temporary))
         feedback = generate_feedback_probes(artifacts)
@@ -401,12 +423,71 @@ def plan_bytes(plan: RepairPlanV1) -> bytes:
     return (canonical_json(plan) + "\n").encode("utf-8")
 
 
-def _write(path: Path, payload: bytes) -> None:
-    """Replaces one file whole, so no torn plan survives a failure."""
+def write_whole(path: Path, payload: bytes) -> None:
+    """Replaces one file whole, so no torn file survives a failure."""
     path.parent.mkdir(parents=True, exist_ok=True)
     staging = path.with_name(f".{path.name}.partial")
     staging.write_bytes(payload)
     os.replace(staging, path)
+
+
+def committed_differs(path: Path, rendered: bytes) -> bool:
+    """Reports whether a committed file is missing or other than ``rendered``.
+
+    A file that cannot be read as a bounded regular file differs.
+    """
+    try:
+        committed = read_bounded(path)
+    except OSError:
+        committed = None
+    return committed != rendered
+
+
+def plan_run(
+    run_dir: Path,
+    *,
+    code_revision: str,
+    check: bool = False,
+    runner: TsharkRunner | None = None,
+) -> tuple[RepairPlanV1, RepairReportV1]:
+    """Writes a base pass's repair plan, or checks the committed one.
+
+    Args:
+        run_dir: The base pass's published directory.
+        code_revision: The revision this pass ran at; it is reported and
+            never written into the plan.
+        check: Compare with the committed plan instead of writing it.
+        runner: The bounded tshark runner that builds every card.
+
+    Returns:
+        The plan derived now, and what was written or whether the
+        committed plan differs from it.
+
+    Raises:
+        RepairError: When the base pass cannot be planned.
+    """
+    plan = build_plan(run_dir, runner=runner)
+    rendered = plan_bytes(plan)
+    target = run_dir / PLAN_PATH
+    differences: tuple[str, ...] = ()
+    if check:
+        if committed_differs(target, rendered):
+            differences = (PLAN_PATH.as_posix(),)
+    else:
+        write_whole(target, rendered)
+    kinds = {kind: 0 for kind in _CARD_KINDS}
+    for item in plan.items:
+        kinds[item.card_kind] += 1
+    return plan, RepairReportV1(
+        plan_path=target,
+        checked=check,
+        code_revision=code_revision,
+        base_run=plan.base_run,
+        items=len(plan.items),
+        card_kinds=kinds,
+        plan_sha256=hashlib.sha256(rendered).hexdigest(),
+        differences=differences,
+    )
 
 
 def repair_run(
@@ -417,6 +498,9 @@ def repair_run(
     runner: TsharkRunner | None = None,
 ) -> RepairReportV1:
     """Writes a base pass's repair plan, or checks the committed one.
+
+    This is the plan stage alone; :func:`dfilterforge.repair_round.round_run`
+    adds the arm runs once they exist.
 
     Args:
         run_dir: The base pass's published directory.
@@ -431,29 +515,6 @@ def repair_run(
     Raises:
         RepairError: When the base pass cannot be planned.
     """
-    plan = build_plan(run_dir, runner=runner)
-    rendered = plan_bytes(plan)
-    target = run_dir / PLAN_PATH
-    differences: tuple[str, ...] = ()
-    if check:
-        try:
-            committed = _read_file(target)
-        except OSError:
-            committed = None
-        if committed != rendered:
-            differences = (PLAN_PATH.as_posix(),)
-    else:
-        _write(target, rendered)
-    kinds = {kind: 0 for kind in _CARD_KINDS}
-    for item in plan.items:
-        kinds[item.card_kind] += 1
-    return RepairReportV1(
-        plan_path=target,
-        checked=check,
-        code_revision=code_revision,
-        base_run=plan.base_run,
-        items=len(plan.items),
-        card_kinds=kinds,
-        plan_sha256=hashlib.sha256(rendered).hexdigest(),
-        differences=differences,
-    )
+    return plan_run(
+        run_dir, code_revision=code_revision, check=check, runner=runner
+    )[1]

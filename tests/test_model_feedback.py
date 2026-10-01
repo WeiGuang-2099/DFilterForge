@@ -253,11 +253,15 @@ def test_the_labels_digest_covers_one_split_and_only_its_expectations(
         FEEDBACK_PROBE_IDS["dev"] = "semantic-11"  # type: ignore[index]
 
 
-# The feedback probe, the cards drawn from it and the plans that carry them.
+# The feedback probe, the cards drawn from it, the plans that carry them
+# and the rounds that read them.
 _FEEDBACK_MODULES = (
     "dfilterforge.counterexample",
     "dfilterforge.model_feedback",
     "dfilterforge.repair",
+    "dfilterforge.repair_report",
+    "dfilterforge.repair_round",
+    "dfilterforge.repair_summary",
 )
 _CLOSURE_CHECK = """
 import importlib.util

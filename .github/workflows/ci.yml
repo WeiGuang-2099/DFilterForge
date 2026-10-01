@@ -101,10 +101,13 @@ jobs:
           done
           echo "re-scored $checked committed output directories"
           test "$checked" -gt 0
-      - name: Check committed repair plans offline
+      - name: Check committed repair plans and rounds offline
         # Each plan is derived again from its base pass and the feedback
-        # probe and compared byte for byte; none is committed before the
-        # first repair round, so zero plans is not a failure.
+        # probe and compared byte for byte. Once arm runs sit beside the
+        # pass, each one's prompts are checked against the pass and the
+        # plan, and once all three are published and scored the round's
+        # summary is derived again too. None is committed before the first
+        # repair round, so zero plans is not a failure.
         run: |
           checked=0
           for plan in docs/results/*/repair/plan.json; do
@@ -116,6 +119,20 @@ jobs:
             checked=$((checked + 1))
           done
           echo "checked $checked committed repair plans"
+      - name: Check committed repair pools offline
+        # Each pool is derived again from the committed summaries of the
+        # bases it names; zero pools is not a failure.
+        run: |
+          checked=0
+          for pooled in docs/results/repair-pool/*.json; do
+            [ -f "$pooled" ] || continue
+            docker compose --profile pilot run --rm lab repair-pool \
+              --results-dir /workspace/results \
+              --split "$(basename "$pooled" .json)" \
+              --check --code-revision "${{ github.sha }}"
+            checked=$((checked + 1))
+          done
+          echo "checked $checked committed repair pools"
 
   web:
     name: Web quality gates

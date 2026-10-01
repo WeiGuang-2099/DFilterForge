@@ -37,7 +37,8 @@ from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import packet_set_hash
 from dfilterforge.pair_report import pair_runs
-from dfilterforge.repair import repair_run
+from dfilterforge.repair_round import pool_run
+from dfilterforge.repair_round import round_run
 from dfilterforge.replay import replay_live
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -368,12 +369,26 @@ def _score(arguments: argparse.Namespace) -> object:
 
 
 def _repair(arguments: argparse.Namespace) -> object:
-    """Writes or checks a scored pass's repair plan offline."""
-    report = repair_run(
+    """Writes or checks a scored pass's repair plan and round offline."""
+    report = round_run(
         arguments.run_dir,
         code_revision=arguments.code_revision,
         check=arguments.check,
         runner=TsharkRunner(tshark=arguments.tshark),
+    )
+    if report.differences:
+        arguments.exit_code = 1
+    return report
+
+
+def _repair_pool(arguments: argparse.Namespace) -> object:
+    """Writes or checks the pool of several bases' repair summaries."""
+    report = pool_run(
+        arguments.results_dir,
+        arguments.split,
+        arguments.base or (),
+        code_revision=arguments.code_revision,
+        check=arguments.check,
     )
     if report.differences:
         arguments.exit_code = 1
@@ -422,8 +437,17 @@ _SCORE_HELP = (
 )
 _REPAIR_HELP = (
     "Write a scored pass's repair plan, its silent-wrong and invalid C4 "
-    "items with their feedback-probe cards, to repair/plan.json; --check "
-    "derives it again and compares bytes without writing."
+    "items with their feedback-probe cards, to repair/plan.json; once its "
+    "resample, bare and counterexample arm runs exist beside it, check "
+    "each against the pass and the plan, and once all three are published "
+    "and scored write repair/summary.json and .md; --check derives every "
+    "file again and compares bytes without writing."
+)
+_REPAIR_POOL_HELP = (
+    "Pool the committed repair summaries of several base passes of one "
+    "split into repair-pool/<split>.json and .md under the results "
+    "directory; --check derives them again and compares bytes, from the "
+    "bases the committed pool names unless --base is given."
 )
 _PAIR_HELP = (
     "Report two scored passes over the same items: per condition the "
@@ -562,6 +586,16 @@ def build_parser() -> argparse.ArgumentParser:
     repair.add_argument("--check", action="store_true")
     repair.add_argument("--tshark", default="tshark")
     repair.set_defaults(handler=_repair)
+
+    repair_pool = commands.add_parser(
+        "repair-pool", help=_REPAIR_POOL_HELP, description=_REPAIR_POOL_HELP
+    )
+    repair_pool.add_argument("--results-dir", type=_path, required=True)
+    repair_pool.add_argument("--split", choices=("dev", "test"), required=True)
+    repair_pool.add_argument("--base", action="append")
+    repair_pool.add_argument("--code-revision", required=True)
+    repair_pool.add_argument("--check", action="store_true")
+    repair_pool.set_defaults(handler=_repair_pool)
 
     pair = commands.add_parser("pair", help=_PAIR_HELP, description=_PAIR_HELP)
     pair.add_argument("--first-run-dir", type=_path, required=True)
