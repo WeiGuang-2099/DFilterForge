@@ -15,6 +15,8 @@ holds the same rows machine-readably, with each run's status.
 every run id follows the naming below, that each config is a committed bake-off
 config sending the row's model, slug and switch, that each cap meets the cap
 rule, and that every run answers the admitted test prompts.
+`scripts/test_passes.py` sends them (Owner command below), and
+`tests/test_test_passes.py` checks it against a scripted call step.
 
 ## Prompts
 
@@ -125,12 +127,99 @@ card code, is merged; publishing a run's answers is allowed before that.
 - Outage (rule 3 of the bake-off note): a pass that ends with no completed
   answer and is not a refusal (only transient failures, a cap spent on
   timeouts, or final provider errors) is re-run once from scratch under its
-  `-r2` row. If the re-run is an outage too, or the owner does not re-run it,
-  the row is reported not run.
+  `-r2` row, 60 s after the outage. If the re-run is an outage too, or the
+  owner rules the `-r2` row `not_run` (or `unused` with a reason) before it
+  starts, the row is reported not run.
+- Refusal: a complete pass with no completed answer whose every attempt that is
+  neither transient nor an account refusal is an HTTP 400 or 404 earned the
+  fallback in the bake-off (rule 2), but rule 7 gives a test pass its fallback
+  for a gate stop only, so no row here is conditional on a refusal and the row
+  is reported not run.
 - Any other budget stop is resumed only under a cap raised above the last
   `max_usd` and committed to this note and `test-runs.json` first. HTTP 401,
   402 or 403 (an account or guardrail problem) and a config or operator error
   stop the run until a resume with the same options. None is a model failure.
+
+## Owner command
+
+`scripts/test_passes.py` sends every run above from one command. The owner runs
+it at the root of the main checkout, in the one shell that holds the key, once
+this note, the registry and the batch are merged and pulled. It reads
+`test-runs.json` and refuses to start unless
+`artifacts/model-eval/test-qwen3-32b-2026-09-26` exists, its `prepare.json` is
+a prompt set the freeze record admits, and it and every prompt file are
+byte-identical to the committed copy; a missing copy prints the commands that
+restore it from `docs/results/test-qwen3-32b-2026-09-26` in both shells. It
+then calls every run it may send once with the key withheld, and each must stop
+at `api_key_missing`, which proves that the run id, cap, prompts, source
+digests and config pass the call step's own checks while no request is
+possible. Paid calls start only when the key variable is set and this note, the
+registry, the configs, the batch and the rules it reads are committed, so the
+commit each call records covers them. Each run is one `scripts/model_run.py
+call` with exactly the arguments under Settings, started as an argument list
+with no shell; the batch never reads, prints or writes the key, and never
+publishes or scores.
+
+It sends pass A, pass B straight after a complete pass A, then the small, mid
+and frontier winners, one run at a time, and applies the rules above by itself:
+pending items are resumed after 60 s with the same options and `--resume`; a
+gate stop on a winner's first answer sends that winner's fallback once; an
+outage is re-run once under its `-r2` row; a gate stop of pass A or pass B, a
+refusal, and a resumed pass that stops at the gate are reported not run. Pass B
+starts only within 24 hours of the counted pass A's first invocation; when that
+window has closed, the batch stops until the owner records pass B's rows
+`not_run` with a reason. A row this file marks `published`, `not_run`, or
+`unused` with a reason is never sent. Every step is read back from the run
+directories, so running the same command again skips finished runs and resumes
+unfinished ones. `--dry-run` prints each row's state and the calls the batch
+would make next, and sends nothing.
+
+The step log `steps.jsonl` and the summaries `summary-<date>.json` and `.txt`
+go to `artifacts/test-passes/` (ignored). The summary gives every row its state
+(`done`, `not_run`, `unused`, `owed` or `waiting`), the reason, its first
+invocation's start and source revision, the directory the maintainer commits it
+to, and the `status`, `reason` and `commit` its entry here gets. A `done` run
+is published into `docs/results/<run id>/`. A run that left a directory but is
+not published keeps its `run_manifest.json` and attempt logs as evidence in
+`docs/decisions/evidence/test-runs/<run id>/`, as the bake-off note does for
+dev runs. A conditional run is sent in the same execution as the stop that
+triggers it, so its `registered` status is written afterwards, in the commit
+that publishes or rules on it.
+
+Git Bash, at the owner's main checkout (`read -rsp` keeps the key off the screen
+and out of the history):
+
+```bash
+cd /d/codeproject/acourse-code/DFilterForge
+git pull --ff-only
+uv run --frozen python scripts/test_passes.py --dry-run
+read -rsp "OpenRouter key: " DFILTERFORGE_MODEL_API_KEY && echo && export DFILTERFORGE_MODEL_API_KEY
+uv run --frozen python scripts/test_passes.py; echo "exit code: $?"
+unset DFILTERFORGE_MODEL_API_KEY
+```
+
+Windows PowerShell 5.1, at the same checkout:
+
+```powershell
+Set-Location D:\codeproject\acourse-code\DFilterForge
+git pull --ff-only
+$env:PYTHONIOENCODING = "utf-8"
+uv run --frozen python scripts/test_passes.py --dry-run
+$secure = Read-Host -AsSecureString "OpenRouter key"
+$env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
+Remove-Variable secure
+uv run --frozen python scripts/test_passes.py
+"exit code: $LASTEXITCODE"
+Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
+```
+
+| Exit | Meaning | What the owner does |
+| --- | --- | --- |
+| 0 | Every row has a final state: `done`, `not_run` or `unused`. | Publish each `done` run, copy each other run's evidence, and commit the status, reason and commit the summary gives each row. |
+| 1 | Stopped for the owner: a budget stop after an answer, pass B's window closed, a call step that ended with an error or left no run directory, the invocation limit, an unreadable run directory, or an error the batch did not expect after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the row's `cap_usd` here and in `test-runs.json` above the last `max_usd` and commit; for pass B's window, record pass B's rows `not_run` with a reason and commit. Then run the same command. |
+| 2 | Refused before any request: the registry, the prompt copy, a config, the lock, git, uncommitted tooling or the keyless preflight. | Fix what the `refused` or `REFUSED` line names (a missing copy prints its restore commands; delete a held `artifacts/test-passes/.lock` only when no batch or call step is running) and run the same command. |
+| 3 | Aborted: the key variable is not set (after the keyless preflight; nothing was sent), or the account refused a request with HTTP 401, 402 or 403. | Set the key, or fix the key, the credit or the account's guardrail, and run the same command. |
+| 130 | Interrupted with Ctrl-C after the request in flight finished; that request may be billed but not recorded. | Run the same command. If it says a call step is still running, let it exit and delete `artifacts/test-passes/.lock` first. |
 
 ## Status
 
@@ -138,8 +227,9 @@ card code, is merged; publishing a run's answers is allowed before that.
 publishes the run or rules on it:
 
 - `registered`: the run may still send requests. Runs 1 to 5 start here, and a
-  conditional run becomes `registered` once its condition occurs, before its
-  first request.
+  conditional run is `registered` from the moment its condition occurs; the
+  batch sends it in the same execution (Owner command), so the file records it
+  in the commit that publishes or rules on it.
 - `unused`: a conditional run whose condition has not occurred. Runs 6 to 16
   start here. One whose named run is `not_run` stays `unused` only with a
   `reason` saying why its condition did not occur, for instance an outage
@@ -215,4 +305,6 @@ smoke runs are not test runs.
 - Prices, quantizations and endpoints may change before a call; each run
   records its config's prices from the 2026-09-26 snapshot, and only the served
   provider, not its quantization.
-- No code checks pass timing; run manifests record it.
+- `scripts/test_passes.py` starts pass B only within 24 hours of the counted
+  pass A's first invocation; a call made by hand is not checked, and the run
+  manifests record the timing either way.

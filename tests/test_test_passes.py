@@ -19,6 +19,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import sys
 from types import ModuleType
@@ -1442,3 +1443,19 @@ def test_the_committed_registry_is_a_plan_the_batch_runs() -> None:
     assert prompts.requests == 448
     endpoints = tp.load_endpoints(plan, _ROOT, prompts.sizes)
     assert set(endpoints) == {row.config for row in plan.rows}
+
+
+@pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
+def test_the_note_gives_the_owner_command_in_both_shells() -> None:
+    note = (_ROOT / tp.NOTE).read_text(encoding="utf-8")
+    for text in (
+        "uv run --frozen python scripts/test_passes.py",
+        "--dry-run",
+        "Read-Host -AsSecureString",
+        '$env:PYTHONIOENCODING = "utf-8"',
+        "exit code: $LASTEXITCODE",
+        tp.EVIDENCE_DIR,
+    ):
+        assert text in note
+    for code in (0, 1, 2, 3, 130):
+        assert re.search(rf"^\| {code} \|", note, re.MULTILINE)
