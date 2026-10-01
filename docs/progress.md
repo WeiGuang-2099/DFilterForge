@@ -247,13 +247,31 @@ Reports under the ignored `artifacts/` are not project evidence.
   breakages (a cap too low or too high, pass B tagged `-res`, a swapped
   fallback config, a quantization in the note, a winner's model, a slug, the
   prepare) each failed it.
+- The frozen-prompt guard now reads the registry (owner ruling G):
+  `test_frozen_prompts_awaiting_a_call_match_the_model_side_code` keeps
+  `docs/results/test-qwen3-32b-2026-09-26` and every registered run's
+  directory guarded while any row is `registered`, or is `unused` while the run
+  it names is `not_run` and it gives no reason, even with pass A's run manifest
+  beside the prompts. It also fails on a row `docs/results` contradicts and
+  when no row names the frozen prompts; other prompt sets keep the manifest
+  rule. 14 unit tests on tmp fixtures cover a
+  registered row beside a manifest, a finished registry, a triggered fallback
+  and ten contradicted statuses.
+- In the test image with `docs/` mounted the CI step command passed on this
+  tree (exit 0). On a scratch copy with `src/dfilterforge/text_limits.py`
+  edited it failed (exit 1, `test-qwen3-32b-2026-09-26 awaits a call;
+  ['src/dfilterforge/text_limits.py'] changed`), and failed the same way with a
+  pass A run manifest beside the prompts and its row published, where the
+  guard as at 4111d8d passed. With every row published or not run it passed
+  despite the edit; a row marked published without its manifest, and a
+  deleted registry beside pass A's manifest (`no registered run`), failed.
 
 ## Planned next
 
-1. Say what releases the CI frozen-prompt guard if pass A never publishes into
-   its prepare directory; then the [registered test runs](decisions/test-runs.md):
-   qwen/qwen3-32b passes A and B, then the slot winners; the 12 hashed files
-   stay unchanged until the last one.
+1. The [registered test runs](decisions/test-runs.md): qwen/qwen3-32b passes A
+   and B, then the slot winners; the 12 hashed files stay unchanged until the
+   last one, and no test run is scored before the `repair-cards` branch
+   merges.
 2. Counterexample repair with three feedback arms, the feedback sent as a
    second conversational turn; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT

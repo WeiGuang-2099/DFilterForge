@@ -149,6 +149,19 @@ publishes the run or rules on it:
 - `not_run`: not sent or not finished, with a `reason` (a gate stop, an outage,
   the A/A pair reported not run).
 
+The frozen-prompt guard reads these statuses (owner ruling G of 2026-10-01; the
+[test-freeze note](test-freeze.md), Limits). `tests/test_model_run.py` keeps
+`docs/results/test-qwen3-32b-2026-09-26` and every registered run's directory
+guarded against a prepare-hashed edit, pass A's run manifest beside the
+prompts or not, while any row is `registered`, or is `unused` while the run it
+names is `not_run` and it gives no reason. It fails on a `published` row whose
+complete run is not in `docs/results/<run id>` with the row's run id, prepare
+digest, config settings and `commit`, on any other row whose directory holds a
+run manifest, on a `not_run` row without a reason, and on a registry that no
+longer names the frozen test prompts. Once every row is final
+the guard releases without a re-freeze, whether pass A was published or the
+A/A pair was reported not run.
+
 ## Caps
 
 Each cap is at least twice the run's expected spend plus one worst-case
