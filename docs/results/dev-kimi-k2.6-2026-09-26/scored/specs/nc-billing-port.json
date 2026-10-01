@@ -1,0 +1,1 @@
+{"case_id":"nc-billing-port","missing_slots":["port"],"rationale":"Traffic to the destination port the in-house billing service listens on, any host, TCP or UDP; the port number is never given.","split":"dev","status":"needs_clarification"}

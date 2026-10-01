@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dns","kind":"predicate","operator":"exists","value":null},{"children":[{"field":"ipv6.addr","kind":"predicate","operator":"exists","value":null},{"field":"dns.resp.code","kind":"predicate","operator":"eq","value":3}],"kind":"any"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

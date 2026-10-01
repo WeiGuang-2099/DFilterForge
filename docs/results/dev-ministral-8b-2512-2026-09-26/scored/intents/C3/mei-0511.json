@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"frame.len","kind":"predicate","operator":"exists","value":null},{"field":"frame.len","kind":"predicate","operator":"gt","value":0},{"field":"frame.len","kind":"predicate","operator":"lt","value":1518}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

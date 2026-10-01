@@ -1,0 +1,49 @@
+anchor A qwen3-32b: passes the run gates
+    pass dev-qwen3-32b-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served DeepInfra; last stop None; 0.0160 USD charged at most
+    qualifying pass dev-qwen3-32b-2026-09-26: qwen/qwen3-32b on deepinfra, reasoning enabled_false
+small 1 qwen3.5-9b: passes the run gates
+    pass dev-qwen3.5-9b-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served DeepInfra; last stop None; 0.0181 USD charged at most
+    fallback dev-qwen3.5-9b-fb-2026-09-26: start (not_started)
+    qualifying pass dev-qwen3.5-9b-2026-09-26: qwen/qwen3.5-9b on deepinfra, reasoning enabled_false
+small 2 ministral-8b-2512: passes the run gates
+    pass dev-ministral-8b-2512-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served Mistral; last stop None; 0.0180 USD charged at most
+    qualifying pass dev-ministral-8b-2512-2026-09-26: mistralai/ministral-8b-2512 on mistral, reasoning None
+small 3 granite-4.2-8b: passes the run gates
+    pass dev-granite-4.2-8b-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served DeepInfra; last stop None; 0.0129 USD charged at most
+    fallback dev-granite-4.2-8b-fb-2026-09-26: start (not_started)
+    qualifying pass dev-granite-4.2-8b-2026-09-26: ibm-granite/granite-4.2-8b on deepinfra, reasoning enabled_false
+mid 1 qwen3.5-122b-a10b: passes the run gates
+    pass dev-qwen3.5-122b-a10b-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served Novita; last stop None; 0.1257 USD charged at most
+    fallback dev-qwen3.5-122b-a10b-fb-2026-09-26: start (not_started)
+    qualifying pass dev-qwen3.5-122b-a10b-2026-09-26: qwen/qwen3.5-122b-a10b on novita, reasoning enabled_false
+mid 2 mistral-medium-3-5: dropped (completed 134 < 152)
+    pass dev-mistral-medium-3-5-2026-09-26: done (complete); 134/160 completed; reasoning honoured; served Mistral; last stop None; 0.2530 USD charged at most
+    fallback dev-mistral-medium-3-5-fb-2026-09-26: start (not_started)
+mid 3 nemotron-3-super-120b-a12b: passes the run gates
+    pass dev-nemotron-3-super-120b-a12b-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served DeepInfra; last stop None; 0.0200 USD charged at most
+    fallback dev-nemotron-3-super-120b-a12b-fb-2026-09-26: start (not_started)
+    qualifying pass dev-nemotron-3-super-120b-a12b-2026-09-26: nvidia/nemotron-3-super-120b-a12b on deepinfra, reasoning enabled_false
+frontier 1 deepseek-v4-pro-0813: passes the run gates
+    pass dev-deepseek-v4-pro-0813-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served DeepInfra; last stop None; 0.1911 USD charged at most
+    fallback dev-deepseek-v4-pro-0813-fb-2026-09-26: start (not_started)
+    qualifying pass dev-deepseek-v4-pro-0813-2026-09-26: deepseek/deepseek-v4-pro-0813 on deepinfra, reasoning enabled_false
+frontier 2 glm-5.2: passes the run gates
+    pass dev-glm-5.2-2026-09-26: done (complete); 159/160 completed; reasoning honoured; served Alibaba; last stop None; 0.1455 USD charged at most
+    fallback dev-glm-5.2-fb-2026-09-26: start (not_started)
+    qualifying pass dev-glm-5.2-2026-09-26: z-ai/glm-5.2 on alibaba/fp8, reasoning enabled_false
+frontier 3 kimi-k2.6: passes the run gates
+    pass dev-kimi-k2.6-2026-09-26: done (complete); 160/160 completed; reasoning honoured; served Parasail; last stop None; 0.1162 USD charged at most
+    fallback dev-kimi-k2.6-fb-2026-09-26: start (not_started)
+    qualifying pass dev-kimi-k2.6-2026-09-26: moonshotai/kimi-k2.6 on parasail, reasoning enabled_false
+reserve-small R llama-3.1-8b-instruct: not started
+    pass dev-llama-3.1-8b-instruct-2026-09-26: start (not_started)
+reserve-mid R qwen3-next-80b-a3b-instruct: not started
+    pass dev-qwen3-next-80b-a3b-instruct-2026-09-26: start (not_started)
+reserve-frontier R kimi-k2-0905: not started
+    pass dev-kimi-k2-0905-2026-09-26: start (not_started)
+
+small: run-gate survivors qwen3.5-9b, ministral-8b-2512, granite-4.2-8b; the score and the two-turn smoke decide; if every survivor fails its smoke, run --only reserve-small --after-smoke-failures
+mid: run-gate survivors qwen3.5-122b-a10b, nemotron-3-super-120b-a12b; the score and the two-turn smoke decide; if every survivor fails its smoke, run --only reserve-mid --after-smoke-failures
+frontier: run-gate survivors deepseek-v4-pro-0813, glm-5.2, kimi-k2.6; the score and the two-turn smoke decide; if every survivor fails its smoke, run --only reserve-frontier --after-smoke-failures
+rulings: {"after_smoke_failures": false, "not_measured": [], "rerun": []}
+total charged upper bound: 0.9165 USD

@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.flags.fin","kind":"predicate","operator":"eq","value":1},{"children":[{"field":"dns","kind":"predicate","operator":"exists","value":null},{"field":"dns.flags.response","kind":"predicate","operator":"eq","value":1}],"kind":"all"}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}

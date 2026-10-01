@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"protocol","kind":"predicate","operator":"eq","value":"udp"},{"field":"protocol","kind":"predicate","operator":"exists","value":null},{"field":"ip.dst","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"},{"field":"protocol","kind":"predicate","operator":"ne","value":"dns"}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}
