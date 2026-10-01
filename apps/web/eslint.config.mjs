@@ -45,10 +45,17 @@ const NUMBER_SYNTAX = [
     message: DIGIT_MESSAGE,
   },
   {selector: `${CHILD} TemplateElement[value.raw=${DIGIT}]`, message: DIGIT_MESSAGE},
+  // An attribute's own value only: JSX passed in a prop, such as a <Term>
+  // inside a label, is checked by the child rules above.
+  {selector: `${TEXT_ATTRIBUTE} > Literal[raw=${DIGIT}]`, message: DIGIT_MESSAGE},
+  {
+    selector: `${TEXT_ATTRIBUTE} > JSXExpressionContainer > Literal[raw=${DIGIT}]`,
+    message: DIGIT_MESSAGE,
+  },
   {
     selector:
-      `${TEXT_ATTRIBUTE} :matches(Literal[raw=${DIGIT}], ` +
-      `TemplateElement[value.raw=${DIGIT}])`,
+      `${TEXT_ATTRIBUTE} > JSXExpressionContainer > TemplateLiteral > ` +
+      `TemplateElement[value.raw=${DIGIT}]`,
     message: DIGIT_MESSAGE,
   },
   {

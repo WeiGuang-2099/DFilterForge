@@ -11,6 +11,8 @@ const SITE_URL = `http://127.0.0.1:${PORT}${basePath}/`;
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
+  // Two workers, as on a CI runner, so local and CI timings compare.
+  workers: 2,
   forbidOnly: true,
   retries: 0,
   reporter: 'list',

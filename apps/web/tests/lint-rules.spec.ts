@@ -91,6 +91,13 @@ const PLANTED = [
     code: "export const f = (n: number) => new Intl.NumberFormat('en').format(n);",
   },
   {
+    name: 'a digit in JSX passed as a label',
+    code:
+      "import type {ReactNode} from 'react';\n" +
+      'type G = (props: {label: ReactNode}) => ReactNode;\n' +
+      'export const F = ({G}: {G: G}) => <G label={<>Run 3</>} />;',
+  },
+  {
     name: 'a digit in markup under lib/',
     code: 'export const F = () => <p>Cases: 12</p>;',
     file: 'lib/fixture.tsx',
@@ -113,10 +120,16 @@ test('lint fails on dangerouslySetInnerHTML everywhere, tests included', async (
 
 test('lint passes sourced values, terms and numbers that never render', async () => {
   const code = [
+    "import type {ReactNode} from 'react';",
+    '',
     "import type {NumNode, StrNode} from '@/lib/data';",
     "import {Num, Str, Term} from '@/lib/sourced';",
     '',
     "export const metadata = {title: {default: 'Runs', template: '%s - Runs'}};",
+    '',
+    'function Fact({label}: {label: ReactNode}) {',
+    '  return <dt>{label}</dt>;',
+    '}',
     '',
     'export function F({n, s, rows}: {n: NumNode; s: StrNode; rows: readonly string[]}) {',
     '  return (',
@@ -128,6 +141,7 @@ test('lint passes sourced values, terms and numbers that never render', async ()
     '        <tr>',
     '          <td colSpan={2}>',
     '            <Num kind="int" node={n} /> <Str node={s} />',
+    '            <Fact label={<>Runner <Term name="SHA-256" /></>} />',
     '          </td>',
     '        </tr>',
     '        {rows.length > 0 && rows.slice(0, 3).map((row) => <tr key={row} />)}',

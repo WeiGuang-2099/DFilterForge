@@ -61,14 +61,12 @@ function rawGet(baseURL: string, path: string): Promise<{status: number; body: s
 }
 
 for (const {path, status, heading} of PAGES) {
-  test(`${path} renders its heading and shows no number`, async ({page}) => {
+  // tests/consistency.spec.ts checks every value and every stray digit.
+  test(`${path} renders its heading`, async ({page}) => {
     const response = await page.goto(path);
 
     expect(response?.status()).toBe(status);
     await expect(page.getByRole('heading', {level: 1, name: heading})).toBeVisible();
-    // No page may show a number until it is rendered from a committed file.
-    expect(await page.title()).not.toMatch(/[0-9]/);
-    expect(await page.locator('body').innerText()).not.toMatch(/[0-9]/);
   });
 
   test(`${path} links and loads only under the base path`, async ({page}) => {

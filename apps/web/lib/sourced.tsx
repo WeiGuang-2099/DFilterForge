@@ -21,10 +21,15 @@ import type {TermName} from './terms';
 
 const REPOSITORY = 'https://github.com/WeiGuang-2099/DFilterForge';
 
+/** Returns the GitHub permalink of a repository file at the source commit. */
+export function repositoryFile(file: string): string {
+  const encoded = file.split('/').map(encodeURIComponent).join('/');
+  return `${REPOSITORY}/blob/${encodeURIComponent(loadSite().source_commit)}/${encoded}`;
+}
+
 /**
- * Returns the GitHub permalink of the one file a source reads, or null when
- * it reads several, as a sum over runs does; no single file holds that
- * value.
+ * Returns the permalink of the one file a source reads, or null when it
+ * reads several, as a sum over runs does; no single file holds that value.
  */
 function permalink(source: Src): string | null {
   const files = new Set(sourcePaths(source));
@@ -32,8 +37,7 @@ function permalink(source: Src): string | null {
     return null;
   }
   const [file = ''] = files;
-  const encoded = file.split('/').map(encodeURIComponent).join('/');
-  return `${REPOSITORY}/blob/${encodeURIComponent(loadSite().source_commit)}/${encoded}`;
+  return repositoryFile(file);
 }
 
 interface NumProps {
