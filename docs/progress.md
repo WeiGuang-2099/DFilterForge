@@ -202,18 +202,37 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   and `run_manifest.json`, the step failed (exit 1) with the same re-freeze
   message. The ci.yml comment and the test-freeze Limits now say so.
 
+## Two-turn smoke and slot winners: 2026-10-01
+
+- The owner sent the nine smokes from `repair-multiturn` at 281b2ce (prepared
+  at 2d305e0 from the committed runner summary, same SHA-256) between 11:50
+  and 12:06 UTC, charged at most 0.0115 USD. The anchor's (informational) and
+  eight candidates' passed: both replies completed with finish_reason stop,
+  parsed under C4 and reported 0 reasoning tokens; every served provider and
+  model was the pinned one.
+- kimi-k2.6 met HTTP 429 from Parasail on all 12 attempts of two runs (0 USD);
+  the owner ruled its smoke not measured and not retried (ruling K). It moves
+  no winner: deepseek-v4-pro-0813 (70) is within 4 of glm-5.2 (72) whether or
+  not kimi-k2.6 (68) survives.
+- Rule 5 winners: qwen/qwen3.5-9b (42 of 96, best 42), qwen/qwen3.5-122b-a10b
+  (57, best 57), deepseek/deepseek-v4-pro-0813 (70, best 72), each through its
+  first pass, so no fallback or reserve runs. Evidence: smoke manifests and
+  attempt logs in `decisions/evidence/bakeoff/<run id>/`, plan, summary and
+  verdicts in `decisions/evidence/bakeoff/smoke/`, the ruling in the [bake-off
+  note](decisions/model-bakeoff.md) and `ruling-2026-10-01.json`, which three
+  host tests in `tests/test_dev_bakeoff.py` check (116 passed in the test
+  image with `docs/` mounted; 111 passed and 5 skipped without it).
+
 ## Planned next
 
-1. The two-turn smoke, built on the branch `repair-multiturn`, sent by the
-   owner as a second command; a candidate that fails it gives way by rule 5.
-2. Register every hosted test run (run id, model id, provider, settings) before
+1. Register every hosted test run (run id, model id, provider, settings) before
    the first test request, pass A as `test-qwen3-32b-2026-09-26`, and say what
    releases the CI frozen-prompt guard if pass A never publishes there; then
    qwen/qwen3-32b passes A and B and the slot winners on test; the 12 hashed
    files stay unchanged until the last one.
-3. Counterexample repair with three feedback arms, the feedback sent as a
+2. Counterexample repair with three feedback arms, the feedback sent as a
    second conversational turn; hosted static page generated from receipts.
-4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
+3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
 ## Blocked or unverified
