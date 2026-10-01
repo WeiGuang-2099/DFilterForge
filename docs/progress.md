@@ -379,7 +379,10 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
 - **CI python job mirror at cc96d36:** 1,329 tests passed, 5 skipped, 96.73
   percent coverage.
   - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
-    kept) pass.
+    kept) pass. The mirror's pylint covered `src` and four scripts, not CI's
+    `scripts/dev_bakeoff.py` and `scripts/dev_bakeoff_configs.py`, and it
+    ran no docs-mounted CI step. CI's own pylint command, run later on a
+    `git archive` export of cc96d36, also returns 0.
   - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
     0 unwaived), prepare and recall pass.
   - `score --check` of all 20 committed outputs passes with no difference.
@@ -399,7 +402,9 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
     present and the two passes missing, it fails.
 - **CI python job mirror at 6d587a2:** 1,330 tests passed, 5 skipped, 96.73
   percent coverage.
-  - Static checks, the gates, prepare and recall pass as at cc96d36.
+  - Static checks, the gates, prepare and recall pass as at cc96d36, with
+    the same pylint scope; CI's own pylint command on an export of 6d587a2
+    returns 0.
   - The mirror now runs both docs-mounted CI steps: the frozen-prompt guard
     and the committed-pair test each pass (1 passed).
   - `score --check` of all 20 committed outputs passes with no difference.
@@ -479,7 +484,11 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
 - **CI python job mirror at a1c7179:** 1,611 tests passed, 6 skipped, 96.8
   percent coverage (1,602 and 96.65 at 1c7df3c).
   - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
-    kept) pass.
+    kept) pass. The mirror's pylint covered `src` and four scripts, not CI's
+    `scripts/dev_bakeoff.py`, `scripts/dev_bakeoff_configs.py` and
+    `scripts/two_turn_smoke.py`, and it ran neither docs-mounted CI step;
+    the guard's expected failure here is recorded above. CI's own pylint
+    command, run later on an export of a1c7179, also returns 0.
   - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
     0 unwaived), prepare and recall pass.
   - `score --check` of all 20 committed outputs passes with no difference.
