@@ -493,6 +493,61 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
     0 unwaived), prepare and recall pass.
   - `score --check` of all 20 committed outputs passes with no difference.
     The repair loops check no plan and no pool, since none is committed.
+- **repair-cards merged again** (cdbc25f) for its three review fixes; the
+  only conflict was one import line of `tests/test_repair.py`.
+- **Review fixes** (839a1c3, 1b4ce7f, 184939c, c8eef3b, b261c31): six
+  confirmed findings, each with a test that fails on its mutant in the test
+  image. No prepare-hashed file changed after 3839586.
+  - **The committed plan is the round's record** (839a1c3). `round_run`
+    derived the plan again even with arm runs present, so a dev correction,
+    which re-scores `scored/` in place, or one that moved a feedback label or
+    a card, made `repair --check` differ and `repair` refuse for good. Once
+    an arm run exists the committed plan is now read and never derived
+    again: it must name the pass's split, run and manifest digest, list
+    ready C4 items in prepare order whose answers are their scored intents,
+    and, while the outcomes it recorded are unchanged, list exactly their
+    trigger set (`repair_plan_changed`; `repair_plan_unreadable`). Moved
+    outcomes are listed by the summary, which `repair` may now rewrite.
+    On a scratch copy of `dev-qwen3.5-9b-2026-09-26` with the three arm
+    prompt sets seeded, changing the C1 mei-0001 outcome in place left
+    `repair --check` at exit 0 and the plan at `387a3309...`; the code at
+    cdbc25f gave exit 1 with `repair/plan.json` differing (`a3f437ba...`).
+  - **An arm the gate stopped is reported as not run** (1b4ce7f).
+    `dfilterforge repair --not-run ARM` writes `repair/not_run.json`
+    (`repair-not-run/1.0`, one or two arms, reason `thinking_not_honoured`).
+    That arm may stay a seed or be absent and must never be published
+    (`repair_arm_mismatch`); the summary lists the arms run, their one
+    comparison and `arms_not_run`, and `repair-pool` refuses the base
+    (`repair_pool_not_run`).
+  - **card_value_reuse counts shortcut answers** (184939c): a direct test
+    of `summarize_round` counts a strong-exact and a shortcut answer.
+  - **Second turns no plan checks are refused** (c8eef3b). A new
+    docs-mounted CI step runs
+    `test_every_committed_second_turn_is_an_arm_a_plan_checks`, which fails
+    on any committed run with a prompt of more than two messages that is not
+    an arm, first run or re-run of a base with a committed plan; it lists
+    none today. A first run an `-r2` re-run replaced now has its prompts
+    checked too.
+  - **The mirror's scope** (b261c31): the three mirror entries above now say
+    which pylint files and docs-mounted steps they left out; CI's own pylint
+    command returns 0 on exports of cc96d36, 6d587a2 and a1c7179. The local
+    mirror now reads its static commands and docs-mounted test nodes from
+    `ci.yml`.
+  - `tests/test_repair.py` goes from 109 to 131 cases. `repair_round.py` is
+    now 776 lines, `repair_summary.py` 715, `repair.py` 579 and
+    `repair_report.py` 241.
+- **CI python job mirror at b261c31:** 1,633 tests passed, 7 skipped, 96.82
+  percent coverage.
+  - pyink, isort, pylint on CI's file list (rc 0), pyright (0 errors) and
+    lint-imports (5 contracts kept) pass.
+  - Of the three docs-mounted CI steps, the committed-pair and second-turn
+    tests pass; the frozen-prompt guard fails with `re-freeze after
+    ['scripts/model_run.py', 'src/dfilterforge/generation.py']`, as expected
+    on this branch, and the mirror counts only that failure as expected.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 20 committed outputs passes with no difference;
+    no repair plan or pool is committed.
 
 ## Planned next
 
