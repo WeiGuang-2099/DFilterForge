@@ -2,8 +2,10 @@
 
 ``docs/decisions/evidence/test-runs.json`` and the note beside it name each
 run over the frozen test prompts: its role, run id, model, config, cap and
-the run whose failure would trigger it. These tests read the committed
-docs/ tree, which the test image does not carry, so they skip there.
+the run whose failure would trigger it. The registry also states the rule
+the protocol's Repair section names repair arm runs by, and the repair note
+lists those ids. These tests read the committed docs/ tree, which the test
+image does not carry, so they skip there.
 """
 
 from __future__ import annotations
@@ -79,6 +81,31 @@ _DEV_REQUESTS = 160
 _CAP_STEP_USD = 0.05
 _NOTE_ROW = re.compile(r"\| (\d+) \| `([a-z_]+)` \| .*\|$")
 _NOTE_TRIGGER = re.compile(r"(gate stop|outage) of `([^`]+)`")
+_REPAIR_NOTE = _DECISIONS / "repair-round.md"
+_ARM_TAGS = ("res", "bare", "cx")
+_RERUN_TAG = "r2"
+# Every role but pass B's is repaired once its run is the counted one.
+_REPAIRED_ROLES = (
+    "aa_pass_a",
+    "winner_small",
+    "winner_mid",
+    "winner_frontier",
+    "fallback_small",
+    "fallback_mid",
+    "fallback_frontier",
+)
+# The only arm re-run ids too long for a result name, as the repair note
+# names them: arm outages of the frontier fallback's own outage re-run.
+_UNFIT_ARM_IDS = frozenset(
+    {
+        "test-deepseek-v4-pro-0813-fb-r2-res-r2-2026-09-26",
+        "test-deepseek-v4-pro-0813-fb-r2-bare-r2-2026-09-26",
+    }
+)
+_DATED = re.compile(r"(.+)-([0-9]{4}-[0-9]{2}-[0-9]{2})")
+_NOTE_ARM_ROW = re.compile(
+    r"\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|"
+)
 
 # Keyed to the results tree, so a deleted registry fails rather than skips.
 pytestmark = pytest.mark.skipif(
@@ -409,3 +436,66 @@ def test_the_note_lists_exactly_the_registered_rows() -> None:
     assert listed == registered
     assert f"`{_PREPARE}`" in note
     assert "(decisions/test-runs.md)" in protocol
+
+
+def _arm_run_id(repaired: str, tag: str, rerun: bool = False) -> str:
+    """Names an arm run as the protocol's Repair section names it."""
+    match = _DATED.fullmatch(repaired)
+    assert match is not None, repaired
+    middle = f"{match.group(1)}-{tag}"
+    if rerun:
+        middle += f"-{_RERUN_TAG}"
+    return f"{middle}-{match.group(2)}"
+
+
+def test_repair_arm_runs_follow_the_registered_naming() -> None:
+    """Every arm run id the Repair rule can give is unique and listed.
+
+    The registry states the rule. The repair note lists the planned passes'
+    ids and names the only two too long for a result name, so a run that
+    would need one is known before the first request.
+    """
+    result_dir: re.Pattern[str] = getattr(db.load_model_run(), "_RESULT_DIR")
+    arms = _read_json(_REGISTRY)["repair_arms"]
+    ruling = _read_json(_RULING)
+    runs = _runs()
+    note = _REPAIR_NOTE.read_text(encoding="utf-8")
+    protocol = (_ROOT / "docs" / "protocol.md").read_text(encoding="utf-8")
+    dev = [
+        ruling["anchor"]["run_id"],
+        *(ruling["slots"][slot]["winner"]["run_id"] for slot in _SLOTS),
+    ]
+    repaired = [run for run in runs if run["role"] in _REPAIRED_ROLES]
+    planned = dev + [run["run_id"] for run in repaired if not run["trigger"]]
+    arm_ids = [
+        _arm_run_id(run_id, tag, rerun)
+        for run_id in dev + [run["run_id"] for run in repaired]
+        for tag in _ARM_TAGS
+        for rerun in (False, True)
+    ]
+    listed = [
+        match.groups()
+        for match in map(_NOTE_ARM_ROW.fullmatch, note.splitlines())
+        if match is not None
+    ]
+
+    assert arms["tags"] == list(_ARM_TAGS)
+    assert arms["rerun_tag"] == _RERUN_TAG
+    assert {*_ARM_TAGS, _RERUN_TAG} <= _TAKEN_TAGS
+    assert arms["repaired_roles"] == list(_REPAIRED_ROLES)
+    assert {run["role"] for run in runs} - set(_REPAIRED_ROLES) == {"aa_pass_b"}
+    assert _ROOT / arms["note"] == _REPAIR_NOTE
+    assert arms["registered_in"] == "docs/protocol.md"
+    assert "(decisions/repair-round.md)" in " ".join(protocol.split())
+    assert f"`{_arm_run_id(runs[0]['run_id'], 'cx')}`" in protocol
+    assert len(arm_ids) == len(set(arm_ids)) == 108
+    assert not set(arm_ids) & {run["run_id"] for run in runs}
+    assert {
+        run_id for run_id in arm_ids if result_dir.fullmatch(run_id) is None
+    } == _UNFIT_ARM_IDS
+    for run_id in _UNFIT_ARM_IDS:
+        assert f"`{run_id}`" in note
+    assert listed == [
+        (run_id, *(_arm_run_id(run_id, tag) for tag in _ARM_TAGS))
+        for run_id in planned
+    ]

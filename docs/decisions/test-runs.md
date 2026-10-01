@@ -195,9 +195,20 @@ smoke), so runs 1 to 5 at their caps bring it to 3.29 USD of the plan's 12 USD.
 
 ## Not registered here
 
-Repair arm runs (`-res`, `-bare`, `-cx`) are not baseline runs; they are
-registered with the repair round before the first test request. Pass B is never
-repaired. Dev runs and smoke runs are not test runs.
+Repair arm runs are not baseline runs and are not rows here. The protocol's
+Repair section registers them by rule before the first test request: the run
+of `aa_pass_a` and each slot's published `winner_<slot>` or `fallback_<slot>`
+run, an outage re-run included, is repaired by three arm runs named after its
+run id with `-res`, `-bare` or `-cx` before the date, and an arm's outage
+re-run adds `-r2` after the tag (`test-qwen3-32b-cx-r2-2026-09-26`). Each arm
+run sends its repaired run's config and call options under the Repair
+section's cap for that slot. `test-runs.json` states the rule under
+`repair_arms`, and the [repair note](repair-round.md) lists the ids. Pass B is
+never repaired. A test arm's prompt set is prepared only after the last
+baseline request and admitted in its own commit; as the test-freeze note's
+Limits say, it is guarded until its own `run_manifest.json` sits beside it, so
+no arm run keeps a row here, or the frozen test prompts, guarded. Dev runs and
+smoke runs are not test runs.
 
 ## Limits
 

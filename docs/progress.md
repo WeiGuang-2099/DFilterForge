@@ -4,8 +4,9 @@ Last updated: 2026-10-01
 
 ## Current slice
 
-The test split is frozen, the slot winners are fixed and every hosted test run
-is registered; the paid test passes follow once the registration merges.
+The test split is frozen, the slot winners are fixed, every hosted test run is
+registered and the repair round is pre-registered; the paid test passes follow
+once the registration merges.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -266,14 +267,57 @@ Reports under the ignored `artifacts/` are not project evidence.
   despite the edit; a row marked published without its manifest, and a
   deleted registry beside pass A's manifest (`no registered run`), failed.
 
+## Repair round registered: 2026-10-01
+
+- `docs/protocol.md` now registers the repair round before any test request,
+  as the owner decided on 2026-10-01 (OD1 to OD4 in the [repair
+  note](decisions/repair-round.md)):
+  - The repair@1 bullet defines the estimator: repaired over triggered case
+    shares on the repaired pass's ready-case vectors.
+  - A new section, Repair, fixes the trigger, the three arms (`-res`,
+    `-bare`, `-cx`), the feedback-probe card and its 13 header fields, the
+    scoring and comparisons, the arm run ids and per-slot caps, admission and
+    corrections.
+  - No freeze quote changed: `tests/test_held_out.py` passes on the host.
+- **Repaired passes.** These are pass A and the three winners' counted test
+  passes, plus the four counted dev passes as a pipeline check.
+  - The dev passes hold 36 triggered C4 items (anchor 10, qwen3.5-9b 7,
+    qwen3.5-122b-a10b 8, deepseek-v4-pro-0813 11; 27 silent-wrong, 9 invalid),
+    counted from the committed outcomes. All have ready gold and finished
+    with `stop`.
+  - So the dev round is 108 requests.
+- **Arm run ids.** Arm runs are not registry rows.
+  - `test-runs.json` states their naming rule under `repair_arms`, and the
+    note lists the 24 ids of the planned passes.
+  - Over all 18 runs that can be repaired, 106 of the 108 arm and re-run ids
+    fit the result-name pattern.
+  - Two do not fit. Both are outage re-runs of an arm over the frontier
+    fallback's own outage re-run, and such an arm is reported not run.
+- **Caps.** The arm caps total 3.90 USD (1.20 dev, 2.70 test). With the
+  0.940 USD recorded so far and the registry's runs 1 to 5 at their caps,
+  OpenRouter spend stays within 7.19 USD of the plan's 12 USD.
+  - Each cap covers at least two requests at the 64 KiB prompt bound, the
+    call step's pre-request bound at the config's prices.
+  - The largest dev counterexample prompt with a full card is 7,667 B.
+- **New host test.** `test_repair_arm_runs_follow_the_registered_naming` in
+  `tests/test_hosted_test_runs.py` passes (7 passed in that file). Each of
+  five deliberate breakages made it fail: a listed id, an unnamed unfit id,
+  a changed tag, the protocol's example id, and pass B made repairable.
+- **Not measured.** No repair request has been sent, and every committed
+  summary still records `repair_at_1` as `not_run`. The card figures and
+  expected costs in the note are the repair design's scratch measurements and
+  have not been re-run.
+
 ## Planned next
 
 1. The [registered test runs](decisions/test-runs.md): qwen/qwen3-32b passes A
    and B, then the slot winners; the 12 hashed files stay unchanged until the
    last one, and no test run is scored before the `repair-cards` branch
    merges.
-2. Counterexample repair with three feedback arms, the feedback sent as a
-   second conversational turn; hosted static page generated from receipts.
+2. The [repair round](decisions/repair-round.md) as registered: the
+   `repair-cards` branch (card code, dev plans), then `repair-arms` with the
+   dev round, then, after the last baseline request, the test round and the
+   locked test result. Then the hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 

@@ -19,6 +19,26 @@
     "max_attempts": 3,
     "min_interval_seconds": 1.0
   },
+  "repair_arms": {
+    "registered_in": "docs/protocol.md",
+    "note": "docs/decisions/repair-round.md",
+    "rule": "Each repaired run gets three arm runs named after its run id with -res, -bare or -cx before its date; an arm's outage re-run adds -r2 after the tag. An arm run sends its repaired run's config and call options under the protocol's per-slot repair cap. Arm runs are not baseline runs and are not rows here.",
+    "repaired_roles": [
+      "aa_pass_a",
+      "winner_small",
+      "winner_mid",
+      "winner_frontier",
+      "fallback_small",
+      "fallback_mid",
+      "fallback_frontier"
+    ],
+    "tags": [
+      "res",
+      "bare",
+      "cx"
+    ],
+    "rerun_tag": "r2"
+  },
   "runs": [
     {
       "role": "aa_pass_a",
