@@ -209,10 +209,11 @@ Reports under the ignored `artifacts/` are not project evidence.
 
 - The owner sent the nine smokes from `repair-multiturn` at 281b2ce (prepared
   at 2d305e0 from the committed runner summary, same SHA-256) between 11:50
-  and 12:06 UTC, charged at most 0.0115 USD. The anchor's (informational) and
-  eight candidates' passed: both replies completed with finish_reason stop,
-  parsed under C4 and reported 0 reasoning tokens; every served provider and
-  model was the pinned one.
+  and 12:06 UTC, charged at most 0.0115 USD. The anchor's smoke
+  (informational) and seven candidates' smokes passed (kimi-k2.6's was not
+  measured; see the next bullet): both replies completed with finish_reason
+  stop, parsed under C4 and reported 0 reasoning tokens; every served provider
+  and model was the pinned one.
 - kimi-k2.6 met HTTP 429 from Parasail on all 12 attempts of two runs (0 USD);
   the owner ruled its smoke not measured and not retried (ruling K). It moves
   no winner: deepseek-v4-pro-0813 (70) is within 4 of glm-5.2 (72) whether or
