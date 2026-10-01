@@ -1822,6 +1822,30 @@ def test_a_round_with_an_arm_not_yet_published_is_refused(
     assert _round_refusal(base_dir).code == "repair_arms_incomplete"
 
 
+def test_a_round_with_an_arm_left_incomplete_is_refused(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    base_dir = _round_base(tmp_path / "results", source)
+    _write_arm(base_dir, source, "resample")
+    # Every answer is published and scored, but the run says it is not done.
+    _write_arm(base_dir, source, "bare", manifest={"status": "incomplete"})
+    _write_arm(base_dir, source, "counterexample")
+
+    error = _round_refusal(base_dir)
+
+    assert error.code == "repair_arms_incomplete"
+    assert str(error).startswith(f"{_ARM_RUNS['bare']} is not complete")
+
+
+def test_a_round_whose_base_lost_its_scored_summary_is_refused(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    base_dir = _round(tmp_path, source)
+    (base_dir / "scored" / "summary.json").unlink()
+
+    assert _round_refusal(base_dir).code == "base_unscored"
+
+
 def test_prompt_sets_seeded_before_their_calls_are_checked_alone(
     tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
 ) -> None:
@@ -2245,6 +2269,81 @@ def test_bases_that_cannot_be_pooled_are_refused(
 
     assert error.value.code == code
     assert not (results / "repair-pool").exists()
+
+
+def _damaged(summary: RepairSummaryV1, damage: str) -> dict[str, Any]:
+    """The fields of a summary whose cases no longer describe its items."""
+    cases, items = list(summary.cases), list(summary.items)
+    if damage == "overfull":
+        # tcp-expiring-ttl triggers both of its two ready items.
+        cases[8] = cases[8].model_copy(update={"ready_items": 1})
+    elif damage == "recounted":
+        cases[0] = cases[0].model_copy(update={"triggered_items": 1})
+    elif damage == "unlisted":
+        del cases[8]
+    elif damage == "repeated":
+        items.append(items[0])
+    elif damage == "armless":
+        outcomes = dict(items[0].outcomes)
+        del outcomes["bare"]
+        items[0] = items[0].model_copy(update={"outcomes": outcomes})
+    else:
+        return {"arms": summary.arms[::-1]}
+    return {"cases": tuple(cases), "items": tuple(items)}
+
+
+@pytest.mark.parametrize(
+    ("damage", "message"),
+    [
+        ("overfull", "a case triggers at most its ready items"),
+        ("recounted", "each case counts its triggered items"),
+        ("unlisted", "every item is in one listed ready case"),
+        ("repeated", "a summary lists each item once"),
+        ("armless", "an item has an outcome in every arm"),
+        ("reordered", "a summary lists the three arms in order"),
+    ],
+)
+def test_a_summary_whose_counts_do_not_add_up_is_not_pooled(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    damage: str,
+    message: str,
+) -> None:
+    base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
+    summary = _summary(base_dir)
+    results = base_dir.parent
+    assert summary.cases[8].case_id == "tcp-expiring-ttl"
+    assert summary.cases[0].triggered_items == 0
+    run = _other_model(results, summary, "b", **_damaged(summary, damage))
+
+    with pytest.raises(ValidationError, match=message):
+        RepairSummaryV1.model_validate_json(
+            (results / run / SUMMARY_PATH).read_bytes()
+        )
+    with pytest.raises(RoundError) as error:
+        pool_run(results, "dev", [base_dir.name, run], code_revision="rev")
+
+    assert error.value.code == "repair_pool_unsummarized"
+    assert str(error.value).startswith(run)
+    assert not (results / "repair-pool").exists()
+
+
+def test_a_committed_pool_that_cannot_be_read_names_no_bases(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
+    results = base_dir.parent
+    pool_run(results, "dev", [base_dir.name], code_revision="rev")
+    (results / "repair-pool" / "dev.json").write_bytes(b"{}\n")
+
+    with pytest.raises(RoundError) as error:
+        pool_run(results, "dev", code_revision="rev", check=True)
+
+    assert error.value.code == "repair_pool_bases_invalid"
+    assert (results / "repair-pool" / "dev.json").read_bytes() == b"{}\n"
 
 
 def test_a_report_cell_cannot_carry_markup_from_a_model_id(
