@@ -63,27 +63,28 @@ test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
     'tcp.port == 443 && ip.addr == 192.0.2.1',
   );
-  expect(visible('Größe 名前 é')).toBe('Größe 名前 é');
-  expect(visible('\u{1F600}')).toBe('\u{1F600}');
+  const mixed = 'Gr\u00f6\u00dfe \u540d\u524d \u00e9';
+  expect(visible(mixed)).toBe(mixed);
+  expect(visible('\u{1D400}')).toBe('\u{1D400}');
 });
 
 test('visible shows C0 controls and DEL as control pictures', () => {
-  expect(visible('\u0000')).toBe('␀');
-  expect(visible('a\rb')).toBe('a␍b');
-  expect(visible('\u001b[31m')).toBe('␛[31m');
-  expect(visible('\u001f')).toBe('␟');
-  expect(visible('\u007f')).toBe('␡');
+  expect(visible('\u0000')).toBe('\u2400');
+  expect(visible('a\rb')).toBe('a\u240db');
+  expect(visible('\u001b[31m')).toBe('\u241b[31m');
+  expect(visible('\u001f')).toBe('\u241f');
+  expect(visible('\u007f')).toBe('\u2421');
 });
 
 test('visible names bidirectional and invisible characters', () => {
   // A right-to-left override can make a filter read differently from the
   // bytes that ran; the page must show it is there.
-  expect(visible('ip.src‮ == 1')).toBe('ip.src[RLO] == 1');
-  expect(visible('⁦x⁩')).toBe('[LRI]x[PDI]');
-  expect(visible('dns​.qry')).toBe('dns[ZWSP].qry');
-  expect(visible('﻿a')).toBe('[BOM]a');
-  expect(visible('a b')).toBe('a[LSEP]b');
-  expect(visible('؜‎‏')).toBe('[ALM][LRM][RLM]');
+  expect(visible('ip.src\u202e == 1')).toBe('ip.src[RLO] == 1');
+  expect(visible('\u2066x\u2069')).toBe('[LRI]x[PDI]');
+  expect(visible('dns\u200b.qry')).toBe('dns[ZWSP].qry');
+  expect(visible('\ufeffa')).toBe('[BOM]a');
+  expect(visible('a\u2028b')).toBe('a[LSEP]b');
+  expect(visible('\u061c\u200e\u200f')).toBe('[ALM][LRM][RLM]');
 });
 
 test('visible shows C1 controls and lone surrogates by code point', () => {
