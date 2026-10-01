@@ -1,0 +1,391 @@
+{
+ "cards": {
+  "all": {
+   "bytes": {
+    "max": 717,
+    "mean": 483.4,
+    "min": 183,
+    "p50": 562.0,
+    "p95": 694,
+    "total": 189494
+   },
+   "frames_per_card": {
+    "1": 107,
+    "2": 66,
+    "3": 219
+   },
+   "kinds": {
+    "frames": 392
+   }
+  },
+  "dev": {
+   "bytes": {
+    "max": 717,
+    "mean": 448.7,
+    "min": 183,
+    "p50": 440.0,
+    "p95": 682,
+    "total": 37688
+   },
+   "frames_per_card": {
+    "1": 25,
+    "2": 20,
+    "3": 39
+   },
+   "kinds": {
+    "frames": 84
+   }
+  },
+  "test": {
+   "bytes": {
+    "max": 717,
+    "mean": 492.9,
+    "min": 183,
+    "p50": 569.0,
+    "p95": 694,
+    "total": 151806
+   },
+   "frames_per_card": {
+    "1": 82,
+    "2": 46,
+    "3": 180
+   },
+   "kinds": {
+    "frames": 308
+   }
+  }
+ },
+ "cards_sha256": "37ccfeb8c201b228f8d45eaee06689669dbe4a4182b671910f88efd1176a783f",
+ "facts": {
+  "semantic-29": {
+   "frames": 62,
+   "frames_confirmed": 62,
+   "seconds": 4.475,
+   "shown_values_confirmed": 478,
+   "tshark_runs": 63
+  },
+  "semantic-35": {
+   "frames": 63,
+   "frames_confirmed": 63,
+   "seconds": 4.593,
+   "shown_values_confirmed": 483,
+   "tshark_runs": 64
+  }
+ },
+ "label_determination": {
+  "context_layers_flags_response": {
+   "cases": {
+    "dev": 12,
+    "test": 40
+   },
+   "cases_total": 52,
+   "determined": {
+    "dev": 2,
+    "test": 7
+   },
+   "determined_total": 9,
+   "undetermined_cases": [
+    "tcp-expiring-ttl",
+    "udp-expiring-ttl",
+    "ack-to-https",
+    "dns-a-queries",
+    "udp-nondns-private-destination",
+    "ecn-syn-or-expiring",
+    "aaaa-or-nxdomain",
+    "udp-normal-ttl",
+    "private-destination",
+    "dns-error-responses",
+    "tcp-source-testnet",
+    "udp-source-testnet",
+    "private-either-endpoint",
+    "source-testnet-or-private",
+    "ack-outside-testnet",
+    "high-udp-source-testnet",
+    "high-udp-normal-ttl",
+    "high-udp-testnet-normal-ttl",
+    "low-port-dns-a",
+    "dns-destination-not-source",
+    "successful-source-dns",
+    "aaaa-or-udp-source-dns",
+    "https-without-syn",
+    "https-syn-no-ack",
+    "https-syn-or-reset",
+    "tcp-destination-not-https",
+    "tcp-from-https-port",
+    "tcp-without-port-443",
+    "https-no-syn-no-reset",
+    "udp-short-ttl",
+    "ttl-between",
+    "udp-to-dns-or-mdns-port",
+    "dns-query-off-port-53",
+    "dns-response-not-nxdomain",
+    "dns-queries-not-a",
+    "unicast-dns-udp-queries",
+    "dns-except-nxdomain",
+    "private-source-or-expiring",
+    "testnet-either-endpoint",
+    "no-testnet-endpoint",
+    "udp-not-from-testnet",
+    "nondns-udp-from-testnet",
+    "https-from-outside-testnet"
+   ]
+  },
+  "context_without_addresses": {
+   "cases": {
+    "dev": 12,
+    "test": 40
+   },
+   "cases_total": 52,
+   "determined": {
+    "dev": 10,
+    "test": 27
+   },
+   "determined_total": 37,
+   "undetermined_cases": [
+    "udp-nondns-private-destination",
+    "private-destination",
+    "tcp-source-testnet",
+    "udp-source-testnet",
+    "private-either-endpoint",
+    "source-testnet-or-private",
+    "ack-outside-testnet",
+    "high-udp-source-testnet",
+    "high-udp-testnet-normal-ttl",
+    "private-source-or-expiring",
+    "testnet-either-endpoint",
+    "no-testnet-endpoint",
+    "udp-not-from-testnet",
+    "nondns-udp-from-testnet",
+    "https-from-outside-testnet"
+   ]
+  },
+  "shown": {
+   "cases": {
+    "dev": 12,
+    "test": 40
+   },
+   "cases_total": 52,
+   "determined": {
+    "dev": 12,
+    "test": 40
+   },
+   "determined_total": 52,
+   "undetermined_cases": []
+  }
+ },
+ "leak_checks": {
+  "candidates_checked": 392,
+  "canonical_ir_cards": 0,
+  "failures": {}
+ },
+ "lines": {
+  "code": 554,
+  "nonblank": 705,
+  "physical": 805,
+  "public_name_count": 20,
+  "public_names": [
+   "CARD_MAX_BYTES",
+   "CardBuilder",
+   "CounterexampleCardV1",
+   "CounterexampleError",
+   "EPHEMERAL_PORTS",
+   "ErrorCardV1",
+   "FrameFactV1",
+   "FramesCardV1",
+   "HeaderFactsV1",
+   "MAX_CARD_FRAMES",
+   "MAX_ERROR_FIELD_BYTES",
+   "MAX_FRAME_NUMBER",
+   "SHOWN_FIELDS",
+   "TCP_FLAG_NAMES",
+   "TcpFlagName",
+   "card_json",
+   "decode_capture",
+   "frames_card",
+   "proof_filter",
+   "read_frame_facts"
+  ]
+ },
+ "measurement_identity": {
+  "candidates": 392,
+  "candidates_sha256": "1da68ee544b6e26d1eaa5f0a18d7f3a596f625afb09c20f41acb23b0ca58b6c5",
+  "dev_base_manifests": {
+   "dev-deepseek-v4-pro-0813-2026-09-26": "298affadb2cd9398f2bd3c4c58f1766a2ccdeb4ba4c6451aeb4ee6f415dc3511",
+   "dev-qwen3-32b-2026-09-26": "6399a0001e5ee0288a11ef809f9878c41930df30ee44cac632c41fab2c604169",
+   "dev-qwen3.5-122b-a10b-2026-09-26": "b1e5bdcc5c4c186d7aa1764bc7685466f7505784e3a745268960b02019187686",
+   "dev-qwen3.5-9b-2026-09-26": "81586aa870cda4e1a77f7120933337ef2a63e4ed500a0810b8372303c93e9a73"
+  },
+  "environment_hash": "8bfb53d31c02b4c36786cd4914840f0808092a7e4fa037058248d4c4ba1bf414",
+  "feedback_captures": {
+   "semantic-29": "1a0ef0e69d85bf39f5f982261fa48822991d00e3c21ae0a26bd190d67c59ec1b",
+   "semantic-35": "3ca0673f7a0da4571cefa72360f2edbd657bf8b5c2042f26aacf24758b10f816"
+  },
+  "feedback_labels_sha256": {
+   "dev": "be0c91824bb5c65396f4cbd95d3c55348a961d877c17ff9018301f1da66b7608",
+   "test": "c0b30949787e0e8a5fcfaf8e45ac2b092cfb7e45305b90721f29375079066b94"
+  },
+  "gold_file_sha256": "f59c6a095aec0afc364afed1c61cc28a0b0f6b1db1849a254eb647796d9bc7a2",
+  "repetitions": 3,
+  "tshark_version": "4.6.8"
+ },
+ "measurement_identity_sha256": "dfc394eeb061774271346627263ce5d4d64a75c269159c91659ff8c6685c1a9d",
+ "module_sha256": "951c02577538c55d7bed779f982b0a769421b97af7d9c04687bea98f14c4ff08",
+ "plans": {
+  "dev-deepseek-v4-pro-0813-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 2,
+    "silent_wrong": 9
+   },
+   "card_bytes": [
+    45,
+    49,
+    227,
+    248,
+    356,
+    426,
+    432,
+    434,
+    446,
+    714,
+    717
+   ],
+   "card_kinds": {
+    "error": 2,
+    "frames": 9
+   },
+   "frames_per_card": {
+    "1": 2,
+    "2": 5,
+    "3": 2
+   },
+   "items": 11,
+   "plan_bytes": 5959,
+   "plan_sha256": "c2e75d74b17ad68f426ff85da711d5426f4aebfd1290998dbdc8ef9165d46388",
+   "seconds": 6.347
+  },
+  "dev-qwen3-32b-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 4,
+    "silent_wrong": 6
+   },
+   "card_bytes": [
+    49,
+    49,
+    50,
+    54,
+    265,
+    446,
+    604,
+    628,
+    697,
+    699
+   ],
+   "card_kinds": {
+    "error": 4,
+    "frames": 6
+   },
+   "frames_per_card": {
+    "1": 1,
+    "2": 1,
+    "3": 4
+   },
+   "items": 10,
+   "plan_bytes": 5229,
+   "plan_sha256": "53e110395c3e4cc85b752f78124a21804b6312cd750b4f57996d2a03f143cf6f",
+   "seconds": 6.094
+  },
+  "dev-qwen3.5-122b-a10b-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 1,
+    "silent_wrong": 7
+   },
+   "card_bytes": [
+    49,
+    227,
+    426,
+    432,
+    638,
+    681,
+    700,
+    717
+   ],
+   "card_kinds": {
+    "error": 1,
+    "frames": 7
+   },
+   "frames_per_card": {
+    "1": 1,
+    "2": 2,
+    "3": 4
+   },
+   "items": 8,
+   "plan_bytes": 5452,
+   "plan_sha256": "6f746e8e067b53a4cc173b859c66669a2b2d3fdde29bf544e481879be9c10942",
+   "seconds": 5.723
+  },
+  "dev-qwen3.5-9b-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 2,
+    "silent_wrong": 5
+   },
+   "card_bytes": [
+    45,
+    49,
+    555,
+    681,
+    682,
+    714,
+    717
+   ],
+   "card_kinds": {
+    "error": 2,
+    "frames": 5
+   },
+   "frames_per_card": {
+    "3": 5
+   },
+   "items": 7,
+   "plan_bytes": 4860,
+   "plan_sha256": "387a330981b60328450688b0cbcc4bab49fb68394138533dbaa986c32cbb1e67",
+   "seconds": 6.337
+  }
+ },
+ "runtime": {
+  "median_cards_seconds": 66.0,
+  "median_facts_seconds": 8.849,
+  "median_total_seconds": 74.849,
+  "repetitions": [
+   {
+    "card_ms_p50": 169.33,
+    "card_ms_p95": 211.73,
+    "card_tshark_runs": 784,
+    "cards_seconds": 68.062,
+    "cards_sha256": "37ccfeb8c201b228f8d45eaee06689669dbe4a4182b671910f88efd1176a783f",
+    "facts_seconds": 9.068,
+    "total_seconds": 77.13
+   },
+   {
+    "card_ms_p50": 166.02,
+    "card_ms_p95": 198.94,
+    "card_tshark_runs": 784,
+    "cards_seconds": 66.0,
+    "cards_sha256": "37ccfeb8c201b228f8d45eaee06689669dbe4a4182b671910f88efd1176a783f",
+    "facts_seconds": 8.849,
+    "total_seconds": 74.849
+   },
+   {
+    "card_ms_p50": 152.77,
+    "card_ms_p95": 177.97,
+    "card_tshark_runs": 784,
+    "cards_seconds": 61.121,
+    "cards_sha256": "37ccfeb8c201b228f8d45eaee06689669dbe4a4182b671910f88efd1176a783f",
+    "facts_seconds": 8.761,
+    "total_seconds": 69.882
+   }
+  ],
+  "script_seconds": 288.478
+ },
+ "schema_version": "ablation-008/1.0",
+ "source_revision": "f29066e",
+ "variant": "full"
+}

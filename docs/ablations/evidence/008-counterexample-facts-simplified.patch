@@ -1,0 +1,644 @@
+--- a/src/dfilterforge/counterexample.py
++++ b/src/dfilterforge/counterexample.py
+@@ -5,19 +5,10 @@
+ packet by the header facts below, never by a payload byte, a label it does
+ not show or a gold filter.
+ 
+-The facts come from a bounded decoder over one hash-checked copy of the
+-capture: classic little-endian PCAP, Ethernet II, IPv4, TCP or UDP, and a
+-DNS header. The decoder displays values; it evaluates no filter. tshark is
+-the authority: for every frame one filter built only from the typed decoded
+-values, each shown field equal to its value and each missing one absent,
+-must select exactly that frame, or nothing is shown at all. The filter goes
+-to ``TsharkRunner.run`` as one argv element with ``shell=False``, and no
+-model text is ever part of it.
+-
+-The capture is untrusted input. Every offset is checked against the bytes
+-its record holds, a compression pointer in a DNS question is refused, and
+-any other surprise stops the round with ``facts_unreadable`` rather than
+-showing a value tshark has not confirmed.
++Simplified (ablation 008): a card shows only the tshark membership facts of a
++frame, its number, whether the answer selected it and whether it should be
++selected. No header field is read from the capture, so nothing is decoded
++and tshark confirms nothing.
+ 
+ A card comes from running the answer on its case's feedback specification
+ through the unchanged ``live.evaluate_live`` and keeping only which frames
+@@ -27,25 +18,18 @@
+ that raises that code alone. An answer the probe cannot separate gets no
+ card. Otherwise the card holds at most three disagreeing frames, taken
+ alternately from the missed and the wrongly selected ones in frame order,
+-skipping a frame equal to one already taken but for its number and any
+-ephemeral port. A card is canonical JSON of at most 1,024 bytes.
++skipping a frame equal to one already taken but for its number. A card is
++canonical JSON of at most 1,024 bytes.
+ 
+ No module that builds prompts, calls a model or scores imports this one.
+ """
+ 
+ from __future__ import annotations
+ 
+-from collections.abc import Iterator, Mapping, Sequence
++from collections.abc import Iterator, Sequence
+ from datetime import datetime
+ from datetime import timezone
+-import hashlib
+-import ipaddress
+-import os
+-from pathlib import Path
+-import stat
+-import struct
+-from types import MappingProxyType
+-from typing import cast, get_args, Literal, TypeAlias
++from typing import TypeAlias
+ 
+ from pydantic import ConfigDict
+ from pydantic import Field
+@@ -57,7 +41,6 @@
+ from dfilterforge.compiler import compile_intent
+ from dfilterforge.compiler import CompileError
+ from dfilterforge.errors import DFilterForgeError
+-from dfilterforge.evaluation import ProbeExpectationV1
+ from dfilterforge.evaluation import ProbeResultV1
+ from dfilterforge.evaluation import SemanticSpecV1
+ from dfilterforge.field_catalog import CatalogError
+@@ -67,462 +50,30 @@
+ from dfilterforge.intent_ir import walk_predicates
+ from dfilterforge.live import evaluate_live
+ from dfilterforge.model_feedback import FeedbackProbes
+-from dfilterforge.runner import RunnerError
+ from dfilterforge.runner import TsharkRunner
+ from dfilterforge.scoring import candidate_error_code
+ from dfilterforge.scoring import CANDIDATE_ERROR_CODES
+ from dfilterforge.scoring import CANDIDATE_RESOURCE_CODES
+ 
+-# Bit i of tshark's 12-bit tcp.flags value, in that order; the three bits
+-# above AE are reserved and refused.
+-TcpFlagName: TypeAlias = Literal[
+-    "FIN", "SYN", "RST", "PSH", "ACK", "URG", "ECE", "CWR", "AE"
+-]
+-TCP_FLAG_NAMES = cast(tuple[TcpFlagName, ...], get_args(TcpFlagName))
+-# The only header fields a card shows. Frame numbers, IP IDs, checksums,
+-# sequence and acknowledgment numbers, stream indexes and TCP analysis are
+-# shortcut fields, MAC addresses are generator constants and the DNS name is
+-# generated payload, so none of them is read.
+-SHOWN_FIELDS: tuple[str, ...] = (
+-    "ip.src",
+-    "ip.dst",
+-    "ip.ttl",
+-    "ip.dsfield.ecn",
+-    "tcp.srcport",
+-    "tcp.dstport",
+-    "tcp.flags",
+-    "tcp.len",
+-    "udp.srcport",
+-    "udp.dstport",
+-    "dns.flags.response",
+-    "dns.flags.rcode",
+-    "dns.qry.type",
+-)
+ MAX_FRAME_NUMBER = 100_000
+ CARD_MAX_BYTES = 1024
+ MAX_CARD_FRAMES = 3
+ MAX_ERROR_FIELD_BYTES = 128
+-# The generator's ephemeral ports; the repeat check reads them as one value.
+-EPHEMERAL_PORTS = range(41000, 51255)
+-_PORT_FIELDS = ("tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport")
+ # The receipt evaluate_live returns is discarded but for two frame lists,
+ # so its run identity is fixed and reaches nothing.
+ _RUN_ID = "counterexample"
+ _CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
+-# tshark shows the DNS header fields for DNS and for mDNS, which it files
+-# under its own protocol, so the frames to decode are the ones it gives the
+-# DNS flags; the protocol test ``dns`` would leave mDNS frames without them.
+-_DNS_FRAMES_FILTER = "dns.flags"
+-_PCAP_MAGIC = b"\xd4\xc3\xb2\xa1"
+-_PCAP_HEADER = struct.Struct("<4sHHiIII")
+-_RECORD_HEADER = struct.Struct("<IIII")
+-_LINKTYPE_ETHERNET = 1
+-_ETHERNET_BYTES = 14
+-_ETHERTYPE_IPV4 = 0x0800
+-_IPV4_MIN_HEADER = 20
+-_TCP_MIN_HEADER = 20
+-_UDP_HEADER = 8
+-_DNS_HEADER = 12
+-_TCP, _UDP = 6, 17
+-_RESERVED_TCP_BITS = 0xE00
+-# More-fragments flag and fragment offset.
+-_IPV4_FRAGMENT_BITS = 0x3FFF
+-_DNS_RESPONSE_BIT = 0x8000
+-_DNS_LABEL_TYPE_BITS = 0xC0
+-_MAX_DNS_NAME_BYTES = 255
+ 
+ 
+ class CounterexampleError(DFilterForgeError, RuntimeError):
+     """A harness stop of the repair round; nothing is shown to a model."""
+ 
+ 
+-class HeaderFactsV1(FrozenModel):
+-    """The shown header fields of one frame, under their tshark names.
+-
+-    A field is absent when the frame does not carry it. Values are typed
+-    and bounded, and the schema is closed, so no filter text, DNS name or
+-    free text fits.
+-    """
++class FrameFactV1(FrozenModel):
++    """One frame where the answer and the labels disagree."""
+ 
+     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+ 
+-    ip_src: str | None = Field(default=None, alias="ip.src")
+-    ip_dst: str | None = Field(default=None, alias="ip.dst")
+-    ip_ttl: int | None = Field(default=None, alias="ip.ttl", ge=0, le=255)
+-    ip_dsfield_ecn: int | None = Field(
+-        default=None, alias="ip.dsfield.ecn", ge=0, le=3
+-    )
+-    tcp_srcport: int | None = Field(
+-        default=None, alias="tcp.srcport", ge=0, le=0xFFFF
+-    )
+-    tcp_dstport: int | None = Field(
+-        default=None, alias="tcp.dstport", ge=0, le=0xFFFF
+-    )
+-    tcp_flags: tuple[TcpFlagName, ...] | None = Field(
+-        default=None, alias="tcp.flags"
+-    )
+-    tcp_len: int | None = Field(default=None, alias="tcp.len", ge=0, le=0xFFFF)
+-    udp_srcport: int | None = Field(
+-        default=None, alias="udp.srcport", ge=0, le=0xFFFF
+-    )
+-    udp_dstport: int | None = Field(
+-        default=None, alias="udp.dstport", ge=0, le=0xFFFF
+-    )
+-    dns_flags_response: bool | None = Field(
+-        default=None, alias="dns.flags.response"
+-    )
+-    dns_flags_rcode: int | None = Field(
+-        default=None, alias="dns.flags.rcode", ge=0, le=15
+-    )
+-    dns_qry_type: int | None = Field(
+-        default=None, alias="dns.qry.type", ge=0, le=0xFFFF
+-    )
+-
+-    @field_validator("ip_src", "ip_dst")
+-    @classmethod
+-    def validate_address(cls, value: str | None) -> str | None:
+-        """Accepts only an IPv4 address in its dotted-quad spelling.
+-
+-        The standard parser refuses leading zeros, shorthand, a prefix and
+-        surrounding text, so its error is the refusal.
+-        """
+-        if value is not None:
+-            ipaddress.IPv4Address(value)
+-        return value
+-
+-    @field_validator("tcp_flags")
+-    @classmethod
+-    def validate_flags(
+-        cls, value: tuple[TcpFlagName, ...] | None
+-    ) -> tuple[TcpFlagName, ...] | None:
+-        """Requires unique flag names in their bit order."""
+-        if value is not None and value != tuple(
+-            name for name in TCP_FLAG_NAMES if name in value
+-        ):
+-            raise ValueError("flag names must be unique and in bit order")
+-        return value
+-
+-    @model_validator(mode="after")
+-    def validate_layers(self) -> "HeaderFactsV1":
+-        """Keeps the layers a frame can carry together consistent."""
+-        tcp = (self.tcp_srcport, self.tcp_dstport, self.tcp_flags, self.tcp_len)
+-        udp = (self.udp_srcport, self.udp_dstport)
+-        if any(value is not None for value in tcp) and any(
+-            value is not None for value in udp
+-        ):
+-            raise ValueError("a frame cannot carry both TCP and UDP")
+-        if self.dns_flags_rcode is not None and not self.dns_flags_response:
+-            raise ValueError("a DNS rcode is shown for responses only")
+-        if self.dns_qry_type is not None and self.dns_flags_response is None:
+-            raise ValueError("a DNS question needs its DNS header")
+-        return self
+-
+-
+-def _unreadable(frame: int, reason: str) -> CounterexampleError:
+-    return CounterexampleError(
+-        "facts_unreadable", f"Feedback capture frame {frame}: {reason}"
+-    )
+-
+-
+-def _u16(data: bytes, offset: int) -> int:
+-    return int.from_bytes(data[offset : offset + 2], "big")
+-
+-
+-def _tcp(segment: bytes, frame: int, values: dict[str, object]) -> bytes:
+-    """Reads the TCP fields and returns the segment's payload."""
+-    if len(segment) < _TCP_MIN_HEADER:
+-        raise _unreadable(frame, "TCP header out of bounds")
+-    offset = (segment[12] >> 4) * 4
+-    if offset < _TCP_MIN_HEADER or offset > len(segment):
+-        raise _unreadable(frame, "TCP data offset out of bounds")
+-    bits = _u16(segment, 12) & 0x0FFF
+-    if bits & _RESERVED_TCP_BITS:
+-        raise _unreadable(frame, "reserved TCP flag bits are set")
+-    values["tcp.srcport"] = _u16(segment, 0)
+-    values["tcp.dstport"] = _u16(segment, 2)
+-    values["tcp.flags"] = tuple(
+-        name for index, name in enumerate(TCP_FLAG_NAMES) if bits >> index & 1
+-    )
+-    values["tcp.len"] = len(segment) - offset
+-    return segment[offset:]
+-
+-
+-def _udp(segment: bytes, frame: int, values: dict[str, object]) -> bytes:
+-    """Reads the UDP ports and returns the datagram's payload."""
+-    if len(segment) < _UDP_HEADER or _u16(segment, 4) != len(segment):
+-        raise _unreadable(frame, "UDP length out of bounds")
+-    values["udp.srcport"] = _u16(segment, 0)
+-    values["udp.dstport"] = _u16(segment, 2)
+-    return segment[_UDP_HEADER:]
+-
+-
+-def _dns(message: bytes, frame: int, values: dict[str, object]) -> None:
+-    """Reads the DNS header and the first question's type.
+-
+-    The question name is skipped label by label and never kept. A label
+-    whose length byte has either top bit set, a compression pointer above
+-    all, is refused, so every label is at most 63 bytes.
+-    """
+-    if len(message) < _DNS_HEADER:
+-        raise _unreadable(frame, "DNS header out of bounds")
+-    flags = _u16(message, 2)
+-    response = bool(flags & _DNS_RESPONSE_BIT)
+-    values["dns.flags.response"] = response
+-    if response:
+-        values["dns.flags.rcode"] = flags & 0x000F
+-    if _u16(message, 4) == 0:
+-        return
+-    position = _DNS_HEADER
+-    name_bytes = 1
+-    while True:
+-        if position >= len(message):
+-            raise _unreadable(frame, "DNS question name out of bounds")
+-        length = message[position]
+-        position += 1
+-        if length == 0:
+-            break
+-        if length & _DNS_LABEL_TYPE_BITS:
+-            raise _unreadable(frame, "DNS question name is compressed")
+-        name_bytes += length + 1
+-        if name_bytes > _MAX_DNS_NAME_BYTES:
+-            raise _unreadable(frame, "DNS question name exceeds 255 bytes")
+-        position += length
+-    if position + 4 > len(message):
+-        raise _unreadable(frame, "DNS question out of bounds")
+-    values["dns.qry.type"] = _u16(message, position)
+-
+-
+-def _decode_frame(packet: bytes, frame: int, is_dns: bool) -> HeaderFactsV1:
+-    """Decodes one Ethernet II IPv4 TCP or UDP frame."""
+-    if len(packet) < _ETHERNET_BYTES + _IPV4_MIN_HEADER or (
+-        _u16(packet, 12) != _ETHERTYPE_IPV4
+-    ):
+-        raise _unreadable(frame, "not IPv4 over Ethernet II")
+-    ip = packet[_ETHERNET_BYTES:]
+-    header_bytes = (ip[0] & 0x0F) * 4
+-    total = _u16(ip, 2)
+-    if (
+-        ip[0] >> 4 != 4
+-        or header_bytes < _IPV4_MIN_HEADER
+-        or not header_bytes <= total <= len(ip)
+-    ):
+-        raise _unreadable(frame, "IPv4 header out of bounds")
+-    if _u16(ip, 6) & _IPV4_FRAGMENT_BITS:
+-        raise _unreadable(frame, "IPv4 fragment")
+-    values: dict[str, object] = {
+-        "ip.src": str(ipaddress.IPv4Address(ip[12:16])),
+-        "ip.dst": str(ipaddress.IPv4Address(ip[16:20])),
+-        "ip.ttl": ip[8],
+-        "ip.dsfield.ecn": ip[1] & 0x03,
+-    }
+-    segment = ip[header_bytes:total]
+-    if ip[9] == _TCP:
+-        payload = _tcp(segment, frame, values)
+-        if is_dns:
+-            # DNS over TCP carries a two-byte length before one message.
+-            if len(payload) < 2 or _u16(payload, 0) != len(payload) - 2:
+-                raise _unreadable(frame, "DNS over TCP length out of bounds")
+-            payload = payload[2:]
+-    elif ip[9] == _UDP:
+-        payload = _udp(segment, frame, values)
+-    else:
+-        raise _unreadable(frame, "neither TCP nor UDP")
+-    if is_dns:
+-        _dns(payload, frame, values)
+-    return HeaderFactsV1.model_validate(values)
+-
+-
+-def decode_capture(
+-    data: bytes, dns_frames: frozenset[int]
+-) -> dict[int, HeaderFactsV1]:
+-    """Decodes the shown header fields of every frame of one capture.
+-
+-    Args:
+-        data: The capture bytes, already read and hash-checked once.
+-        dns_frames: The frames tshark gives DNS flags, whose DNS header is
+-            read too.
+-
+-    Returns:
+-        Each frame number, from 1, to its decoded facts.
+-
+-    Raises:
+-        CounterexampleError: With code ``facts_unreadable`` when the bytes
+-            are not the expected layers or leave their bounds, or
+-            ``facts_unproven`` when tshark names a DNS frame the capture
+-            does not hold.
+-    """
+-    if len(data) < _PCAP_HEADER.size:
+-        raise _unreadable(0, "PCAP header out of bounds")
+-    magic, major, minor, _, _, _, linktype = _PCAP_HEADER.unpack_from(data)
+-    if (magic, major, minor, linktype) != (
+-        _PCAP_MAGIC,
+-        2,
+-        4,
+-        _LINKTYPE_ETHERNET,
+-    ):
+-        raise _unreadable(0, "not a little-endian Ethernet PCAP 2.4")
+-    facts: dict[int, HeaderFactsV1] = {}
+-    offset = _PCAP_HEADER.size
+-    while offset < len(data):
+-        frame = len(facts) + 1
+-        if frame > MAX_FRAME_NUMBER:
+-            raise _unreadable(frame, "too many frames")
+-        if offset + _RECORD_HEADER.size > len(data):
+-            raise _unreadable(frame, "record header out of bounds")
+-        _, _, captured, original = _RECORD_HEADER.unpack_from(data, offset)
+-        offset += _RECORD_HEADER.size
+-        if captured != original or captured > len(data) - offset:
+-            raise _unreadable(frame, "record is truncated")
+-        facts[frame] = _decode_frame(
+-            data[offset : offset + captured], frame, frame in dns_frames
+-        )
+-        offset += captured
+-    if not facts:
+-        raise _unreadable(0, "no frames")
+-    if not dns_frames <= facts.keys():
+-        raise CounterexampleError(
+-            "facts_unproven", "tshark names a DNS frame the capture lacks"
+-        )
+-    return facts
+-
+-
+-def _flag_bits(names: tuple[TcpFlagName, ...]) -> int:
+-    return sum(1 << TCP_FLAG_NAMES.index(name) for name in names)
+-
+-
+-def proof_filter(frame: int, facts: HeaderFactsV1) -> str:
+-    """Builds the filter that selects a frame only if its facts are true.
+-
+-    Each shown field must hold exactly its value in every occurrence, and
+-    each field the facts leave out must be absent. Only typed values enter
+-    the text: integers, a validated dotted quad and a hexadecimal flag word.
+-
+-    Args:
+-        frame: The frame number.
+-        facts: The frame's decoded facts.
+-
+-    Returns:
+-        A display filter for ``TsharkRunner.run``.
+-    """
+-    flags = (
+-        None
+-        if facts.tcp_flags is None
+-        else f"0x{_flag_bits(facts.tcp_flags):03x}"
+-    )
+-    response = (
+-        None
+-        if facts.dns_flags_response is None
+-        else int(facts.dns_flags_response)
+-    )
+-    values: tuple[int | str | None, ...] = (
+-        facts.ip_src,
+-        facts.ip_dst,
+-        facts.ip_ttl,
+-        facts.ip_dsfield_ecn,
+-        facts.tcp_srcport,
+-        facts.tcp_dstport,
+-        flags,
+-        facts.tcp_len,
+-        facts.udp_srcport,
+-        facts.udp_dstport,
+-        response,
+-        facts.dns_flags_rcode,
+-        facts.dns_qry_type,
+-    )
+-    terms = [f"frame.number == {frame}"]
+-    for name, value in zip(SHOWN_FIELDS, values, strict=True):
+-        terms.append(f"!{name}" if value is None else f"{name} === {value}")
+-    return " && ".join(terms)
+-
+-
+-def _read_capture(capture: Path, capture_sha256: str, max_bytes: int) -> bytes:
+-    """Reads one regular file once, bounded, and checks its digest."""
+-    try:
+-        descriptor = os.open(
+-            capture, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+-        )
+-        with os.fdopen(descriptor, "rb") as source:
+-            regular = stat.S_ISREG(os.fstat(source.fileno()).st_mode)
+-            data = source.read(max_bytes + 1) if regular else b""
+-    except OSError:
+-        raise CounterexampleError(
+-            "facts_unreadable", "Feedback capture cannot be read"
+-        ) from None
+-    if not regular or len(data) > max_bytes:
+-        raise CounterexampleError(
+-            "facts_unreadable",
+-            "Feedback capture is not a regular file within the byte limit",
+-        )
+-    if hashlib.sha256(data).hexdigest() != capture_sha256:
+-        raise CounterexampleError(
+-            "facts_unreadable",
+-            "Feedback capture does not match its specification",
+-        )
+-    return data
+-
+-
+-def _frames(
+-    runner: TsharkRunner, capture: Path, capture_sha256: str, text: str
+-) -> tuple[int, ...]:
+-    """Runs one harness-built filter on the capture the decoder read."""
+-    try:
+-        result = runner.run(capture, text)
+-    except RunnerError as error:
+-        raise CounterexampleError(
+-            "facts_unproven", f"tshark could not check the facts: {error.code}"
+-        ) from None
+-    if result.capture_sha256 != capture_sha256:
+-        raise CounterexampleError(
+-            "facts_unreadable", "Feedback capture changed while it was read"
+-        )
+-    return result.frames
+-
+-
+-def read_frame_facts(
+-    capture: Path, capture_sha256: str, runner: TsharkRunner
+-) -> Mapping[int, HeaderFactsV1]:
+-    """Reads and confirms the shown header fields of every frame.
+-
+-    The capture is read once into memory, bounded by the runner's capture
+-    limit, and decoded only from that buffer after its digest matches. Each
+-    tshark run must report the same digest, so tshark and the decoder see
+-    the same bytes.
+-
+-    Args:
+-        capture: A feedback probe capture.
+-        capture_sha256: The digest its specification pins.
+-        runner: The bounded tshark runner that confirms every frame.
+-
+-    Returns:
+-        Each frame number to its confirmed facts.
+-
+-    Raises:
+-        CounterexampleError: With code ``facts_unreadable`` when the capture
+-            cannot be read or decoded, or ``facts_unproven`` when tshark
+-            does not select a frame by its decoded facts alone.
+-    """
+-    data = _read_capture(
+-        capture, capture_sha256, runner.limits.max_capture_bytes
+-    )
+-    dns_frames = frozenset(
+-        _frames(runner, capture, capture_sha256, _DNS_FRAMES_FILTER)
+-    )
+-    facts = decode_capture(data, dns_frames)
+-    for frame, frame_facts in facts.items():
+-        selected = _frames(
+-            runner, capture, capture_sha256, proof_filter(frame, frame_facts)
+-        )
+-        if selected != (frame,):
+-            raise CounterexampleError(
+-                "facts_unproven",
+-                f"tshark does not confirm the facts of frame {frame}",
+-            )
+-    return MappingProxyType(facts)
+-
+-
+-class FrameFactV1(HeaderFactsV1):
+-    """One frame where the answer and the labels disagree."""
+-
+     frame: int = Field(ge=1, le=MAX_FRAME_NUMBER)
+     answer_matched: bool
+     should_match: bool
+@@ -610,21 +161,14 @@
+ 
+ 
+ def _repeat_key(fact: FrameFactV1) -> str:
+-    """A frame's entry without its number, every ephemeral port one value."""
+-    values = fact.model_dump(
+-        by_alias=True, exclude_none=True, exclude={"frame"}
++    """A frame's entry without its number."""
++    return canonical_json(
++        fact.model_dump(by_alias=True, exclude_none=True, exclude={"frame"})
+     )
+-    for name in _PORT_FIELDS:
+-        port = values.get(name)
+-        if isinstance(port, int) and port in EPHEMERAL_PORTS:
+-            values[name] = "ephemeral"
+-    return canonical_json(values)
+ 
+ 
+ def frames_card(
+-    probe: ProbeResultV1,
+-    facts: Mapping[int, HeaderFactsV1],
+-    max_bytes: int = CARD_MAX_BYTES,
++    probe: ProbeResultV1, max_bytes: int = CARD_MAX_BYTES
+ ) -> FramesCardV1:
+     """Chooses the frames a card shows and caps its size.
+ 
+@@ -633,7 +177,6 @@
+ 
+     Args:
+         probe: The answer's result on its feedback probe.
+-        facts: Confirmed facts of every frame of the capture.
+         max_bytes: The cap on the card's canonical JSON.
+ 
+     Returns:
+@@ -642,24 +185,14 @@
+ 
+     Raises:
+         CounterexampleError: With code ``card_aborted`` when there is no
+-            frame to show, a frame has no facts or one frame alone exceeds
+-            the cap.
++            frame to show or one frame alone exceeds the cap.
+     """
+     chosen: list[FrameFactV1] = []
+     seen: set[str] = set()
+     missed, wrong = sorted(probe.reference_only), sorted(probe.candidate_only)
+     for frame, matched in _alternate(missed, wrong):
+-        if frame not in facts:
+-            raise CounterexampleError(
+-                "card_aborted", f"Frame {frame} has no confirmed facts"
+-            )
+-        fact = FrameFactV1.model_validate(
+-            {
+-                "frame": frame,
+-                "answer_matched": matched,
+-                "should_match": not matched,
+-                **facts[frame].model_dump(by_alias=True, exclude_none=True),
+-            }
++        fact = FrameFactV1(
++            frame=frame, answer_matched=matched, should_match=not matched
+         )
+         key = _repeat_key(fact)
+         if key in seen:
+@@ -678,17 +211,13 @@
+ 
+ 
+ class CardBuilder:
+-    """Builds cards on the feedback probes, reading each capture once."""
++    """Builds cards on the feedback probes."""
+ 
+     def __init__(
+         self, feedback: FeedbackProbes, runner: TsharkRunner | None = None
+     ) -> None:
+         self._feedback = feedback
+         self._runner = runner if runner is not None else TsharkRunner()
+-        self._captures = {
+-            probe.probe_id: probe.capture_path for probe in feedback.probes
+-        }
+-        self._facts: dict[tuple[str, str], Mapping[int, HeaderFactsV1]] = {}
+ 
+     def card(
+         self, case_id: str, candidate: IntentIrV1 | str
+@@ -705,7 +234,7 @@
+ 
+         Raises:
+             CounterexampleError: With code ``card_aborted`` when the failure
+-                is the harness's, or a facts code from reading the capture.
++                is the harness's.
+         """
+         spec = self._feedback.specs.get(case_id)
+         if spec is None or len(spec.probes) != 1:
+@@ -727,23 +256,7 @@
+         (probe,) = receipt.probes
+         if probe.exact:
+             return None
+-        return frames_card(probe, self.facts(spec.probes[0]))
+-
+-    def facts(
+-        self, expected: ProbeExpectationV1
+-    ) -> Mapping[int, HeaderFactsV1]:
+-        """Returns a feedback capture's confirmed facts, read on first use."""
+-        key = (expected.probe_id, expected.capture_sha256)
+-        if key not in self._facts:
+-            capture = self._captures.get(expected.probe_id)
+-            if capture is None:
+-                raise CounterexampleError(
+-                    "card_aborted", "The probe is not a feedback capture"
+-                )
+-            self._facts[key] = read_frame_facts(
+-                capture, expected.capture_sha256, self._runner
+-            )
+-        return self._facts[key]
++        return frames_card(probe)
+ 
+     def _error_card(
+         self,
