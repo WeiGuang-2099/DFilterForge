@@ -138,15 +138,41 @@ const numValue: Guard<NumNode['v']> = (value, where) => {
   )(value, where);
 };
 
-const cap: Guard<number> = (value, where) =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value > 0
-    ? value
-    : fail(where, 'is not a positive integer');
+// The exporter cuts untrusted model text, a completion's response_text and
+// nothing else, at 4 KiB of UTF-8.
+const RAW_TEXT_CAP = 4096;
+const RESPONSE_TEXT_FILE = /^docs\/results\/[^/]+\/completions\/[^/]+[.]json$/;
+const RESPONSE_TEXT_POINTER = /^\/completions\/(?:0|[1-9][0-9]*)\/response_text$/;
 
-const strNode: Guard<StrNode> = (value, where) =>
-  isRecord(value) && 'cap' in value
-    ? object({t: text, src, cap})(value, where)
-    : object({t: text, src})(value, where);
+function isResponseText(source: Src): boolean {
+  const [op, file, pointer] = source;
+  return (
+    op === 'ptr' &&
+    typeof file === 'string' &&
+    typeof pointer === 'string' &&
+    RESPONSE_TEXT_FILE.test(file) &&
+    RESPONSE_TEXT_POINTER.test(pointer)
+  );
+}
+
+const cap: Guard<number> = (value, where) =>
+  value === RAW_TEXT_CAP ? value : fail(where, `is not ${RAW_TEXT_CAP}`);
+
+/** A sourced string; a model answer carries the cap, and nothing else does. */
+const strNode: Guard<StrNode> = (value, where) => {
+  const node =
+    isRecord(value) && 'cap' in value
+      ? object({t: text, src, cap})(value, where)
+      : object({t: text, src})(value, where);
+  const answer = isResponseText(node.src);
+  if ('cap' in node && !answer) {
+    return fail(where, 'carries a cap, which only a model answer may');
+  }
+  if (!('cap' in node) && answer) {
+    return fail(where, 'is a model answer without its cap');
+  }
+  return node;
+};
 
 const numNode: Guard<NumNode> = object({v: numValue, src});
 

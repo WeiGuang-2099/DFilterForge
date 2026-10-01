@@ -5,7 +5,7 @@ import {expect, test} from '@playwright/test';
 
 import {fmt, isFmtKind} from '../lib/fmt';
 import {TERMS} from '../lib/terms';
-import {capUtf8, Resolver} from './support/resolve';
+import {capFor, capUtf8, RAW_TEXT_CAP, Resolver} from './support/resolve';
 
 // Proves that every value on every built page is what the committed files
 // hold. Each [data-src] element is re-derived from the raw files under
@@ -86,7 +86,11 @@ function sameValue(first: unknown, second: unknown): boolean {
   return Object.is(first, second);
 }
 
-/** Re-derives one sourced value and lists what does not match. */
+/**
+ * Re-derives one sourced value and lists what does not match. The cut of
+ * model text comes from the source, never from the page's data-cap, which
+ * must agree with it.
+ */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
   if (value.kind === null || !isFmtKind(value.kind)) {
@@ -96,13 +100,22 @@ function mismatches(value: Sourced): string[] {
     return [`${where}: no data-v`];
   }
   let expected: unknown;
+  let cap: number | null;
   try {
-    expected = resolver.resolve(JSON.parse(where));
-    if (value.cap !== null) {
-      expected = capUtf8(String(expected), Number(value.cap));
-    }
+    const source: unknown = JSON.parse(where);
+    expected = resolver.resolve(source);
+    cap = capFor(source);
   } catch (error) {
     return [`${where}: ${error instanceof Error ? error.message : String(error)}`];
+  }
+  if (value.cap !== (cap === null ? null : String(cap))) {
+    return [
+      `${where}: data-cap is ${JSON.stringify(value.cap)}; ` +
+        (cap === null ? 'only a model answer is cut' : `a model answer is cut at ${cap} bytes`),
+    ];
+  }
+  if (cap !== null) {
+    expected = capUtf8(String(expected), cap);
   }
   if (!sameValue(JSON.parse(value.v), expected)) {
     return [`${where}: the page holds ${value.v}; the files hold ${JSON.stringify(expected)}`];
@@ -255,4 +268,33 @@ test('dynamic routes are exactly the committed rows the site shows', () => {
   expect(BUILT.filter((route) => route.startsWith('cases/'))).toEqual(
     routeExists('cases', '[case]') ? cases : [],
   );
+});
+
+test('model text is cut only at the contract size and only where the exporter cuts it', () => {
+  // A page that hides most of an answer, or cuts a string that is not model
+  // output, must fail even when its data-cap agrees with what it shows.
+  const run = resolver.shownRuns()[0] ?? '';
+  const answer = ['ptr', `docs/results/${run}/completions/C1.json`, '/completions/0/response_text'];
+  const label = ['ptr', `docs/results/${run}/prepare.json`, '/conditions/0/label'];
+  const shown = (source: readonly string[], cap: number | null): Sourced => {
+    const whole = String(resolver.resolve(source));
+    const text = cap === null ? whole : capUtf8(whole, cap);
+    return {
+      src: JSON.stringify(source),
+      v: JSON.stringify(text),
+      kind: 'text',
+      cap: cap === null ? null : String(cap),
+      text: fmt(text, 'text'),
+    };
+  };
+
+  expect(capFor(answer)).toBe(RAW_TEXT_CAP);
+  expect(capFor(label)).toBeNull();
+  expect(mismatches(shown(answer, RAW_TEXT_CAP))).toEqual([]);
+  expect(mismatches(shown(label, null))).toEqual([]);
+  expect(mismatches(shown(answer, 64))).toHaveLength(1);
+  expect(mismatches(shown(answer, 1))).toHaveLength(1);
+  expect(mismatches(shown(answer, null))).toHaveLength(1);
+  expect(mismatches(shown(label, 1))).toHaveLength(1);
+  expect(mismatches(shown(label, RAW_TEXT_CAP))).toHaveLength(1);
 });

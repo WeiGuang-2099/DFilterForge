@@ -116,6 +116,31 @@ export function pointerGet(document: unknown, pointer: string): unknown {
   return value;
 }
 
+/** The exporter's cut for untrusted model text, in UTF-8 bytes (4 KiB). */
+export const RAW_TEXT_CAP = 4096;
+
+const RESPONSE_TEXT_FILE = /^docs\/results\/[^/]+\/completions\/[^/]+\.json$/;
+const RESPONSE_TEXT_POINTER = /^\/completions\/(?:0|[1-9][0-9]*)\/response_text$/;
+
+/**
+ * Returns the cut a sourced string must carry: RAW_TEXT_CAP for a model
+ * answer's response_text, the only text the exporter cuts, and null for
+ * every other source, which must be shown whole. The page's own data-cap is
+ * never trusted for this.
+ */
+export function capFor(source: unknown): number | null {
+  if (!Array.isArray(source) || source[0] !== 'ptr' || source.length !== 3) {
+    return null;
+  }
+  const [, file, pointer] = source as readonly unknown[];
+  return typeof file === 'string' &&
+    typeof pointer === 'string' &&
+    RESPONSE_TEXT_FILE.test(file) &&
+    RESPONSE_TEXT_POINTER.test(pointer)
+    ? RAW_TEXT_CAP
+    : null;
+}
+
 /** Cuts text to at most limit UTF-8 bytes without splitting a character. */
 export function capUtf8(text: string, limit: number): string {
   const bytes = Buffer.from(text, 'utf8');

@@ -118,7 +118,10 @@ cannot contain an underscore, so the mapping is injective, and no route
 segment ends in a dotted name that Next would treat as a file.
 
 Model output is untrusted. Raw text is capped at 4 KiB on a character
-boundary and rendered only as a React text node. `lib/fmt.ts` passes every
+boundary and rendered only as a React text node. The cap is the contract's,
+never the page's: `lib/data.ts`, the consistency test and the Python source
+check accept `cap` only as 4,096 and only on a completion's `response_text`,
+and require it there. `lib/fmt.ts` passes every
 string through `lib/visible.ts`, which shows C0 and C1 controls, bidi and
 zero-width characters, and every other format, default-ignorable or
 private-use code point (Unicode tag characters, invisible operators,

@@ -18,6 +18,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 from types import ModuleType
 from typing import Any, cast
@@ -60,6 +61,13 @@ _ALLOWED = (
     "docs/ablations/evidence/",
 )
 _FREEZE = "src/dfilterforge/held_out_freeze.json"
+# The contract for untrusted model text: a completion's response_text is cut
+# at 4 KiB of UTF-8, and no other string is cut.
+_RAW_TEXT_CAP = 4096
+_RESPONSE_TEXT_FILE = re.compile(r"docs/results/[^/]+/completions/[^/]+\.json")
+_RESPONSE_TEXT_POINTER = re.compile(
+    r"/completions/(?:0|[1-9][0-9]*)/response_text"
+)
 _IMPORTS = {
     "__future__",
     "argparse",
@@ -687,16 +695,38 @@ def _capped(text: str, limit: int) -> str:
     return text
 
 
+def _is_response_text(src: Any) -> bool:
+    """Says whether a source names a completion's response_text."""
+    if not isinstance(src, list):
+        return False
+    op = cast(list[object], src)
+    return (
+        len(op) == 3
+        and op[0] == "ptr"
+        and _RESPONSE_TEXT_FILE.fullmatch(str(op[1])) is not None
+        and _RESPONSE_TEXT_POINTER.fullmatch(str(op[2])) is not None
+    )
+
+
 def check_sources(root: Path, documents: dict[str, Document]) -> int:
-    """Asserts every sourced node equals its source; returns the count."""
+    """Asserts every sourced node equals its source; returns the count.
+
+    The cut of model text is the contract's, never the node's own: a model
+    answer must carry exactly ``_RAW_TEXT_CAP`` and nothing else a cap.
+    """
     resolver = Resolver(root)
     checked = 0
     for name, document in documents.items():
         for node in _nodes(document):
             expected = resolver.resolve(node["src"])
+            answer = _is_response_text(node["src"])
+            assert node.get("cap") == (_RAW_TEXT_CAP if answer else None), (
+                name,
+                node["src"],
+            )
             if "t" in node:
-                if "cap" in node:
-                    expected = _capped(expected, node["cap"])
+                if answer:
+                    expected = _capped(expected, _RAW_TEXT_CAP)
                 assert isinstance(node["t"], str), (name, node)
                 assert node["t"] == expected, (name, node["src"])
             else:
@@ -954,6 +984,44 @@ def test_a_long_answer_is_capped_at_a_character_boundary(
     assert raw["raw"]["t"] == "a" * 4095 and raw["raw"]["cap"] == 4096
     check_sources(root, documents)
     assert exporter.cap_text("\u00e9" * 3, 5) == "\u00e9\u00e9"
+
+
+def test_the_source_check_holds_a_cap_to_the_contract(
+    fixture: Fixture,
+) -> None:
+    # A node's own cap is never trusted: a cut that agrees with it must
+    # still fail when it is not the contract's.
+    root = fixture.build()
+    exported = _documents(exporter.export(root, "abc1234"))
+    name = "receipts/dev-anchor-2026-01-01/C1/i-0001.json"
+    check_sources(root, {name: exported[name]})
+
+    def broken(change: Callable[[Document], None]) -> Document:
+        receipt: Document = json.loads(json.dumps(exported[name]))
+        change(receipt)
+        return receipt
+
+    def short_cut(receipt: Document) -> None:
+        receipt["raw"] = {
+            **receipt["raw"],
+            "t": receipt["raw"]["t"][:1],
+            "cap": 1,
+        }
+
+    def uncapped(receipt: Document) -> None:
+        del receipt["raw"]["cap"]
+
+    def capped_label(receipt: Document) -> None:
+        label = next(
+            node
+            for node in _nodes(receipt)
+            if "t" in node and not _is_response_text(node["src"])
+        )
+        label["cap"] = _RAW_TEXT_CAP
+
+    for change in (short_cut, uncapped, capped_label):
+        with pytest.raises(AssertionError):
+            check_sources(root, {name: broken(change)})
 
 
 def _registration(
