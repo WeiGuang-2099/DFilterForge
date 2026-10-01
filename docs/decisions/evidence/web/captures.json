@@ -1,0 +1,2490 @@
+{
+  "notes": [
+    "Frame numbers count from 1, as tshark numbers frames.",
+    "A recipe frame is a benchmark frame, named by its packet recipe; a witness frame belongs to the witness tail and is named by its witness.",
+    "Built in pure Python by dfilterforge.model_split and dfilterforge.model_feedback; no tshark run and no packet bytes."
+  ],
+  "probes": [
+    {
+      "benchmark_frames": 21,
+      "capture_sha256": "72c24cc3a61b0c0f5a2e9d80ada806fa0bb26443a40a7bd29bc3c58514ab8c9e",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "witness",
+          "n": 22,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 23,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 24,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 25,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 26,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 27,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 28,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 29,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 30,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-11",
+      "role": "scored",
+      "size_bytes": 4497,
+      "split": "dev"
+    },
+    {
+      "benchmark_frames": 22,
+      "capture_sha256": "f4845f3241c5ad7db760e73b9fbdc0da8e2268a34b3278f88d86b21abb6a7b57",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "udp-private"
+        },
+        {
+          "kind": "witness",
+          "n": 23,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 24,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 25,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 26,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 27,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 28,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 29,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 30,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-17",
+      "role": "scored",
+      "size_bytes": 4550,
+      "split": "dev"
+    },
+    {
+      "benchmark_frames": 28,
+      "capture_sha256": "510cc21324a6c1439d01747bef6d35d20c55876e3ee06122d39759b7b2211a29",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 23,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 24,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 25,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 26,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 27,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 28,
+          "name": "udp-other"
+        },
+        {
+          "kind": "witness",
+          "n": 29,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 30,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 56,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 57,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 58,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 59,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 60,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 61,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-23",
+      "role": "scored",
+      "size_bytes": 5084,
+      "split": "dev"
+    },
+    {
+      "benchmark_frames": 29,
+      "capture_sha256": "1a0ef0e69d85bf39f5f982261fa48822991d00e3c21ae0a26bd190d67c59ec1b",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 23,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 24,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 25,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 26,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 27,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 28,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 29,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "witness",
+          "n": 30,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 56,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 57,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 58,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 59,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 60,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 61,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 62,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-29",
+      "role": "feedback",
+      "size_bytes": 5186,
+      "split": "dev"
+    },
+    {
+      "benchmark_frames": 26,
+      "capture_sha256": "2e772681dff9db870f6763cece94ef37ce302cd277407106e848174cc0baf872",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 23,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 24,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 25,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 26,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "witness",
+          "n": 27,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 28,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 29,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 30,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 56,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 57,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 58,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 59,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-31",
+      "role": "scored",
+      "size_bytes": 4937,
+      "split": "test"
+    },
+    {
+      "benchmark_frames": 27,
+      "capture_sha256": "dd18bced698eef8ef38a69e6d09e67515b84f655192436a99751ee5267b3bfa8",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 23,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 24,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 25,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 26,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 27,
+          "name": "ack"
+        },
+        {
+          "kind": "witness",
+          "n": 28,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 29,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 30,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 56,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 57,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 58,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 59,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 60,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-37",
+      "role": "scored",
+      "size_bytes": 4930,
+      "split": "test"
+    },
+    {
+      "benchmark_frames": 33,
+      "capture_sha256": "2d68035f76b6e83fc0e92c728803966cc5f74001c22336e85879124f1162dbe1",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 23,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 24,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 25,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 26,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 27,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 28,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 29,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 30,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 31,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 32,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 33,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 56,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 57,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 58,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 59,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 60,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 61,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 62,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 63,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 64,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 65,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 66,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-43",
+      "role": "scored",
+      "size_bytes": 5544,
+      "split": "test"
+    },
+    {
+      "benchmark_frames": 30,
+      "capture_sha256": "3ca0673f7a0da4571cefa72360f2edbd657bf8b5c2042f26aacf24758b10f816",
+      "frames": [
+        {
+          "kind": "recipe",
+          "n": 1,
+          "name": "udp-aaaa"
+        },
+        {
+          "kind": "recipe",
+          "n": 2,
+          "name": "udp-mdns"
+        },
+        {
+          "kind": "recipe",
+          "n": 3,
+          "name": "tcp-http"
+        },
+        {
+          "kind": "recipe",
+          "n": 4,
+          "name": "udp-both-53"
+        },
+        {
+          "kind": "recipe",
+          "n": 5,
+          "name": "udp-other"
+        },
+        {
+          "kind": "recipe",
+          "n": 6,
+          "name": "udp-response"
+        },
+        {
+          "kind": "recipe",
+          "n": 7,
+          "name": "udp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 8,
+          "name": "tcp-query"
+        },
+        {
+          "kind": "recipe",
+          "n": 9,
+          "name": "fin"
+        },
+        {
+          "kind": "recipe",
+          "n": 10,
+          "name": "reset"
+        },
+        {
+          "kind": "recipe",
+          "n": 11,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 12,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 13,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 14,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 15,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 16,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 17,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 18,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 19,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 20,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 21,
+          "name": "udp-nxdomain"
+        },
+        {
+          "kind": "recipe",
+          "n": 22,
+          "name": "udp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 23,
+          "name": "tcp-lowttl"
+        },
+        {
+          "kind": "recipe",
+          "n": 24,
+          "name": "udp-private"
+        },
+        {
+          "kind": "recipe",
+          "n": 25,
+          "name": "udp-private-destination"
+        },
+        {
+          "kind": "recipe",
+          "n": 26,
+          "name": "tcp-reverse"
+        },
+        {
+          "kind": "recipe",
+          "n": 27,
+          "name": "syn"
+        },
+        {
+          "kind": "recipe",
+          "n": 28,
+          "name": "syn-ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 29,
+          "name": "ack"
+        },
+        {
+          "kind": "recipe",
+          "n": 30,
+          "name": "ecn-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 31,
+          "name": "server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 32,
+          "name": "server-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 33,
+          "name": "client-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 34,
+          "name": "client-ack-next"
+        },
+        {
+          "kind": "witness",
+          "n": 35,
+          "name": "keepalive-server-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 36,
+          "name": "keepalive-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 37,
+          "name": "ece-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 38,
+          "name": "cwr-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 39,
+          "name": "ece-syn-reset"
+        },
+        {
+          "kind": "witness",
+          "n": 40,
+          "name": "server-syn"
+        },
+        {
+          "kind": "witness",
+          "n": 41,
+          "name": "syn-nonzero-ack"
+        },
+        {
+          "kind": "witness",
+          "n": 42,
+          "name": "tcp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 43,
+          "name": "tcp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 44,
+          "name": "udp-ttl-0"
+        },
+        {
+          "kind": "witness",
+          "n": 45,
+          "name": "udp-ttl-2"
+        },
+        {
+          "kind": "witness",
+          "n": 46,
+          "name": "udp-ttl-63"
+        },
+        {
+          "kind": "witness",
+          "n": 47,
+          "name": "udp-ttl-128"
+        },
+        {
+          "kind": "witness",
+          "n": 48,
+          "name": "udp-to-5354"
+        },
+        {
+          "kind": "witness",
+          "n": 49,
+          "name": "dns-mx-query"
+        },
+        {
+          "kind": "witness",
+          "n": 50,
+          "name": "dns-servfail"
+        },
+        {
+          "kind": "witness",
+          "n": 51,
+          "name": "dns-response-53-to-53"
+        },
+        {
+          "kind": "witness",
+          "n": 52,
+          "name": "mdns-response"
+        },
+        {
+          "kind": "witness",
+          "n": 53,
+          "name": "dns-response-to-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 54,
+          "name": "dns-query-from-low-port"
+        },
+        {
+          "kind": "witness",
+          "n": 55,
+          "name": "dns-query-to-5352"
+        },
+        {
+          "kind": "witness",
+          "n": 56,
+          "name": "udp-to-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 57,
+          "name": "udp-from-far-private"
+        },
+        {
+          "kind": "witness",
+          "n": 58,
+          "name": "tcp-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 59,
+          "name": "dns-to-private"
+        },
+        {
+          "kind": "witness",
+          "n": 60,
+          "name": "tcp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 61,
+          "name": "udp-near-testnet"
+        },
+        {
+          "kind": "witness",
+          "n": 62,
+          "name": "dns-query-to-private-low"
+        },
+        {
+          "kind": "witness",
+          "n": 63,
+          "name": "server-fin-ack"
+        }
+      ],
+      "probe_id": "semantic-35",
+      "role": "feedback",
+      "size_bytes": 5178,
+      "split": "test"
+    }
+  ],
+  "schema_version": "capture-frames/1.0"
+}
