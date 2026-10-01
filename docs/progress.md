@@ -6,7 +6,8 @@ Last updated: 2026-10-01
 
 The test split is frozen, the slot winners are fixed, every hosted test run is
 registered, and the repair round and the Disproof Reel's selection rule are
-pre-registered; the paid test passes follow once the registration merges.
+pre-registered; the paid test passes follow once the registration merges, sent
+by the owner with one command, `scripts/test_passes.py`.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -333,12 +334,70 @@ Reports under the ignored `artifacts/` are not project evidence.
 - **No code yet.** No exporter exists. `scripts/export_web_data.py` is the
   web track's.
 
+## Test-pass batch and registration check: 2026-10-01
+
+- `scripts/test_passes.py` is the owner's one command for the 16 registered
+  runs (Owner command in the [test-run note](decisions/test-runs.md), for Git
+  Bash and Windows PowerShell 5.1, with exit codes 0, 1, 2, 3 and 130). It
+  reads `evidence/test-runs.json` and sends pass A, pass B only after a
+  complete pass A and within 24 hours of its first invocation, then the small,
+  mid and frontier winners. Each run is one `scripts/model_run.py call`
+  argument list, no shell, with the row's run id, config and cap and
+  `--gate-first --max-attempts 3 --min-interval-seconds 1.0`.
+  - It resumes pending items after 60 s, sends a winner's listed fallback
+    after a gate stop on the first answer, and re-runs an outage once under its
+    `-r2` row. A gate stop of pass A or pass B, a refusal and a resumed pass
+    that stops at the gate are reported not run.
+  - It stops for the owner on a budget stop after an answer, a closed pass B
+    window or a call step error, and aborts on HTTP 401, 402 or 403. A row
+    the registry marks `published`, `not_run`, or `unused` with a reason is
+    never sent.
+  - It reuses the bake-off batch's run reading, gate, resume and outage
+    decisions, invoker and lock; `scripts/dev_bakeoff.py` is unchanged. Its
+    summary in `artifacts/test-passes/` gives each row its state, publish or
+    evidence target and registry update.
+  - The note now states that a refusal has no registered fallback (rule 7
+    gives test passes one for a gate stop only) and that a triggered fallback
+    or re-run is sent in the same execution, its status written in the
+    publishing commit.
+- `tests/test_test_passes.py` holds 54 tests: 52 drive the batch with a
+  scripted call step over an eight-item synthetic test prompt set (order,
+  pass B after A and its 24-hour window, rule 7, the anchor's gate stop, the
+  outage re-run, 401 to 403, the budget stop and a raised cap, a missing or
+  unadmitted prompt copy, the keyless preflight, a resume after exit 1,
+  rulings, the lock and interrupts, and 21 unusable registries or configs);
+  2 read the committed registry, prompts and note and skip without `docs/`.
+  In the mirror's suite they cover 97% of the script (statements and
+  branches). CI's pylint list and pyright include it.
+- Keyless check from this worktree, the key unset in the process, user and
+  machine scopes: with no prompt copy the batch refused (exit 2) and printed
+  the restore commands for both shells. After the printed Git Bash restore,
+  `--dry-run` exited 0 and wrote nothing, and the batch called all 16 runs
+  with the key withheld, each stopping at `api_key_missing`, then aborted
+  (exit 3); no run directory was created and no request was sent.
+- Branch `register-test-runs` holds ten commits over 4111d8d, and none of the
+  12 prepare-hashed files changed (`git diff --name-only 4111d8d`). The four
+  sections above record the smoke verdicts, ruling K and the slot winners;
+  the registry and the guard it holds (ruling G); the repair round (OD1 to
+  OD4); and the Reel rule `reel-v1`.
+- Tests: in the test image with `docs/` mounted, `tests/test_held_out.py`,
+  `tests/test_hosted_test_runs.py`, `tests/test_dev_bakeoff.py`,
+  `tests/test_test_passes.py` and the frozen-prompt guard gave 201 passed, and
+  the CI guard step's command alone exited 0; the four files on the host gave
+  200 passed. The CI mirror (`artifacts/ci/ci_mirror.sh
+  register-test-runs-impl`, working tree, read-only mounts, at b6a1beb)
+  returned rc 0 for pyink, isort, pylint, pyright, lint-imports, pytest (1235
+  passed, 16 skipped, coverage 96.52%), the benchmark gate, adequacy, prepare,
+  recall and the 20 committed re-score checks: overall status 0. The mirror's
+  pylint list predates the bake-off scripts; CI's list, `scripts/test_passes.py`
+  included, rated 10.00/10 (rc 0).
+
 ## Planned next
 
-1. The [registered test runs](decisions/test-runs.md): qwen/qwen3-32b passes A
-   and B, then the slot winners; the 12 hashed files stay unchanged until the
-   last one, and no test run is scored before the `repair-cards` branch
-   merges.
+1. The [registered test runs](decisions/test-runs.md), sent with
+   `scripts/test_passes.py`: qwen/qwen3-32b passes A and B, then the slot
+   winners; the 12 hashed files stay unchanged until the last one, and no test
+   run is scored before the `repair-cards` branch merges.
 2. The [repair round](decisions/repair-round.md) as registered: the
    `repair-cards` branch (card code, dev plans), then `repair-arms` with the
    dev round, then, after the last baseline request, the test round and the
