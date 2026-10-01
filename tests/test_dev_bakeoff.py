@@ -3,8 +3,9 @@
 Every run directory here is written from the real contracts
 (``RunManifestV1``, ``AttemptV1``, ``CompletionV1``) over a synthetic
 160-prompt dev set, and the call step is replaced by a scripted fake, so
-nothing is sent anywhere. The tests of the committed configurations skip
-where the test image carries no docs/ tree.
+nothing is sent anywhere. The tests of the committed configurations, the
+two-turn smoke evidence and the slot ruling skip where the test image
+carries no docs/ tree.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from datetime import timedelta
 from datetime import timezone
 import hashlib
 import importlib.util
+import itertools
 import json
 from pathlib import Path
 import re
@@ -2033,3 +2035,242 @@ def test_committed_configs_are_the_specs_written_out() -> None:
 def test_committed_dev_prompts_have_the_registered_digest() -> None:
     receipt = _ROOT / db.COMMITTED_PREPARE_DIR / "prepare.json"
     assert _sha256(receipt.read_bytes()).startswith(db.PREPARE_SHA256_PREFIX)
+
+
+# The committed two-turn smoke evidence and the final slot ruling.
+
+
+_EVIDENCE = _ROOT / db.EVIDENCE_DIR
+_RULING = _EVIDENCE / "ruling-2026-10-01.json"
+_SMOKE_RUN = re.compile(r"dev-.+-rs[0-9]?-[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_NO_DOCS = "the test image carries no docs/ tree"
+
+
+def _read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _smoke_verdicts() -> dict[str, Fields]:
+    """Returns the committed smoke verdicts by their counted pass's run id."""
+    verdicts: dict[str, Fields] = {}
+    for path in sorted((_EVIDENCE / "smoke" / "verdicts").glob("*.json")):
+        verdict = _read_json(path)
+        assert path.stem == verdict["smoke_id"]
+        verdicts[verdict["source_run_id"]] = verdict
+    return verdicts
+
+
+def _rule_5_winner(
+    rows: Sequence[Fields], survivors: set[str], margin: int
+) -> str | None:
+    """Returns the earliest-listed survivor within the best one's margin."""
+    counts = [
+        row["strong_exact_ready"] for row in rows if row["run_id"] in survivors
+    ]
+    if not counts:
+        return None
+    floor = max(counts) - margin
+    return next(
+        row["run_id"]
+        for row in rows
+        if row["run_id"] in survivors and row["strong_exact_ready"] >= floor
+    )
+
+
+def test_rule_5_takes_the_earliest_survivor_within_the_margin() -> None:
+    rows: list[Fields] = [
+        {"run_id": "a", "strong_exact_ready": 70},
+        {"run_id": "b", "strong_exact_ready": 74},
+        {"run_id": "c", "strong_exact_ready": 75},
+    ]
+    # The margin is inclusive: 70 is at most 4 below 74.
+    assert _rule_5_winner(rows, {"a", "b"}, 4) == "a"
+    assert _rule_5_winner(rows, {"a", "b", "c"}, 4) == "b"
+    assert _rule_5_winner(rows, {"a", "c"}, 4) == "c"
+    assert _rule_5_winner(rows, set(), 4) is None
+
+
+@pytest.mark.skipif(not _RULING.is_file(), reason=_NO_DOCS)
+def test_committed_smoke_evidence_is_what_the_verdicts_read() -> None:
+    model_run = db.load_model_run()
+    verdicts = _smoke_verdicts()
+    summary = _read_json(_EVIDENCE / "smoke" / "summary-2026-10-01.json")
+    assert summary["verdicts"] == {
+        verdict["smoke_id"]: verdict["verdict"] for verdict in verdicts.values()
+    }
+    plan = _read_json(_EVIDENCE / "smoke" / "plan.json")
+    assert sorted(smoke["smoke_id"] for smoke in plan["smokes"]) == sorted(
+        summary["verdicts"]
+    )
+    # The smokes were prepared from the runner summary committed here.
+    runner_summary = _EVIDENCE / "summary-2026-09-26.json"
+    assert plan["summary_sha256"] == _sha256(runner_summary.read_bytes())
+    listed: list[str] = []
+    for verdict in verdicts.values():
+        evidence: list[str] = []
+        for run in verdict["runs"]:
+            directory = _EVIDENCE / run["run_id"]
+            data = (directory / "run_manifest.json").read_bytes()
+            assert _sha256(data) == run["run_manifest_sha256"]
+            manifest = RunManifestV1.model_validate_json(data)
+            assert manifest.run_id == run["run_id"]
+            (condition,) = manifest.conditions
+            attempts = directory / condition.attempts_path
+            assert _sha256(attempts.read_bytes()) == condition.attempts_sha256
+            # The attempt contract forbids extra keys, so no reasoning or
+            # refusal text can sit beside the stored answers.
+            lines = attempts.read_text(encoding="utf-8").splitlines()
+            for line in lines:
+                model_run.AttemptV1.model_validate_json(line)
+            assert len(lines) == run["requests"]
+            assert sorted(
+                path.relative_to(directory).as_posix()
+                for path in directory.rglob("*")
+                if path.is_file()
+            ) == sorted(["run_manifest.json", condition.attempts_path])
+            evidence += [
+                f"{run['run_id']}/run_manifest.json",
+                f"{run['run_id']}/{condition.attempts_path}",
+            ]
+            listed.append(run["run_id"])
+        assert verdict["evidence"] == evidence
+    on_disk = [
+        path.name
+        for path in _EVIDENCE.iterdir()
+        if path.is_dir() and _SMOKE_RUN.fullmatch(path.name)
+    ]
+    assert sorted(on_disk) == sorted(listed)
+
+
+@pytest.mark.skipif(not _RULING.is_file(), reason=_NO_DOCS)
+def test_a_smoke_ruled_not_measured_met_only_rate_limits() -> None:
+    ruling = _read_json(_RULING)
+    by_smoke = {
+        verdict["smoke_id"]: verdict for verdict in _smoke_verdicts().values()
+    }
+    assert ruling["owner_rulings"]
+    for ruled in ruling["owner_rulings"].values():
+        verdict = by_smoke[ruled["smoke_id"]]
+        assert ruled["ruling"] == "not_measured" and not ruled["retried"]
+        assert verdict["verdict"] == ruled["judge_verdict"] == "rerun_owed"
+        assert [run["run_id"] for run in verdict["runs"]] == ruled["runs"]
+        statuses: list[int | None] = []
+        charged = 0.0
+        for run_id in ruled["runs"]:
+            directory = _EVIDENCE / run_id
+            manifest = RunManifestV1.model_validate_json(
+                (directory / "run_manifest.json").read_bytes()
+            )
+            charged += manifest.charged_usd_upper_bound
+            path = directory / "attempts" / "C4.jsonl"
+            for line in path.read_text(encoding="utf-8").splitlines():
+                record: Fields = json.loads(line)
+                assert record["charged_micro_usd"] == 0
+                assert record["completion"]["status"] == "failed"
+                statuses.append(record["completion"]["http_status"])
+        assert len(statuses) == ruled["attempts"]
+        assert statuses.count(429) == ruled["http_429"] == len(statuses)
+        assert charged == ruled["charged_usd_upper_bound"] == 0.0
+
+
+@pytest.mark.skipif(not _RULING.is_file(), reason=_NO_DOCS)
+def test_committed_slot_ruling_follows_the_ranking_and_the_smoke() -> None:
+    ruling = _read_json(_RULING)
+    ranking = _read_json(_EVIDENCE / "ranking-2026-09-26.json")
+    summary = _read_json(_EVIDENCE / "summary-2026-09-26.json")
+    verdicts = _smoke_verdicts()
+    qualifying: dict[str, Fields] = {
+        candidate["qualifying_pass"]["run_id"]: candidate["qualifying_pass"]
+        for candidate in summary["candidates"]
+        if candidate["qualifying_pass"]
+    }
+    assert ruling["schema"] == "bakeoff-ruling/1.0"
+    margin = ruling["margin"]
+    assert margin == ranking["margin"] == 4
+    anchor = verdicts[ranking["anchor"]["run_id"]]
+    assert anchor["informational"]
+    assert ruling["anchor"] == {
+        "run_id": ranking["anchor"]["run_id"],
+        "smoke_id": anchor["smoke_id"],
+        "smoke": anchor["verdict"],
+        "informational": True,
+    }
+    assert sorted(ruling["slots"]) == sorted(db.RANKED_SLOTS)
+    winners: dict[str, str] = {}
+    for slot in db.RANKED_SLOTS:
+        ruled = ruling["slots"][slot]
+        rows: list[Fields] = ruled["candidates"]
+        assert [(row["rank"], row["candidate"]) for row in rows] == [
+            (int(candidate.rank), candidate.name) for candidate in db.PLAN[slot]
+        ]
+        survivors: set[str] = set()
+        unresolved: list[str] = []
+        for row, ranked in zip(
+            rows, ranking["slots"][slot]["candidates"], strict=True
+        ):
+            for key in ("rank", "run_id", "run_gates", "strong_exact_ready"):
+                assert row[key] == ranked[key]
+            verdict = verdicts.get(row["run_id"])
+            if row["run_gates"] != "pass":
+                assert verdict is None
+                assert row["smoke_id"] is None
+                assert row["smoke"] == "not_run"
+                assert row["status"] == "dropped"
+                assert row["owner_ruling"] is None
+                continue
+            assert verdict is not None
+            assert verdict["slot"] == slot
+            assert verdict["candidate"] == row["candidate"]
+            assert verdict["smoke_id"] == row["smoke_id"]
+            assert not verdict["informational"]
+            assert not verdict["provider_changed"]
+            assert not verdict["model_changed"]
+            if row["owner_ruling"] is None:
+                assert row["smoke"] == verdict["verdict"]
+                status = {"pass": "survivor", "fail": "dropped"}[row["smoke"]]
+            else:
+                owner = ruling["owner_rulings"][row["owner_ruling"]]
+                assert owner["smoke_id"] == verdict["smoke_id"]
+                assert row["smoke"] == owner["ruling"] == "not_measured"
+                status = "unresolved"
+            assert row["status"] == status
+            if status == "survivor":
+                survivors.add(row["run_id"])
+            elif status == "unresolved":
+                unresolved.append(row["run_id"])
+        assert survivors, f"{slot} has no survivor, so rule 6 applies"
+        assert ruled["reserve"] == "not_run"
+        assert ruled["best_survivor_count"] == max(
+            row["strong_exact_ready"]
+            for row in rows
+            if row["run_id"] in survivors
+        )
+        assert ruled["floor"] == ruled["best_survivor_count"] - margin
+        # The winner must not depend on how a smoke not measured would
+        # have ended, so every reading of the unresolved rows agrees.
+        outcomes = {
+            _rule_5_winner(rows, survivors | set(chosen), margin)
+            for size in range(len(unresolved) + 1)
+            for chosen in itertools.combinations(unresolved, size)
+        }
+        winner = ruled["winner"]
+        assert outcomes == {winner["run_id"]}
+        counted = qualifying[winner["run_id"]]
+        assert winner == {
+            "candidate": verdicts[winner["run_id"]]["candidate"],
+            "run_id": counted["run_id"],
+            "qualified_through": counted["role"],
+            "config": counted["config"],
+            "model_id": counted["model_id"],
+            "slug": counted["slug"],
+            "reasoning_switch": counted["reasoning_switch"],
+        }
+        assert verdicts[winner["run_id"]]["config"] == winner["config"]
+        assert verdicts[winner["run_id"]]["model_id"] == winner["model_id"]
+        winners[slot] = winner["model_id"]
+    assert ruling["winners"] == winners
+    assert winners == {
+        "small": "qwen/qwen3.5-9b",
+        "mid": "qwen/qwen3.5-122b-a10b",
+        "frontier": "deepseek/deepseek-v4-pro-0813",
+    }
