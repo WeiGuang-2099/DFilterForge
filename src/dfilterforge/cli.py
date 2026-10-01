@@ -438,10 +438,11 @@ _SCORE_HELP = (
 _REPAIR_HELP = (
     "Write a scored pass's repair plan, its silent-wrong and invalid C4 "
     "items with their feedback-probe cards, to repair/plan.json; once its "
-    "resample, bare and counterexample arm runs exist beside it, check "
-    "each against the pass and the plan, and once all three are published "
-    "and scored write repair/summary.json and .md; --check derives every "
-    "file again and compares bytes without writing."
+    "resample, bare and counterexample arm runs exist beside it, read the "
+    "committed plan, never rewritten, and check it and each arm against "
+    "the pass, and once all three are published and scored write "
+    "repair/summary.json and .md; --check derives each file it would "
+    "write again and compares bytes without writing."
 )
 _REPAIR_POOL_HELP = (
     "Pool the committed repair summaries of several base passes of one "

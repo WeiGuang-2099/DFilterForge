@@ -79,7 +79,7 @@ class RoundError(DFilterForgeError, RuntimeError):
     The codes are ``repair_arms_incomplete``, ``repair_arm_mismatch``,
     ``repair_items_mismatch``, ``repair_prompt_mismatch``,
     ``repair_settings_mismatch``, ``repair_arm_unscored``,
-    ``repair_plan_changed``, ``base_unscored``,
+    ``repair_plan_changed``, ``repair_plan_unreadable``, ``base_unscored``,
     ``repair_pool_bases_invalid``, ``repair_pool_unsummarized`` and
     ``repair_pool_mismatch``. A message names a run, an arm or an item id,
     never model text.

@@ -70,6 +70,7 @@ from dfilterforge.model_feedback import FEEDBACK_PROBE_IDS
 from dfilterforge.model_feedback import FeedbackProbes
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import ModelInputItemV1
+from dfilterforge.model_split import ModelSplit
 from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.model_split import MUTANT_WAIVERS
 from dfilterforge.mutants import single_site_mutants
@@ -349,13 +350,14 @@ def _write_scored(
     *,
     tree: str = "scored",
     cases: Mapping[str, str] | None = None,
+    gold_hash: str = _GOLD_HASH,
 ) -> bytes:
     """Writes a scored tree as the scorer lays it out, with given verdicts.
 
     An item with no verdict is strong exact on ready gold and abstained on
     non-ready gold, and each carries its gold status; every ready answer's
     intent is written, and ``scored/`` gets the summary of its outcomes,
-    as scoring does.
+    as scoring does, under ``gold_hash``.
     """
     batch = PreparedBatchV1.model_validate_json(
         (run_dir / "prepared" / "C4.json").read_bytes()
@@ -400,7 +402,7 @@ def _write_scored(
                 run=run_dir.name,
                 model_id=recorded.settings.model_id,
                 split=batch.prompts[0].split or "dev",
-                gold_hash=_GOLD_HASH,
+                gold_hash=gold_hash,
                 capture_hashes={},
                 batch_hashes={},
             ),
@@ -2078,20 +2080,180 @@ def test_a_committed_plan_is_never_rewritten_under_its_arms(
     tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
 ) -> None:
     base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
     plan = base_dir / PLAN_PATH
-    edited = plan.read_bytes() + b"\n"
+    committed = plan.read_bytes()
+    edited = committed + b"\n"
     plan.write_bytes(edited)
 
-    error = _round_refusal(base_dir)
+    with pytest.raises(RoundError) as error:
+        round_run(base_dir, code_revision="rev")
     checked = round_run(base_dir, code_revision="rev", check=True)
 
-    assert error.code == "repair_plan_changed"
+    assert error.value.code == "repair_plan_changed"
     assert plan.read_bytes() == edited
-    assert checked.differences == (
-        "repair/plan.json",
-        "repair/summary.json",
-        "repair/summary.md",
+    # The summary pins the plan's canonical bytes, which did not change.
+    assert checked.differences == ("repair/plan.json",)
+
+
+def _edited_plan(committed: bytes, damage: str) -> bytes:
+    """A canonical plan that no longer fits its base pass."""
+    plan = RepairPlanV1.model_validate_json(committed)
+    items = list(plan.items)
+    if damage == "trigger":
+        items[2] = items[2].model_copy(update={"base_outcome": "invalid"})
+    elif damage == "dropped":
+        del items[2]
+    elif damage.endswith("reordered"):
+        items[0], items[1] = items[1], items[0]
+    else:
+        return plan_bytes(
+            plan.model_copy(update={"base_run_manifest_sha256": "0" * 64})
+        )
+    return plan_bytes(plan.model_copy(update={"items": tuple(items)}))
+
+
+@pytest.mark.parametrize(
+    ("damage", "code"),
+    [
+        ("trigger", "repair_plan_changed"),
+        ("dropped", "repair_plan_changed"),
+        ("reordered", "repair_plan_changed"),
+        ("rescored-reordered", "repair_plan_changed"),
+        ("manifest", "repair_plan_changed"),
+        ("missing", "repair_plan_unreadable"),
+        ("intent", "intent_mismatch"),
+    ],
+)
+def test_a_committed_plan_that_does_not_fit_its_pass_stops_the_round(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    damage: str,
+    code: str,
+) -> None:
+    """Under its arms the plan is read and checked, never derived again.
+
+    ``rescored-reordered`` re-scores the base in place first, so the
+    outcomes no longer give the plan's trigger set and only the prepare
+    order can refuse the plan.
+    """
+    base_dir = _round(tmp_path, source)
+    plan = base_dir / PLAN_PATH
+    if damage.startswith("rescored"):
+        verdicts = {item: outcome for item, (_, outcome) in _ROUND_BASE.items()}
+        _write_scored(base_dir, source, {**verdicts, "mei-0003": _SE})
+    if damage == "missing":
+        plan.unlink()
+    elif damage == "intent":
+        (base_dir / "scored" / "intents" / "C4" / "mei-0003.json").unlink()
+    else:
+        plan.write_bytes(_edited_plan(plan.read_bytes(), damage))
+    built = len(spy.cards)
+
+    codes: set[str] = set()
+    for check in (True, False):
+        with pytest.raises(DFilterForgeError) as error:
+            round_run(base_dir, code_revision="rev", check=check)
+        codes.add(error.value.code)
+
+    assert codes == {code}
+    assert not (base_dir / SUMMARY_PATH).exists()
+    assert len(spy.cards) == built
+    assert plan.exists() is (damage != "missing")
+
+
+def test_a_dev_correction_in_place_keeps_the_round_checkable(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    """A dev correction re-scores scored/ in place and keeps no original.
+
+    The plan keeps its trigger set, base outcomes and outcome digest; the
+    summary is written again under the new gold and lists the triggered
+    item whose outcome moved, and then the round checks clean.
+    """
+    base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
+    plan = (base_dir / PLAN_PATH).read_bytes()
+    before = _summary(base_dir)
+    built = len(spy.cards)
+    verdicts = {item: outcome for item, (_, outcome) in _ROUND_BASE.items()}
+    untriggered = next(
+        item for item in _ready_items(source, "dev") if item not in verdicts
     )
+    corrected = {**verdicts, untriggered: _SC}
+    _write_scored(base_dir, source, corrected, gold_hash="8" * 64)
+
+    regolded = round_run(base_dir, code_revision="rev", check=True)
+    rewritten = round_run(base_dir, code_revision="rev")
+    clean = round_run(base_dir, code_revision="rev", check=True)
+    first = _summary(base_dir)
+    _write_scored(
+        base_dir, source, {**corrected, "mei-0003": _SE}, gold_hash="8" * 64
+    )
+    moved = round_run(base_dir, code_revision="rev", check=True)
+    round_run(base_dir, code_revision="rev")
+    after = _summary(base_dir)
+
+    assert not (base_dir / "scored-original").exists()
+    assert regolded.differences == ("repair/summary.json", "repair/summary.md")
+    assert (rewritten.differences, clean.differences) == ((), ())
+    assert first.gold_hash == "8" * 64
+    assert first.base_outcome_changed == ()
+    assert first.model_copy(update={"gold_hash": _GOLD_HASH}) == before
+    assert moved.differences == ("repair/summary.json", "repair/summary.md")
+    assert after.base_outcome_changed == ("mei-0003",)
+    assert after.items[2].base_outcome == "silent_wrong"
+    assert after.base_outcomes_sha256 == before.base_outcomes_sha256
+    assert (after.arms, after.comparisons) == (before.arms, before.comparisons)
+    assert (base_dir / PLAN_PATH).read_bytes() == plan
+    assert (
+        round_run(base_dir, code_revision="rev", check=True).differences == ()
+    )
+    assert len(spy.cards) == built
+
+
+def test_moved_feedback_labels_and_cards_keep_the_round_checkable(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A correction that moves the feedback labels and cards keeps the plan.
+
+    The arms were sent with the committed cards, so once they exist the
+    plan is read and each arm's prompts are checked against its cards;
+    without the arms, the plan stage would derive another plan.
+    """
+    base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
+    paths = (PLAN_PATH, SUMMARY_PATH, SUMMARY_REPORT_PATH)
+    committed = {path: (base_dir / path).read_bytes() for path in paths}
+
+    def moved_labels(feedback: FeedbackProbes, split: ModelSplit) -> str:
+        del feedback, split
+        return "f" * 64
+
+    monkeypatch.setattr(repair_module, "feedback_labels_sha256", moved_labels)
+    spy.answer = lambda candidate: (
+        None if candidate == _BLIND_IR else _ERROR_CARD
+    )
+    built = len(spy.cards)
+
+    checked = round_run(base_dir, code_revision="rev", check=True)
+    written = round_run(base_dir, code_revision="rev")
+
+    assert (checked.differences, written.differences) == ((), ())
+    assert written.stage == "summary"
+    assert {path: (base_dir / path).read_bytes() for path in paths} == committed
+    assert len(spy.cards) == built
+    aside = tmp_path / "aside"
+    aside.mkdir()
+    for run in _ARM_RUNS.values():
+        shutil.move(base_dir.parent / run, aside / run)
+    alone = repair_run(base_dir, code_revision="rev", check=True)
+    assert alone.differences == ("repair/plan.json",)
+    assert len(spy.cards) > built
 
 
 def test_a_corrected_base_keeps_the_plans_trigger_set(

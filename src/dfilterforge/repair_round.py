@@ -5,7 +5,9 @@ of three arms, as ordinary C4 runs named after the base run with ``-res``,
 ``-bare`` or ``-cx`` before its date; the one re-run an outage allows adds
 ``-r2`` after the tag and replaces its arm. :func:`round_run` is the
 ``dfilterforge repair`` command. It writes or checks the plan and, once arm
-runs exist beside the base pass, requires all three and checks each one:
+runs exist beside the base pass, requires all three and checks each one
+against the committed plan, which from then on is the round's record and
+is never derived again:
 
 - one C4 condition on the base's split and prepared inputs, named after its
   arm, over the plan's items in plan order;
@@ -53,11 +55,15 @@ from dfilterforge.pair_report import read_pass
 from dfilterforge.repair import BasePass
 from dfilterforge.repair import committed_differs
 from dfilterforge.repair import plan_bytes
+from dfilterforge.repair import PLAN_PATH
+from dfilterforge.repair import plan_report
 from dfilterforge.repair import plan_run
 from dfilterforge.repair import read_base
 from dfilterforge.repair import read_bounded
+from dfilterforge.repair import ready_intent
 from dfilterforge.repair import REPAIR_CONDITION
 from dfilterforge.repair import RepairReportV1
+from dfilterforge.repair import triggers
 from dfilterforge.repair import write_whole
 from dfilterforge.repair_report import render_pool
 from dfilterforge.repair_report import render_summary
@@ -157,6 +163,86 @@ def _locate(base_dir: Path) -> dict[ArmName, Path]:
             "repair_arms_incomplete", f"{base_dir.name}: no {missing} arm run"
         )
     return found
+
+
+def _in_order(item_ids: Sequence[str], order: Sequence[str]) -> bool:
+    """Reports whether every id is in ``order``, once each and in its order."""
+    remaining = iter(order)
+    # Each membership test consumes ``remaining`` up to the id it finds.
+    return all(item_id in remaining for item_id in item_ids)
+
+
+def _committed_plan(
+    run_dir: Path, base: BasePass, check: bool
+) -> tuple[RepairPlanV1, tuple[str, ...]]:
+    """Reads the plan a round's arms were prepared from and checks its base.
+
+    Once an arm run exists the committed plan is the round's record. A gold
+    correction may since have moved the base's outcomes, the feedback labels
+    or a card, but the arms were prepared from these bytes and the
+    triggered set stays the plan's, so the plan is never derived again.
+    What must still hold is checked: it is a plan of this pass, its items
+    are ready C4 items of the pass in prepare order, each with a ready
+    answer equal to its scored intent, and while the outcomes the trigger
+    reads are the ones the plan recorded, its items are exactly their
+    trigger set. Outcomes a correction moved are reported by the summary.
+
+    Args:
+        run_dir: The base pass's published directory.
+        base: The base pass, read as the plan stage reads it.
+        check: Compare the committed bytes instead of requiring them.
+
+    Returns:
+        The plan, and ``repair/plan.json`` when its committed bytes are not
+        its canonical encoding.
+
+    Raises:
+        RoundError: With ``repair_plan_unreadable`` when no committed plan
+            can be read, and ``repair_plan_changed`` when it does not fit
+            the pass, or, outside a check, is not in its canonical bytes.
+        RepairError: When a planned answer is not its scored intent.
+    """
+    try:
+        raw = read_bounded(run_dir / PLAN_PATH)
+        plan = None if raw is None else RepairPlanV1.model_validate_json(raw)
+    except (OSError, ValidationError):
+        raw, plan = None, None
+    if raw is None or plan is None:
+        raise RoundError(
+            "repair_plan_unreadable",
+            f"{run_dir.name}: arm runs exist, and no committed plan reads",
+        )
+    planned = tuple((item.item_id, item.base_outcome) for item in plan.items)
+    ready = [
+        prompt.item_id
+        for prompt in base.prompts.prompts
+        if base.outcomes[prompt.item_id].gold_status == "ready"
+    ]
+    if (
+        (plan.split, plan.base_run, plan.base_run_manifest_sha256)
+        != (base.split, base.manifest.run_id, base.manifest_sha256)
+        or not _in_order([item_id for item_id, _ in planned], ready)
+        or (
+            plan.base_outcomes_sha256 == base.outcomes_sha256
+            and planned != triggers(base)
+        )
+    ):
+        raise RoundError(
+            "repair_plan_changed",
+            f"{plan.base_run}: the committed plan is not one this pass gives",
+        )
+    first = {prompt.item_id: prompt for prompt in base.prompts.prompts}
+    for item_id, _ in planned:
+        ready_intent(run_dir, first[item_id], base.answers[item_id])
+    if raw == plan_bytes(plan):
+        return plan, ()
+    if not check:
+        raise RoundError(
+            "repair_plan_changed",
+            f"{plan.base_run}: arm runs exist, and the committed plan is not"
+            " in its canonical bytes",
+        )
+    return plan, (PLAN_PATH.as_posix(),)
 
 
 def _arm_prompt(
@@ -368,10 +454,11 @@ def round_run(
 ) -> RepairReportV1:
     """Writes or checks a base pass's plan and, once its arms ran, its summary.
 
-    With no arm run beside the pass this is the plan stage alone. Once any
-    arm run exists, all three must, the committed plan must be the one
-    derived now and is never rewritten, and every arm's prompts are
-    checked. Once all three are published and scored, the summary is
+    With no arm run beside the pass this is the plan stage alone, which
+    derives the plan again. Once any arm run exists, all three must, and
+    the committed plan is read, checked against the pass and never
+    rewritten (:func:`_committed_plan`); every arm's prompts are checked
+    against it. Once all three are published and scored, the summary is
     written or checked.
 
     Args:
@@ -390,21 +477,19 @@ def round_run(
         ScoringError: For any layout, manifest or split failure.
     """
     arms = _locate(run_dir.absolute())
-    plan, report = plan_run(
-        run_dir,
-        code_revision=code_revision,
-        check=check or bool(arms),
-        runner=runner,
-    )
     if not arms:
-        return report
-    if report.differences and not check:
-        raise RoundError(
-            "repair_plan_changed",
-            f"{plan.base_run}: arm runs exist, and the committed plan is not"
-            " the one derived now",
-        )
+        return plan_run(
+            run_dir, code_revision=code_revision, check=check, runner=runner
+        )[1]
     base = read_base(run_dir)
+    plan, differences = _committed_plan(run_dir, base, check)
+    report = plan_report(
+        plan,
+        run_dir,
+        differences=differences,
+        code_revision=code_revision,
+        check=check,
+    )
     runs = [_check_arm(arm, arms[arm], plan, base) for arm in ARMS]
     stage: dict[str, object] = {
         "checked": check,

@@ -77,7 +77,8 @@ REPAIR_CONDITION: ConditionLabel = "C4"
 # trigger set is the one those outcomes give.
 ORIGINAL_SCORED_NAME = "scored-original"
 CardKind = Literal["frames", "error", "none"]
-_TRIGGERS: Mapping[OutcomeV1, Literal["silent_wrong", "invalid"]] = {
+Trigger = Literal["silent_wrong", "invalid"]
+_TRIGGERS: Mapping[OutcomeV1, Trigger] = {
     OutcomeV1.SILENT_WRONG: "silent_wrong",
     OutcomeV1.INVALID: "invalid",
 }
@@ -263,10 +264,36 @@ def read_base(run_dir: Path) -> BasePass:
     )
 
 
-def _answer(
+def triggers(base: BasePass) -> tuple[tuple[str, Trigger], ...]:
+    """Lists the triggered C4 items of a base pass and what triggered each.
+
+    Args:
+        base: The base pass, with the outcomes the trigger is read from.
+
+    Returns:
+        Each silent-wrong or invalid C4 item's id and outcome, in prepare
+        order.
+    """
+    triggered: list[tuple[str, Trigger]] = []
+    for prompt in base.prompts.prompts:
+        trigger = _TRIGGERS.get(base.outcomes[prompt.item_id].outcome)
+        if trigger is not None:
+            triggered.append((prompt.item_id, trigger))
+    return tuple(triggered)
+
+
+def ready_intent(
     run_dir: Path, prompt: PreparedPromptV1, completion: CompletionV1
 ) -> IntentIrV1:
     """Parses a triggered answer and ties it to the scorer's committed intent.
+
+    Args:
+        run_dir: The base pass's published directory.
+        prompt: The item's committed C4 prompt.
+        completion: The item's stored answer.
+
+    Returns:
+        The ready typed IR the answer parses to.
 
     Raises:
         RepairError: With ``outcomes_mismatch`` when the stored answer is not
@@ -323,7 +350,7 @@ def _check_frozen_labels(split: str, digest: str) -> None:
 
 def _plan_item(
     item_id: str,
-    trigger: Literal["silent_wrong", "invalid"],
+    trigger: Trigger,
     card: CounterexampleCardV1 | None,
 ) -> RepairItemV1:
     """Records one triggered item with its card's kind and canonical text."""
@@ -363,7 +390,7 @@ def _plan_items(
         trigger = _TRIGGERS.get(outcome.outcome)
         if trigger is None:
             continue
-        answer = _answer(run_dir, prompt, base.answers[prompt.item_id])
+        answer = ready_intent(run_dir, prompt, base.answers[prompt.item_id])
         card = builder.card(case_id, answer)
         items.append(_plan_item(prompt.item_id, trigger, card))
     return tuple(items)
@@ -443,6 +470,42 @@ def committed_differs(path: Path, rendered: bytes) -> bool:
     return committed != rendered
 
 
+def plan_report(
+    plan: RepairPlanV1,
+    run_dir: Path,
+    *,
+    check: bool,
+    code_revision: str,
+    differences: tuple[str, ...] = (),
+) -> RepairReportV1:
+    """Reports a plan written, checked or read beside its base pass.
+
+    Args:
+        plan: The plan.
+        run_dir: The base pass's published directory.
+        check: Whether the committed plan was compared rather than written.
+        code_revision: The revision this pass ran at.
+        differences: The committed files found to differ.
+
+    Returns:
+        The plan stage's report; ``plan_sha256`` is the digest of the
+        plan's canonical bytes.
+    """
+    kinds = {kind: 0 for kind in _CARD_KINDS}
+    for item in plan.items:
+        kinds[item.card_kind] += 1
+    return RepairReportV1(
+        plan_path=run_dir / PLAN_PATH,
+        checked=check,
+        code_revision=code_revision,
+        base_run=plan.base_run,
+        items=len(plan.items),
+        card_kinds=kinds,
+        plan_sha256=hashlib.sha256(plan_bytes(plan)).hexdigest(),
+        differences=differences,
+    )
+
+
 def plan_run(
     run_dir: Path,
     *,
@@ -475,17 +538,11 @@ def plan_run(
             differences = (PLAN_PATH.as_posix(),)
     else:
         write_whole(target, rendered)
-    kinds = {kind: 0 for kind in _CARD_KINDS}
-    for item in plan.items:
-        kinds[item.card_kind] += 1
-    return plan, RepairReportV1(
-        plan_path=target,
-        checked=check,
+    return plan, plan_report(
+        plan,
+        run_dir,
+        check=check,
         code_revision=code_revision,
-        base_run=plan.base_run,
-        items=len(plan.items),
-        card_kinds=kinds,
-        plan_sha256=hashlib.sha256(rendered).hexdigest(),
         differences=differences,
     )
 
