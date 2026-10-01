@@ -101,23 +101,58 @@ jobs:
           done
           echo "re-scored $checked committed output directories"
           test "$checked" -gt 0
+      - name: Lint the web data scripts
+        # Its own step, so the pylint file list above stays as it is.
+        run: >-
+          docker compose --profile dev run --rm test
+          pylint scripts/export_web_data.py scripts/export_web_evidence.py
+      - name: Check the committed web evidence
+        # Regenerates captures.json in pure Python, compares it byte for
+        # byte and matches every capture hash to the test-freeze gate
+        # receipt, the scored specifications and the held-out freeze record.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python scripts/export_web_evidence.py check'
+      - name: Test the web exporters against the committed tree
+        # The suite above skips these files' committed-tree cases, which
+        # need docs/: the exporter's values re-derived by an independent
+        # resolver and the committed frame tables.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_export_web_data.py tests/test_export_web_evidence.py'
+      - name: Export the web data twice and compare
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python scripts/export_web_data.py --repo /workspace
+          --out /tmp/a --source-commit "${{ github.sha }}"
+          && python scripts/export_web_data.py --repo /workspace
+          --out /tmp/b --source-commit "${{ github.sha }}"
+          && diff -r /tmp/a /tmp/b'
 
   web:
     name: Web quality gates
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20.20.2
-      - run: corepack enable
-      - run: corepack prepare pnpm@10.34.5 --activate
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm web:typecheck
-      - run: pnpm web:lint
-      - run: pnpm web:build
-      - run: pnpm --filter @dfilterforge/web exec playwright install --with-deps chromium
-      - run: pnpm --filter @dfilterforge/web test:e2e
+      - name: Build and check the site
+        uses: ./.github/actions/web-site
+      - name: Serve the site image on loopback under the Compose hardening
+        # Builds the site stage from the cache the step above filled.
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          docker compose --profile web-local up --build --detach web
+          curl --fail --silent --show-error --head \
+            --retry 10 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:3000/DFilterForge/
+          docker compose --profile web-local down
 
   containers:
     name: Docker contract
