@@ -383,6 +383,26 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
     0 unwaived), prepare and recall pass.
   - `score --check` of all 20 committed outputs passes with no difference.
+- **Review fixes** (8f1b811, 493026b, 6d587a2): three test gaps a mutation
+  review of the branch confirmed, each closed by a test that kills its mutant
+  in the test image.
+  - The plan stage's prompt check: a base whose triggered item asks something
+    else, with every digest derived from those bytes, is refused with
+    `prompt_mismatch`, no card built and no plan written. With the
+    `check_prompts` call removed, the test fails and the other 57 pass.
+  - The DNS name bound: a 256-byte question name is refused with "DNS
+    question name exceeds 255 bytes" and a 255-byte one is read. Counting the
+    name without its terminator, the test fails.
+  - The committed-pair test (dev-qwen3-32b C1 and C2 rerun) ran nowhere in CI,
+    because the test image has no docs/ tree. A second docs-mounted CI step
+    now runs it, and it skips only when docs/results is absent: with the tree
+    present and the two passes missing, it fails.
+- **CI python job mirror at 6d587a2:** 1,330 tests passed, 5 skipped, 96.73
+  percent coverage.
+  - Static checks, the gates, prepare and recall pass as at cc96d36.
+  - The mirror now runs both docs-mounted CI steps: the frozen-prompt guard
+    and the committed-pair test each pass (1 passed).
+  - `score --check` of all 20 committed outputs passes with no difference.
 
 ## Repair arms: 2026-10-01 to 2026-10-02, branch repair-arms
 

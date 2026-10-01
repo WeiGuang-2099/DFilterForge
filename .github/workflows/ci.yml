@@ -55,6 +55,17 @@ jobs:
           test sh -c 'test -d /workspace/docs/results
           && python -m pytest -q -rs -p no:cacheprovider
           tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code'
+      - name: Re-count the committed A/A rerun with the pair report
+        # The suite above skips this test for the same missing docs/ tree,
+        # and it is the only check of the pair report against committed
+        # passes rather than fixtures. It skips only when docs/results is
+        # absent, which the test -d rules out, so here it runs or fails.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_pair_report.py::test_the_committed_c1_and_c2_rerun_is_the_one_the_v2_note_reports'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test

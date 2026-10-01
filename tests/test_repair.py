@@ -9,6 +9,7 @@ with outcomes chosen so that every reported number is counted by hand.
 """
 
 from collections.abc import Callable, Mapping, Sequence
+import dataclasses
 from datetime import datetime
 from datetime import timezone
 import hashlib
@@ -812,6 +813,38 @@ def _scored_base(
     )
     _write_scored(run_dir, source, {ready[0]: OutcomeV1.SILENT_WRONG})
     return run_dir, ready
+
+
+def test_a_pass_whose_prompts_are_not_the_frozen_ones_is_refused(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    """Consistent digests do not admit a prompt the code does not rebuild.
+
+    The base is written from a split whose triggered item asks something
+    else, and its prepare and run manifests are derived from those bytes,
+    so every digest agrees and only the prompt check can refuse it.
+    """
+    triggered = _ready_items(source, "dev")[0]
+    edited = dataclasses.replace(
+        source,
+        inputs=tuple(
+            (
+                item.model_copy(update={"intent": f"{item.intent} Please."})
+                if item.item_id == triggered
+                else item
+            )
+            for item in source.inputs
+        ),
+    )
+    run_dir, _ = _scored_base(tmp_path, edited)
+
+    error = _refusal(run_dir)
+
+    assert isinstance(error, ScoringError)
+    assert error.code == "prompt_mismatch"
+    assert str(error) == f"C4 {triggered}"
+    assert not spy.cards
+    assert not (run_dir / PLAN_PATH).exists()
 
 
 @pytest.mark.parametrize(

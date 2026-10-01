@@ -669,11 +669,16 @@ def test_the_committed_c1_and_c2_rerun_is_the_one_the_v2_note_reports() -> None:
     answer text is identical on 12 and 14 of 16 items, and the only outcome
     that changed is C1/mei-0005, which flips its case and takes C1 from 8 to
     9 strong exact.
+
+    The test image carries no docs/ tree, so the suite skips this test and
+    CI runs it in its own step with docs/ mounted. It skips only when the
+    whole results tree is absent: with the tree present, a missing or
+    renamed pass fails it rather than passing as a skip.
     """
+    if not _RESULTS.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
     first = _RESULTS / "dev-qwen3-32b-2026-09-21"
     second = _RESULTS / "dev-qwen3-32b-v2-2026-09-23"
-    if not (first.is_dir() and second.is_dir()):
-        pytest.skip("the test image carries no docs/ tree")
 
     report = pair_runs(first, second)
     c1, c2, c3, c4 = report.conditions

@@ -299,17 +299,21 @@ def test_a_compression_pointer_in_the_question_is_refused() -> None:
 
 
 def test_a_dns_name_is_bounded_and_never_read_past_its_message() -> None:
-    labels = b"".join(b"\x3f" + b"a" * 63 for _ in range(4))
+    # Three 63-byte labels, a fourth label and the terminator: the wire
+    # name, length octets included, is 255 bytes with a 61-byte fourth
+    # label and one byte over with a 62-byte one.
     longest = b"".join(b"\x3f" + b"a" * 63 for _ in range(3))
     fits = longest + b"\x3d" + b"a" * 61 + b"\x00"
+    over = longest + b"\x3e" + b"a" * 62 + b"\x00"
 
     (facts,) = decode_capture(
         _pcap(_ipv4(17, _udp(_dns(question=fits)))), frozenset({1})
     ).values()
 
+    assert (len(fits), len(over)) == (255, 256)
     assert facts.dns_qry_type == 28
-    assert "exceeds 255 bytes" in str(
-        _refusal(_pcap(_ipv4(17, _udp(_dns(question=labels + b"\x00")))))
+    assert str(_refusal(_pcap(_ipv4(17, _udp(_dns(question=over)))))) == (
+        "Feedback capture frame 1: DNS question name exceeds 255 bytes"
     )
     assert "name out of bounds" in str(
         _refusal(_pcap(_ipv4(17, _udp(_dns()[:20]))))
