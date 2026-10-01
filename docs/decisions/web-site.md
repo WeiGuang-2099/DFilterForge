@@ -179,8 +179,16 @@ sets and source ops before a page renders.
     `document.title`;
   - a page without values that is not on the closed data-free list;
   - a server-rendered HTML file whose `data-src` set differs from the
-    hydrated page's;
-  - receipt and case routes that differ from the resolver's executed rows.
+    hydrated page's.
+
+  The first three checks run twice per route: on the hydrated page, and in
+  a browser context with JavaScript disabled, which sees the HTML as the
+  server rendered it. A number that only the server HTML shows, and that
+  hydration removes, reaches every visitor without JavaScript, every crawler
+  and every first paint; a planted page proves the second pass catches it.
+  Playwright 1.62.1 evaluates in a context with JavaScript disabled.
+  Separately, the test fails when the receipt and case routes differ from
+  the resolver's executed rows.
 - **The Python side.** `tests/test_export_web_data.py` holds a second
   independent resolver and an AST allowlist that keeps the exporter on the
   standard library.

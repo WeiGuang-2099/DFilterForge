@@ -2,6 +2,7 @@ import {existsSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 
 import {expect, test} from '@playwright/test';
+import type {Browser} from '@playwright/test';
 
 import {fmt, isFmtKind} from '../lib/fmt';
 import {TERMS} from '../lib/terms';
@@ -211,48 +212,108 @@ function staticSources(html: string): string[] {
   ).sort();
 }
 
+/** Every [data-src] element of the page and any nested in another. */
+function sourcedValues(): {values: Sourced[]; nested: (string | null)[]} {
+  const elements = Array.from(document.querySelectorAll('[data-src]'));
+  return {
+    values: elements.map((element) => ({
+      src: element.getAttribute('data-src') ?? '',
+      v: element.getAttribute('data-v'),
+      kind: element.getAttribute('data-fmt'),
+      cap: element.getAttribute('data-cap'),
+      text: element.textContent ?? '',
+    })),
+    nested: elements
+      .filter((element) => element.parentElement?.closest('[data-src]'))
+      .map((element) => element.getAttribute('data-src')),
+  };
+}
+
+/** What a visitor is shown at one address. */
+interface Visit {
+  readonly status: number | undefined;
+  readonly values: readonly Sourced[];
+  readonly nested: readonly (string | null)[];
+  readonly stray: readonly string[];
+}
+
+/**
+ * Opens one address in a fresh context and reads what it shows. With
+ * JavaScript the page is read after hydration; without it, as the server
+ * rendered it, which is what a crawler, a visitor without JavaScript and
+ * every first paint see. A plant, if given, answers the address instead of
+ * the server, so a test can prove what this function catches.
+ */
+async function visit(
+  browser: Browser,
+  baseURL: string | undefined,
+  target: string,
+  javaScriptEnabled: boolean,
+  plant?: string,
+): Promise<Visit> {
+  if (baseURL === undefined) {
+    throw new Error('playwright.config.ts must set use.baseURL');
+  }
+  const context = await browser.newContext({baseURL, javaScriptEnabled, reducedMotion: 'reduce'});
+  try {
+    if (plant !== undefined) {
+      await context.route(`**/${target}`, (route) =>
+        route.fulfill({contentType: 'text/html', body: plant}),
+      );
+    }
+    const page = await context.newPage();
+    const response = await page.goto(target, {
+      waitUntil: javaScriptEnabled ? 'networkidle' : 'load',
+    });
+    const {values, nested} = await page.evaluate(sourcedValues);
+    const stray = await page.evaluate(strayNumbers, SWEEP);
+    return {status: response?.status(), values, nested, stray};
+  } finally {
+    await context.close();
+  }
+}
+
 test.use({contextOptions: {reducedMotion: 'reduce'}});
 
 for (const route of ROUTES) {
-  test(`/${route.path} shows only values the committed files hold`, async ({page, request}) => {
+  test(`/${route.path} shows only values the committed files hold`, async ({
+    browser,
+    baseURL,
+    request,
+  }) => {
     const target = route.path === '' ? './' : route.path;
-    const response = await page.goto(target, {waitUntil: 'networkidle'});
-    expect(response?.status()).toBe(route.status);
 
-    const {values, nested} = await page.evaluate(() => {
-      const elements = Array.from(document.querySelectorAll('[data-src]'));
-      return {
-        values: elements.map((element) => ({
-          src: element.getAttribute('data-src') ?? '',
-          v: element.getAttribute('data-v'),
-          kind: element.getAttribute('data-fmt'),
-          cap: element.getAttribute('data-cap'),
-          text: element.textContent ?? '',
-        })),
-        nested: elements
-          .filter((element) => element.parentElement?.closest('[data-src]'))
-          .map((element) => element.getAttribute('data-src')),
-      };
-    });
+    // Every check runs on the hydrated page and on the server-rendered one:
+    // a client island could show a number on either alone.
+    const hydrated = await visit(browser, baseURL, target, true);
+    const server = await visit(browser, baseURL, target, false);
+    for (const [where, shown] of [
+      ['hydrated', hydrated],
+      ['server-rendered', server],
+    ] as const) {
+      expect(shown.status, where).toBe(route.status);
 
-    // 1. Every sourced value equals its re-derivation, as value and text.
-    expect(nested, 'a sourced value inside another').toEqual([]);
-    expect(values.flatMap(mismatches)).toEqual([]);
+      // 1. Every sourced value equals its re-derivation, as value and text.
+      expect(shown.nested, `${where}: a sourced value inside another`).toEqual([]);
+      expect(shown.values.flatMap(mismatches), where).toEqual([]);
 
-    // 2. No number outside a sourced value, a script or style, or a term.
-    expect(await page.evaluate(strayNumbers, SWEEP)).toEqual([]);
+      // 2. No number outside a sourced value, a script or style, or a term.
+      expect(shown.stray, where).toEqual([]);
 
-    // 3. A page shows at least one value unless it is data-free on purpose.
-    if (DATA_FREE.has(route.path)) {
-      expect(values).toEqual([]);
-    } else {
-      expect(values.length).toBeGreaterThan(0);
+      // 3. A page shows at least one value unless it is data-free on purpose.
+      if (DATA_FREE.has(route.path)) {
+        expect(shown.values, where).toEqual([]);
+      } else {
+        expect(shown.values.length, where).toBeGreaterThan(0);
+      }
     }
 
-    // The server-rendered HTML already holds every value the page shows.
+    // The raw HTML bytes hold the same values as the hydrated page.
     const html = await request.get(target, {failOnStatusCode: false});
     expect(html.status()).toBe(route.status);
-    expect(staticSources(await html.text())).toEqual(values.map((value) => value.src).sort());
+    expect(staticSources(await html.text())).toEqual(
+      hydrated.values.map((value) => value.src).sort(),
+    );
   });
 }
 
@@ -334,4 +395,23 @@ test('the sweep finds a number in any script, in a list start and outside the te
     'text in <span>: SHA-512',
     'start on <ol>: 56',
   ]);
+});
+
+test('the server-rendered sweep finds a number that hydration removes', async ({
+  browser,
+  baseURL,
+}) => {
+  // The plant's HTML shows a hand-typed number and its script removes it,
+  // as a client island that renders differently after hydration would.
+  const plant =
+    '<!doctype html><title>Plant</title>' +
+    '<p id="before">Seventy-eight: 78 runs</p>' +
+    "<script>document.getElementById('before').remove();</script>";
+
+  const hydrated = await visit(browser, baseURL, 'plant/', true, plant);
+  const server = await visit(browser, baseURL, 'plant/', false, plant);
+
+  expect(hydrated.status).toBe(200);
+  expect(hydrated.stray).toEqual([]);
+  expect(server.stray).toEqual(['text in <p>: Seventy-eight: 78 runs']);
 });
