@@ -74,21 +74,33 @@ the printed prefixes in `docs/protocol.md`, keep the receipt as
 
 ## Limits
 
-No code checks settings, pass timing or which runs exist; the protocol states
-them and run manifests record them. A call refuses a hashed-file edit made
-after its prepare (`prepare_code_mismatch`) before any request. The
-frozen-prompt test also fails on it, on a host and in the CI step that runs it
-with `docs/` mounted, but only while a prompt set under `docs/results` has no
-`run_manifest.json` beside it: once pass A publishes into the committed test
-directory, pass B and the slot winners' test passes, which call from the same
-prepare under their own run ids, are guarded by the call alone, as is any
-prepare directory outside `docs/results`. Only that publish releases the test,
-since `publish` refuses an incomplete run and writes only into the directory
-named after its run id: if pass A publishes under another run id, or the A/A
-pair is reported not run (rule 7 of the model bake-off note), the test and its
-CI step fail every later hashed-file edit, the merge after the last baseline
-test request included, until a commit releases them. The commit that registers
-the hosted test runs, before the first test request, says how. The call reads
-the working-tree record and does not check that it is committed, and it trusts
-the split a prompt set declares: a test prompt set hand-edited to say dev is
-sent, and only the scorer refuses its answers.
+Only `scripts/test_passes.py` checks pass timing: it starts pass B only within
+24 hours of the counted pass A's first invocation, as the protocol requires. A
+call made by hand is not checked, and the run manifests record the timing
+either way. The [test-run registry](test-runs.md) names every baseline test
+run, and the frozen-prompt test checks each published one against it. A call
+refuses a hashed-file edit made after its prepare (`prepare_code_mismatch`)
+before any request. The frozen-prompt test also fails on it, on a host and in
+the CI step that runs it with `docs/` mounted, while a prompt set under
+`docs/results` awaits a call. Since owner ruling G of 2026-10-01 the registry
+(`evidence/test-runs.json`) decides that for a prompt set it names, as a
+prepare or as a run's own directory: it stays guarded, a `run_manifest.json`
+beside it or not, while any run over that prepare is `registered`, or is an
+`unused` conditional run (a rule 7 fallback or an outage re-run) whose named
+run is `not_run` and that gives no reason for staying unused. A row leaves
+that state only as `published`, with a complete run in `docs/results/<run id>`
+whose manifest records the row's run id, prepare digest, config settings and
+first source revision, or as `not_run` with a reason; the test fails on any
+row that `docs/results` contradicts, and if no row names the frozen test
+prompts as its prepare. So the frozen test prompts stay guarded
+until the last registered baseline run is published or ruled not run, the A/A
+pair reported not run included, and are then released without a re-freeze.
+Any other prompt set under `docs/results`, such as a repair arm's, is guarded
+until a `run_manifest.json` sits beside it, and one outside `docs/results` by
+the call alone. From 2026-09-27 to ruling G, a `run_manifest.json` beside a
+prompt set released it, so pass A's publish alone released the frozen test
+prompts, and a pass A published under another run id or an A/A pair reported
+not run would have kept them guarded until a commit released them. The call
+reads the working-tree record and does not check that it is committed, and it
+trusts the split a prompt set declares: a test prompt set hand-edited to say
+dev is sent, and only the scorer refuses its answers.

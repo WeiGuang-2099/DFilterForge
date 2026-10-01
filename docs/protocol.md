@@ -96,7 +96,11 @@ number; every rate below except false-ready and slot match covers ready gold.
 - repair@1: share of silent-wrong or invalid items that become strong exact on
   the three scored probes after one feedback round, which shows packets only
   from its split's unscored feedback probe (dev semantic-29, test semantic-35);
-  an item that probe cannot separate stays in the denominator.
+  an item that probe cannot separate stays in the denominator. It is the sum
+  over ready cases of each case's repaired share of its C4 items in the
+  repaired pass, divided by the same sum of its triggered share, with the
+  interval from that pass's ready-case vectors, as for silent-wrong over
+  compile-valid items (see Repair).
 - abstention (both contracts, no human rubric): over-abstention on ready gold.
   false-ready: a ready answer to needs_clarification or not_expressible gold,
   never executed, over non-ready items, reported overall and per gold status.
@@ -141,6 +145,73 @@ probe decides no survivor, but every killed mutant must differ on it too and
 no waived one may. A mismatch, a survivor without a waiver, a waiver without a
 survivor, or a breach of either feedback rule fails CI.
 
+## Repair
+
+The repaired passes are qwen/qwen3-32b's pass A and each slot winner's counted
+test pass (qwen/qwen3.5-9b, qwen/qwen3.5-122b-a10b and
+deepseek/deepseek-v4-pro-0813, whose runs the [test-run
+registry](decisions/test-runs.md) names), and first, as a pipeline check that
+is never reported as an effect and changes no rule here, the same models'
+counted 2026-09-26 dev passes. A C4 item whose outcome there is silent-wrong
+or invalid is triggered, whatever its finish reason; that it failed is the
+only thing a scored probe tells the round. `dfilterforge repair` writes the triggered items in prepare order, each
+with its card, to `repair/plan.json` beside the pass, committed before any
+repair request. Each triggered item is sent once in each of three arms with
+its pass's model, provider, settings, `--gate-first`, `--max-attempts 3` and
+`--min-interval-seconds 1.0`, and stays in every arm's denominator:
+`resample` sends its C4 prompt from that pass again as a first turn; `bare`
+sends that prompt, the counted answer verbatim as the assistant turn and the
+user turn "Your filter was incorrect. Reply with a corrected answer in the
+same JSON format."; `counterexample` sends the same turns with a line
+`COUNTEREXAMPLE_JSON` and the item's card appended to that user turn, or the
+bare turn when the item has no card. A repair request, the resample included,
+is not a baseline request.
+
+A card comes from running the answer on its split's feedback probe and
+nothing else. An answer that raises there a code that makes an answer invalid
+gets `{"error": code}`, with `field`, the answer's own field in the first
+predicate in reading order that raises that code alone, when the catalog or
+compiler raised it. An answer that selects exactly the labelled frames gets no
+card. Otherwise the card lists at most three frames where answer and labels
+disagree, taken alternately from the missed and the wrongly selected frames in
+frame order, skipping a frame equal to one already listed but for its number
+and any port from 41000 to 51254. Each frame gives its number,
+`answer_matched`, `should_match` and only ip.src, ip.dst, ip.ttl,
+ip.dsfield.ecn, tcp.srcport, tcp.dstport, tcp.flags (the names of the set
+flags), tcp.len, udp.srcport, udp.dstport, dns.flags.response,
+dns.flags.rcode (responses only) and dns.qry.type, read from the capture and
+confirmed frame by frame by tshark 4.6.8. A card shows no other label, no gold
+filter, IR or predicate, no recipe or witness name, no count and no payload
+byte; it is canonical JSON of at most 1,024 bytes, and a test fails if one
+breaks this.
+
+Arm answers are scored like any C4 answer, against the item's request: an item
+is repaired only if its arm outcome is strong exact, so an answer that copies a
+shown host address or ephemeral port is a shortcut, and every other outcome, a
+provider failure included, is not repaired. repair@1 is reported per model and
+arm, beside its silent-wrong and invalid parts. Per model, counterexample
+against bare (primary), counterexample against resample and bare against
+resample are compared on each case's repaired share by discordant cases, fewer
+than 10 inconclusive; the same three over the four models, each drawn case
+bringing every model's items, are secondary. The A/A noise reading covers only
+the condition comparisons.
+
+Arm runs are named after their pass's run id with `-cx`, `-bare` or `-res`
+before its date (`test-qwen3-32b-cx-2026-09-26`); an outage is re-run once
+from scratch with `-r2` after the tag, and an arm run stopped at the gate is
+reported as not run, never moved to another provider. Each sends `--max-usd`
+0.20, 0.10, 0.05 and 0.05 on dev and 0.50, 0.30, 0.05 and 0.05 on test for the
+frontier, about 120B-class, 8B-class and qwen/qwen3-32b passes; a budget stop
+is resumed only under a raised cap committed first. A test arm's prompt set is
+admitted in its own commit before its first request. If an item's second turn
+would exceed the 64 KiB prompt budget, that model's round is not run and is
+reported so. A defect the dev round shows is fixed only by a correction that
+names it, before any test repair prompt is prepared. A gold correction
+re-scores the arm runs in place and lists the triggered items whose pass
+outcome changed; the triggered set stays the plan's. The [repair
+note](decisions/repair-round.md) holds the run ids, commands, schemas and the
+measured before and after.
+
 ## Decoding and provenance
 
 Temperature 0, one greedy pass, fixed max output tokens, thinking disabled where
@@ -178,9 +249,11 @@ on dev (C2 and C4 only, at most 5 USD). A dev bake-off fills each slot under the
 the candidates its drop rule and smoke leave, the earliest-listed one at most 4
 below the best survivor's C1-C4 strong-exact ready count wins, else the reserve,
 else the slot is empty. Each hosted test run's run id, model id, provider and
-settings are written here or in that note before the first test request. Local:
-Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and a continued-SFT
-control matched on optimizer steps and tokens, three seeds each.
+settings are written here, in that note or in the [test-run
+registry](decisions/test-runs.md), also part of this protocol, before the
+first test request; the registry holds the A/A pair's and the slot winners'
+runs. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and a
+continued-SFT control matched on optimizer steps and tokens, three seeds each.
 
 ## Training rules
 
