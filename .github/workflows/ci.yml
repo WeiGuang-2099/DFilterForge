@@ -144,15 +144,19 @@ jobs:
       - name: Build and check the site
         uses: ./.github/actions/web-site
       - name: Serve the site image on loopback under the Compose hardening
-        # Builds the site stage from the cache the step above filled.
+        # Builds the site stage from the cache the step above filled. On a
+        # Linux runner docker-proxy holds the published port from container
+        # start, so until node listens a connection is accepted and dropped
+        # (curl exit 52 or 56), which --retry-connrefused does not retry;
+        # --retry-all-errors does. The trap stops the service on failure too.
         env:
           SOURCE_COMMIT: ${{ github.sha }}
         run: |
+          trap 'docker compose --profile web-local down' EXIT
           docker compose --profile web-local up --build --detach web
           curl --fail --silent --show-error --head \
-            --retry 10 --retry-connrefused --retry-delay 1 \
+            --retry 10 --retry-all-errors --retry-delay 1 \
             http://127.0.0.1:3000/DFilterForge/
-          docker compose --profile web-local down
 
   containers:
     name: Docker contract
