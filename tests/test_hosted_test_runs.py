@@ -10,6 +10,7 @@ image does not carry, so they skip there.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 import hashlib
 import importlib.util
 import json
@@ -81,6 +82,12 @@ _DEV_REQUESTS = 160
 _CAP_STEP_USD = 0.05
 _NOTE_ROW = re.compile(r"\| (\d+) \| `([a-z_]+)` \| .*\|$")
 _NOTE_TRIGGER = re.compile(r"(gate stop|outage) of `([^`]+)`")
+# A Caps table row: config, dev pass, dev spend, scaled, worst request, the
+# cap rule's figure and the registered cap.
+_NOTE_CAP_ROW = re.compile(
+    r"\| `([^`]+)` \| [^|]+ \| [0-9.]+ \| [0-9.]+ \| [0-9.]+ \| ([0-9.]+) \|"
+    r" ([0-9.]+) \|"
+)
 _REPAIR_NOTE = _DECISIONS / "repair-round.md"
 _ARM_TAGS = ("res", "bare", "cx")
 _RERUN_TAG = "r2"
@@ -236,7 +243,9 @@ def test_registered_runs_are_the_ruled_winners_and_the_a_a_pair() -> None:
             assert run["run_id"] == repeated["run_id"].replace(
                 f"-{_DATE}", f"-r2-{_DATE}"
             )
-            for key in ("role", "model_id", "config", "cap_usd", "prepare"):
+            # Its cap is its config's registered cap, as the run's is; a
+            # cap raised after a budget stop changes the stopped row alone.
+            for key in ("role", "model_id", "config", "prepare"):
                 assert run[key] == repeated[key], (run["run_id"], key)
         else:
             assert run["trigger"] is None
@@ -352,11 +361,15 @@ def _dev_spend_usd(dev_run: str, usd_in: float, usd_out: float) -> float:
     return max(recorded, repriced)
 
 
-def test_caps_cover_twice_the_expected_pass_and_one_request() -> None:
-    """Each cap is the cap rule's figure, rounded up to the next 0.05 USD."""
+def _cap_rule_figures() -> dict[str, float]:
+    """Returns each registered config's cap-rule figure, by config name.
+
+    The figure is twice the expected test pass plus one worst-case test
+    request, from the counted dev pass of the row's model.
+    """
     ruling = _read_json(_RULING)
     sizes = _test_prompt_bytes()
-    caps: dict[str, float] = {}
+    figures: dict[str, float] = {}
     for run in _runs():
         config = _read_json(_ROOT / run["config"])
         usd_in = config["prices"]["usd_per_million_input"]
@@ -378,18 +391,90 @@ def test_caps_cover_twice_the_expected_pass_and_one_request() -> None:
             )
             / db.MICRO
         )
-        need = 2 * expected + worst
-        cap = run["cap_usd"]
-        steps = cap / _CAP_STEP_USD
+        figure = 2 * expected + worst
+        name = Path(run["config"]).stem
+        assert math.isclose(figures.setdefault(name, figure), figure), name
+    return figures
 
-        assert 0 < cap <= db.MAX_USD
-        assert math.isclose(steps, round(steps)), run["run_id"]
-        assert cap >= need, run["run_id"]
-        assert cap - _CAP_STEP_USD < need, run["run_id"]
-        caps[run["run_id"]] = cap
-    planned = [run["run_id"] for run in _runs() if run["trigger"] is None]
-    assert math.isclose(sum(caps[run] for run in planned), 2.35)
-    assert math.isclose(sum(caps.values()), 9.0)
+
+def _registered_caps() -> dict[str, tuple[float, float]]:
+    """Reads the note's Caps table: each config's figure and registered cap.
+
+    The table keeps the caps as registered; a cap raised after a budget
+    stop changes only the stopped row in the Runs table and the JSON.
+    """
+    table: dict[str, tuple[float, float]] = {}
+    for line in _NOTE.read_text(encoding="utf-8").splitlines():
+        match = _NOTE_CAP_ROW.fullmatch(line)
+        if match is not None:
+            figure, cap = float(match.group(2)), float(match.group(3))
+            assert table.setdefault(match.group(1), (figure, cap)) == (
+                figure,
+                cap,
+            )
+    return table
+
+
+def _cap_problems(
+    runs: Sequence[Mapping[str, Any]], registered: Mapping[str, float]
+) -> list[str]:
+    """Names each row whose cap is below its config's registered cap.
+
+    A cap is only ever raised (the note's Stops), so a row may sit above
+    the Caps table but never below it, nor past the call step's bound.
+    """
+    problems: list[str] = []
+    for run in runs:
+        floor = registered.get(Path(run["config"]).stem)
+        if floor is None:
+            problems.append(f"{run['run_id']}: its config has no cap")
+        elif not floor <= run["cap_usd"] <= db.MAX_USD:
+            problems.append(f"{run['run_id']}: cap below {floor:.2f} USD")
+    return problems
+
+
+def test_caps_cover_twice_the_expected_pass_and_one_request() -> None:
+    """Each registered cap is the cap rule's figure, rounded up to 0.05 USD.
+
+    The note's Caps table records each config's figure and cap as
+    registered; the totals are the registered caps of every row.
+    """
+    table = _registered_caps()
+    figures = _cap_rule_figures()
+    runs = _runs()
+
+    assert set(table) == set(figures)
+    for name, (shown, cap) in table.items():
+        need = figures[name]
+        steps = cap / _CAP_STEP_USD
+        assert math.isclose(shown, need, abs_tol=5e-7), name
+        assert math.isclose(steps, round(steps)), name
+        assert need <= cap < need + _CAP_STEP_USD, name
+    caps = [table[Path(run["config"]).stem][1] for run in runs]
+    planned = [cap for cap, run in zip(caps, runs) if run["trigger"] is None]
+    assert math.isclose(sum(planned), 2.35)
+    assert math.isclose(sum(caps), 9.0)
+
+
+def test_no_row_cap_is_below_its_registered_cap() -> None:
+    """Every row's cap is its config's registered cap or one raised later."""
+    registered = {name: cap for name, (_, cap) in _registered_caps().items()}
+    runs = _runs()
+
+    assert not _cap_problems(runs, registered)
+    # The raise the Stops section prescribes, in the stopped row alone,
+    # keeps the registration whole; a cap lowered below it does not.
+    stopped = next(run for run in runs if run["role"] == "winner_small")
+    floor = registered[Path(stopped["config"]).stem]
+    below = f"{stopped['run_id']}: cap below {floor:.2f} USD"
+    for cap, problems in (
+        (floor + _CAP_STEP_USD, []),
+        (floor - _CAP_STEP_USD, [below]),
+    ):
+        changed = [
+            run | {"cap_usd": cap} if run is stopped else run for run in runs
+        ]
+        assert _cap_problems(changed, registered) == problems
 
 
 def test_the_note_lists_exactly_the_registered_rows() -> None:

@@ -13,8 +13,9 @@ verdicts and slot winners: 2026-10-01", `evidence/bakeoff/ruling-2026-10-01.json
 holds the same rows machine-readably, with each run's status.
 `tests/test_hosted_test_runs.py` checks that the two list the same rows, that
 every run id follows the naming below, that each config is a committed bake-off
-config sending the row's model, slug and switch, that each cap meets the cap
-rule, and that every run answers the admitted test prompts.
+config sending the row's model, slug and switch, that each registered cap
+meets the cap rule and no row's cap is below it, and that every run answers the
+admitted test prompts.
 `scripts/test_passes.py` sends them (Owner command below), and
 `tests/test_test_passes.py` checks it against a scripted call step.
 
@@ -140,7 +141,8 @@ card code, is merged; publishing a run's answers is allowed before that.
   for a gate stop only, so no row here is conditional on a refusal and the row
   is reported not run.
 - Any other budget stop is resumed only under a cap raised above the last
-  `max_usd` and committed to this note and `test-runs.json` first. HTTP 401,
+  `max_usd` and committed to the stopped row in this note's Runs table and in
+  `test-runs.json` first; the Caps table keeps the registered caps. HTTP 401,
   402 or 403 (an account or guardrail problem) and a config or operator error
   stop the run until a resume with the same options. None is a model failure.
 
@@ -276,8 +278,16 @@ figure, times 448/160 (the test prompts average 3,336 bytes against the dev
 prompts' 3,272). A fallback takes that pass's prompt and completion tokens at
 its own prices where that is higher. The worst-case request is the call step's
 pre-request bound at the config's prices over the 448 test prompts: prompt
-bytes plus 64 as input tokens and 2,048 output tokens. An outage re-run has the
-cap of the run it repeats.
+bytes plus 64 as input tokens and 2,048 output tokens. An outage re-run is
+registered with the cap of the run it repeats.
+
+The table below gives each config's figure and cap as registered, and a cap
+raised later does not change it. A budget stop after an answer (Stops above)
+raises only the stopped row's cap, in its Runs row above and in
+`test-runs.json`; an outage re-run's cap stays as registered, since a pass with
+an answer is never an outage. So a row's cap may sit above its config's
+registered cap but never below it, and `tests/test_hosted_test_runs.py` checks
+the cap rule and the totals below against the registered caps.
 
 | Config | Dev pass | Dev spend | x 448/160 | Worst request | Twice plus worst | Cap |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
