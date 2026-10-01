@@ -5,7 +5,8 @@ run over the frozen test prompts: its role, run id, model, config, cap and
 the run whose failure would trigger it. The registry also states the rule
 the protocol's Repair section names repair arm runs by, and the repair note
 lists those ids. These tests read the committed docs/ tree, which the test
-image does not carry, so they skip there.
+image does not carry, so the suite skips them; CI runs them in its step
+that mounts docs/.
 """
 
 from __future__ import annotations

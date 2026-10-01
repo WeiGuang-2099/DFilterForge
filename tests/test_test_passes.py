@@ -4,9 +4,9 @@ Every run directory here is written from the real contracts
 (``RunManifestV1``, ``AttemptV1``, ``CompletionV1``) over a synthetic
 eight-item test prompt set, the registry is written row by row from the
 committed bake-off config specs, and the call step is replaced by a
-scripted fake, so nothing is sent anywhere. The test of the committed
-registry, prompts and note skips where the test image carries no docs/
-tree.
+scripted fake, so nothing is sent anywhere. The tests of the committed
+registry, prompts and note skip where the test image carries no docs/
+tree; CI runs them in its step that mounts docs/.
 """
 
 from __future__ import annotations

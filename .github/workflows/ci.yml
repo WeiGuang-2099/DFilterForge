@@ -26,13 +26,21 @@ jobs:
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
-      - name: Check frozen prompt sets against the model-side code
-        # The test image has no docs/ tree, so the suite above skips this
-        # guard. With docs/ mounted, a branch that edits a prepare-hashed
-        # file while a prompt set still awaits its call fails here rather
-        # than at the call step's prepare_code_mismatch; the test -d keeps
-        # a missing mount from passing as a skip. The hosted test-run
-        # registry, docs/decisions/evidence/test-runs.json (owner ruling G,
+      - name: Check frozen prompt sets and the test-run registration
+        # The test image has no docs/ tree, so the suite above skips every
+        # test that reads the committed docs/. This step runs them with
+        # docs/ mounted; the test -d keeps a missing mount from passing as
+        # a skip. They are the registration tests
+        # (tests/test_hosted_test_runs.py: test-runs.json and the note list
+        # the same rows, the caps meet the cap rule, the configs send the
+        # ruled winners' routes), the bake-off ruling and smoke evidence
+        # tests, the test-pass batch's committed-registry and note tests,
+        # the freeze quote test, and the frozen-prompt guard, so a commit
+        # that lets the note and the registry drift fails here.
+        # The guard fails a branch that edits a prepare-hashed file while a
+        # prompt set still awaits its call, rather than at the call step's
+        # prepare_code_mismatch. The hosted test-run registry,
+        # docs/decisions/evidence/test-runs.json (owner ruling G,
         # 2026-10-01), decides for the frozen test prompts and every
         # registered run's directory: they stay guarded, a run_manifest.json
         # beside them or not, while any registered run may still send a
@@ -47,7 +55,9 @@ jobs:
           --volume "$PWD/docs:/workspace/docs:ro"
           test sh -c 'test -d /workspace/docs/results
           && python -m pytest -q -rs -p no:cacheprovider
-          tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code'
+          tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code
+          tests/test_hosted_test_runs.py tests/test_dev_bakeoff.py
+          tests/test_test_passes.py tests/test_held_out.py'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test

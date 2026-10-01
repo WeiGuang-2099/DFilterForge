@@ -17,7 +17,9 @@ config sending the row's model, slug and switch, that each registered cap
 meets the cap rule and no row's cap is below it, and that every run answers the
 admitted test prompts.
 `scripts/test_passes.py` sends them (Owner command below), and
-`tests/test_test_passes.py` checks it against a scripted call step.
+`tests/test_test_passes.py` checks it against a scripted call step. The test
+image carries no `docs/`, so CI runs both files, with the bake-off ruling tests
+and the frozen-prompt guard, in a step that mounts it.
 
 ## Prompts
 
