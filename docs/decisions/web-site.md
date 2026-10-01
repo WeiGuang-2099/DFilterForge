@@ -238,7 +238,7 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency) |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path) |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured
@@ -283,6 +283,7 @@ with other sessions using Docker at the same time:
 | Host `pnpm web:build` | 8.2 s: compile 1.8 s, static generation 0.5 s |
 | Host `pnpm web:typecheck` / `pnpm web:lint` | 2.4 s / 5.0 s |
 | Playwright, 57 tests on two workers | 10.5 s on the Docker build, 9.8 s on the host build; about 0.7 to 0.9 s per route for the consistency test |
+| Playwright, 82 tests on two workers, at a9f12d9 | 10.9 s on the Docker build; each consistency route now loads twice, with and without JavaScript, in 0.9 to 1.6 s per route on the host build |
 | CI pylint step for the two scripts | 4.2 s |
 | CI evidence check | 2.2 s |
 | CI exporter and evidence tests, 124 with `docs/` | 18.3 s (pytest 17.3 s) |

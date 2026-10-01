@@ -323,3 +323,90 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   - predicate traces for the Reel pool;
   - pinning base images by digest;
   - a first CI run on GitHub.
+
+## Web data path review fixes: 2026-10-01, branch web-data
+
+- A review of 07c0cbf confirmed eight minor findings. Each is fixed in its
+  own commit, still unpushed. Each commit's new test fails on the old code,
+  except the CI step, which was proven with a local server.
+- The commits:
+  - 113396f: the CI compose smoke probe now uses `--retry-all-errors` and
+    stops the service from an `EXIT` trap.
+    - On a Linux runner, docker-proxy accepts and drops connections until
+      node listens. curl then exits 52 or 56, and `--retry-connrefused`
+      never retries those.
+    - A local server that drops the first three connections fails the old
+      flags at once (exit 56) and passes the new ones.
+    - The step ran locally: a 200 in 4.8 s. With a wrong prefix it exits 22
+      after its retries, and the trap removes the container.
+  - 0e4c78a: `react/no-danger` now applies to every component
+    (`customComponentNames: ['*']`). A syntax rule also bans the prop's
+    name as an identifier, a string or a template key. Eight fixtures, each
+    linted as a page and as a test, cover:
+    - a DOM element;
+    - a wrapper component;
+    - a spread object;
+    - `createElement` props;
+    - a string key, a computed member, a template key and a member.
+  - 9d8929e: `visible()` now marks every format, default-ignorable and
+    private-use code point as `[U+XXXX]`. That covers tag characters,
+    invisible operators, variation selectors and Hangul fillers.
+    - Unassigned code points are left alone. A browser draws them as a box,
+      and their set changes with each Unicode version.
+    - Node 20.20.2 and 24.21.0 both carry Unicode 17.0, and both mark
+      141,674 code points.
+  - 9c30d68: the exporter, the TypeScript resolver and the Python test
+    resolver now refuse a symbolic link at any path component. That
+    includes a directory link that stays inside the repository.
+    - A pytest case plants such a link, and so does a resolver spec, which
+      uses a junction on Windows.
+  - 28efe20: the cut of model text comes from the contract, never from the
+    page's `data-cap`. It is exactly 4,096 bytes, it applies to a
+    completion's `response_text` only, and it is required there.
+    - This holds in the consistency test, `lib/data.ts` and the Python
+      source check.
+    - The new tests plant a 64-byte cut, a 1-byte cut, a missing cap and a
+      cap on a label. Each fails.
+  - 3d3342c: the lint and the sweep now match any Unicode number character
+    (`\p{N}`), and both treat `start` as a shown attribute.
+    - Seven new lint fixtures fail on the old rules, and so does a planted
+      page for the sweep.
+  - 5048d0e: each route is also checked in a browser context with
+    JavaScript disabled, with the same value, number and data-free checks.
+    - A planted page removes its typed number once scripts run. It passes
+      the hydrated sweep and fails the server-rendered one.
+  - a9f12d9: `base_path.mjs` exports `DEFAULT_BASE_PATH`.
+    `tests/base-path.spec.ts` pins the other three copies of the default to
+    it: the Dockerfile `ARG`, the action input and the CI probe URL. With
+    the default renamed, all three tests fail.
+- `git diff --name-only 86cd624..HEAD` still lists none of the 12
+  prepare-hashed files, and none of `runner.py`, `live.py` or `replay.py`.
+- Verification at a9f12d9:
+  - Host: `pnpm web:typecheck`, `pnpm web:lint` and `pnpm web:build` pass.
+    actionlint 1.7.7 reports no error.
+  - The Docker `--target out` build takes 12.2 s with a warm cache. It
+    gives the same 29 files and 923,060 bytes as before, with 4
+    `index.html` routes.
+  - 82 Playwright tests pass on that build in 10.9 s on two workers:
+    - 13 smoke and 13 formatter;
+    - 41 lint-rule and 9 consistency;
+    - 3 resolver and 3 base-path.
+  - In the test image with `docs/` mounted:
+    - The exporter and evidence tests pass: 126 tests.
+    - The frozen-prompt guard passes: 1 test.
+    - pylint on the two web scripts exits 0.
+    - `export_web_evidence.py check` passes.
+    - Two exports are identical under `diff -r`: 676 files, 651 receipts.
+  - The CI python job mirror passes in 33 min 56 s:
+    - pyink, isort, pylint, pyright (0 errors) and lint-imports (5
+      contracts kept);
+    - 1,291 tests passed and 7 skipped, with 96.89 percent coverage;
+    - the benchmark and adequacy gates, prepare and recall;
+    - all 20 `score --check` outputs, with no difference.
+- Still open:
+  - The `lib/data.ts` cap guard has no unit test. The module imports
+    `server-only`, so the Playwright runner cannot load it. The consistency
+    test and the Python check cover the same rule.
+  - The sweep does not see the markers that CSS numbers for a list without
+    a `start`.
+  - Neither CI job has run on GitHub.
