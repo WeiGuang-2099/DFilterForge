@@ -178,9 +178,11 @@ on dev (C2 and C4 only, at most 5 USD). A dev bake-off fills each slot under the
 the candidates its drop rule and smoke leave, the earliest-listed one at most 4
 below the best survivor's C1-C4 strong-exact ready count wins, else the reserve,
 else the slot is empty. Each hosted test run's run id, model id, provider and
-settings are written here or in that note before the first test request. Local:
-Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and a continued-SFT
-control matched on optimizer steps and tokens, three seeds each.
+settings are written here, in that note or in the [test-run
+registry](decisions/test-runs.md), also part of this protocol, before the
+first test request; the registry holds the A/A pair's and the slot winners'
+runs. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and a
+continued-SFT control matched on optimizer steps and tokens, three seeds each.
 
 ## Training rules
 

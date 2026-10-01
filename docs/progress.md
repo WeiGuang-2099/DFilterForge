@@ -1,11 +1,12 @@
 # Implementation Progress
 
-Last updated: 2026-09-27
+Last updated: 2026-10-01
 
 ## Current slice
 
-The test split is frozen and the bake-off dev passes are scored; the two-turn
-smoke is next. Reports under the ignored `artifacts/` are not project evidence.
+The test split is frozen, the slot winners are fixed and every hosted test run
+is registered; the paid test passes follow once the registration merges.
+Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -223,13 +224,36 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   host tests in `tests/test_dev_bakeoff.py` check (116 passed in the test
   image with `docs/` mounted; 111 passed and 5 skipped without it).
 
+## Hosted test runs registered: 2026-10-01
+
+- [`decisions/test-runs.md`](decisions/test-runs.md), linked from the
+  protocol's Models paragraph and part of the protocol, registers 16 hosted
+  runs over the frozen test prompts before any test request: the A/A pair
+  `test-qwen3-32b-2026-09-26` and `test-qwen3-32b-passb-2026-09-26`, the three
+  slot winners on their counted passes' routes, their listed fallbacks for a
+  rule 7 gate stop, and one `-r2` outage re-run for each of those eight. Every
+  run uses a committed bake-off config. `evidence/test-runs.json`
+  (`test-runs/1.0`) holds the same rows and each run's status: 5 registered,
+  11 unused.
+- Caps are twice the counted dev pass's spend times 448/160 plus one worst-case
+  test request, rounded up to 0.05 USD: 0.10 per A/A pass, 0.15 small, 0.75
+  mid, 1.25 frontier, and the same for each fallback and re-run. The five
+  planned runs hold 2.35 USD of caps (about 1.10 USD expected), all 16 hold
+  9.00 USD, and the committed runs so far record at most 0.940 USD.
+- `tests/test_hosted_test_runs.py` (6 host tests) checks the run ids, the
+  ruled winners and the anchor, the configs and quantizations, the admitted
+  prepare, the cap rule, and that the note lists the JSON's rows. In the test
+  image with `docs/` mounted 6 passed; without it 6 skipped. Eight deliberate
+  breakages (a cap too low or too high, pass B tagged `-res`, a swapped
+  fallback config, a quantization in the note, a winner's model, a slug, the
+  prepare) each failed it.
+
 ## Planned next
 
-1. Register every hosted test run (run id, model id, provider, settings) before
-   the first test request, pass A as `test-qwen3-32b-2026-09-26`, and say what
-   releases the CI frozen-prompt guard if pass A never publishes there; then
-   qwen/qwen3-32b passes A and B and the slot winners on test; the 12 hashed
-   files stay unchanged until the last one.
+1. Say what releases the CI frozen-prompt guard if pass A never publishes into
+   its prepare directory; then the [registered test runs](decisions/test-runs.md):
+   qwen/qwen3-32b passes A and B, then the slot winners; the 12 hashed files
+   stay unchanged until the last one.
 2. Counterexample repair with three feedback arms, the feedback sent as a
    second conversational turn; hosted static page generated from receipts.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
