@@ -1640,3 +1640,14 @@ def test_the_note_gives_the_owner_command_in_both_shells() -> None:
         assert text in note
     for code in (0, 1, 2, 3, 130):
         assert re.search(rf"^\| {code} \|", note, re.MULTILINE)
+    # The main checkout may sit on a branch without the batch, so each
+    # shell's block switches to main before it pulls and runs anything.
+    blocks = re.findall(
+        r"^```(?:bash|powershell)\n(.*?)^```", note, re.M | re.S
+    )
+    assert len(blocks) == 2
+    for block in blocks:
+        assert block.splitlines()[1:3] == [
+            "git switch main",
+            "git pull --ff-only",
+        ]

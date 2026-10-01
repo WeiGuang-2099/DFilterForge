@@ -151,8 +151,11 @@ card code, is merged; publishing a run's answers is allowed before that.
 ## Owner command
 
 `scripts/test_passes.py` sends every run above from one command. The owner runs
-it at the root of the main checkout, in the one shell that holds the key, once
-this note, the registry and the batch are merged and pulled. It reads
+it at the root of the main checkout, switched to `main`, in the one shell that
+holds the key, once this note, the registry and the batch are merged into
+`main` and pulled; another branch in that checkout, such as `bakeoff-results`,
+has no `scripts/test_passes.py`, and Python exits 2 on the missing file. It
+reads
 `test-runs.json` and refuses to start unless
 `artifacts/model-eval/test-qwen3-32b-2026-09-26` exists, its `prepare.json` is
 a prompt set the freeze record admits, and it and every prompt file are
@@ -204,10 +207,12 @@ triggers it, so its `registered` status is written afterwards, in the commit
 that publishes or rules on it.
 
 Git Bash, at the owner's main checkout (`read -rsp` keeps the key off the screen
-and out of the history):
+and out of the history). If `git switch main` or `git pull --ff-only` fails, for
+instance on uncommitted changes, stop there and fix that first:
 
 ```bash
 cd /d/codeproject/acourse-code/DFilterForge
+git switch main
 git pull --ff-only
 uv run --frozen python scripts/test_passes.py --dry-run
 read -rsp "OpenRouter key: " DFILTERFORGE_MODEL_API_KEY && echo && export DFILTERFORGE_MODEL_API_KEY
@@ -219,6 +224,7 @@ Windows PowerShell 5.1, at the same checkout:
 
 ```powershell
 Set-Location D:\codeproject\acourse-code\DFilterForge
+git switch main
 git pull --ff-only
 $env:PYTHONIOENCODING = "utf-8"
 uv run --frozen python scripts/test_passes.py --dry-run
