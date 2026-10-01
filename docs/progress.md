@@ -5,8 +5,8 @@ Last updated: 2026-10-01
 ## Current slice
 
 The test split is frozen, the slot winners are fixed, every hosted test run is
-registered and the repair round is pre-registered; the paid test passes follow
-once the registration merges.
+registered, and the repair round and the Disproof Reel's selection rule are
+pre-registered; the paid test passes follow once the registration merges.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -308,6 +308,31 @@ Reports under the ignored `artifacts/` are not project evidence.
   expected costs in the note are the repair design's scratch measurements and
   have not been re-run.
 
+## Disproof Reel rule registered: 2026-10-01
+
+- [`decisions/disproof-reel.md`](decisions/disproof-reel.md) fixes rule
+  `reel-v1`, the headline definition and the dev-display rule, with the text
+  of the web design that the owner approved as decision D2. It is committed
+  before any test or repair answer exists.
+  - The note adds the repair round's repair-trajectory sentence. That
+    sentence applies when the pick has no repair row of its own.
+  - It also gives a dated reading of the rule against the committed registry
+    (`test-runs/1.0` statuses and roles, and the winners' dev passes from
+    the bake-off ruling). No choice made today changes.
+- **Checked on today's data.** A script applied steps 1 to 4 to the
+  committed files. It read only the registry, the ruling, the pool runs'
+  outcomes and their C4 receipts.
+  - The test phase is off, so the pool is the dev anchor and the three
+    winners' dev passes.
+  - 27 C4 silent-wrong candidates. Three tie at 3 disagreeing frames, and
+    pool order picks `dev-qwen3-32b-2026-09-26` C4 `mei-0015`. The filter
+    `(dns.aaaa || dns.flags.rcode == 3)` misses one labelled frame on each
+    scored probe.
+  - The highlight is semantic-17, frame 3.
+  - Headline over the dev pool: M is 284 and N is 65.
+- **No code yet.** No exporter exists. `scripts/export_web_data.py` is the
+  web track's.
+
 ## Planned next
 
 1. The [registered test runs](decisions/test-runs.md): qwen/qwen3-32b passes A
@@ -317,7 +342,8 @@ Reports under the ignored `artifacts/` are not project evidence.
 2. The [repair round](decisions/repair-round.md) as registered: the
    `repair-cards` branch (card code, dev plans), then `repair-arms` with the
    dev round, then, after the last baseline request, the test round and the
-   locked test result. Then the hosted static page generated from receipts.
+   locked test result. Then the hosted static page generated from receipts,
+   its Disproof Reel chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
