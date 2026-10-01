@@ -88,11 +88,19 @@ services:
     profiles:
       - web-local
       - public-demo
+    # SOURCE_COMMIT=$(git rev-parse HEAD) docker compose --profile web-local
+    # up --build serves the site at http://127.0.0.1:3000/DFilterForge/.
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      target: site
+      args:
+        # Taken from the shell when set; the build refuses an unset commit,
+        # and an unset base path keeps the Dockerfile default.
+        - SOURCE_COMMIT
+        - PAGES_BASE_PATH
     image: dfilterforge-web:0.1.0
     cpus: 1.0
     mem_limit: 512m
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"

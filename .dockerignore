@@ -10,6 +10,13 @@
 **/node_modules
 **/playwright-report
 **/test-results
+**/*.tsbuildinfo
+# Exported and built inside the image; a host copy must never leak in.
+apps/web/data
+apps/web/out
+# Ignored local agent notes that `COPY apps/web` would otherwise pick up.
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
 artifacts/*
 !artifacts/.gitkeep
 pcap_lab/catalog/*.gz
