@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Current slice
 
@@ -383,6 +383,87 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
     0 unwaived), prepare and recall pass.
   - `score --check` of all 20 committed outputs passes with no difference.
+
+## Repair arms: 2026-10-01 to 2026-10-02, branch repair-arms
+
+- **Branch.** `repair-arms` starts from repair-multiturn 281b2ce and merges
+  repair-cards at 0a941e6 (e5cb093). It is local, unmerged and never rebased,
+  and no model request was sent for it.
+  - Of the 12 prepare-hashed files only `src/dfilterforge/generation.py`
+    (fbf9aff) and `scripts/model_run.py` (3839586) change; `_MODEL_SIDE_FILES`
+    still lists 12.
+  - CI's frozen-prompt guard therefore fails here until pass A publishes, as
+    the repair design expects: in the test image with `docs/` mounted it exits
+    1 with `test-qwen3-32b-2026-09-26: re-freeze after ['scripts/model_run.py',
+    'src/dfilterforge/generation.py']`. The branch merges only after the last
+    baseline test request.
+- **A second turn may carry a card** (fbf9aff).
+  - `follow_up_prompt(prompt, answer, card)` appends a line
+    `COUNTEREXAMPLE_JSON` and the card to the follow-up text; the prefix's
+    SHA-256 `5918ae3a...` is pinned.
+  - A card must be one canonical JSON object of at most 1,024 B, else
+    `follow_up_invalid`, and it counts in the 64 KiB prompt budget.
+  - Without a card the output is unchanged: the nine smoke prompt sets rebuild
+    byte for byte.
+- **A second turn is scored by its first turn** (e56b35e). `check_prompts`
+  rebuilds only the system and user messages; `repair` checks the tail.
+- **Arms** (3839586). `model_run.py follow-up --plan PATH --arm
+  {resample,bare,counterexample}` prepares one arm of a dev or test pass from
+  its canonical `repair-plan/1.0` file.
+  - resample sends the base C4 prompt byte for byte; bare adds the counted
+    answer and the follow-up; counterexample adds the item's card as well.
+  - The run id is the base's with `-res`, `-bare` or `-cx` before its date,
+    and `-r2` after the tag for the one re-run.
+  - Without `--plan` the smoke path is unchanged.
+- **Round and pool** (1c7df3c, a1c7179).
+  - `dfilterforge repair` is the plan stage alone while no arm run sits beside
+    the base pass. Once one does, all three must (`repair_arms_incomplete`),
+    and the committed plan is checked and never rewritten.
+  - Each arm must be a C4 run of the base's split and prepared inputs named
+    after itself, over the plan's items in plan order, with exactly the
+    prompts its arm builds. Prompt sets committed before their calls are
+    checked alone (stage `prompts`).
+  - Once all three are published and scored, each must match the base's
+    settings, prices, endpoint host, attempt limit and pacing
+    (`repair_settings_mismatch`), be complete, and be scored on the base's
+    cases. Then `repair/summary.json` and `.md` (`repair-summary/1.0`) are
+    written or checked.
+  - repair@1 per arm is `ratio_rate` of the summed repaired case shares over
+    the summed triggered case shares, on the base pass's ready-case vectors,
+    with its silent-wrong and invalid parts; only strong exact repairs.
+  - The three arm pairs are compared by discordant cases, inconclusive below
+    10. Transitions, unchanged answers, card value reuse, latency and spend
+    are reported, never outcomes.
+  - `dfilterforge repair-pool --results-dir DIR --split SPLIT [--base RUN]`
+    pools committed summaries into `repair-pool/<split>.json` and `.md`, each
+    drawn case bringing every model's cells; `--check` re-derives the bases
+    the committed pool names. CI checks committed pools after the plans.
+  - The code is in `repair_round.py` (546 lines), `repair_summary.py` (682)
+    and `repair_report.py` (229). `repair.py` (now 520) and `pair_report.py`
+    only make their readers public.
+- **Tests.** `tests/test_repair.py` goes from 57 to 108 cases.
+  - On a synthetic dev round, 7 items trigger in 5 of 12 ready cases, so the
+    triggered shares sum to 3.5. repair@1 is then 0.5/3.5, 1.5/3.5 and 2.5/3.5
+    for resample, bare and counterexample, and the paired differences are 1/3.5,
+    2/3.5 and 1/3.5. Every one of these numbers was counted by hand.
+  - a1c7179 adds nine cases. In a scratch copy of `src`, deleting any one of
+    nine guards (an incomplete arm, an unscored base, six summary validators,
+    an unreadable committed pool) left the 99 earlier cases passing, and each
+    deletion now fails exactly one new case.
+- **Real data, offline, on a scratch copy** of `dev-qwen3.5-9b-2026-09-26`.
+  - `repair` wrote a plan of 7 items (5 frames cards, 2 error cards) whose
+    SHA-256 `387a3309...` is the one ablation 008's receipt records.
+  - `follow-up --plan` wrote the three arm prompt sets, 7 prompts each.
+  - `repair --check` read them at stage `prompts` with no difference (exit 0).
+  - No plan, arm run or summary is committed yet.
+- **CI python job mirror at a1c7179:** 1,611 tests passed, 6 skipped, 96.8
+  percent coverage (1,602 and 96.65 at 1c7df3c).
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept) pass.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 20 committed outputs passes with no difference.
+    The repair loops check no plan and no pool, since none is committed.
 
 ## Planned next
 
