@@ -2,10 +2,23 @@ import {defineConfig, globalIgnores} from 'eslint/config';
 import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
 import nextTypeScript from 'eslint-config-next/typescript';
 
+// Model output is untrusted and is rendered as text only. react/no-danger
+// sees the prop only where it is written on an element, so the name itself
+// is banned too: in a spread object, a createElement props object, a member
+// access or a string key, on any component. The name is only ever written
+// inside these selectors, never as a string of its own, or this file would
+// match them.
 const BASE_SYNTAX = [
   {
     selector: 'TSNonNullExpression',
     message: 'Handle the nullable case explicitly.',
+  },
+  {
+    selector:
+      ":matches(Identifier, JSXIdentifier)[name='dangerouslySetInnerHTML'], " +
+      "Literal[value='dangerouslySetInnerHTML'], " +
+      "TemplateElement[value.cooked='dangerouslySetInnerHTML']",
+    message: 'Model output is rendered as text only; never set inner HTML.',
   },
 ];
 
@@ -89,9 +102,9 @@ export default defineConfig([
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
       'no-restricted-syntax': ['error', ...BASE_SYNTAX],
-      // Model output is untrusted and is rendered as text only; there is no
-      // exception anywhere, tests included.
-      'react/no-danger': 'error',
+      // No exception anywhere, tests included; '*' extends the rule from DOM
+      // elements to every component. BASE_SYNTAX bans the name elsewhere.
+      'react/no-danger': ['error', {customComponentNames: ['*']}],
     },
   },
   {

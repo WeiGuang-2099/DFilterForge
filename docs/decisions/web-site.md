@@ -118,8 +118,11 @@ segment ends in a dotted name that Next would treat as a file.
 Model output is untrusted. Raw text is capped at 4 KiB on a character
 boundary and rendered only as a React text node. `lib/fmt.ts` passes every
 string through `lib/visible.ts`, which shows C0, C1, bidi and zero-width
-characters as visible marks. `react/no-danger` is an error everywhere, tests
-included.
+characters as visible marks. `react/no-danger` is an error on every
+component, not only DOM elements, and a `no-restricted-syntax` rule bans the
+prop's name wherever else it could reach React: a spread object,
+`createElement` props, a member or a string key. Both apply everywhere, tests
+included, and `tests/lint-rules.spec.ts` proves each form fails.
 
 ### What fails
 

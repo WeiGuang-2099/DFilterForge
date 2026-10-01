@@ -111,14 +111,79 @@ for (const {name, code, ...rest} of PLANTED) {
   });
 }
 
-test('lint fails on dangerouslySetInnerHTML everywhere, tests included', async () => {
-  const code =
-    'export const F = ({h}: {h: string}) => ' +
-    '<div dangerouslySetInnerHTML={{__html: h}} />;';
+// Every way to hand untrusted text to React as HTML. react/no-danger alone
+// sees only the prop written on an element; the rest reach a DOM element
+// through a wrapper, a spread or createElement.
+const DANGER = [
+  {
+    name: 'on a DOM element',
+    code:
+      'export const F = ({h}: {h: string}) => ' +
+      '<div dangerouslySetInnerHTML={{__html: h}} />;',
+    ids: ['no-restricted-syntax', 'react/no-danger'],
+  },
+  {
+    name: 'on a wrapper component',
+    code:
+      "import type {ComponentProps} from 'react';\n" +
+      "const Prose = (props: ComponentProps<'div'>) => <div {...props} />;\n" +
+      'export const F = ({h}: {h: string}) => ' +
+      '<Prose dangerouslySetInnerHTML={{__html: h}} />;',
+    ids: ['no-restricted-syntax', 'react/no-danger'],
+  },
+  {
+    name: 'in a spread object',
+    code:
+      'export const F = ({h}: {h: string}) => ' +
+      '<div {...{dangerouslySetInnerHTML: {__html: h}}} />;',
+    ids: ['no-restricted-syntax'],
+  },
+  {
+    name: 'in createElement props',
+    code:
+      "import {createElement} from 'react';\n" +
+      'export const F = ({h}: {h: string}) => ' +
+      "createElement('div', {dangerouslySetInnerHTML: {__html: h}});",
+    ids: ['no-restricted-syntax'],
+  },
+  {
+    name: 'as a string key',
+    code:
+      "import {createElement} from 'react';\n" +
+      'export const F = ({h}: {h: string}) => ' +
+      "createElement('div', {'dangerouslySetInnerHTML': {__html: h}});",
+    ids: ['no-restricted-syntax'],
+  },
+  {
+    name: 'as a computed member',
+    code:
+      'export function f(p: Record<string, unknown>, h: string) {\n' +
+      "  p['dangerouslySetInnerHTML'] = {__html: h};\n}",
+    ids: ['no-restricted-syntax'],
+  },
+  {
+    name: 'as a template key',
+    code:
+      'export function f(p: Record<string, unknown>, h: string) {\n' +
+      '  p[`dangerouslySetInnerHTML`] = {__html: h};\n}',
+    ids: ['no-restricted-syntax'],
+  },
+  {
+    name: 'as a member',
+    code:
+      'export function f(p: {dangerouslySetInnerHTML?: {__html: string}}, h: string) {\n' +
+      '  p.dangerouslySetInnerHTML = {__html: h};\n}',
+    ids: ['no-restricted-syntax', 'no-restricted-syntax'],
+  },
+] as const;
 
-  expect(await guardIds(code)).toEqual(['react/no-danger']);
-  expect(await guardIds(code, 'tests/fixture.tsx')).toEqual(['react/no-danger']);
-});
+for (const {name, code, ids} of DANGER) {
+  test(`lint fails on dangerouslySetInnerHTML ${name}, tests included`, async () => {
+    for (const file of ['app/fixture.tsx', 'tests/fixture.tsx']) {
+      expect((await guardIds(code, file)).sort(), file).toEqual([...ids]);
+    }
+  });
+}
 
 test('lint passes sourced values, terms and numbers that never render', async () => {
   const code = [
