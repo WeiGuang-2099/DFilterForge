@@ -36,6 +36,7 @@ from dfilterforge.fixtures import generate_fixtures
 from dfilterforge.intent_ir import IntentIrV1
 from dfilterforge.live import evaluate_live_with_trace
 from dfilterforge.live import packet_set_hash
+from dfilterforge.pair_report import pair_runs
 from dfilterforge.repair import repair_run
 from dfilterforge.replay import replay_live
 from dfilterforge.runner import RunnerError
@@ -379,6 +380,11 @@ def _repair(arguments: argparse.Namespace) -> object:
     return report
 
 
+def _pair(arguments: argparse.Namespace) -> object:
+    """Reports what changed between two scored passes over the same items."""
+    return pair_runs(arguments.first_run_dir, arguments.second_run_dir)
+
+
 def _ablation_run(arguments: argparse.Namespace) -> object:
     """Checks a recorded ablation receipt and prints its identity.
 
@@ -418,6 +424,12 @@ _REPAIR_HELP = (
     "Write a scored pass's repair plan, its silent-wrong and invalid C4 "
     "items with their feedback-probe cards, to repair/plan.json; --check "
     "derives it again and compares bytes without writing."
+)
+_PAIR_HELP = (
+    "Report two scored passes over the same items: per condition the "
+    "changed answers, outcome transitions and flipped cases, and each "
+    "condition comparison against the pair's rerun noise; reads committed "
+    "files only and executes nothing."
 )
 _ABLATION_RUN_HELP = (
     "Validate a recorded ablation receipt and print its hash, identifier, "
@@ -550,6 +562,11 @@ def build_parser() -> argparse.ArgumentParser:
     repair.add_argument("--check", action="store_true")
     repair.add_argument("--tshark", default="tshark")
     repair.set_defaults(handler=_repair)
+
+    pair = commands.add_parser("pair", help=_PAIR_HELP, description=_PAIR_HELP)
+    pair.add_argument("--first-run-dir", type=_path, required=True)
+    pair.add_argument("--second-run-dir", type=_path, required=True)
+    pair.set_defaults(handler=_pair)
 
     ablation = commands.add_parser("ablation")
     ablation_commands = ablation.add_subparsers(
