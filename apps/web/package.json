@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "serve": "node scripts/serve.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:e2e": "playwright test"
