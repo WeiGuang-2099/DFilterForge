@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-09-27
+Last updated: 2026-10-01
 
 ## Current slice
 
@@ -201,6 +201,52 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   directory sat beside a `test-qwen3-32b-r2-2026-09-26/` holding `prepare.json`
   and `run_manifest.json`, the step failed (exit 1) with the same re-freeze
   message. The ci.yml comment and the test-freeze Limits now say so.
+
+## Repair cards: 2026-10-01
+
+- **Branch.** `repair-cards` (079ba82 to cc96d36) starts from 86cd624. It is
+  local and unmerged, it changes none of the 12 prepare-hashed files, and no
+  model request was sent for it.
+- **Shared codes.** Scoring names its 13 codes that make an answer invalid in
+  one place (079ba82: `CANDIDATE_ERROR_CODES`, `candidate_error_code`), so a
+  card and the scorer charge the same code.
+- **Cards** (`dfilterforge.counterexample`, 9e6cb85 and a0289d3).
+  - A bounded decoder reads 13 header fields of each feedback frame from one
+    hash-checked copy of the capture.
+  - tshark confirms every frame with a filter built only from the typed values.
+  - A card comes from running the answer on its split's feedback probe alone.
+    It is one of three:
+    - the invalid code and the answer's first refused field;
+    - no card, when the probe cannot separate the answer;
+    - at most three disagreeing frames, as canonical JSON of at most 1,024 B.
+- **Commands** (7b0a66f, ba9418d, f29066e).
+  - The paired-case statistics of `score_summary` are public.
+  - `dfilterforge repair` writes or checks `repair/plan.json`
+    (`repair-plan/1.0`) for a scored base pass, and CI checks every committed
+    plan.
+  - Import contracts keep scoring and prompt building from loading
+    `counterexample` or `repair`.
+  - `dfilterforge pair` reports the changed answers, outcome transitions and
+    flipped cases of two scored passes.
+- **[Ablation 008](ablations/008-counterexample-facts.md), `keep_full`**
+  (cc96d36).
+  - Full confirms 62/62 and 63/63 feedback frames (961 shown values). Its card
+    entries determine the feedback labels of 52/52 ready cases; membership
+    facts alone determine 0/52.
+  - The four counted 2026-09-26 dev passes trigger 36 items: qwen3.5-9b 7,
+    qwen3.5-122b-a10b 8, deepseek-v4-pro-0813 11, qwen3-32b 10. They get 27
+    frames cards and 9 error cards; every item gets a card, and the largest is
+    717 B.
+  - Facts and cards take 10.7 percent longer, all of it the one-time facts
+    read of the two captures.
+  - No repair plan is committed yet.
+- **CI python job mirror at cc96d36:** 1,329 tests passed, 5 skipped, 96.73
+  percent coverage.
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept) pass.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 20 committed outputs passes with no difference.
 
 ## Planned next
 
