@@ -39,7 +39,12 @@ What follows a pass, by the registry (rules 3 and 7 of the bake-off note):
   is not run.
 - A row the registry marks ``not_run``, or ``unused`` with a reason, is
   the owner's ruling and is never sent; a ``published`` row is never sent
-  again.
+  again. A run ruled ``not_run`` after it left a directory still triggers
+  what that directory shows, its fallback after a gate stop or its
+  ``-r2`` row after an outage, so committing the statuses a stop's
+  summary gives never drops a triggered run. A conditional row the
+  registry registers, or that left a directory, is never called unused;
+  if no chain reaches it, the batch stops for the owner.
 
 HTTP 401, 402 or 403 aborts. A budget stop after an answer stops the batch
 until the row's cap is raised above the last invocation's ``max_usd`` in
@@ -583,6 +588,11 @@ class Context:
         """Reads what one run's directory says comes next."""
         return db.decide(self.view(row.run_id), _micro(row.cap_usd))
 
+    def read(self, row: RunRowV1) -> Any | None:
+        """Reads a run's action as its directory stands; None without one."""
+        view = self.view(row.run_id)
+        return db.decide(view, _micro(row.cap_usd)) if view.exists else None
+
     def log(self, record: dict[str, Any]) -> None:
         """Appends one step record; argv and codes only, never the env."""
         path = self.layout.out_dir / STEP_LOG
@@ -673,11 +683,14 @@ class Walk:
 
     ``settle`` returns a run's action once no call is due in this pass:
     the read-only one returns it as the directory stands, the sending one
-    after its calls. ``before_rerun`` runs before an outage re-run.
+    after its calls. ``read`` returns it as the directory stands, or None
+    when the run has none, and never sends. ``before_rerun`` runs before
+    an outage re-run.
     """
 
     plan: Plan
     settle: Callable[[RunRowV1], Any]
+    read: Callable[[RunRowV1], Any | None]
     before_rerun: Callable[[RunRowV1], None] = _no_wait
     states: dict[str, RowState] = field(default_factory=dict[str, RowState])
 
@@ -713,12 +726,30 @@ def _classify(action: Any) -> tuple[str, RowState]:
     return "owed", RowState("owed", f"{kind} ({reason})", action)
 
 
+def _ruled_kind(row: RunRowV1, ruled: RowState, walk: Walk) -> str:
+    """Reads what a ruled run triggers: its directory decides, not the ruling.
+
+    At a stop the summary proposes a run's ``not_run`` while its fallback or
+    outage re-run is still owed, and the owner commits both. So a run ruled
+    ``not_run`` that left a directory triggers whatever that directory
+    shows; the ruling fixes only the row's own state, and nothing is sent
+    for it.
+    """
+    if ruled.state == "not_run":
+        action = walk.read(row)
+        if action is not None:
+            kind = _classify(action)[0]
+            if kind not in ("done", "owed"):
+                return kind
+    return ruled.state
+
+
 def _outcome(row: RunRowV1, walk: Walk) -> tuple[str, str]:
     """Settles one run and records its row; returns its kind and why."""
     ruled = ruling(row)
     if ruled is not None:
         walk.states[row.run_id] = ruled
-        return ruled.state, str(ruled.reason)
+        return _ruled_kind(row, ruled, walk), str(ruled.reason)
     kind, state = _classify(walk.settle(row))
     walk.states[row.run_id] = state
     return kind, str(state.reason)
@@ -778,7 +809,11 @@ def _pair(walk: Walk) -> RowState:
 
 
 def _closed(row: RunRowV1, walk: Walk) -> RowState:
-    """States a row the chains did not reach, from the run it waits on."""
+    """States a row the chains did not reach, from the run it waits on.
+
+    A conditional row the registry registers, or one that left a run
+    directory, is never called unused: the owner rules on it.
+    """
     ruled = ruling(row)
     if ruled is not None:
         return ruled
@@ -788,11 +823,22 @@ def _closed(row: RunRowV1, walk: Walk) -> RowState:
     state = walk.states.get(named.run_id) or _closed(named, walk)
     if state.state in OPEN_STATES:
         return RowState("waiting", f"after {named.run_id}")
+    missing = TRIGGER_TEXT[row.trigger]
+    if row.status == "registered" or walk.read(row) is not None:
+        held = (
+            "is registered"
+            if row.status == "registered"
+            else "left a run directory"
+        )
+        return RowState(
+            "owed",
+            f"it {held}, but {named.run_id} ended {state.state} without"
+            f" {missing}; the owner rules on it",
+        )
     if state.state in ("done", "unused"):
         # Its condition can no longer occur, and the guard asks a reason
         # only of a row whose named run is not run.
         return RowState("unused", None)
-    missing = TRIGGER_TEXT[row.trigger]
     return RowState(
         "unused", f"{named.run_id} ended {state.state} without {missing}"
     )
@@ -817,9 +863,19 @@ def walk_all(walk: Walk) -> dict[str, RowState]:
 
 def read_walk(ctx: Context) -> Walk:
     """Walks the chains from the run directories alone, sending nothing."""
-    walk = Walk(ctx.plan, ctx.decide)
+    walk = Walk(ctx.plan, ctx.decide, ctx.read)
     walk_all(walk)
     return walk
+
+
+def _may_send(state: RowState) -> bool:
+    """Says whether a row's state may still lead to a call.
+
+    An owed row with no call to make waits for the owner's ruling.
+    """
+    return state.state == "waiting" or (
+        state.state == "owed" and state.action is not None
+    )
 
 
 def sendable(walk: Walk) -> list[RunRowV1]:
@@ -827,7 +883,7 @@ def sendable(walk: Walk) -> list[RunRowV1]:
     return [
         row
         for row in walk.plan.rows
-        if walk.states[row.run_id].state in OPEN_STATES and ruling(row) is None
+        if _may_send(walk.states[row.run_id]) and ruling(row) is None
     ]
 
 
@@ -1040,11 +1096,21 @@ def run_batch(ctx: Context) -> int:
     walk = Walk(
         ctx.plan,
         lambda row: settle(row, ctx),
+        ctx.read,
         lambda row: _wait_for_rerun(row, ctx),
     )
     walk_all(walk)
-    final = all(s.state in FINAL_STATES for s in read_walk(ctx).states.values())
-    return EXIT_OK if final else EXIT_STOPPED
+    states = read_walk(ctx).states
+    held = [
+        f"{row.run_id} ({states[row.run_id].reason})"
+        for row in ctx.plan.rows
+        if states[row.run_id].state not in FINAL_STATES
+    ]
+    if held:
+        raise BatchStop(
+            "no run is due, but the owner rules on " + "; ".join(held)
+        )
+    return EXIT_OK
 
 
 # What the summary says.
@@ -1140,7 +1206,7 @@ def _pass_b_window(ctx: Context) -> dict[str, Any]:
 
 def summarize(ctx: Context) -> dict[str, Any]:
     """Reads every registry row's state from the run directories."""
-    walk = Walk(ctx.plan, ctx.decide)
+    walk = Walk(ctx.plan, ctx.decide, ctx.read)
     outcomes = walk_all(walk)
     rows = [
         summary_row(number, row, walk.states[row.run_id], ctx)

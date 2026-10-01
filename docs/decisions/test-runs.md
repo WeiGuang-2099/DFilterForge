@@ -169,10 +169,15 @@ refusal, and a resumed pass that stops at the gate are reported not run. Pass B
 starts only within 24 hours of the counted pass A's first invocation; when that
 window has closed, the batch stops until the owner records pass B's rows
 `not_run` with a reason. A row this file marks `published`, `not_run`, or
-`unused` with a reason is never sent. Every step is read back from the run
-directories, so running the same command again skips finished runs and resumes
-unfinished ones. `--dry-run` prints each row's state and the calls the batch
-would make next, and sends nothing.
+`unused` with a reason is never sent. A run marked `not_run` after it left a
+run directory still triggers what that directory shows, its fallback after a
+gate stop or its `-r2` row after an outage, so committing the statuses a
+stopped batch's summary gives drops no triggered run. A conditional row marked
+`registered`, or one that left a run directory, is never called unused; if no
+chain reaches it, the batch stops for the owner. Every step is read back from
+the run directories, so running the same command again skips finished runs and
+resumes unfinished ones. `--dry-run` prints each row's state and the calls the
+batch would make next, and sends nothing.
 
 The step log `steps.jsonl` and the summaries `summary-<date>.json` and `.txt`
 go to `artifacts/test-passes/` (ignored). The summary gives every row its state
@@ -216,7 +221,7 @@ Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
 | Exit | Meaning | What the owner does |
 | --- | --- | --- |
 | 0 | Every row has a final state: `done`, `not_run` or `unused`. | Publish each `done` run, copy each other run's evidence, and commit the status, reason and commit the summary gives each row. |
-| 1 | Stopped for the owner: a budget stop after an answer, pass B's window closed, a call step that ended with an error or left no run directory, the invocation limit, an unreadable run directory, or an error the batch did not expect after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the row's `cap_usd` here and in `test-runs.json` above the last `max_usd` and commit; for pass B's window, record pass B's rows `not_run` with a reason and commit. Then run the same command. |
+| 1 | Stopped for the owner: a budget stop after an answer, pass B's window closed, a call step that ended with an error or left no run directory, the invocation limit, an unreadable run directory, a conditional row marked `registered` or with a run directory that no chain reaches, or an error the batch did not expect after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the row's `cap_usd` here and in `test-runs.json` above the last `max_usd` and commit; for pass B's window, record pass B's rows `not_run` with a reason and commit; for a conditional row no chain reaches, rule on it and commit. Then run the same command. |
 | 2 | Refused before any request: the registry, the prompt copy, a config, the lock, git, uncommitted tooling or the keyless preflight. | Fix what the `refused` or `REFUSED` line names (a missing copy prints its restore commands; delete a held `artifacts/test-passes/.lock` only when no batch or call step is running) and run the same command. |
 | 3 | Aborted: the key variable is not set (after the keyless preflight; nothing was sent), or the account refused a request with HTTP 401, 402 or 403. | Set the key, or fix the key, the credit or the account's guardrail, and run the same command. |
 | 130 | Interrupted with Ctrl-C after the request in flight finished; that request may be billed but not recorded. | Run the same command. If it says a call step is still running, let it exit and delete `artifacts/test-passes/.lock` first. |

@@ -1165,6 +1165,108 @@ def test_registry_rulings_are_never_sent(bench: Bench) -> None:
     }
 
 
+BUDGET = play("budget", lambda s: first(5, ok()))
+
+
+def _commit_summary(bench: Bench, keep: Sequence[str] = ()) -> None:
+    """Commits the registry update the summary gives each row but ``keep``."""
+    for run_id, row in bench.rows().items():
+        if run_id not in keep:
+            bench.edit_row(run_id, **row["registry_update"])
+
+
+@pytest.mark.parametrize(
+    ("script", "stopped", "updates", "keep", "paid"),
+    [
+        (
+            [OUTAGE, COMPLETE, BUDGET],
+            PASS_B,
+            {PASS_A: "not_run", _r2(PASS_A): "published"},
+            (),
+            [PASS_B, SMALL, MID, FRONTIER],
+        ),
+        (
+            [COMPLETE, COMPLETE, GATED, BUDGET],
+            SMALL_FB,
+            {SMALL: "not_run", SMALL_FB: "registered"},
+            (),
+            [SMALL_FB, MID, FRONTIER],
+        ),
+        (
+            [COMPLETE, COMPLETE, GATED, BUDGET],
+            SMALL_FB,
+            {SMALL: "not_run", SMALL_FB: "registered"},
+            (SMALL_FB,),
+            [SMALL_FB, MID, FRONTIER],
+        ),
+        (
+            [OUTAGE, BUDGET],
+            _r2(PASS_A),
+            {PASS_A: "not_run", _r2(PASS_A): "registered"},
+            (),
+            [_r2(PASS_A), PASS_B, SMALL, MID, FRONTIER],
+        ),
+    ],
+    ids=[
+        "pass-b-after-pass-a-re-run",
+        "fallback-registered",
+        "fallback-left-unused",
+        "pass-a-re-run",
+    ],
+)
+def test_committing_a_stops_statuses_never_drops_a_triggered_run(
+    bench: Bench,
+    script: list[Step],
+    stopped: str,
+    updates: dict[str, str],
+    keep: tuple[str, ...],
+    paid: list[str],
+) -> None:
+    assert bench.run(bench.keyless() + script) == 1
+    rows = bench.rows()
+    assert {
+        run: rows[run]["registry_update"]["status"] for run in updates
+    } == updates
+    # The owner commits what the summary gives (here leaving ``keep``
+    # unused) and the raised cap, then runs the same command.
+    _commit_summary(bench, keep)
+    bench.edit_row(stopped, cap_usd=0.2)
+    assert bench.run(bench.keyless() + [COMPLETE] * len(paid)) == 0
+    assert bench.paid() == paid
+    assert bench.paid_argv()[0][-1] == "--resume"
+    assert _flag(bench.paid_argv()[0], "--run-id") == stopped
+    summary = bench.summary()
+    assert summary["final"] is True
+    assert summary["rows"][ALL_RUNS.index(stopped)]["state"] == "done"
+    for row in summary["rows"]:
+        assert row["state"] != "unused" or not row["run"]["exists"]
+
+
+@pytest.mark.parametrize("held", ["is registered", "left a run directory"])
+def test_a_conditional_row_whose_condition_did_not_occur_waits_for_the_owner(
+    bench: Bench, held: str
+) -> None:
+    if held == "is registered":
+        bench.edit_row(SMALL_FB, status="registered")
+    else:
+        _complete(bench, SMALL_FB)
+    assert bench.run(bench.keyless() + [COMPLETE] * 5) == 1
+    assert bench.paid() == PLANNED
+    reason = (
+        f"it {held}, but {SMALL} ended done without a gate stop; the owner"
+        " rules on it"
+    )
+    assert bench.rows()[SMALL_FB]["state"] == "owed"
+    assert bench.rows()[SMALL_FB]["reason"] == reason
+    assert (
+        f"STOPPED: no run is due, but the owner rules on {SMALL_FB} ({reason});"
+        f" {_r2(SMALL_FB)} (after {SMALL_FB})"
+    ) in bench.printed
+    assert SMALL_FB not in [
+        row.run_id for row in tp.sendable(tp.read_walk(bench.context()))
+    ]
+
+
 def test_a_published_pass_a_without_its_run_stops_pass_b(
     bench: Bench,
 ) -> None:
