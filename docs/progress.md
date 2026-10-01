@@ -396,6 +396,74 @@ Reports under the ignored `artifacts/` are not project evidence.
   pylint list predates the bake-off scripts; CI's list, `scripts/test_passes.py`
   included, rated 10.00/10 (rc 0).
 
+## Registration review fixes: 2026-10-02
+
+- A review of this branch at 12df7ba confirmed ten findings, three of them
+  the same freeze-note sentence. Eight commits fix them; none of the 12
+  prepare-hashed files changed (`git diff --name-only 4111d8d`).
+- **A ruling no longer cuts a chain** (4ca3d9a). At an exit-1 stop the
+  summary proposes statuses such as pass A `not_run` with its `-r2`
+  published, or a winner `not_run` with its fallback `registered`. Once the
+  owner committed them, the batch read the ruling as the chain's end: it
+  never resumed the re-run or fallback, exited 0, and proposed a false
+  "ended not_run without ..." `unused` reason whose commit would release the
+  frozen-prompt guard. Now a run ruled `not_run` that left a directory
+  triggers what that directory shows, read without sending, and a
+  conditional row that is `registered` or has a directory is never called
+  unused; if no chain reaches it, the batch stops (exit 1). Four new cases
+  commit the summary's statuses and a raised cap after a budget stop and run
+  the same command again (pass B after pass A's re-run, a fallback left
+  registered or unused, pass A's re-run); each resumes the stopped run and
+  ends with exit 0. They and two cases of an unreached conditional row failed
+  on the batch as at 12df7ba (6 failed).
+- **Pass B whatever pass A shows but the gate** (fd5027e). The batch skipped
+  pass B after any pass A that was not complete; the protocol sends it
+  whatever A shows unless the bake-off note reports the pair not run, which
+  rule 7 does only at the gate. Pass B is now held back only when pass A's
+  chain ends at the gate (pass A, its `-r2` run or a resumed pass); after a
+  refused pass A, or an outage on its re-run too, pass B is sent. Its 24
+  hours run from the counted pass A's first invocation, the `-r2` run's once
+  that has a manifest, else pass A's; with neither, the batch stops for the
+  owner. On the batch before it, 7 tests failed: the new cases (a refusal,
+  an outage twice, a refused pass A at 24 h and at 24 h plus 1 s, a pass A
+  ruled published or not run with no run) and the owner-ruling test, whose
+  pair reason now reads "incomplete". The gate cases now also cover pass A's
+  re-run and its resumed pass.
+- **Caps** (60a819b). The note's Caps table carries the registered caps;
+  `tests/test_hosted_test_runs.py` checks the cap rule (each table figure
+  equals the recomputed one to 5e-7 USD) and the 2.35 and 9.00 USD totals
+  against it, and each row's cap only for being at or above its config's
+  registered cap. On a scratch copy of `docs/`, test-qwen3.5-9b-2026-09-26
+  raised from 0.15 to 0.20 USD in both the note and the JSON passed (8
+  passed); the JSON at 0.25 against the note's 0.20 failed the row equality,
+  and 0.10 in both failed the floor.
+- **CI** (19b80e4). The docs-mounted step now also runs
+  `tests/test_hosted_test_runs.py`, `tests/test_dev_bakeoff.py`,
+  `tests/test_test_passes.py` and `tests/test_held_out.py`. Its command, in
+  the test image under compose's hardening (read-only root, no network, caps
+  dropped) with the worktree's code and `docs/` mounted read-only: 215 passed,
+  exit 0, no skip; without the `docs/` mount, exit 1 at `test -d`; with the
+  0.15 USD caps raised in `test-runs.json` but not in the note, 1 failed,
+  exit 1.
+- **Notes.** The test-freeze Limits now says `scripts/test_passes.py` checks
+  pass B's timing (79a0761); the smoke line counts seven passing candidates
+  besides the anchor (2871005); both owner blocks run `git switch main`
+  before `git pull --ff-only`, which a note test checks (7f98e18; in a
+  scratch clone on `bakeoff-results` the batch was absent, and after the
+  switch `--dry-run` reached the missing-prompt-copy refusal); the spend
+  bounds round up to 0.941, 3.291 and 7.191 USD (exact sum 0.940394,
+  010b204).
+- **Checks.** `tests/test_test_passes.py` holds 67 tests (2 read the
+  committed docs) and `tests/test_hosted_test_runs.py` 8. In the test image
+  with `docs/` mounted, pyink, isort, pylint over CI's list (10.00/10),
+  pyright and lint-imports returned 0; the five files of the CI docs step
+  gave 215 passed there and 215 passed on the host. The CI mirror
+  (`artifacts/ci/ci_mirror.sh register-test-runs-fix`, working tree at
+  010b204, read-only mounts) returned rc 0 for pyink, isort, pylint,
+  pyright, lint-imports, pytest (1248 passed, 17 skipped, coverage 96.53%;
+  `scripts/test_passes.py` 97%), the benchmark gate, adequacy, prepare,
+  recall and the 20 committed re-score checks: overall status 0.
+
 ## Planned next
 
 1. The [registered test runs](decisions/test-runs.md), sent with
