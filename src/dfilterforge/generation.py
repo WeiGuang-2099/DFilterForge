@@ -59,6 +59,12 @@ FOLLOW_UP_TEXT = (
     "Your filter was incorrect. Reply with a corrected answer in the same "
     "JSON format."
 )
+# The line that introduces a repair round's counterexample card inside that
+# turn, as INPUT_JSON introduces the first turn's input. A test pins its
+# digest too.
+COUNTEREXAMPLE_PREFIX = "\nCOUNTEREXAMPLE_JSON\n"
+# A card is one canonical JSON object of at most this many UTF-8 bytes.
+MAX_CARD_BYTES = 1024
 
 
 class GenerationError(DFilterForgeError):
@@ -549,23 +555,46 @@ def prepare_batch(
     )
 
 
-def follow_up_prompt(prompt: PreparedPromptV1, answer: str) -> PreparedPromptV1:
+def _is_card(card: str) -> bool:
+    """Tells whether a card is one canonical JSON object within its limit."""
+    try:
+        if utf8_size(card, "card") > MAX_CARD_BYTES:
+            return False
+        payload = json.loads(card)
+        if not isinstance(payload, dict):
+            return False
+        return canonical_json(cast(dict[str, object], payload)) == card
+    except (ValueError, RecursionError):
+        return False
+
+
+def follow_up_prompt(
+    prompt: PreparedPromptV1, answer: str, card: str | None = None
+) -> PreparedPromptV1:
     """Continues a first-turn prompt with its own answer and the follow-up.
 
     The answer becomes the assistant turn verbatim, whatever it parses as,
     so the second request shows the model exactly what it said, and
-    :data:`FOLLOW_UP_TEXT` becomes the last user turn. No IO.
+    :data:`FOLLOW_UP_TEXT` becomes the last user turn. A card, when given,
+    is appended to that turn after :data:`COUNTEREXAMPLE_PREFIX`, verbatim.
+    Cards are built elsewhere, from the feedback probe; this function only
+    checks a card's encoding and size, so ``card=None`` gives exactly the
+    bytes it gave before cards existed. No IO.
 
     Args:
         prompt: A first-turn prompt exactly as a prepared batch holds it.
         answer: That prompt's recorded response text, unchanged.
+        card: ``None`` for the bare follow-up, or a counterexample card:
+            one JSON object in canonical encoding, at most
+            :data:`MAX_CARD_BYTES` bytes.
 
     Returns:
         The same item and condition with four messages.
 
     Raises:
         GenerationError: With ``follow_up_invalid`` if the prompt is already
-            a second turn or the answer is empty or not valid UTF-8, and
+            a second turn, the answer is empty or not valid UTF-8, or the
+            card is not one canonical JSON object within its limit, and
             with ``prompt_too_large`` if the four messages exceed the
             prompt byte budget.
     """
@@ -582,7 +611,15 @@ def follow_up_prompt(prompt: PreparedPromptV1, answer: str) -> PreparedPromptV1:
         raise GenerationError(
             "follow_up_invalid", "The answer is not valid UTF-8"
         ) from None
-    if size + utf8_size(FOLLOW_UP_TEXT, "follow-up") > MAX_PROMPT_BYTES:
+    last = FOLLOW_UP_TEXT
+    if card is not None:
+        if not _is_card(card):
+            raise GenerationError(
+                "follow_up_invalid",
+                "The card is not one canonical JSON object within its limit",
+            )
+        last = FOLLOW_UP_TEXT + COUNTEREXAMPLE_PREFIX + card
+    if size + utf8_size(last, "follow-up") > MAX_PROMPT_BYTES:
         raise GenerationError(
             "prompt_too_large", "Prompt exceeds the byte limit"
         )
@@ -595,7 +632,7 @@ def follow_up_prompt(prompt: PreparedPromptV1, answer: str) -> PreparedPromptV1:
         messages=(
             *prompt.messages,
             ChatMessageV1(role="assistant", content=answer),
-            ChatMessageV1(role="user", content=FOLLOW_UP_TEXT),
+            ChatMessageV1(role="user", content=last),
         ),
     )
 
