@@ -2811,3 +2811,64 @@ def test_repair_at_1_weights_each_case_by_its_share_of_its_items() -> None:
     )
     assert (first.first_better, first.second_better) == (1, 1)
     assert summary.arms[2].card_value_reuse == 0
+
+
+def test_card_value_reuse_counts_strong_exact_and_shortcut_answers() -> None:
+    """A shown value counts when its answer is strong exact or a shortcut.
+
+    _FRAMES_CARD shows ip.ttl 64. mei-0001 and mei-0002 hold it and are
+    strong exact and shortcut, so both count; mei-0003 holds it but stays
+    silent-wrong, mei-0004 is a shortcut holding no shown value, and
+    mei-0005 holds it under an error card, which shows none.
+    """
+    item_ids = [f"mei-000{index}" for index in range(1, 6)]
+    outcomes = {
+        item_id: _scored_item(item_id, f"case-{item_id}", _SW)
+        for item_id in item_ids
+    }
+    frames = card_json(_FRAMES_CARD)
+    plan = RepairPlanV1.model_validate(
+        _plan(
+            items=[
+                {
+                    "item_id": item_id,
+                    "base_outcome": "silent_wrong",
+                    "card_kind": "error" if item_id == "mei-0005" else "frames",
+                    "card": (
+                        card_json(_ERROR_CARD)
+                        if item_id == "mei-0005"
+                        else frames
+                    ),
+                }
+                for item_id in item_ids
+            ]
+        )
+    )
+    base = RoundBase(
+        model_id="vendor/model-a",
+        gold_hash=_GOLD_HASH,
+        outcomes=outcomes,
+        now={key: value.outcome for key, value in outcomes.items()},
+        answers={key: "an answer" for key in outcomes},
+    )
+    arm = {"mei-0001": _SE, "mei-0002": _SC, "mei-0003": _SW}
+    arm |= {"mei-0004": _SC, "mei-0005": _SE}
+    answers: dict[str, str | None] = {
+        item_id: _UNSHOWN if item_id == "mei-0004" else _SHOWN_TTL
+        for item_id in item_ids
+    }
+    counterexample = _arm_result(arm)._replace(answers=answers)
+
+    summary = summarize_round(
+        plan,
+        "3" * 64,
+        base,
+        {
+            "resample": _arm_result(arm),
+            "bare": _arm_result(arm),
+            "counterexample": counterexample,
+        },
+    )
+
+    assert [item.card_value_reuse for item in summary.arms] == [None, None, 2]
+    assert summary.arms[2].shortcut == 2
