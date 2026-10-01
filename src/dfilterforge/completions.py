@@ -12,6 +12,11 @@ fields; none of them restates the shape. The one rule that reads a reply's
 reasoning evidence lives here for the same reason: the call step applies it
 to its first answer and the scorer applies it to every answer, and a rule
 stated twice would let the two disagree.
+
+:class:`RepairPlanV1` is defined here too, because the step that prepares a
+repair round's prompts reads it and may import no gold: it is a closed
+record of item ids, base outcomes and card strings, and nothing in this
+module derives one.
 """
 
 # The recorded catalog identity repeats the five fields the runtime reports
@@ -21,17 +26,20 @@ stated twice would let the two disagree.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from datetime import timezone
 from enum import StrEnum
+import json
 import re
-from typing import Annotated, Literal
+from types import MappingProxyType
+from typing import Annotated, cast, Literal
 
 from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+from dfilterforge.canonical import canonical_json
 from dfilterforge.generation import ConditionLabel
 from dfilterforge.generation import MAX_RESPONSE_BYTES
 from dfilterforge.generation import OutputContractV1
@@ -60,6 +68,28 @@ _MAX_INVOCATIONS = 32
 
 _PROVIDER_SLUG_PATTERN = re.compile(r"^[a-z0-9-]{1,64}(/[a-z0-9-]{1,64})?$")
 _MODEL_ITEM_ID_PATTERN = re.compile(r"^mei-[0-9]{4}$")
+# A published result directory's name, as the call step's run ids are.
+_ResultDir = Annotated[
+    str,
+    Field(
+        pattern=(
+            r"^(dev|test)-[a-z0-9][a-z0-9.-]{0,31}"
+            r"-[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        )
+    ),
+]
+# Each split's unscored feedback probe. dfilterforge.model_feedback owns the
+# mapping and this module may not import it, so a test ties the two.
+REPAIR_FEEDBACK_PROBES: Mapping[str, str] = MappingProxyType(
+    {"dev": "semantic-29", "test": "semantic-35"}
+)
+REPAIR_CARD_MAX_BYTES = 1024
+_CARD_KEYS: Mapping[str, tuple[frozenset[str], ...]] = MappingProxyType(
+    {
+        "frames": (frozenset({"frames"}),),
+        "error": (frozenset({"error"}), frozenset({"error", "field"})),
+    }
+)
 
 # The run directory's own layout, so a manifest cannot name a file that
 # the publish and scoring steps would never look for.
@@ -487,4 +517,77 @@ class RunManifestV1(FrozenModel):
             for condition in self.conditions
         ):
             raise ValueError("a complete run has published every condition")
+        return self
+
+
+class RepairItemV1(FrozenModel):
+    """One triggered C4 item of a repair round and the card it is shown.
+
+    ``card`` is the canonical JSON of the card, at most 1,024 bytes, and is
+    null exactly when the feedback probe cannot tell the answer from its
+    labels. Only its outer shape is checked here; what a card may hold is
+    the counterexample module's to say, and this module never imports it.
+    """
+
+    item_id: str = Field(pattern=r"^mei-[0-9]{4}$")
+    base_outcome: Literal["silent_wrong", "invalid"]
+    card_kind: Literal["frames", "error", "none"]
+    card: str | None = None
+
+    @model_validator(mode="after")
+    def validate_card(self) -> "RepairItemV1":
+        """Requires a bounded canonical JSON object of the stated kind."""
+        if self.card is None:
+            if self.card_kind != "none":
+                raise ValueError("only an item without a card has no card")
+            return self
+        if self.card_kind == "none":
+            raise ValueError("an item without a card holds none")
+        if len(self.card.encode("utf-8")) > REPAIR_CARD_MAX_BYTES:
+            raise ValueError("a card is at most 1,024 bytes")
+        try:
+            document: object = json.loads(self.card)
+            canonical = canonical_json(document)
+        except (ValueError, RecursionError):
+            raise ValueError("a card is canonical JSON") from None
+        if not isinstance(document, dict) or canonical != self.card:
+            raise ValueError("a card is one canonical JSON object")
+        keys = frozenset(cast(dict[str, object], document))
+        if keys not in _CARD_KEYS[self.card_kind]:
+            raise ValueError("the card's keys do not match its kind")
+        return self
+
+
+class RepairPlanV1(FrozenModel):
+    """Which C4 answers of one scored pass a repair round continues.
+
+    The plan pins its base pass by the digests of its run manifest and of
+    the outcomes the trigger was read from, and its feedback probe by the
+    digest of that probe's labels. It is canonical JSON with no timestamp
+    and no revision, so a re-derived plan is checked byte for byte. It is
+    the only gold-derived input a repair prompt reads, and it carries only
+    the trigger set and each item's card.
+    """
+
+    schema_version: Literal["repair-plan/1.0"] = "repair-plan/1.0"
+    split: Literal["dev", "test"]
+    base_run: _ResultDir
+    base_run_manifest_sha256: _Sha256
+    base_outcomes_sha256: _Sha256
+    feedback_labels_sha256: _Sha256
+    feedback_probe: Literal["semantic-29", "semantic-35"]
+    items: tuple[RepairItemV1, ...] = Field(
+        default=(), max_length=_MAX_ITEMS_PER_CONDITION
+    )
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "RepairPlanV1":
+        """Ties the base run and the feedback probe to the plan's split."""
+        if not self.base_run.startswith(f"{self.split}-"):
+            raise ValueError("base_run must start with the plan's split")
+        if self.feedback_probe != REPAIR_FEEDBACK_PROBES[self.split]:
+            raise ValueError("feedback_probe is not the split's own")
+        item_ids = [item.item_id for item in self.items]
+        if len(set(item_ids)) != len(item_ids):
+            raise ValueError("a plan lists each item once")
         return self

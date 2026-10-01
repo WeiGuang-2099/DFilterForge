@@ -1,11 +1,11 @@
 # Implementation Progress
 
-Last updated: 2026-09-27
+Last updated: 2026-10-01
 
 ## Current slice
 
-The test split is frozen and the model bake-off registered; its dev passes are
-next. Generated reports under the ignored `artifacts/` are not project evidence.
+The test split is frozen and the bake-off dev passes are scored; the two-turn
+smoke is next. Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -97,13 +97,11 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
 
 - Pre-registered (36cff89) before the code: a repair round shows packets only
   from one unscored probe per split, an item that probe cannot separate stays
-  in the repair@1 denominator, and the gate checks it. Ablation 007 says why
-  one capture per split, not per case, and why the ARP witness was dropped.
-- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev) and
-  semantic-35 (test) with the witness tail through the scored probes' helper
-  (d47eb32) into `feedback/`. No scored capture, gold hash (8a061589fe6c) or
-  model input changes; an import contract keeps scoring from the module and a
-  test keeps it off `scripts/model_run.py`.
+  in the repair@1 denominator, and the gate checks it (ablation 007 has why).
+- `dfilterforge.model_feedback` (1db1b50) copies semantic-29 (dev) and -35
+  (test) with the witness tail via the scored probes' helper (d47eb32). No
+  scored capture, gold hash (8a061589fe6c) or model input changes; an import
+  contract and a test keep it from scoring and `scripts/model_run.py`.
 - Gate `probe-adequacy/1.2` (11e01d7, tests 52a29d5) checks the gold filters
   on all eight probes and runs every mutant on the feedback probe too; strict
   mode passes with the counts in ablation 007.
@@ -111,10 +109,8 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   tail, 112 mutants, 10 authored mutations and 6 of 24 committed silent-wrong
   answers get no packet; with it, 24 of 24, and none of 60 strong-exact
   answers gets a false one.
-- CI python job in the test image at 52a29d5: 1,019 tests, 1 skipped, 96.55
-  percent coverage, static checks and all gates pass. `score --check`
-  reproduced all six committed outputs at 11e01d7; later commits change only
-  docstrings and tests.
+- CI python job at 52a29d5: 1,019 tests, 1 skipped, 96.55 percent coverage;
+  static checks, gates and `score --check` (at 11e01d7) pass.
 
 ## Test freeze code: 2026-09-25
 
@@ -127,29 +123,26 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   codes, lab control timings and a table before (ea4656f) and after (e37a7a7):
   a C4-only run now scores 40 items (dd7de1e) and manifest-less test answers
   are refused with `split_violation` (e4d0ed4).
-- CI python job in the test image at e37a7a7: 1,050 tests, 2 skipped, 96.55
-  percent coverage, peak /tmp 12.2 MiB; static checks and all gates pass, and
-  `score --check` reproduced all six committed outputs.
+- CI python job at e37a7a7: 1,050 tests, 2 skipped, 96.55 percent, peak /tmp
+  12.2 MiB; static checks, gates and `score --check` pass.
 
 ## Test freeze: 2026-09-26
 
 - At 7590e4d, with rebuilt images, `score --check` reproduced all six
   committed outputs and the strict gate passed: 344 mutants, 4 waived
   survivors, 0 unwaived (`decisions/evidence/test-freeze-gate.json`).
-- Dev and test prompts were prepared ten seconds apart in one image: 40 and
-  112 items, C1 to C4, top-k 16, no empty context; the dev set is 3d71c39.
-  The 16 dev items of the v2 run are byte-identical in all four conditions.
-  Lab controls: dev reference 96 strong exact and 64 abstained of 160,
-  mutation 48 silent-wrong and 32 false-ready of 80; test reference 320 and
-  128 of 448 in 183 s, mutation 160 and 64 of 224 in 102 s.
+- Dev (3d71c39) and test prompts were prepared ten seconds apart in one image:
+  40 and 112 items, C1 to C4, top-k 16; the v2 run's 16 dev items are
+  byte-identical. Lab controls: dev reference 96 strong exact and 64 abstained,
+  mutation 48 silent-wrong and 32 false-ready; test 320 and 128 (183 s), 160
+  and 64 (102 s).
 - `src/dfilterforge/held_out_freeze.json` admits only the committed test
   `prepare.json` (206599bb67e1) and holds the digests of the test inputs,
   gold with routing, gold hash, feedback labels and four captures, quoted in
   `docs/protocol.md`. The record test no longer skips, and a host test ties
   the committed test `prepare.json` and those quotes to the record.
-- CI python job in the test image at the freeze commit: 1,059 tests, 1
-  skipped (no docs/ in the image), 96.55 percent coverage; static checks and
-  all gates pass, and `score --check` reproduced all ten committed outputs.
+- CI python job at the freeze commit: 1,059 tests, 1 skipped, 96.55 percent;
+  static checks, gates and `score --check` of all ten outputs pass.
 
 ## Model bake-off registered: 2026-09-26
 
@@ -160,9 +153,21 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   per slot three ranked candidates and a reserve, their slugs, eight fallbacks,
   run ids, the rule and a two-turn smoke. `scripts/dev_bakeoff_configs.py` wrote
   the 21 call configs and endpoints snapshot keyless at 2026-09-26T10:05:28Z,
-  matching the note. No bake-off request has been sent.
-- `scripts/dev_bakeoff.py` runs the passes, resumes transient failures after
-  60 s and refuses uncommitted tooling; 112 tests, 2 host-only; keyless: exit 3.
+  matching the note. `scripts/dev_bakeoff.py` runs the passes, resumes
+  transient failures after 60 s and refuses uncommitted tooling.
+
+## Model bake-off dev passes: 2026-09-26
+
+- The owner ran `scripts/dev_bakeoff.py` at 0e1f1e6: ten passes completed in
+  one execution with no fallback or reserve, every hybrid reported 0 reasoning
+  tokens, and providers reported 0.916 USD. mistral-medium-3-5 dropped at 134
+  of 160: 26 items met HTTP 429 on all three attempts, a provider rate limit.
+- Strong-exact ready items of 96, before the smoke: anchor 50; 8B qwen3.5-9b
+  42, ministral 39, granite 18; 120B qwen3.5-122b 57, nemotron 37 (the dropped
+  mistral-medium scores 51); frontier deepseek-v4-pro 70, glm-5.2 72, kimi-k2.6
+  68. The rule picks qwen3.5-9b, qwen3.5-122b and deepseek-v4-pro, within 4 of
+  glm-5.2 (`decisions/evidence/bakeoff/ranking-2026-09-26.json`). The anchor
+  answered non-ready gold for the first time: 6 of its 64 were false-ready.
 
 ## Two-turn smoke tooling: 2026-09-26, branch repair-multiturn
 
@@ -175,6 +180,39 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   `api_key_missing` for all nine with nothing sent. No smoke request is sent.
 - Test image with the branch mounted: 1,242 passed, 5 skipped (no docs/), 96
   percent coverage; static checks pass. It merges after the last baseline.
+
+## CI frozen-prompt guard: 2026-09-27
+
+- The suite skips `test_frozen_prompts_awaiting_a_call_match_the_model_side_code`
+  (no `docs/` in the test image), so CI now runs it alone with `docs/` mounted
+  read-only behind `test -d docs/results`. In the test image with each tree
+  mounted: 1 passed on this branch (04fa035); on a throwaway merge of
+  repair-multiturn (851e037) it failed with `test-qwen3-32b-2026-09-26:
+  re-freeze after scripts/model_run.py, src/dfilterforge/generation.py`;
+  without the mount the step exits 1.
+- The guard stops at pass A's publish, not at the last baseline test request.
+  It skips a prompt set with a `run_manifest.json` beside it, `publish` wants
+  the directory named after the run id, and pass A publishes into
+  `docs/results/test-qwen3-32b-2026-09-26`, the only prompt set awaiting a call.
+  Pass B and the slot winners' test passes call from that prepare but publish
+  under their own run ids. In the test image with the repair-multiturn code
+  (23fc4cd, hashed files as at 851e037) and a scratch copy of that directory,
+  the step failed (exit 1) and, with a `run_manifest.json` added, passed (exit
+  0). After A's publish an early merge passes CI; what is left is the call's
+  `prepare_code_mismatch`, which refuses each later test call before any
+  request, and the rule that the 12 hashed files stay unchanged until the last
+  baseline test request.
+- Only that publish releases the guard: `publish` refuses an incomplete run
+  (`run_incomplete`) and a directory not named after the run id
+  (`output_name_mismatch`). If pass A publishes under another run id, or rule 7
+  of the bake-off note reports the A/A pair not run, the step fails every
+  hashed-file edit, the merge after the last baseline test request included,
+  and asks for a re-freeze the protocol allows only before the first test
+  request. In the test image with the repair-multiturn code (1f64784, hashed
+  files as at 851e037) and a scratch results tree whose manifest-less frozen
+  directory sat beside a `test-qwen3-32b-r2-2026-09-26/` holding `prepare.json`
+  and `run_manifest.json`, the step failed (exit 1) with the same re-freeze
+  message. The ci.yml comment and the test-freeze Limits now say so.
 
 ## Smoke review fixes: 2026-09-27, branch repair-multiturn
 
@@ -300,15 +338,61 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   pylint on CI's file list (rc 0), pyright (0 errors) and lint-imports (5
   contracts kept).
 
+## Repair cards: 2026-10-01
+
+- **Branch.** `repair-cards` (079ba82 to cc96d36) starts from 86cd624. It is
+  local and unmerged, it changes none of the 12 prepare-hashed files, and no
+  model request was sent for it.
+- **Shared codes.** Scoring names its 13 codes that make an answer invalid in
+  one place (079ba82: `CANDIDATE_ERROR_CODES`, `candidate_error_code`), so a
+  card and the scorer charge the same code.
+- **Cards** (`dfilterforge.counterexample`, 9e6cb85 and a0289d3).
+  - A bounded decoder reads 13 header fields of each feedback frame from one
+    hash-checked copy of the capture.
+  - tshark confirms every frame with a filter built only from the typed values.
+  - A card comes from running the answer on its split's feedback probe alone.
+    It is one of three:
+    - the invalid code and the answer's first refused field;
+    - no card, when the probe cannot separate the answer;
+    - at most three disagreeing frames, as canonical JSON of at most 1,024 B.
+- **Commands** (7b0a66f, ba9418d, f29066e).
+  - The paired-case statistics of `score_summary` are public.
+  - `dfilterforge repair` writes or checks `repair/plan.json`
+    (`repair-plan/1.0`) for a scored base pass, and CI checks every committed
+    plan.
+  - Import contracts keep scoring and prompt building from loading
+    `counterexample` or `repair`.
+  - `dfilterforge pair` reports the changed answers, outcome transitions and
+    flipped cases of two scored passes.
+- **[Ablation 008](ablations/008-counterexample-facts.md), `keep_full`**
+  (cc96d36).
+  - Full confirms 62/62 and 63/63 feedback frames (961 shown values). Its card
+    entries determine the feedback labels of 52/52 ready cases; membership
+    facts alone determine 0/52.
+  - The four counted 2026-09-26 dev passes trigger 36 items: qwen3.5-9b 7,
+    qwen3.5-122b-a10b 8, deepseek-v4-pro-0813 11, qwen3-32b 10. They get 27
+    frames cards and 9 error cards; every item gets a card, and the largest is
+    717 B.
+  - Facts and cards take 10.7 percent longer, all of it the one-time facts
+    read of the two captures.
+  - No repair plan is committed yet.
+- **CI python job mirror at cc96d36:** 1,329 tests passed, 5 skipped, 96.73
+  percent coverage.
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept) pass.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 20 committed outputs passes with no difference.
+
 ## Planned next
 
-1. Merge, then the owner runs `scripts/dev_bakeoff.py`; the maintainer publishes
-   and scores the done passes and keeps the rest as evidence. The two-turn smoke
-   tool is built on a branch meanwhile and sent as a second owner command.
-2. Write each hosted test run's run id, model id, provider and settings into
-   `docs/protocol.md` or the bake-off note before the first test request, then
-   run qwen/qwen3-32b passes A and B and the slot winners on test. The 12 hashed
-   files stay unchanged until the last baseline request.
+1. The two-turn smoke, built on the branch `repair-multiturn`, sent by the
+   owner as a second command; a candidate that fails it gives way by rule 5.
+2. Register every hosted test run (run id, model id, provider, settings) before
+   the first test request, pass A as `test-qwen3-32b-2026-09-26`, and say what
+   releases the CI frozen-prompt guard if pass A never publishes there; then
+   qwen/qwen3-32b passes A and B and the slot winners on test; the 12 hashed
+   files stay unchanged until the last one.
 3. Counterexample repair with three feedback arms, the feedback sent as a
    second conversational turn; hosted static page generated from receipts.
 4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -320,10 +404,8 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
   standalone hash-validation phase was intentionally not run; the stopped local
   run reached 28 captures and 4,200 exact pairs without a difference, but
   partial measurements are not release evidence.
-- Only one model has been measured, twice, on 8 dev cases and no non-ready
-  gold; every comparison is inconclusive by construction, and false-ready rate
-  and slot match are unmeasured. Test-split baselines, SFT, DPO and GRPO remain
-  unmeasured; the complete Pilot Go/No-Go decision is unverified.
+- Dev has 12 ready cases, so every dev comparison is inconclusive. Test-split
+  baselines, SFT, DPO, GRPO and the Pilot Go/No-Go decision are unmeasured.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
@@ -331,6 +413,5 @@ next. Generated reports under the ignored `artifacts/` are not project evidence.
 
 ## Next verification
 
-1. Hosted CI on the freeze: the record test runs and ten outputs re-score.
-2. Locked-test run replayed offline from a clean checkout without an API key.
-3. Web numbers checked against the scored summary by a CI test.
+1. Locked-test run replayed offline from a clean checkout without an API key.
+2. Web numbers checked against the scored summary by a CI test.

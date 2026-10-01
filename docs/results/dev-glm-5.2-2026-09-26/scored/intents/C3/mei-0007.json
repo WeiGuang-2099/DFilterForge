@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dns","kind":"predicate","operator":"exists","value":null},{"field":"dns.flags.response","kind":"predicate","operator":"eq","value":0},{"field":"dns.qry.type","kind":"predicate","operator":"eq","value":1}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

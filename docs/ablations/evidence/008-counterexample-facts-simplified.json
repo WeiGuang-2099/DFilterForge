@@ -1,0 +1,323 @@
+{
+ "cards": {
+  "all": {
+   "bytes": {
+    "max": 124,
+    "mean": 74.3,
+    "min": 67,
+    "p50": 68.0,
+    "p95": 123,
+    "total": 29115
+   },
+   "frames_per_card": {
+    "1": 345,
+    "2": 47
+   },
+   "kinds": {
+    "frames": 392
+   }
+  },
+  "dev": {
+   "bytes": {
+    "max": 124,
+    "mean": 72.4,
+    "min": 67,
+    "p50": 68.0,
+    "p95": 124,
+    "total": 6081
+   },
+   "frames_per_card": {
+    "1": 77,
+    "2": 7
+   },
+   "kinds": {
+    "frames": 84
+   }
+  },
+  "test": {
+   "bytes": {
+    "max": 124,
+    "mean": 74.8,
+    "min": 67,
+    "p50": 68.0,
+    "p95": 123,
+    "total": 23034
+   },
+   "frames_per_card": {
+    "1": 268,
+    "2": 40
+   },
+   "kinds": {
+    "frames": 308
+   }
+  }
+ },
+ "cards_sha256": "953ca2ec271987df631fc1ed5e8cce6c8754ed9a4d2900e2667dac26b088d39c",
+ "facts": null,
+ "label_determination": {
+  "shown": {
+   "cases": {
+    "dev": 12,
+    "test": 40
+   },
+   "cases_total": 52,
+   "determined": {},
+   "determined_total": 0,
+   "undetermined_cases": [
+    "tcp-expiring-ttl",
+    "udp-expiring-ttl",
+    "ack-to-https",
+    "dns-a-queries",
+    "fin-or-dns-response",
+    "udp-nondns-private-destination",
+    "ecn-syn-or-expiring",
+    "aaaa-or-nxdomain",
+    "reset-or-fin",
+    "udp-normal-ttl",
+    "private-destination",
+    "dns-error-responses",
+    "tcp-source-testnet",
+    "udp-source-testnet",
+    "private-either-endpoint",
+    "source-testnet-or-private",
+    "ack-outside-testnet",
+    "high-udp-source-testnet",
+    "high-udp-normal-ttl",
+    "high-udp-testnet-normal-ttl",
+    "low-port-dns-a",
+    "dns-destination-not-source",
+    "successful-source-dns",
+    "aaaa-or-udp-source-dns",
+    "https-without-syn",
+    "https-syn-no-ack",
+    "https-syn-or-reset",
+    "tcp-destination-not-https",
+    "tcp-from-https-port",
+    "tcp-without-port-443",
+    "fin-from-https-port",
+    "ece-any-segment",
+    "cwr-any-segment",
+    "syn-without-ece",
+    "control-segments",
+    "https-no-syn-no-reset",
+    "ack-without-syn",
+    "ack-no-payload",
+    "udp-short-ttl",
+    "ttl-between",
+    "udp-to-dns-or-mdns-port",
+    "dns-query-off-port-53",
+    "dns-response-not-nxdomain",
+    "dns-queries-not-a",
+    "unicast-dns-udp-queries",
+    "dns-except-nxdomain",
+    "private-source-or-expiring",
+    "testnet-either-endpoint",
+    "no-testnet-endpoint",
+    "udp-not-from-testnet",
+    "nondns-udp-from-testnet",
+    "https-from-outside-testnet"
+   ]
+  }
+ },
+ "leak_checks": {
+  "candidates_checked": 392,
+  "canonical_ir_cards": 0,
+  "failures": {}
+ },
+ "lines": {
+  "code": 195,
+  "nonblank": 263,
+  "physical": 318,
+  "public_name_count": 12,
+  "public_names": [
+   "CARD_MAX_BYTES",
+   "CardBuilder",
+   "CounterexampleCardV1",
+   "CounterexampleError",
+   "ErrorCardV1",
+   "FrameFactV1",
+   "FramesCardV1",
+   "MAX_CARD_FRAMES",
+   "MAX_ERROR_FIELD_BYTES",
+   "MAX_FRAME_NUMBER",
+   "card_json",
+   "frames_card"
+  ]
+ },
+ "measurement_identity": {
+  "candidates": 392,
+  "candidates_sha256": "1da68ee544b6e26d1eaa5f0a18d7f3a596f625afb09c20f41acb23b0ca58b6c5",
+  "dev_base_manifests": {
+   "dev-deepseek-v4-pro-0813-2026-09-26": "298affadb2cd9398f2bd3c4c58f1766a2ccdeb4ba4c6451aeb4ee6f415dc3511",
+   "dev-qwen3-32b-2026-09-26": "6399a0001e5ee0288a11ef809f9878c41930df30ee44cac632c41fab2c604169",
+   "dev-qwen3.5-122b-a10b-2026-09-26": "b1e5bdcc5c4c186d7aa1764bc7685466f7505784e3a745268960b02019187686",
+   "dev-qwen3.5-9b-2026-09-26": "81586aa870cda4e1a77f7120933337ef2a63e4ed500a0810b8372303c93e9a73"
+  },
+  "environment_hash": "8bfb53d31c02b4c36786cd4914840f0808092a7e4fa037058248d4c4ba1bf414",
+  "feedback_captures": {
+   "semantic-29": "1a0ef0e69d85bf39f5f982261fa48822991d00e3c21ae0a26bd190d67c59ec1b",
+   "semantic-35": "3ca0673f7a0da4571cefa72360f2edbd657bf8b5c2042f26aacf24758b10f816"
+  },
+  "feedback_labels_sha256": {
+   "dev": "be0c91824bb5c65396f4cbd95d3c55348a961d877c17ff9018301f1da66b7608",
+   "test": "c0b30949787e0e8a5fcfaf8e45ac2b092cfb7e45305b90721f29375079066b94"
+  },
+  "gold_file_sha256": "f59c6a095aec0afc364afed1c61cc28a0b0f6b1db1849a254eb647796d9bc7a2",
+  "repetitions": 3,
+  "tshark_version": "4.6.8"
+ },
+ "measurement_identity_sha256": "dfc394eeb061774271346627263ce5d4d64a75c269159c91659ff8c6685c1a9d",
+ "module_sha256": "b395284228bb9231c358e3de2450687ea2238f33936c903d668bd4be12022997",
+ "plans": {
+  "dev-deepseek-v4-pro-0813-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 2,
+    "silent_wrong": 9
+   },
+   "card_bytes": [
+    45,
+    49,
+    67,
+    67,
+    67,
+    68,
+    68,
+    68,
+    68,
+    68,
+    68
+   ],
+   "card_kinds": {
+    "error": 2,
+    "frames": 9
+   },
+   "frames_per_card": {
+    "1": 9
+   },
+   "items": 11,
+   "plan_bytes": 2120,
+   "plan_sha256": "e7526a275605e2525f9cfc630285913cef570a92fbc238999a38a995950dc74a",
+   "seconds": 2.524
+  },
+  "dev-qwen3-32b-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 4,
+    "silent_wrong": 6
+   },
+   "card_bytes": [
+    49,
+    49,
+    50,
+    54,
+    67,
+    67,
+    67,
+    67,
+    68,
+    68
+   ],
+   "card_kinds": {
+    "error": 4,
+    "frames": 6
+   },
+   "frames_per_card": {
+    "1": 6
+   },
+   "items": 10,
+   "plan_bytes": 1908,
+   "plan_sha256": "12bb630877f6891da775598c299e5055dee70f690c82bcc977e4236eab0e54c9",
+   "seconds": 2.227
+  },
+  "dev-qwen3.5-122b-a10b-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 1,
+    "silent_wrong": 7
+   },
+   "card_bytes": [
+    49,
+    67,
+    67,
+    67,
+    67,
+    68,
+    68,
+    68
+   ],
+   "card_kinds": {
+    "error": 1,
+    "frames": 7
+   },
+   "frames_per_card": {
+    "1": 7
+   },
+   "items": 8,
+   "plan_bytes": 1665,
+   "plan_sha256": "b2b2f31d29cf21cbe303ce3adc5b6873aab8e9613d2a350a68843e2a5e722eb5",
+   "seconds": 2.453
+  },
+  "dev-qwen3.5-9b-2026-09-26": {
+   "base_outcomes": {
+    "invalid": 2,
+    "silent_wrong": 5
+   },
+   "card_bytes": [
+    45,
+    49,
+    67,
+    68,
+    68,
+    68,
+    68
+   ],
+   "card_kinds": {
+    "error": 2,
+    "frames": 5
+   },
+   "frames_per_card": {
+    "1": 5
+   },
+   "items": 7,
+   "plan_bytes": 1472,
+   "plan_sha256": "405ca5683925daabb7044bbeb3a188be51f18f83e583432fd9ea381c15ce8d3f",
+   "seconds": 1.473
+  }
+ },
+ "runtime": {
+  "median_cards_seconds": 67.61,
+  "median_facts_seconds": 0,
+  "median_total_seconds": 67.61,
+  "repetitions": [
+   {
+    "card_ms_p50": 157.07,
+    "card_ms_p95": 184.45,
+    "card_tshark_runs": 784,
+    "cards_seconds": 63.576,
+    "cards_sha256": "953ca2ec271987df631fc1ed5e8cce6c8754ed9a4d2900e2667dac26b088d39c",
+    "facts_seconds": 0,
+    "total_seconds": 63.576
+   },
+   {
+    "card_ms_p50": 166.63,
+    "card_ms_p95": 219.68,
+    "card_tshark_runs": 784,
+    "cards_seconds": 67.61,
+    "cards_sha256": "953ca2ec271987df631fc1ed5e8cce6c8754ed9a4d2900e2667dac26b088d39c",
+    "facts_seconds": 0,
+    "total_seconds": 67.61
+   },
+   {
+    "card_ms_p50": 186.75,
+    "card_ms_p95": 260.62,
+    "card_tshark_runs": 784,
+    "cards_seconds": 77.217,
+    "cards_sha256": "953ca2ec271987df631fc1ed5e8cce6c8754ed9a4d2900e2667dac26b088d39c",
+    "facts_seconds": 0,
+    "total_seconds": 77.217
+   }
+  ],
+  "script_seconds": 263.344
+ },
+ "schema_version": "ablation-008/1.0",
+ "source_revision": "f29066e+simplified",
+ "variant": "simplified"
+}

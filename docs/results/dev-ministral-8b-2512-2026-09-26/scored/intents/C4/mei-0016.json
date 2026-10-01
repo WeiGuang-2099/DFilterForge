@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dns","kind":"predicate","operator":"exists","value":null},{"children":[{"field":"dns.a","kind":"predicate","operator":"exists","value":null},{"field":"dns.tkey.error","kind":"predicate","operator":"ne","value":0}],"kind":"any"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

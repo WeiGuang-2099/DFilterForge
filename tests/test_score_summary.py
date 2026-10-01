@@ -12,10 +12,16 @@ from dfilterforge.canonical import canonical_json
 from dfilterforge.score_report import render_markdown
 from dfilterforge.score_summary import BOOTSTRAP_RESAMPLES
 from dfilterforge.score_summary import BOOTSTRAP_SEED
+from dfilterforge.score_summary import case_means
 from dfilterforge.score_summary import ConditionLabel
+from dfilterforge.score_summary import Discordance
+from dfilterforge.score_summary import discordance
+from dfilterforge.score_summary import draw_indices
 from dfilterforge.score_summary import EffectiveSettingsV1
 from dfilterforge.score_summary import ItemOutcomeV1
+from dfilterforge.score_summary import MIN_DISCORDANT_CASES
 from dfilterforge.score_summary import OutcomeV1
+from dfilterforge.score_summary import ratio_rate
 from dfilterforge.score_summary import ScoreSummaryV1
 from dfilterforge.score_summary import SpendV1
 from dfilterforge.score_summary import summarize
@@ -464,6 +470,135 @@ def test_comparison_without_shared_cases_reports_no_difference() -> None:
     assert comparison.difference.resamples_used == 0
     assert comparison.discordant_cases == 0
     assert comparison.inconclusive is True
+
+
+def test_the_public_vectors_are_the_seeded_draw_of_one_universe() -> None:
+    """The vectors depend on the case count alone, from seed 17."""
+    rng = random.Random(BOOTSTRAP_SEED)
+    expected = tuple(
+        tuple(int(rng.random() * 5) for _ in range(5))
+        for _ in range(BOOTSTRAP_RESAMPLES)
+    )
+
+    assert draw_indices(5) == expected
+    assert draw_indices(5) == draw_indices(5)
+    assert draw_indices(6) != expected
+    assert all(0 <= index < 5 for vector in expected for index in vector)
+
+
+def test_case_means_average_each_case_and_keep_a_zero_case() -> None:
+    """A case whose items all count zero keeps its key."""
+    means = case_means(
+        [("case-1", 1.0), ("case-2", 0.0), ("case-1", 0.0), ("case-2", 0.0)]
+    )
+
+    assert means == {"case-1": 0.5, "case-2": 0.0}
+
+
+def test_ratio_rate_divides_summed_case_means() -> None:
+    """The value is a ratio of sums; resamples without a denominator drop."""
+    case_ids = ("case-a", "case-b", "case-c")
+    vectors = ((0, 0, 0), (0, 1, 2), (2, 2, 1))
+    numerators = {"case-a": 0.0, "case-b": 1.0, "case-c": 0.5}
+    denominators = {"case-a": 0.0, "case-b": 1.0, "case-c": 0.5}
+    rate = ratio_rate(
+        {"case-a": 0.0, "case-b": 0.5, "case-c": 0.0},
+        denominators,
+        vectors,
+        case_ids,
+    )
+
+    assert rate.value == round(0.5 / 1.5, 6)
+    # (0, 0, 0) draws no denominator; (0, 1, 2) gives 0.5 / 1.5 and
+    # (2, 2, 1) gives 0.5 / 2.
+    assert rate.resamples_used == 2
+    assert rate.low == pytest.approx(0.25)
+    assert rate.high == pytest.approx(round(0.5 / 1.5, 6))
+    assert ratio_rate(numerators, denominators, vectors, case_ids).value == 1.0
+    empty = ratio_rate({}, {"case-a": 0.0}, vectors, case_ids)
+    assert empty.value is None
+    assert empty.resamples_used == 0
+
+
+def test_a_paired_difference_is_the_ratio_of_the_differences() -> None:
+    """Two shares over one denominator differ by the ratio of differences."""
+    case_ids = tuple(f"case-{index}" for index in range(6))
+    vectors = draw_indices(len(case_ids))
+    triggered = dict(zip(case_ids, (1.0, 0.5, 0.5, 1.0, 0.0, 0.5)))
+    first = dict(zip(case_ids, (1.0, 0.5, 0.0, 0.5, 0.0, 0.5)))
+    second = dict(zip(case_ids, (0.0, 0.5, 0.5, 0.0, 0.0, 0.0)))
+    differences = {
+        case_id: first[case_id] - second[case_id] for case_id in case_ids
+    }
+
+    paired = ratio_rate(differences, triggered, vectors, case_ids)
+    first_rate = ratio_rate(first, triggered, vectors, case_ids)
+    second_rate = ratio_rate(second, triggered, vectors, case_ids)
+
+    assert first_rate.value is not None and second_rate.value is not None
+    assert paired.value == pytest.approx(
+        first_rate.value - second_rate.value, abs=1e-5
+    )
+    assert paired.value == round(1.5 / 3.5, 6)
+    assert paired.resamples_used == BOOTSTRAP_RESAMPLES
+
+
+def test_the_public_ratio_is_the_summarys_executable_share() -> None:
+    """Silent-wrong over compile-valid is the public ratio on its vectors."""
+    outcomes: list[ItemOutcomeV1] = []
+    verdicts = (
+        (OutcomeV1.SILENT_WRONG, OutcomeV1.STRONG_EXACT),
+        (OutcomeV1.INVALID, OutcomeV1.SILENT_WRONG),
+        (OutcomeV1.STRONG_EXACT, OutcomeV1.STRONG_EXACT),
+        (OutcomeV1.SILENT_WRONG, OutcomeV1.PROVIDER_FAILED),
+        (OutcomeV1.SHORTCUT, OutcomeV1.ABSTAINED),
+    )
+    for index, pair in enumerate(verdicts):
+        for slot, outcome in enumerate(pair):
+            outcomes.append(
+                _item("C4", f"case-{index}", f"i{index}-{slot}", outcome)
+            )
+    case_ids = tuple(sorted({item.case_id for item in outcomes}))
+    executable = {
+        OutcomeV1.SHORTCUT,
+        OutcomeV1.SILENT_WRONG,
+        OutcomeV1.STRONG_EXACT,
+    }
+
+    silent = case_means(
+        [
+            (item.case_id, float(item.outcome is OutcomeV1.SILENT_WRONG))
+            for item in outcomes
+        ]
+    )
+    runs = case_means(
+        [(item.case_id, float(item.outcome in executable)) for item in outcomes]
+    )
+    expected = ratio_rate(silent, runs, draw_indices(len(case_ids)), case_ids)
+
+    summary = _summarize(outcomes)
+    assert summary.conditions["C4"].silent_wrong_of_executable == expected
+    assert expected.value == round(1.5 / 3.5, 6)
+
+
+def test_discordance_counts_each_side_and_turns_conclusive_at_ten() -> None:
+    """A tie is not discordant; ten differing cases are conclusive."""
+    counts = discordance({"a": 0.5, "b": -1.0, "c": 0.0, "d": 1.0})
+    nine = discordance({f"case-{index}": 1.0 for index in range(9)})
+    ten = discordance({f"case-{index}": -0.5 for index in range(10)})
+    summary = _summarize(_paired(10)).comparisons[0]
+
+    assert counts == Discordance(first_better=2, second_better=1)
+    assert counts.discordant == 3
+    assert nine.inconclusive is True
+    assert ten == Discordance(first_better=0, second_better=10)
+    assert ten.inconclusive is False
+    assert ten.discordant == MIN_DISCORDANT_CASES
+    assert discordance({}) == Discordance(0, 0)
+    assert (summary.first_better_cases, summary.second_better_cases) == (
+        10,
+        0,
+    )
 
 
 def test_missing_condition_is_reported_not_compared() -> None:

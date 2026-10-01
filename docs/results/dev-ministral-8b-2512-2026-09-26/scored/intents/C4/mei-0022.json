@@ -1,0 +1,1 @@
+{"expression":{"children":[{"child":{"field":"ip.dst","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"},"kind":"not"},{"field":"ip.src","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

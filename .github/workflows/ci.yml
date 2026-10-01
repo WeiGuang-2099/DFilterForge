@@ -26,6 +26,35 @@ jobs:
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
+      - name: Check frozen prompt sets against the model-side code
+        # The test image has no docs/ tree, so the suite above skips this
+        # guard. With docs/ mounted, a branch that edits a prepare-hashed
+        # file while a prompt set still awaits its call fails here rather
+        # than at the call step's prepare_code_mismatch; the test -d keeps
+        # a missing mount from passing as a skip. A prompt set with a
+        # run_manifest.json beside it no longer counts as awaiting, so the
+        # guard lapses once pass A publishes into
+        # docs/results/test-qwen3-32b-2026-09-26. Pass B and the slot
+        # winners' test passes call from that same prepare but publish
+        # under their own run ids, so from then on an early merge passes
+        # here; only the call's prepare_code_mismatch, which refuses each
+        # later test call before any request, and the rule that the hashed
+        # files stay unchanged until the last baseline test request remain.
+        # Nothing else releases it: publish refuses an incomplete run and
+        # writes only into the directory named after its run id. If pass A
+        # publishes under another run id, or the A/A pair is reported not
+        # run under rule 7 of the bake-off note, no manifest lands there and
+        # this step fails every hashed-file edit, the merge after the last
+        # baseline test request included, asking for a re-freeze the
+        # protocol allows only before the first test request. The commit
+        # that registers the hosted test runs, before that request, says
+        # what releases the guard in that case.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test
@@ -72,6 +101,21 @@ jobs:
           done
           echo "re-scored $checked committed output directories"
           test "$checked" -gt 0
+      - name: Check committed repair plans offline
+        # Each plan is derived again from its base pass and the feedback
+        # probe and compared byte for byte; none is committed before the
+        # first repair round, so zero plans is not a failure.
+        run: |
+          checked=0
+          for plan in docs/results/*/repair/plan.json; do
+            [ -f "$plan" ] || continue
+            run="$(basename "$(dirname "$(dirname "$plan")")")"
+            docker compose --profile pilot run --rm lab repair \
+              --run-dir "/workspace/results/$run" \
+              --check --code-revision "${{ github.sha }}"
+            checked=$((checked + 1))
+          done
+          echo "checked $checked committed repair plans"
 
   web:
     name: Web quality gates

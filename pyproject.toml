@@ -151,6 +151,7 @@ source_modules = [
 ]
 forbidden_modules = [
   "dfilterforge.benchmark",
+  "dfilterforge.counterexample",
   "dfilterforge.evaluation",
   "dfilterforge.fixtures",
   "dfilterforge.model_cases",
@@ -158,6 +159,7 @@ forbidden_modules = [
   "dfilterforge.model_feedback",
   "dfilterforge.model_split",
   "dfilterforge.model_test_cases",
+  "dfilterforge.repair",
 ]
 
 [[tool.importlinter.contracts]]
@@ -167,4 +169,8 @@ source_modules = [
   "dfilterforge.run_store",
   "dfilterforge.scoring",
 ]
-forbidden_modules = ["dfilterforge.model_feedback"]
+forbidden_modules = [
+  "dfilterforge.counterexample",
+  "dfilterforge.model_feedback",
+  "dfilterforge.repair",
+]
