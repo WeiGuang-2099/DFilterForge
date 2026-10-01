@@ -233,3 +233,88 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
 
 1. Locked-test run replayed offline from a clean checkout without an API key.
 2. Web numbers checked against the scored summary by a CI test.
+
+## Web data path: 2026-10-01, branch web-data
+
+- The branch starts at 86cd624, on bakeoff-results, and has not been pushed.
+  The [web site](decisions/web-site.md) note holds the data contract, a before
+  and after table, and the measurements.
+- `git diff --name-only 86cd624..HEAD` lists none of the 12 prepare-hashed
+  files, and none of `runner.py`, `live.py` or `replay.py`.
+- The commits:
+  - 52c9a37 deletes the hand-written evaluation mock: `app/_data/recorded.ts`,
+    `/evaluate`, its components and its test. It also removes the methodology
+    page's claim that no language model had been evaluated.
+  - 66297e0 makes the site a static export under `/DFilterForge`, served by
+    `scripts/serve.mjs` and tested with bundled Chromium. The base path is read
+    from `PAGES_BASE_PATH` in `apps/web/scripts/base_path.mjs` only; an empty
+    value serves the site at the domain root.
+  - 9126742 commits `docs/decisions/evidence/web/captures.json`.
+  - 3df8722 adds `scripts/export_web_data.py`.
+  - 0dcd8df projects the Reel by rule `reel-v1`.
+  - 7925340 builds the site inside Docker.
+  - e1272c2 adds the sourced components and the digit lint.
+  - fc0ee7e adds the consistency test.
+  - 979397a and 5c043bd clean up formatting.
+  - 07d91ca wires CI.
+- `captures.json` has 8 probes, 480 frames and 51,073 bytes.
+  `export_web_evidence.py check` regenerates it and passes. It matches every
+  capture hash to the test-freeze gate receipt, the scored specifications and
+  the held-out freeze digests.
+- The export of the committed dev data has 676 files and 9,546,808 bytes: 651
+  receipts and 20 cases.
+  - It holds 52,934 sourced values, and an independent Python resolver
+    re-derives every one from the raw files.
+  - Two exports in the test image are byte-identical.
+  - The Docker `data` stage's output equals the test-image export.
+- Rule `reel-v1` picks `dev-qwen3-32b-2026-09-26` C4 `mei-0015` from 27 C4
+  silent-wrong candidates. The headline counts are M = 284 and N = 65. These
+  are dev counts: model selection, not an effect.
+  - The rule is not registered yet. `docs/decisions/disproof-reel.md` and
+    `docs/decisions/evidence/test-runs.json` must land before the first test
+    request.
+- The Docker-built static export has 29 files, 923,060 bytes and 3 routes.
+  - The methodology page renders 138 sourced values: 40 linked numbers and 98
+    strings.
+  - The home page stays a digit-free placeholder until the Reel lands.
+  - 57 Playwright tests pass on that build: 13 smoke, 11 formatter, 27
+    lint-rule and 6 consistency.
+  - A digit typed into markup fails the lint and the consistency sweep. A
+    value that differs from its committed file fails the consistency test.
+- CI, in 07d91ca:
+  - The python job gains four steps after the re-score loop. The
+    frozen-prompt guard and the pylint line are unchanged; lines 1 to 103 are
+    byte-identical.
+  - The web job builds `out/` through `apps/web/Dockerfile` with the
+    composite action `.github/actions/web-site`. It then runs typecheck, lint
+    and Playwright on that build, and serves the Compose `site` stage on
+    loopback.
+  - Neither job has run on GitHub. actionlint 1.7.7 reports no error, and
+    every step ran locally under the Compose hardening.
+- The CI python job mirror at 07d91ca, in the test image with the branch
+  mounted, passed:
+  - 1,289 tests passed and 7 skipped (no `docs/` tree in the image), with
+    96.89 percent coverage;
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept);
+  - the benchmark and adequacy gates, prepare and recall;
+  - all 20 `score --check` outputs, with no difference.
+
+  Run separately: CI's exact pylint line (rc 0), the frozen-prompt guard with
+  `docs/` mounted (1 passed), and the four new steps. Their timings are pylint
+  4 s, evidence check 2 s, 124 tests in 17 s and two exports in 16 s.
+- Build and test timings:
+  - A Docker build of `out/` takes 21.0 s with no layer cache and 1.8 s cached.
+  - A host `pnpm web:build` takes 8.2 s.
+  - The 57 Playwright tests take 10.5 s on the Docker build and 9.8 s on the
+    host build.
+  - Typecheck, lint, build and Playwright all pass on the host.
+- Item 2 of "Next verification" now has a CI test for the methodology page.
+  The board, case and receipt pages come in the next pull request.
+- Still open:
+  - hosting (GitHub Pages after a repository flip, or Cloudflare Pages);
+  - the two registration commits;
+  - the board, case and receipt pages and the Reel;
+  - predicate traces for the Reel pool;
+  - pinning base images by digest;
+  - a first CI run on GitHub.
