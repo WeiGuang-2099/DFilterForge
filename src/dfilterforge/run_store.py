@@ -436,6 +436,12 @@ def check_prompts(
     newest first, and must all match under one of them, so a run prepared
     before a prompt change still re-scores while a batch mixing versions,
     or a prompt no version reproduces, is refused.
+
+    A second turn is checked by the first turn it continues, its system
+    and user messages, and is refused the same way when no version
+    reproduces them. Its assistant and last user messages are not rebuilt
+    here: they hold another run's counted answer and the follow-up turn,
+    and an item's own inputs cannot reproduce either.
     """
     for label, (batch, _) in prepared.items():
         output_contract, retrieval = _CONDITIONS[label]
@@ -444,12 +450,22 @@ def check_prompts(
             [
                 prompt.item_id
                 for prompt in batch.prompts
-                if _rebuilt(prompt, items_by_id, retrieval, version) != prompt
+                if _rebuilt(prompt, items_by_id, retrieval, version)
+                != _first_turn(prompt)
             ]
             for version in versions
         ]
         if all(mismatches):
             raise ScoringError("prompt_mismatch", f"{label} {mismatches[0][0]}")
+
+
+def _first_turn(prompt: PreparedPromptV1) -> PreparedPromptV1:
+    """Cuts a committed prompt to its system and user messages.
+
+    A first-turn prompt comes back equal to itself, so a run of first
+    turns is checked exactly as before second turns existed.
+    """
+    return prompt.model_copy(update={"messages": prompt.messages[:2]})
 
 
 def _rebuilt(

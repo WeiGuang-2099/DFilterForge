@@ -16,6 +16,7 @@ Before is 431df73 (main); after is this branch. Nothing here sends a request.
 | (system, user, assistant, user) as a `PreparedPromptV1` | refused (`too_long`) | accepted |
 | any other role order, or 1, 3 or 5+ messages | refused | refused |
 | `model_run.py follow-up` | invalid choice, exit 2 | C4-only dev prepare |
+| `dfilterforge score` over a published second-turn set | refused at load (`run_layout_invalid`) | scored, each prompt checked by its first turn |
 | `docs/results/*/prepared/*.json` committed at 431df73, re-serialized | 16 of 16 | 16 of 16 byte-identical |
 | recorded prompt files in the main checkout re-serialized (see below) | 116 of 116 | 116 of 116 byte-identical |
 | tests collected in the test image | 1,172 | 1,313 at b9c9c4b (1,247 at 851e037, before the review fixes) |
@@ -163,8 +164,16 @@ all nine calls with nothing sent.
   `generation.py` and `model_run.py` restores the calls with no re-freeze;
   an early merge after pass A would hold up pass B, which starts within 24
   hours of pass A, until that revert.
-- Scoring rebuilds first turns only, so it refuses a second-turn prompt set
-  (`prompt_mismatch`) until repair scoring exists; smoke runs are evidence.
+- Scoring checks a second turn by the first turn it continues: it rebuilds
+  the system and user messages as it does for any prompt, so a second-turn
+  set scores and re-scores like any C4 run, and one whose first turn no
+  prompt version reproduces is still `prompt_mismatch`
+  (`run_store.check_prompts`; `tests/test_run_store.py`). It does not
+  rebuild the assistant turn or the last user turn, the counted answer and
+  the follow-up, which an item's own inputs cannot reproduce: a scored
+  second-turn set proves its first turns and its outcomes, and its tail
+  needs a check of its own against the run it continues. Smoke runs are
+  evidence, not scored.
 - `judge` rebuilds prompts from the raw source runs the plan names, so it
   needs those directories, or byte-identical ones, to stay where they are.
   A source run that is missing, edited or otherwise refused by `follow-up`

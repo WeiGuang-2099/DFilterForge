@@ -63,7 +63,6 @@ from dfilterforge.run_store import check_prepare
 from dfilterforge.run_store import check_prompts
 from dfilterforge.run_store import check_splits
 from dfilterforge.run_store import load_run
-from dfilterforge.run_store import ScoringError
 from dfilterforge.runner import TsharkRunner
 from dfilterforge.score_summary import ScoreSummaryV1
 from dfilterforge.scoring import score_run
@@ -2887,8 +2886,10 @@ def test_a_follow_up_prompt_set_is_called_and_published(
 ) -> None:
     """The call sends four ordered turns per item; publish keeps the set.
 
-    Scoring rebuilds first turns only, so it refuses a second-turn prompt
-    set as ``prompt_mismatch`` until repair scoring exists.
+    The published set then scores like any C4 run: scoring checks each
+    second turn by the first turn it continues, and re-scores it byte for
+    byte. No skip: scoring needs tshark 4.6.8 and the frozen field
+    catalog, as the end-to-end test above does.
     """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
     prepare_dir = tmp_path / "smoke" / _FOLLOW_UP_ID
@@ -2917,11 +2918,15 @@ def test_a_follow_up_prompt_set_is_called_and_published(
     assert _publish(run_dir, output) == 0
     assert sorted(_files(output)) == sorted(_C4_FILES)
     continued = _batch(prepare_dir, "C4")
+    assert [len(prompt.messages) for prompt in continued.prompts] == [4, 4]
     items = {item.item_id: item for item in artifacts.inputs}
-    with pytest.raises(ScoringError) as caught:
-        check_prompts({"C4": (continued, "")}, items)
-    assert caught.value.code == "prompt_mismatch"
+    check_prompts({"C4": (continued, "")}, items)
     check_prompts({"C4": (_batch(c4_run, "C4"), "")}, items)
+    scored = score_run(output, code_revision="follow-up-test")
+    assert scored.items == 2
+    assert scored.outcomes["strong_exact"] == 2
+    again = score_run(output, code_revision="follow-up-test", check=True)
+    assert again.differences == ()
 
 
 _README = Path(__file__).parents[1] / "README.md"
