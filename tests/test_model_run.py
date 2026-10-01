@@ -33,6 +33,8 @@ from dfilterforge.completions import CompletionBatchV1
 from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import PrepareManifestV1
+from dfilterforge.completions import RepairItemV1
+from dfilterforge.completions import RepairPlanV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import TokenPricesV1
@@ -41,6 +43,7 @@ from dfilterforge.field_retrieval import FieldRetrievalError
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
 from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.generation import condition_label
+from dfilterforge.generation import COUNTEREXAMPLE_PREFIX
 from dfilterforge.generation import DirectFilterResultV1
 from dfilterforge.generation import FOLLOW_UP_TEXT
 from dfilterforge.generation import PreparedBatchV1
@@ -2927,6 +2930,487 @@ def test_a_follow_up_prompt_set_is_called_and_published(
     assert scored.outcomes["strong_exact"] == 2
     again = score_run(output, code_revision="follow-up-test", check=True)
     assert again.differences == ()
+
+
+# A repair round's arms, prepared from a plan over the C4 run. The run ids
+# carry the arm's tag before the base run's date.
+_ARM_IDS: dict[str, str] = {
+    "resample": "dev-qwen3-32b-c4-res-2026-09-20",
+    "bare": "dev-qwen3-32b-c4-bare-2026-09-20",
+    "counterexample": "dev-qwen3-32b-c4-cx-2026-09-20",
+}
+_TEST_C4_RUN_ID = "test-qwen3-32b-c4-2026-09-20"
+_FRAMES_CARD = canonical_json(
+    {
+        "frames": [
+            {
+                "answer_matched": True,
+                "dns.flags.response": False,
+                "dns.qry.type": 1,
+                "frame": 1,
+                "ip.dsfield.ecn": 0,
+                "ip.dst": "198.51.100.1",
+                "ip.src": "192.0.2.129",
+                "ip.ttl": 64,
+                "should_match": False,
+                "udp.dstport": 53,
+                "udp.srcport": 41129,
+            }
+        ]
+    }
+)
+_ERROR_CARD = canonical_json({"error": "unknown_field", "field": "ip.ttll"})
+# One item of each card kind, in prepare order.
+_PLAN_ITEMS = (
+    RepairItemV1(
+        item_id="mei-0003",
+        base_outcome="silent_wrong",
+        card_kind="frames",
+        card=_FRAMES_CARD,
+    ),
+    RepairItemV1(
+        item_id="mei-0007",
+        base_outcome="invalid",
+        card_kind="error",
+        card=_ERROR_CARD,
+    ),
+    RepairItemV1(
+        item_id="mei-0012", base_outcome="silent_wrong", card_kind="none"
+    ),
+)
+_PLANNED = tuple(item.item_id for item in _PLAN_ITEMS)
+
+
+def _plan_document(
+    run_dir: Path, items: Sequence[RepairItemV1] = _PLAN_ITEMS
+) -> dict[str, Any]:
+    """Describes a plan of one run as ``dfilterforge repair`` derives it.
+
+    Only what the prepare step checks is real: the split, the base run id
+    and its manifest digest. The outcome and label digests stand in.
+    """
+    manifest = _run_manifest_at(run_dir)
+    split = manifest.prepare.split
+    return {
+        "split": split,
+        "base_run": manifest.run_id,
+        "base_run_manifest_sha256": hashlib.sha256(
+            (run_dir / "run_manifest.json").read_bytes()
+        ).hexdigest(),
+        "base_outcomes_sha256": "2" * 64,
+        "feedback_labels_sha256": "3" * 64,
+        "feedback_probe": "semantic-29" if split == "dev" else "semantic-35",
+        "items": [item.model_dump() for item in items],
+    }
+
+
+def _write_plan(path: Path, document: Mapping[str, Any]) -> Path:
+    """Writes a plan in the canonical encoding the repair command writes."""
+    plan = RepairPlanV1.model_validate(document)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes((canonical_json(plan) + "\n").encode("utf-8"))
+    return path
+
+
+def _arm(source: Path, output: Path, plan: Path | None, arm: str | None) -> int:
+    """Prepares one repair arm, or passes only the options given."""
+    options = [
+        *(["--plan", str(plan)] if plan is not None else []),
+        *(["--arm", arm] if arm is not None else []),
+    ]
+    return model_run.main(
+        [
+            "follow-up",
+            "--from-run",
+            str(source),
+            "--output-dir",
+            str(output),
+            "--source-revision",
+            "test",
+            *options,
+        ]
+    )
+
+
+def test_each_repair_arm_is_prepared_from_a_plan_without_network_or_gold(
+    c4_run: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The arms differ only in what follows the counted answer.
+
+    The plan is the trigger: mei-0003 stopped on its length, which the
+    smoke's readiness rule would pass over, and is continued all the same.
+    Each arm's prompts pass the scorer's first-turn check.
+    """
+    run_dir = _run_copy(c4_run, tmp_path)
+    _rewrite_answers(run_dir, {"mei-0003": _TRUNCATED})
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(run_dir))
+    monkeypatch.setattr(socket.socket, "connect", _no_sockets)
+    monkeypatch.setattr(model_run, "generate_model_split", _no_gold)
+    monkeypatch.setattr(model_run, "open_frozen_catalog", _no_gold)
+    source = _run_manifest_at(run_dir)
+    first = {p.item_id: p for p in _batch(run_dir, "C4").prompts}
+    counted = {a.item_id: a for a in _counted(run_dir).completions}
+    batches: dict[str, PreparedBatchV1] = {}
+
+    for arm, arm_id in _ARM_IDS.items():
+        output = tmp_path / "repair" / arm_id
+        output.parent.mkdir(exist_ok=True)
+        capsys.readouterr()
+        assert _arm(run_dir, output, plan, arm) == 0
+
+        report = cast(dict[str, Any], json.loads(capsys.readouterr().out))
+        prepare = _manifest(output)
+        batches[arm] = _batch(output, "C4")
+        assert sorted(_files(output)) == sorted(_FOLLOW_UP_FILES)
+        assert (prepare.prepare_id, prepare.split) == (arm_id, "dev")
+        assert prepare.item_ids == _PLANNED
+        assert [c.label for c in prepare.conditions] == ["C4"]
+        assert prepare.source_files == _SOURCE_MANIFEST()
+        assert (
+            prepare.catalog,
+            prepare.top_k,
+            prepare.model_inputs_sha256,
+        ) == (
+            source.prepare.catalog,
+            source.prepare.top_k,
+            source.prepare.model_inputs_sha256,
+        )
+        assert (report["arm"], report["items"]) == (arm, list(_PLANNED))
+        assert report["source_run_id"] == _C4_RUN_ID
+        assert (
+            report["plan_sha256"]
+            == hashlib.sha256(plan.read_bytes()).hexdigest()
+        )
+        assert report["conditions"]["C4"] == prepare.conditions[0].sha256
+
+    for prompt in batches["resample"].prompts:
+        assert prompt == first[prompt.item_id]
+    for prompt in batches["bare"].prompts:
+        assert prompt.messages[:2] == first[prompt.item_id].messages
+        assert prompt.messages[2].role == "assistant"
+        assert (
+            prompt.messages[2].content == counted[prompt.item_id].response_text
+        )
+        assert prompt.messages[3].content == FOLLOW_UP_TEXT
+    cards = {item.item_id: item.card for item in _PLAN_ITEMS}
+    for bare, card in zip(
+        batches["bare"].prompts, batches["counterexample"].prompts
+    ):
+        assert card.messages[:3] == bare.messages[:3]
+        shown = cards[card.item_id]
+        assert card.messages[3].content == (
+            FOLLOW_UP_TEXT
+            if shown is None
+            else FOLLOW_UP_TEXT + COUNTEREXAMPLE_PREFIX + shown
+        )
+    assert batches["counterexample"].prompts[2] == batches["bare"].prompts[2]
+    items = {
+        item.item_id: item
+        for item in generate_model_split(tmp_path / "split").inputs
+    }
+    for batch in batches.values():
+        check_prompts({"C4": (batch, "")}, items)
+    assert not list((tmp_path / "repair").glob(".*.partial"))
+
+
+def test_a_resample_of_every_item_is_the_base_prompt_file_byte_for_byte(
+    c4_run: Path, tmp_path: Path
+) -> None:
+    """Re-sending the frozen first turn writes the very same prompt file."""
+    base = _manifest(c4_run).conditions[0]
+    every = [
+        RepairItemV1(item_id=item, base_outcome="invalid", card_kind="none")
+        for item in _DEV_ITEM_IDS
+    ]
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(c4_run, every))
+    output = tmp_path / _ARM_IDS["resample"]
+
+    assert _arm(c4_run, output, plan, "resample") == 0
+
+    written = (output / "prepared" / "C4.json").read_bytes()
+    assert written == (c4_run / "prepared" / "C4.json").read_bytes()
+    resampled = _manifest(output)
+    assert resampled.conditions[0].sha256 == base.sha256
+    assert (
+        resampled.conditions[0].system_prompt_sha256
+        == base.system_prompt_sha256
+    )
+    assert (
+        resampled.empty_context_item_ids
+        == _manifest(c4_run).empty_context_item_ids
+    )
+
+
+def test_a_test_pass_is_continued_only_from_a_plan_and_called_once_admitted(
+    c4_run: Path,
+    held_out_prepared: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A test arm is prepared offline but sent only once the record admits it.
+
+    The smoke path still refuses every test run; a plan lifts only that
+    guard, and the call's admission check is unchanged.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    record = tmp_path / "held_out_freeze.json"
+    monkeypatch.setattr(held_out, "RECORD_PATH", record)
+    run_dir = _run_copy(c4_run, tmp_path)
+    _as_test_run(run_dir)
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(run_dir))
+    arm_id = "test-qwen3-32b-c4-cx-2026-09-20"
+    output = tmp_path / arm_id
+    capsys.readouterr()
+
+    assert _follow_up(run_dir, tmp_path / _FOLLOW_UP_ID) == 2
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "split_refused"
+    assert _arm(run_dir, output, plan, "counterexample") == 0
+
+    prepare = _manifest(output)
+    assert prepare.split == "test"
+    assert prepare.item_ids == _PLANNED
+    assert {p.split for p in _batch(output, "C4").prompts} == {"test"}
+    config = tmp_path / "call.json"
+    _write_record(record, held_out_prepared)
+    with _provider(_healthy) as provider:
+        _write_config(config, provider.url)
+        capsys.readouterr()
+        refused = _call(output, config, run_id=arm_id)
+        assert provider.received == []
+        error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+        assert (refused, error["error"]["code"]) == (2, "test_not_frozen")
+        _write_record(record, held_out_prepared, output)
+        assert _call(output, config, run_id=arm_id) == 0
+        bodies = [json.loads(r.body) for r in provider.received]
+    assert [len(body["messages"]) for body in bodies] == [4, 4, 4]
+    assert bodies[0]["messages"][3]["content"].endswith(_FRAMES_CARD)
+
+
+def test_a_counterexample_arm_is_called_published_and_scored_like_c4(
+    c4_run: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An arm run is an ordinary C4 run under its own result name.
+
+    No skip: scoring needs tshark 4.6.8 and the frozen field catalog, as
+    the end-to-end test above does.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(c4_run))
+    arm_id = _ARM_IDS["counterexample"]
+    prepare_dir = tmp_path / "repair" / arm_id
+    prepare_dir.parent.mkdir()
+    assert _arm(c4_run, prepare_dir, plan, "counterexample") == 0
+    answers = _GoldReplies(_dev_routing(generate_model_split(tmp_path / "s")))
+    config = tmp_path / "call.json"
+    with _provider(answers) as provider:
+        answers.received = provider.received
+        _write_config(config, provider.url)
+        assert _call(prepare_dir, config, run_id=arm_id) == 0
+        assert len(provider.received) == len(_PLAN_ITEMS)
+    output = tmp_path / "docs" / "results" / arm_id
+
+    assert _publish(prepare_dir / "runs" / arm_id, output) == 0
+
+    scored = score_run(output, code_revision="repair-arm-test")
+    assert scored.items == len(_PLAN_ITEMS)
+    assert scored.outcomes["strong_exact"] == len(_PLAN_ITEMS)
+    again = score_run(output, code_revision="repair-arm-test", check=True)
+    assert again.differences == ()
+
+
+def _renamed_base(run_dir: Path) -> str:
+    """Renames the base run so that a tagged arm id overflows its name."""
+    long_id = f"dev-{'a' * 30}-2026-09-20"
+
+    def _rename(document: dict[str, Any]) -> None:
+        document["run_id"] = long_id
+
+    _edit_manifest(run_dir, _rename)
+    return f"dev-{'a' * 30}-cx-2026-09-20"
+
+
+def _plan_refusal(
+    name: str, c4_run: Path, tmp_path: Path
+) -> tuple[Path, Path, Path | None, str | None]:
+    """Builds one plan, arm and output that the follow-up step refuses."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    output = tmp_path / _ARM_IDS["counterexample"]
+    document = _plan_document(run_dir)
+    plan = tmp_path / "plan.json"
+    arm: str | None = "counterexample"
+    if name == "plan_alone":
+        arm = None
+    elif name == "arm_alone":
+        return run_dir, output, None, arm
+    elif name == "missing":
+        return run_dir, output, plan, arm
+    elif name == "oversized":
+        plan.write_bytes(b" " * ((1 << 20) + 1))
+        return run_dir, output, plan, arm
+    elif name == "unusable":
+        plan.write_bytes(b'{"schema_version":"repair-plan/1.0"}\n')
+        return run_dir, output, plan, arm
+    elif name == "reindented":
+        _write_plan(plan, document)
+        plan.write_text(
+            json.dumps(json.loads(plan.read_bytes()), indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        return run_dir, output, plan, arm
+    elif name == "other_run":
+        document["base_run"] = _PUBLISH_RUN_ID
+    elif name == "other_manifest":
+        document["base_run_manifest_sha256"] = "0" * 64
+    elif name == "other_split":
+        document.update(
+            split="test", base_run=_TEST_C4_RUN_ID, feedback_probe="semantic-35"
+        )
+    elif name == "empty":
+        document["items"] = []
+    elif name == "foreign_item":
+        document["items"][2]["item_id"] = "mei-0999"
+    elif name == "out_of_order":
+        document["items"].reverse()
+    elif name == "other_arm":
+        output = tmp_path / _ARM_IDS["bare"]
+    elif name == "untagged":
+        output = tmp_path / _C4_RUN_ID
+    elif name == "tag_after_date":
+        output = tmp_path / f"{_C4_RUN_ID}-cx"
+    elif name == "third_run":
+        output = tmp_path / "dev-qwen3-32b-c4-cx-r3-2026-09-20"
+    elif name == "overflow":
+        output = tmp_path / _renamed_base(run_dir)
+        document = _plan_document(run_dir)
+    _write_plan(plan, document)
+    return run_dir, output, plan, arm
+
+
+_GIVEN_TOGETHER = ("arm_invalid", "A repair plan and an arm are given together")
+_OTHER_PASS = ("plan_mismatch", "The plan was derived from another pass")
+_NOT_ITS_ITEMS = (
+    "plan_mismatch",
+    "The plan's items are not the pass's C4 items in prepare order",
+)
+_NOT_ITS_NAME = (
+    "arm_id_mismatch",
+    "The output is not named after the base run and its arm",
+)
+
+
+# The message names the guard where two guards share a code.
+@pytest.mark.parametrize(
+    ("name", "refusal"),
+    [
+        ("plan_alone", _GIVEN_TOGETHER),
+        ("arm_alone", _GIVEN_TOGETHER),
+        ("missing", ("plan_invalid", "A required file is missing")),
+        (
+            "oversized",
+            ("plan_too_large", "A recorded file is larger than its bound"),
+        ),
+        ("unusable", ("plan_invalid", "The repair plan is not usable")),
+        (
+            "reindented",
+            (
+                "plan_invalid",
+                "The repair plan is not in its canonical encoding",
+            ),
+        ),
+        ("other_run", _OTHER_PASS),
+        ("other_manifest", _OTHER_PASS),
+        ("other_split", _OTHER_PASS),
+        (
+            "empty",
+            ("plan_empty", "The plan triggers no item, so no arm is run"),
+        ),
+        ("foreign_item", _NOT_ITS_ITEMS),
+        ("out_of_order", _NOT_ITS_ITEMS),
+        ("other_arm", _NOT_ITS_NAME),
+        ("untagged", _NOT_ITS_NAME),
+        ("tag_after_date", _NOT_ITS_NAME),
+        ("third_run", _NOT_ITS_NAME),
+        (
+            "overflow",
+            (
+                "run_id_invalid",
+                "The arm's run id is not a usable result name",
+            ),
+        ),
+    ],
+)
+def test_follow_up_refuses_a_plan_that_does_not_fit_its_pass(
+    name: str,
+    refusal: tuple[str, str],
+    c4_run: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A plan of another pass, split or item order prepares nothing."""
+    run_dir, output, plan, arm = _plan_refusal(name, c4_run, tmp_path)
+    capsys.readouterr()
+
+    assert _arm(run_dir, output, plan, arm) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == dict(zip(("code", "message"), refusal))
+    assert not output.exists()
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_an_arm_run_id_may_carry_the_one_re_run_tag(
+    c4_run: Path, tmp_path: Path
+) -> None:
+    """An outage is re-run once from scratch with r2 after the tag."""
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(c4_run))
+    output = tmp_path / "dev-qwen3-32b-c4-bare-r2-2026-09-20"
+
+    assert _arm(c4_run, output, plan, "bare") == 0
+
+    assert _manifest(output).prepare_id == output.name
+
+
+@pytest.mark.parametrize("arm", list(_ARM_IDS))
+@pytest.mark.parametrize(
+    ("change", "code", "message"),
+    [
+        (_FAILED, "follow_up_invalid", "The answer is empty"),
+        (
+            {"response_text": "x" * 65000},
+            "prompt_too_large",
+            "Prompt exceeds the byte limit",
+        ),
+    ],
+    ids=["failed", "over_budget"],
+)
+def test_a_round_whose_second_turn_cannot_be_built_is_refused_at_every_arm(
+    arm: str,
+    change: dict[str, Any],
+    code: str,
+    message: str,
+    c4_run: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The resample is refused too, so no arm of such a round is sent."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    _rewrite_answers(run_dir, {"mei-0007": change})
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(run_dir))
+    output = tmp_path / _ARM_IDS[arm]
+    capsys.readouterr()
+
+    assert _arm(run_dir, output, plan, arm) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == {"code": code, "message": message}
+    assert not output.exists()
+    assert not list(tmp_path.glob(".*.partial"))
 
 
 _README = Path(__file__).parents[1] / "README.md"
