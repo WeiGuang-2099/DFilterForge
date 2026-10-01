@@ -83,10 +83,12 @@ from dfilterforge.repair_report import render_summary
 from dfilterforge.repair_round import ARM_RERUN
 from dfilterforge.repair_round import arm_run_ids
 from dfilterforge.repair_round import ARM_TAGS
+from dfilterforge.repair_round import NOT_RUN_PATH
 from dfilterforge.repair_round import pool_run
 from dfilterforge.repair_round import round_run
 from dfilterforge.repair_round import SUMMARY_PATH
 from dfilterforge.repair_round import SUMMARY_REPORT_PATH
+from dfilterforge.repair_summary import ArmName
 from dfilterforge.repair_summary import ArmResult
 from dfilterforge.repair_summary import ARMS
 from dfilterforge.repair_summary import pool_summaries
@@ -1766,6 +1768,7 @@ def test_a_round_reports_its_diagnostics_and_items(
     assert "| counterexample | dev-model-a-cx-2026-10-01 | 0.714 [" in report
     assert "inconclusive (fewer than 10 discordant cases)" in report
     assert "Base outcome changed since the plan: none." in report
+    assert "Arms not run: none." in report
     # No answer text and no card reaches the report.
     assert "ip.ttl" not in report and "not json" not in report
 
@@ -2280,6 +2283,135 @@ def test_a_corrected_base_keeps_the_plans_trigger_set(
     ).read_text("utf-8")
 
 
+def _gated_round(
+    root: Path, source: ModelSplitArtifacts, *, seeded: bool = True
+) -> Path:
+    """A round whose counterexample run the gate stopped after two arms ran.
+
+    The stopped run is never published, so the arm is its committed prompt
+    set when ``seeded``, as on test, and absent otherwise, as on dev.
+    """
+    base_dir = _round_base(root / "results", source)
+    _write_arm(base_dir, source, "resample")
+    _write_arm(base_dir, source, "bare")
+    if seeded:
+        _write_arm(base_dir, source, "counterexample", published=False)
+    return base_dir
+
+
+@pytest.mark.parametrize("seeded", [True, False], ids=["seeded", "absent"])
+def test_an_arm_stopped_at_the_gate_is_reported_as_not_run(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    capsys: pytest.CaptureFixture[str],
+    seeded: bool,
+) -> None:
+    base_dir = _gated_round(tmp_path, source, seeded=seeded)
+    args = ["repair", "--run-dir", str(base_dir), "--code-revision", "rev"]
+
+    assert main([*args, "--not-run", "counterexample"]) == 0
+    written = json.loads(capsys.readouterr().out)
+    assert main([*args, "--check"]) == 0
+    checked = json.loads(capsys.readouterr().out)
+    summary = _summary(base_dir)
+    text = (base_dir / SUMMARY_REPORT_PATH).read_text("utf-8")
+
+    assert (base_dir / NOT_RUN_PATH).read_bytes() == (
+        b'{"arms":{"counterexample":"thinking_not_honoured"},'
+        b'"schema_version":"repair-not-run/1.0"}\n'
+    )
+    assert (written["stage"], checked["stage"]) == ("summary", "summary")
+    assert checked["differences"] == []
+    assert checked["summary_sha256"] == written["summary_sha256"]
+    assert checked["arms_not_run"] == {
+        "counterexample": "thinking_not_honoured"
+    }
+    assert set(checked["arm_runs"]) == (
+        set(_ARM_RUNS) if seeded else {"resample", "bare"}
+    )
+    assert summary.arms_not_run == {"counterexample": "thinking_not_honoured"}
+    # The arms run keep the numbers the full round counts by hand.
+    assert [(arm.arm, arm.repair_at_1.value) for arm in summary.arms] == [
+        ("resample", 0.142857),
+        ("bare", 0.428571),
+    ]
+    assert [
+        (item.first, item.second, item.difference.value, item.discordant)
+        for item in summary.comparisons
+    ] == [("bare", "resample", 0.285714, 2)]
+    assert {frozenset(item.outcomes) for item in summary.items} == {
+        frozenset({"resample", "bare"})
+    }
+    assert (
+        "Arms not run: counterexample, stopped at the gate"
+        " (thinking_not_honoured)." in text
+    )
+    assert "| counterexample |" not in text
+    with pytest.raises(RoundError) as error:
+        pool_run(base_dir.parent, "dev", [base_dir.name], code_revision="rev")
+    assert error.value.code == "repair_pool_not_run"
+
+
+@pytest.mark.parametrize(
+    ("damage", "code"),
+    [
+        ("published", "repair_arm_mismatch"),
+        ("checked", "repair_not_run_invalid"),
+        ("every-arm", "repair_not_run_invalid"),
+        ("edited", "repair_not_run_invalid"),
+        ("unreadable", "repair_not_run_invalid"),
+        ("bare-missing", "repair_arms_incomplete"),
+        ("none-run", "repair_arms_incomplete"),
+    ],
+)
+def test_a_record_of_arms_not_run_that_does_not_fit_is_refused(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    damage: str,
+    code: str,
+) -> None:
+    base_dir = _gated_round(tmp_path, source)
+    record = base_dir / NOT_RUN_PATH
+    not_run: tuple[ArmName, ...] = ("counterexample",)
+    check = False
+    if damage == "published":
+        shutil.rmtree(base_dir.parent / _ARM_RUNS["counterexample"])
+        _write_arm(base_dir, source, "counterexample")
+    elif damage == "checked":
+        check = True
+    elif damage == "every-arm":
+        not_run = ARMS
+    elif damage == "bare-missing":
+        shutil.rmtree(base_dir.parent / _ARM_RUNS["bare"])
+    elif damage == "none-run":
+        for run in _ARM_RUNS.values():
+            shutil.rmtree(base_dir.parent / run)
+    else:
+        round_run(base_dir, code_revision="rev", not_run=not_run)
+        (base_dir / SUMMARY_PATH).unlink()
+        record.write_bytes(
+            b" " + record.read_bytes() if damage == "edited" else b"{}\n"
+        )
+        not_run = ()
+
+    error = _round_refusal_with(base_dir, check, not_run)
+
+    assert error.code == code
+    assert record.exists() is (damage in {"edited", "unreadable"})
+
+
+def _round_refusal_with(
+    base_dir: Path, check: bool, not_run: tuple[ArmName, ...]
+) -> RoundError:
+    """Runs a round with arms named not run that must be refused."""
+    with pytest.raises(RoundError) as error:
+        round_run(base_dir, code_revision="rev", check=check, not_run=not_run)
+    assert not (base_dir / SUMMARY_PATH).exists()
+    return error.value
+
+
 def _other_model(
     results: Path, summary: RepairSummaryV1, letter: str, **update: Any
 ) -> str:
@@ -2495,7 +2627,7 @@ def _damaged(summary: RepairSummaryV1, damage: str) -> dict[str, Any]:
         ("unlisted", "every item is in one listed ready case"),
         ("repeated", "a summary lists each item once"),
         ("armless", "an item has an outcome in every arm"),
-        ("reordered", "a summary lists the three arms in order"),
+        ("reordered", "a summary lists every arm run, in order"),
     ],
 )
 def test_a_summary_whose_counts_do_not_add_up_is_not_pooled(

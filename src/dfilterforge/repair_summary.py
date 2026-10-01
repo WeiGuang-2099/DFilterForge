@@ -20,10 +20,12 @@ model's shares case by case, so each drawn case brings every model's cells,
 and counts discordant cells.
 
 A summary holds every ready case of the base pass with its C4 item count
-and every triggered item with its outcome in each arm, so a pool is derived
-from committed summaries alone. Diagnostics are reported and never become
-outcomes: transitions from the base outcome, answers equal to the base's,
-card kinds and card values an answer reuses.
+and every triggered item with its outcome in each arm run, so a pool is
+derived from committed summaries alone. An arm run the gate stopped is
+reported as not run: the summary names it and why and reports the other
+arms and their comparison, and such a round is never pooled. Diagnostics
+are reported and never become outcomes: transitions from the base outcome,
+answers equal to the base's, card kinds and card values an answer reuses.
 """
 
 from __future__ import annotations
@@ -66,6 +68,9 @@ ARM_PAIRS: tuple[tuple[ArmName, ArmName], ...] = (
     ("bare", "resample"),
 )
 Trigger = Literal["silent_wrong", "invalid"]
+# Why an arm was not run: its run stopped at the first-answer gate because
+# the provider kept on thinking, as scripts/model_run.py records it.
+NotRunReason = Literal["thinking_not_honoured"]
 
 _Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 _REUSING = frozenset({OutcomeV1.STRONG_EXACT, OutcomeV1.SHORTCUT})
@@ -80,10 +85,23 @@ class RoundError(DFilterForgeError, RuntimeError):
     ``repair_items_mismatch``, ``repair_prompt_mismatch``,
     ``repair_settings_mismatch``, ``repair_arm_unscored``,
     ``repair_plan_changed``, ``repair_plan_unreadable``, ``base_unscored``,
-    ``repair_pool_bases_invalid``, ``repair_pool_unsummarized`` and
-    ``repair_pool_mismatch``. A message names a run, an arm or an item id,
+    ``repair_not_run_invalid``, ``repair_pool_bases_invalid``,
+    ``repair_pool_unsummarized``, ``repair_pool_mismatch`` and
+    ``repair_pool_not_run``. A message names a run, an arm or an item id,
     never model text.
     """
+
+
+class RepairNotRunV1(FrozenModel):
+    """The arms of a round recorded as not run, as ``repair/not_run.json``.
+
+    An arm run the gate stopped is over: it is never published or moved to
+    another provider, and its prompt set may stay committed as a seed. At
+    least one arm of the round runs.
+    """
+
+    schema_version: Literal["repair-not-run/1.0"] = "repair-not-run/1.0"
+    arms: dict[ArmName, NotRunReason] = Field(min_length=1, max_length=2)
 
 
 class RepairCaseV1(FrozenModel):
@@ -149,7 +167,7 @@ class RepairArmV1(FrozenModel):
 
 
 class RepairItemOutcomesV1(FrozenModel):
-    """One triggered item: its plan entry and its outcome in every arm.
+    """One triggered item: its plan entry and its outcome in every arm run.
 
     ``base_outcome`` is the one the plan was triggered by and
     ``base_outcome_now`` the base pass's outcome in ``scored/`` today,
@@ -163,13 +181,6 @@ class RepairItemOutcomesV1(FrozenModel):
     card_kind: Literal["frames", "error", "none"]
     card_sha256: _Sha256 | None = None
     outcomes: dict[ArmName, OutcomeV1]
-
-    @model_validator(mode="after")
-    def validate_arms(self) -> "RepairItemOutcomesV1":
-        """Requires an outcome in every arm."""
-        if set(self.outcomes) != set(ARMS):
-            raise ValueError("an item has an outcome in every arm")
-        return self
 
 
 class RepairSummaryV1(FrozenModel):
@@ -194,16 +205,22 @@ class RepairSummaryV1(FrozenModel):
     comparisons: tuple[RepairComparisonV1, ...]
     items: tuple[RepairItemOutcomesV1, ...] = Field(min_length=1)
     base_outcome_changed: tuple[str, ...] = ()
+    arms_not_run: dict[ArmName, NotRunReason] = Field(
+        default_factory=dict[ArmName, NotRunReason]
+    )
 
     @model_validator(mode="after")
     def validate_round(self) -> "RepairSummaryV1":
-        """Ties the items to the cases and the arms to their order.
+        """Ties the items to the cases and the arms run to their order.
 
         A pool reads only the cases and the items, so a summary whose case
         counts do not describe its items is refused rather than pooled.
         """
-        if tuple(arm.arm for arm in self.arms) != ARMS:
-            raise ValueError("a summary lists the three arms in order")
+        run = tuple(arm for arm in ARMS if arm not in self.arms_not_run)
+        if not run or tuple(arm.arm for arm in self.arms) != run:
+            raise ValueError("a summary lists every arm run, in order")
+        if any(set(item.outcomes) != set(run) for item in self.items):
+            raise ValueError("an item has an outcome in every arm run")
         if len({item.item_id for item in self.items}) != len(self.items):
             raise ValueError("a summary lists each item once")
         counts = Counter(item.case_id for item in self.items)
@@ -543,7 +560,9 @@ def _cells(
                     else hashlib.sha256(item.card.encode("utf-8")).hexdigest()
                 ),
                 outcomes={
-                    arm: arms[arm].outcomes[item.item_id] for arm in ARMS
+                    arm: arms[arm].outcomes[item.item_id]
+                    for arm in ARMS
+                    if arm in arms
                 },
             )
             for item in plan.items
@@ -556,6 +575,7 @@ def summarize_round(
     plan_sha256: str,
     base: RoundBase,
     arms: Mapping[ArmName, ArmResult],
+    not_run: Mapping[ArmName, NotRunReason] | None = None,
 ) -> RepairSummaryV1:
     """Reduces a checked round to its published summary.
 
@@ -563,17 +583,18 @@ def summarize_round(
         plan: The round's plan; every item is a C4 item of ``base``.
         plan_sha256: The digest of the plan's committed bytes.
         base: What the summary reads of the base pass.
-        arms: Every arm's published, scored run; each scores every item of
-            the plan.
+        arms: Every arm run's published, scored run; each scores every item
+            of the plan.
+        not_run: Every other arm, with why it was not run.
 
     Returns:
-        repair@1 per arm with its silent-wrong and invalid parts, the three
-        arm comparisons, the diagnostics and every triggered item's
-        outcomes.
+        repair@1 per arm run with its silent-wrong and invalid parts, the
+        comparisons of every two arms run, the diagnostics and every
+        triggered item's outcomes.
 
     Raises:
         ValidationError: When an item of the plan is not a ready C4 item
-            of the base pass.
+            of the base pass, or the arms run and not run are not the three.
     """
     cells = _cells(plan, base, arms)
     universe = _universe(case.case_id for case in cells.cases)
@@ -601,9 +622,12 @@ def summarize_round(
         arms=tuple(
             _arm_summary(arm, arms[arm], plan, base, cells, universe)
             for arm in ARMS
+            if arm in arms
         ),
         comparisons=tuple(
-            _comparison([cells], universe, pair, "cases") for pair in ARM_PAIRS
+            _comparison([cells], universe, pair, "cases")
+            for pair in ARM_PAIRS
+            if set(pair) <= set(arms)
         ),
         items=cells.items,
         base_outcome_changed=tuple(
@@ -611,6 +635,7 @@ def summarize_round(
             for item in cells.items
             if item.base_outcome_now.value != item.base_outcome
         ),
+        arms_not_run=dict(not_run or {}),
     )
 
 
@@ -633,10 +658,18 @@ def pool_summaries(
     Raises:
         RoundError: With ``repair_pool_mismatch`` when a summary is of
             another split, a model appears twice, or the bases do not share
-            one set of ready cases.
+            one set of ready cases, and ``repair_pool_not_run`` when a
+            base's round has an arm not run, so its cells cannot be paired
+            in every comparison.
     """
     if any(summary.split != split for summary, _ in summaries):
         raise RoundError("repair_pool_mismatch", f"A base is not on {split}")
+    for summary, _ in summaries:
+        if summary.arms_not_run:
+            raise RoundError(
+                "repair_pool_not_run",
+                f"{summary.base_run} has an arm not run and is not pooled",
+            )
     models = [summary.model_id for summary, _ in summaries]
     if len(set(models)) != len(models):
         raise RoundError("repair_pool_mismatch", "A model appears twice")

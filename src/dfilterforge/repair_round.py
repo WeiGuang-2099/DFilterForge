@@ -18,7 +18,12 @@ is never derived again:
   attempt limit and pacing, a complete run and a scored tree that scores
   every item on the case the base pass scored it on.
 
-With all three published and scored it writes or checks
+An arm run the gate stopped is reported as not run: ``repair --not-run
+ARM`` records it in ``repair/not_run.json``, after which that arm may stay
+an unpublished prompt set or be absent and is never published, and the
+other arms are checked and summarized without it.
+
+With every arm run published and scored it writes or checks
 ``repair/summary.json`` and ``repair/summary.md``, which
 :mod:`dfilterforge.repair_summary` derives and
 :mod:`dfilterforge.repair_report` prints. :func:`pool_run` does the same for
@@ -70,7 +75,9 @@ from dfilterforge.repair_report import render_summary
 from dfilterforge.repair_summary import ArmName
 from dfilterforge.repair_summary import ArmResult
 from dfilterforge.repair_summary import ARMS
+from dfilterforge.repair_summary import NotRunReason
 from dfilterforge.repair_summary import pool_summaries
+from dfilterforge.repair_summary import RepairNotRunV1
 from dfilterforge.repair_summary import RepairPoolV1
 from dfilterforge.repair_summary import RepairSummaryV1
 from dfilterforge.repair_summary import RoundBase
@@ -89,10 +96,12 @@ ARM_TAGS: Mapping[ArmName, str] = MappingProxyType(
 )
 ARM_RERUN = "r2"
 SUMMARY_PATH = Path("repair") / "summary.json"
+NOT_RUN_PATH = Path("repair") / "not_run.json"
 SUMMARY_REPORT_PATH = Path("repair") / "summary.md"
 POOL_DIR = "repair-pool"
 
 _DATE_LENGTH = 10
+_GATE_STOP: NotRunReason = "thinking_not_honoured"
 _RESULT_DIR = re.compile(
     r"(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}"
 )
@@ -142,12 +151,49 @@ def arm_run_ids(base_run: str, arm: ArmName) -> tuple[str, str]:
     return f"{tagged}-{date}", f"{tagged}-{ARM_RERUN}-{date}"
 
 
-def _locate(base_dir: Path) -> dict[ArmName, Path]:
-    """Finds the arm runs beside a base pass, a re-run before its first run.
+def _not_run(
+    run_dir: Path, named: Sequence[ArmName], check: bool
+) -> dict[ArmName, NotRunReason]:
+    """The arms a round records as not run: those named now, or the file's.
 
     Raises:
-        RoundError: With ``repair_arms_incomplete`` when some arm has a run
-            and another has none.
+        RoundError: With ``repair_not_run_invalid`` when arms are named in
+            a check or all three are named, or when the committed record is
+            not a canonical record.
+    """
+    if named:
+        if check or set(named) == set(ARMS):
+            raise RoundError(
+                "repair_not_run_invalid",
+                "Name one or two arms not run, and only outside a check",
+            )
+        return {arm: _GATE_STOP for arm in ARMS if arm in named}
+    try:
+        data = read_bounded(run_dir / NOT_RUN_PATH)
+        record = (
+            None if data is None else RepairNotRunV1.model_validate_json(data)
+        )
+    except (OSError, ValidationError):
+        data, record = b"", None
+    if data is not None and (record is None or data != _encoded(record)):
+        raise RoundError(
+            "repair_not_run_invalid",
+            f"{run_dir.name}: {NOT_RUN_PATH.as_posix()} is not its record",
+        )
+    return {} if record is None else dict(record.arms)
+
+
+def _locate(
+    base_dir: Path, not_run: Mapping[ArmName, NotRunReason]
+) -> dict[ArmName, Path]:
+    """Finds the arm runs beside a base pass, a re-run before its first run.
+
+    Once any arm has a run, or some arm is recorded as not run, every other
+    arm must have one; an arm not run may keep its unpublished prompt set.
+
+    Raises:
+        RoundError: With ``repair_arms_incomplete`` when an arm that is not
+            recorded as not run has no run while the round has begun.
     """
     found: dict[ArmName, Path] = {}
     for arm in ARMS:
@@ -157,10 +203,11 @@ def _locate(base_dir: Path) -> dict[ArmName, Path]:
             if os.path.lexists(path):
                 found[arm] = path
                 break
-    if found and len(found) != len(ARMS):
-        missing = ", ".join(arm for arm in ARMS if arm not in found)
+    missing = [arm for arm in ARMS if arm not in found and arm not in not_run]
+    if (found or not_run) and missing:
         raise RoundError(
-            "repair_arms_incomplete", f"{base_dir.name}: no {missing} arm run"
+            "repair_arms_incomplete",
+            f"{base_dir.name}: no {', '.join(missing)} arm run",
         )
     return found
 
@@ -389,6 +436,29 @@ def _read_arm(run: _ArmRun, plan: RepairPlanV1, base: BasePass) -> ArmResult:
     )
 
 
+def _counted_arms(
+    arms: Mapping[ArmName, Path],
+    plan: RepairPlanV1,
+    base: BasePass,
+    not_run: Mapping[ArmName, NotRunReason],
+) -> list[_ArmRun]:
+    """Checks every arm run's prompts and returns those of the arms run.
+
+    Raises:
+        RoundError: With ``repair_arm_mismatch`` when an arm recorded as not
+            run was published, and as :func:`_check_arm` says.
+    """
+    runs = [_check_arm(arm, path, plan, base) for arm, path in arms.items()]
+    for run in runs:
+        if run.arm in not_run and run.manifest is not None:
+            raise RoundError(
+                "repair_arm_mismatch",
+                f"{run.run_dir.name} is published, and the round records"
+                f" its {run.arm} arm as not run",
+            )
+    return [run for run in runs if run.arm not in not_run]
+
+
 def _encoded(value: FrozenModel) -> bytes:
     """Encodes a contract as committed: canonical JSON and one newline."""
     return (canonical_json(value) + "\n").encode("utf-8")
@@ -408,9 +478,13 @@ def _settle(
 
 
 def _summarize(
-    run_dir: Path, plan: RepairPlanV1, base: BasePass, runs: Sequence[_ArmRun]
+    run_dir: Path,
+    plan: RepairPlanV1,
+    base: BasePass,
+    runs: Sequence[_ArmRun],
+    not_run: Mapping[ArmName, NotRunReason],
 ) -> RepairSummaryV1:
-    """Reads the base's scored tree and every arm's, and summarizes them.
+    """Reads the base's scored tree and every arm run's, and summarizes them.
 
     Raises:
         RoundError: With ``base_unscored`` when the base pass's own scored
@@ -442,6 +516,7 @@ def _summarize(
             },
         ),
         results,
+        not_run,
     )
 
 
@@ -451,15 +526,16 @@ def round_run(
     code_revision: str,
     check: bool = False,
     runner: TsharkRunner | None = None,
+    not_run: Sequence[ArmName] = (),
 ) -> RepairReportV1:
     """Writes or checks a base pass's plan and, once its arms ran, its summary.
 
     With no arm run beside the pass this is the plan stage alone, which
-    derives the plan again. Once any arm run exists, all three must, and
-    the committed plan is read, checked against the pass and never
-    rewritten (:func:`_committed_plan`); every arm's prompts are checked
-    against it. Once all three are published and scored, the summary is
-    written or checked.
+    derives the plan again. Once any arm run exists, every arm not
+    recorded as not run must have one, and the committed plan is read,
+    checked against the pass and never rewritten (:func:`_committed_plan`);
+    every arm's prompts are checked against it. Once every arm run is
+    published and scored, the summary is written or checked.
 
     Args:
         run_dir: The base pass's published directory, beside its arm runs.
@@ -467,6 +543,9 @@ def round_run(
             never written into any file.
         check: Compare with the committed files instead of writing them.
         runner: The bounded tshark runner that builds every card.
+        not_run: Arms whose runs the gate stopped, recorded in
+            ``repair/not_run.json`` once the other arms check; a check
+            reads the committed record instead.
 
     Returns:
         What was written, or which committed files differ.
@@ -476,42 +555,47 @@ def round_run(
         RepairError: When the base pass cannot be planned.
         ScoringError: For any layout, manifest or split failure.
     """
-    arms = _locate(run_dir.absolute())
+    gated = _not_run(run_dir, not_run, check)
+    arms = _locate(run_dir.absolute(), gated)
     if not arms:
         return plan_run(
             run_dir, code_revision=code_revision, check=check, runner=runner
         )[1]
     base = read_base(run_dir)
     plan, differences = _committed_plan(run_dir, base, check)
+    runs = _counted_arms(arms, plan, base, gated)
+    if not_run:
+        write_whole(
+            run_dir / NOT_RUN_PATH, _encoded(RepairNotRunV1(arms=gated))
+        )
     report = plan_report(
         plan,
         run_dir,
         differences=differences,
         code_revision=code_revision,
         check=check,
+    ).model_copy(
+        update={
+            "arm_runs": {arm: path.name for arm, path in arms.items()},
+            "arms_not_run": gated,
+            "stage": "prompts",
+        }
     )
-    runs = [_check_arm(arm, arms[arm], plan, base) for arm in ARMS]
-    stage: dict[str, object] = {
-        "checked": check,
-        "arm_runs": {run.arm: run.run_dir.name for run in runs},
-        "stage": "prompts",
-    }
     published = [run.manifest is not None for run in runs]
     if not any(published):
-        return report.model_copy(update=stage)
+        return report
     if not all(published):
         raise RoundError(
             "repair_arms_incomplete",
             f"{plan.base_run}: only some arm runs are published",
         )
-    summary = _summarize(run_dir, plan, base, runs)
+    summary = _summarize(run_dir, plan, base, runs, gated)
     rendered = {
         SUMMARY_PATH: _encoded(summary),
         SUMMARY_REPORT_PATH: render_summary(summary).encode("utf-8"),
     }
     return report.model_copy(
-        update=stage
-        | {
+        update={
             "stage": "summary",
             "summary_sha256": hashlib.sha256(
                 rendered[SUMMARY_PATH]

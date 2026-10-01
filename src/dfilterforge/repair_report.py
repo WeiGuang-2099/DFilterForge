@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 
+from dfilterforge.repair_summary import ArmName
 from dfilterforge.repair_summary import ARMS
 from dfilterforge.repair_summary import RepairComparisonV1
 from dfilterforge.repair_summary import RepairPoolV1
@@ -118,17 +119,18 @@ def _transition_rows(summary: RepairSummaryV1) -> list[str]:
 
 
 def _item_rows(summary: RepairSummaryV1) -> list[str]:
-    """Renders every triggered item's outcome in each arm."""
+    """Renders every triggered item's outcome in each arm run."""
+    arms: list[ArmName] = [arm.arm for arm in summary.arms]
     lines = [
         "| Item | Case | Base outcome | Base outcome now | Card |"
-        + "".join(f" {arm} |" for arm in ARMS),
-        "| --- | --- | --- | --- | --- |" + " --- |" * len(ARMS),
+        + "".join(f" {arm} |" for arm in arms),
+        "| --- | --- | --- | --- | --- |" + " --- |" * len(arms),
     ]
     for item in summary.items:
         lines.append(
             f"| {item.item_id} | {item.case_id} | {item.base_outcome}"
             f" | {item.base_outcome_now.value} | {item.card_kind} |"
-            + "".join(f" {item.outcomes[arm].value} |" for arm in ARMS)
+            + "".join(f" {item.outcomes[arm].value} |" for arm in arms)
         )
     return lines
 
@@ -145,6 +147,14 @@ def render_summary(summary: RepairSummaryV1) -> str:
     kinds = summary.card_kinds
     by_outcome = summary.by_base_outcome
     changed = ", ".join(summary.base_outcome_changed) or "none"
+    not_run = (
+        ", ".join(
+            f"{arm}, stopped at the gate ({summary.arms_not_run[arm]})"
+            for arm in ARMS
+            if arm in summary.arms_not_run
+        )
+        or "none"
+    )
     lines = [
         "# Repair summary",
         "",
@@ -163,6 +173,8 @@ def render_summary(summary: RepairSummaryV1) -> str:
         "## Arms",
         "",
         *_arm_rows(summary),
+        "",
+        f"Arms not run: {not_run}.",
         "",
         "repair@1 is the triggered items made strong exact over the triggered"
         " items, as summed case shares of each case's C4 items. A shortcut,"

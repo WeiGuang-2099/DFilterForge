@@ -102,7 +102,8 @@ class RepairReportV1(FrozenModel):
     ``stage`` is how far the round has come: ``plan`` when no arm run
     exists beside the base pass, ``prompts`` when the three arms' prompt
     sets are committed but not yet answered, and ``summary`` once all
-    three are published and scored. ``arm_runs`` maps each arm to the run
+    three are published and scored. ``arms_not_run`` names each arm the
+    round records as not run, with why. ``arm_runs`` maps each arm to the run
     it was read from, and ``summary_sha256`` is the digest of the summary
     written or derived, both empty before that stage.
     """
@@ -117,6 +118,7 @@ class RepairReportV1(FrozenModel):
     plan_sha256: str
     stage: Literal["plan", "prompts", "summary"] = "plan"
     arm_runs: dict[str, str] = Field(default_factory=dict)
+    arms_not_run: dict[str, str] = Field(default_factory=dict)
     summary_sha256: str | None = None
     differences: tuple[str, ...] = ()
 

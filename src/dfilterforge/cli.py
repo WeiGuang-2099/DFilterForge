@@ -39,6 +39,7 @@ from dfilterforge.live import packet_set_hash
 from dfilterforge.pair_report import pair_runs
 from dfilterforge.repair_round import pool_run
 from dfilterforge.repair_round import round_run
+from dfilterforge.repair_summary import ARMS
 from dfilterforge.replay import replay_live
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
@@ -375,6 +376,7 @@ def _repair(arguments: argparse.Namespace) -> object:
         code_revision=arguments.code_revision,
         check=arguments.check,
         runner=TsharkRunner(tshark=arguments.tshark),
+        not_run=tuple(arguments.not_run or ()),
     )
     if report.differences:
         arguments.exit_code = 1
@@ -586,6 +588,15 @@ def build_parser() -> argparse.ArgumentParser:
     repair.add_argument("--code-revision", required=True)
     repair.add_argument("--check", action="store_true")
     repair.add_argument("--tshark", default="tshark")
+    repair.add_argument(
+        "--not-run",
+        action="append",
+        choices=ARMS,
+        help=(
+            "Record an arm whose run the gate stopped as not run in"
+            " repair/not_run.json; repeat for a second arm."
+        ),
+    )
     repair.set_defaults(handler=_repair)
 
     repair_pool = commands.add_parser(

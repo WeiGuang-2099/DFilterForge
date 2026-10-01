@@ -118,9 +118,11 @@ jobs:
         # Once arm runs exist, the committed plan is the round's record: it
         # is read and checked against the pass, never derived again, so a
         # gold correction cannot break the check, and each arm's prompts
-        # are checked against it. Once all three are published and scored
-        # the round's summary is derived again too. None is committed
-        # before the first repair round, so zero plans is not a failure.
+        # are checked against it. Once every arm run is published and
+        # scored the round's summary is derived again too; an arm the gate
+        # stopped is read from repair/not_run.json and reported as not run.
+        # None is committed before the first repair round, so zero plans is
+        # not a failure.
         run: |
           checked=0
           for plan in docs/results/*/repair/plan.json; do
