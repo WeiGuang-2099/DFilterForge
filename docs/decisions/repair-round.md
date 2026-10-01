@@ -282,9 +282,9 @@ what is already spent, would exceed `--max-usd` (`_worst_case_micro_usd` in
   The tightest is the dev frontier cap: 0.20 USD against 0.181 USD.
 - **Total.** The 24 arm runs of the planned passes hold 3.90 USD of caps:
   1.20 on dev and 2.70 on test.
-- **Against the plan's 12 USD.** The committed runs record at most 0.940
-  USD. With the registry's runs 1 to 5 at their caps, the total is at most
-  3.29 USD, and the arm caps bring it to 7.19 USD.
+- **Against the plan's 12 USD.** The committed runs record at most 0.941
+  USD (0.940394). With the registry's runs 1 to 5 at their caps, the total is
+  at most 3.291 USD, and the arm caps bring it to at most 7.191 USD.
 - **Raising a cap.** A budget stop is resumed only under a raised cap,
   committed first.
 

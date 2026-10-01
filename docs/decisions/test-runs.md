@@ -310,9 +310,10 @@ the cap rule and the totals below against the registered caps.
 deepseek-v4-pro-0813's figure is its price-derived spend; its pass was charged
 at most 0.191094 USD. Runs 1 to 5 hold 2.35 USD of caps against about 1.10 USD
 expected; the three fallbacks add 2.15 USD and the eight outage re-runs 4.50
-USD, 9.00 USD for all 16. The committed runs so far record at most 0.940 USD of
-OpenRouter spend (0.929 for the dev runs in `docs/results`, 0.011 for the
-smoke), so runs 1 to 5 at their caps bring it to 3.29 USD of the plan's 12 USD.
+USD, 9.00 USD for all 16. The committed runs so far record at most 0.941 USD of
+OpenRouter spend (0.940394: 0.928912 for the dev runs in `docs/results`,
+0.011482 for the smoke), so runs 1 to 5 at their caps bring it to at most 3.291
+USD of the plan's 12 USD.
 
 ## Not registered here
 

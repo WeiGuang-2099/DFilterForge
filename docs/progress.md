@@ -242,7 +242,8 @@ Reports under the ignored `artifacts/` are not project evidence.
   test request, rounded up to 0.05 USD: 0.10 per A/A pass, 0.15 small, 0.75
   mid, 1.25 frontier, and the same for each fallback and re-run. The five
   planned runs hold 2.35 USD of caps (about 1.10 USD expected), all 16 hold
-  9.00 USD, and the committed runs so far record at most 0.940 USD.
+  9.00 USD, and the committed runs so far record at most 0.941 USD
+  (0.940394).
 - `tests/test_hosted_test_runs.py` (6 host tests) checks the run ids, the
   ruled winners and the anchor, the configs and quantizations, the admitted
   prepare, the cap rule, and that the note lists the JSON's rows. In the test
@@ -296,8 +297,8 @@ Reports under the ignored `artifacts/` are not project evidence.
   - Two do not fit. Both are outage re-runs of an arm over the frontier
     fallback's own outage re-run, and such an arm is reported not run.
 - **Caps.** The arm caps total 3.90 USD (1.20 dev, 2.70 test). With the
-  0.940 USD recorded so far and the registry's runs 1 to 5 at their caps,
-  OpenRouter spend stays within 7.19 USD of the plan's 12 USD.
+  at most 0.941 USD recorded so far and the registry's runs 1 to 5 at their
+  caps, OpenRouter spend stays within 7.191 USD of the plan's 12 USD.
   - Each cap covers at least two requests at the 64 KiB prompt bound, the
     call step's pre-request bound at the config's prices.
   - The largest dev counterexample prompt with a full card is 7,667 B.
