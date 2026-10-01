@@ -22,7 +22,7 @@ jobs:
       - run: docker compose --profile dev build test
       - run: docker compose --profile dev run --rm test pyink --check src tests scripts
       - run: docker compose --profile dev run --rm test isort --check-only src tests scripts
-      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py
+      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
