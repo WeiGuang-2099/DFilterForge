@@ -106,8 +106,11 @@ _MODEL_ERROR_CODES: dict[type[DFilterForgeError], frozenset[str]] = {
 }
 # A resource bound is reachable from either side, so a candidate is only
 # charged with one once the same gold case still runs clean.
-_CANDIDATE_RESOURCE_CODES = frozenset(
-    {"timeout", "output_limit", "frame_limit"}
+CANDIDATE_RESOURCE_CODES = frozenset({"timeout", "output_limit", "frame_limit"})
+# Every code that can make an answer invalid. The repair round's error card
+# reads this set, so the card and the scorer cannot drift apart.
+CANDIDATE_ERROR_CODES = frozenset[str]().union(
+    *_MODEL_ERROR_CODES.values(), CANDIDATE_RESOURCE_CODES
 )
 # The abstention channel is derived from the parsed status itself, so a
 # fourth generation status raises here instead of being misfiled as an
@@ -289,6 +292,31 @@ def _status_fields(
     return fields
 
 
+def candidate_error_code(error: DFilterForgeError) -> str | None:
+    """Returns the code an execution error may charge to the candidate.
+
+    The code must come from the boundary that owns it: a catalog code from
+    the catalog, a filter code or resource bound from the runner. A
+    resource code is returned too, but it is charged only once the same
+    gold case reruns clean, which the caller checks.
+
+    Args:
+        error: An error raised while evaluating one candidate.
+
+    Returns:
+        A member of ``CANDIDATE_ERROR_CODES``, or None when the error is
+        not the candidate's.
+    """
+    if isinstance(error, RunnerError) and (
+        error.code in CANDIDATE_RESOURCE_CODES
+    ):
+        return error.code
+    for error_type, codes in _MODEL_ERROR_CODES.items():
+        if isinstance(error, error_type) and error.code in codes:
+            return error.code
+    return None
+
+
 def _attributable_code(
     error: DFilterForgeError, case: ModelGoldCaseV1, context: _Execution
 ) -> str | None:
@@ -297,14 +325,10 @@ def _attributable_code(
     A resource bound is reachable from the reference side too, so it is
     charged to the candidate only once the same gold case reruns clean.
     """
-    if isinstance(error, RunnerError) and (
-        error.code in _CANDIDATE_RESOURCE_CODES
-    ):
-        return error.code if _case_is_healthy(case, context) else None
-    for error_type, codes in _MODEL_ERROR_CODES.items():
-        if isinstance(error, error_type) and error.code in codes:
-            return error.code
-    return None
+    code = candidate_error_code(error)
+    if code in CANDIDATE_RESOURCE_CODES and not _case_is_healthy(case, context):
+        return None
+    return code
 
 
 # pylint: disable-next=too-many-locals
