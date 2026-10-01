@@ -405,14 +405,20 @@ class Repo:
         return _Scope(self._scopes)
 
     def _directory(self, directory: str) -> Path:
-        """Resolves a directory once, refusing one that leaves the root."""
+        """Resolves a directory once, refusing one reached through a link.
+
+        The resolved directory must be the literal path under the root, so
+        no component may be a symbolic link, even one that stays inside the
+        repository: a link from an allowed root to another folder would
+        publish that folder's bytes under the allowed path.
+        """
         if directory not in self._directories:
-            resolved = (self.root / directory).resolve()
-            if not resolved.is_relative_to(self.root):
+            literal = self.root.joinpath(*directory.split("/"))
+            if literal.resolve() != literal:
                 raise ExportError(
-                    "path_refused", f"{directory!r} leaves the repository"
+                    "path_refused", f"{directory!r} passes through a link"
                 )
-            self._directories[directory] = resolved
+            self._directories[directory] = literal
         return self._directories[directory]
 
     def _regular(self, path: str) -> tuple[Path, int] | None:

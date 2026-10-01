@@ -158,7 +158,12 @@ export class Resolver {
     }
   }
 
-  /** Reads one regular file's bytes; links and oversized files are refused. */
+  /**
+   * Reads one regular file's bytes. A file reached through a link is
+   * refused, even a link to a directory inside the repository, since its
+   * bytes would be read under an allowed path they do not live at; so is an
+   * oversized file.
+   */
   data(file: string): Buffer {
     const cached = this.bytes.get(file);
     if (cached !== undefined) {
@@ -172,8 +177,8 @@ export class Resolver {
     if (status.size > MAX_BYTES) {
       return refuse(`${file} exceeds 32 MiB`);
     }
-    if (!realpathSync(location).startsWith(this.realRoot + path.sep)) {
-      return refuse(`${file} leaves the repository`);
+    if (realpathSync(location) !== path.join(this.realRoot, ...file.split('/'))) {
+      return refuse(`${file} passes through a link`);
     }
     const read = readFileSync(location);
     this.bytes.set(file, read);

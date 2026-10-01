@@ -573,7 +573,10 @@ class Resolver:
     def _path(self, path: str) -> Path:
         assert ".." not in path.split("/") and "\\" not in path
         assert path == _FREEZE or path.startswith(_ALLOWED), path
-        return self.root / path
+        literal = self.root.resolve().joinpath(*path.split("/"))
+        # No component may be a link, inside the repository or out of it.
+        assert literal.resolve() == literal, path
+        return literal
 
     def json(self, path: str) -> Any:
         if path not in self._json:
@@ -1543,6 +1546,41 @@ def test_links_out_of_the_tree_are_refused(
     linked = _mid(root, "scored/intents")
     linked.rename(outside / "intents")
     linked.symlink_to(outside / "intents", target_is_directory=True)
+
+    with pytest.raises(exporter.ExportError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "path_refused"
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Symbolic links need privileges here"
+)
+def test_links_inside_the_tree_are_refused_too(fixture: Fixture) -> None:
+    # A link from an allowed root to a folder that is not one would publish
+    # that folder's bytes under the allowed path.
+    root = fixture.build()
+    private = root / "private"
+    private.mkdir()
+    (private / "secret.json").write_text('{"token": "x"}\n', encoding="utf-8")
+    linked = root / "docs" / "results" / "dev-x-2026-09-26"
+    linked.symlink_to(Path("..", "..", "private"), target_is_directory=True)
+    repo = exporter.Repo(root)
+
+    with pytest.raises(exporter.ExportError) as caught:
+        repo.resolve(["ptr", "docs/results/dev-x-2026-09-26/secret.json", ""])
+    assert caught.value.code == "path_refused"
+    assert not repo.inputs
+
+    linked.unlink()
+    intents = _mid(root, "scored/intents")
+    moved = root / "artifacts" / "intents"
+    moved.parent.mkdir()
+    intents.rename(moved)
+    intents.symlink_to(
+        Path("..", "..", "..", "..", "artifacts", "intents"),
+        target_is_directory=True,
+    )
+    assert intents.resolve() == moved.resolve()
 
     with pytest.raises(exporter.ExportError) as caught:
         exporter.export(root, "abc1234")

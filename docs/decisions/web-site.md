@@ -60,9 +60,11 @@ The exporter reads only these paths:
 - `docs/decisions/model-bakeoff.md`, only to check that every registered test
   run is named in it.
 
-Any other path is refused, and so is a path with a dot segment, a symbolic
-link or a file that is not regular. Both test resolvers apply the same roots
-to every source path. Every read uses UTF-8 and is capped at
+Any other path is refused, and so is a path with a dot segment, a file that
+is not regular, or a symbolic link at any component, even a directory link
+that stays inside the repository: such a link would publish another
+folder's bytes under an allowed path. Both test resolvers apply the same
+roots and the same link rule to every source path. Every read uses UTF-8 and is capped at
 32 MiB, the run store's ceiling. NaN, Infinity and duplicate keys are refused.
 
 The shown runs come from files, never from a hand list:
