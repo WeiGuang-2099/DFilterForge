@@ -66,17 +66,17 @@ const PLANTED = [
     name: 'a string as a list start',
     code: 'export const F = () => <ol start="56"><li>x</li></ol>;',
   },
-  {name: 'fullwidth digits in JSX text', code: 'export const F = () => <p>９０ runs</p>;'},
+  {name: 'fullwidth digits in JSX text', code: 'export const F = () => <p>\uff19\uff10 runs</p>;'},
   {
     name: 'fullwidth digits as a child literal',
-    code: "export const F = () => <p>{'９０ runs'}</p>;",
+    code: "export const F = () => <p>{'\uff19\uff10 runs'}</p>;",
   },
   {
     name: 'Arabic-Indic digits in an attribute',
-    code: 'export const F = () => <abbr title="٣ runs">x</abbr>;',
+    code: 'export const F = () => <abbr title="\u0663 runs">x</abbr>;',
   },
-  {name: 'a Roman numeral in JSX text', code: 'export const F = () => <p>Round Ⅷ</p>;'},
-  {name: 'a superscript in JSX text', code: 'export const F = () => <p>x²</p>;'},
+  {name: 'a Roman numeral in JSX text', code: 'export const F = () => <p>Round \u2167</p>;'},
+  {name: 'a superscript in JSX text', code: 'export const F = () => <p>x\u00b2</p>;'},
   {
     name: 'a digit in a template attribute',
     code: 'export const F = ({a}: {a: string}) => <abbr title={`${a} 2`}>x</abbr>;',

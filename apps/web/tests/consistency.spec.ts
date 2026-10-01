@@ -382,15 +382,15 @@ test('the sweep finds a number in any script, in a list start and outside the te
   await page.setContent(
     '<title>Plant</title>' +
     '<ol start="56"><li>first item</li></ol>' +
-    '<p>９０ runs</p><p>Round Ⅷ</p><p>x²</p><p>Cases: 12</p>' +
+    '<p>\uff19\uff10 runs</p><p>Round \u2167</p><p>x\u00b2</p><p>Cases: 12</p>' +
     '<p><span data-src="[]">99</span></p>' +
     '<p><span data-term="">SHA-256</span> <span data-term="">SHA-512</span></p>',
   );
 
   expect(await page.evaluate(strayNumbers, SWEEP)).toEqual([
-    'text in <p>: ９０ runs',
-    'text in <p>: Round Ⅷ',
-    'text in <p>: x²',
+    'text in <p>: \uff19\uff10 runs',
+    'text in <p>: Round \u2167',
+    'text in <p>: x\u00b2',
     'text in <p>: Cases: 12',
     'text in <span>: SHA-512',
     'start on <ol>: 56',

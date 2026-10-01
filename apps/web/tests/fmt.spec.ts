@@ -104,14 +104,14 @@ test('visible shows format, default-ignorable and private-use code points', () =
     expect(visible(`tcp${String.fromCodePoint(code)}.port`), hex).toBe(`tcp[U+${hex}].port`);
   }
   // Private use, in the basic plane and in plane fifteen.
-  expect(visible('\u{F0000}')).toBe('[U+E000][U+F0000]');
+  expect(visible('\ue000\u{F0000}')).toBe('[U+E000][U+F0000]');
 });
 
 test('visible leaves visible symbols and unassigned code points as they are', () => {
   // An emoji without a variation selector, a mathematical letter and a
   // code point no Unicode version has assigned, which renders as a
   // missing-glyph box.
-  for (const text of ['\u{1F600}', '\u{1D400}', '͸', '␀', ' ']) {
+  for (const text of ['\u{1F600}', '\u{1D400}', '\u0378', '\u2400', '\u00a0']) {
     expect(visible(text), text).toBe(text);
   }
 });
