@@ -87,6 +87,35 @@ test('visible names bidirectional and invisible characters', () => {
   expect(visible('\u061c\u200e\u200f')).toBe('[ALM][LRM][RLM]');
 });
 
+test('visible shows format, default-ignorable and private-use code points', () => {
+  // Tag characters render at zero width and can carry a hidden sentence
+  // after a filter that looks complete.
+  expect(visible('ip.src == 10.0.0.1\u{E0069}\u{E0067}\u{E006E}')).toBe(
+    'ip.src == 10.0.0.1[U+E0069][U+E0067][U+E006E]',
+  );
+  expect(visible('\u{E0001}\u{E0041}\u{E007F}')).toBe('[U+E0001][U+E0041][U+E007F]');
+  // Invisible operators and separators, variation selectors, the combining
+  // grapheme joiner and Hangul fillers.
+  for (const code of [
+    0x034f, 0x115f, 0x180e, 0x2061, 0x2063, 0x2064, 0x206a, 0x206f, 0x3164, 0xfe00, 0xfe0f,
+    0xffa0, 0xfff9, 0x1d173, 0xe0100,
+  ]) {
+    const hex = code.toString(16).toUpperCase().padStart(4, '0');
+    expect(visible(`tcp${String.fromCodePoint(code)}.port`), hex).toBe(`tcp[U+${hex}].port`);
+  }
+  // Private use, in the basic plane and in plane fifteen.
+  expect(visible('\u{F0000}')).toBe('[U+E000][U+F0000]');
+});
+
+test('visible leaves visible symbols and unassigned code points as they are', () => {
+  // An emoji without a variation selector, a mathematical letter and a
+  // code point no Unicode version has assigned, which renders as a
+  // missing-glyph box.
+  for (const text of ['\u{1F600}', '\u{1D400}', '͸', '␀', ' ']) {
+    expect(visible(text), text).toBe(text);
+  }
+});
+
 test('visible shows C1 controls and lone surrogates by code point', () => {
   expect(visible('\u0085')).toBe('[U+0085]');
   expect(visible('\u009f')).toBe('[U+009F]');

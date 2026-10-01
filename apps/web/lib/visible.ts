@@ -4,10 +4,18 @@
  * Model output and committed text reach the page only as React text nodes,
  * so no markup ever runs. A control or bidirectional formatting character
  * still changes what a reader sees: a right-to-left override can make a
- * filter read differently from the bytes tshark ran, and a zero-width space
- * can hide inside a field name. visible() replaces each such character with
- * a visible mark, so the page shows every code point that is there. Tab and
- * line feed are kept, because they lay text out rather than hide it.
+ * filter read differently from the bytes tshark ran, a zero-width space can
+ * hide inside a field name, and Unicode tag characters can carry a whole
+ * hidden sentence after a filter. visible() replaces each control, format,
+ * default-ignorable and private-use code point with a visible mark, so none
+ * can render at zero width or as a glyph the reader cannot name. Tab and line
+ * feed are kept, because they lay text out rather than hide it.
+ *
+ * Unassigned code points are left as they are: a browser draws them as a
+ * missing-glyph box, and which code points are unassigned changes with each
+ * Unicode version, so the build and the test could disagree. The property
+ * classes below are read from the JavaScript engine's Unicode data; CI builds
+ * and tests on the same Node release.
  */
 
 // The Unicode Control Pictures block has one symbol per C0 control, in code
@@ -43,9 +51,21 @@ const NAMED = new Map<number, string>([
   [0xfeff, 'BOM'],
 ]);
 
-/** Whether a code point is a C1 control or a lone UTF-16 surrogate. */
-function isUnnamedControl(code: number): boolean {
-  return (code >= 0x80 && code <= 0x9f) || (code >= 0xd800 && code <= 0xdfff);
+// Format characters (tag characters, invisible operators, the Mongolian
+// vowel separator), default-ignorable code points (variation selectors,
+// Hangul fillers, the combining grapheme joiner) and private-use code points.
+const INVISIBLE = /^[\p{Cf}\p{Default_Ignorable_Code_Point}\p{Co}]$/u;
+
+/**
+ * Whether a code point without a name is still marked: a C1 control, a lone
+ * UTF-16 surrogate, or one of the INVISIBLE classes.
+ */
+function isUnnamed(code: number, character: string): boolean {
+  return (
+    (code >= 0x80 && code <= 0x9f) ||
+    (code >= 0xd800 && code <= 0xdfff) ||
+    INVISIBLE.test(character)
+  );
 }
 
 /** Returns the mark shown for one code point, or the character itself. */
@@ -64,21 +84,22 @@ function mark(character: string): string {
   if (name !== undefined) {
     return `[${name}]`;
   }
-  if (isUnnamedControl(code)) {
+  if (isUnnamed(code, character)) {
     return `[U+${code.toString(16).toUpperCase().padStart(4, '0')}]`;
   }
   return character;
 }
 
 /**
- * Returns text with every control, bidirectional formatting character and
- * invisible separator replaced by a visible mark.
+ * Returns text with every control, format, default-ignorable and private-use
+ * code point replaced by a visible mark.
  *
  * @param text Any string, including model output.
  * @return The same text with C0 controls other than tab and line feed shown
- *     as control pictures, DEL as its picture, bidirectional and invisible
- *     characters as a bracketed abbreviation such as [RLO], and C1 controls
- *     and lone surrogates as a bracketed code point.
+ *     as control pictures, DEL as its picture, bidirectional and common
+ *     invisible characters as a bracketed abbreviation such as [RLO], and
+ *     every other marked code point, such as a C1 control, a lone surrogate
+ *     or a tag character, as a bracketed code point such as [U+E0041].
  */
 export function visible(text: string): string {
   let shown = '';
