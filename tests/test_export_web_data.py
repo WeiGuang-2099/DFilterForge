@@ -1343,6 +1343,13 @@ def _spec_names_other(root: Path) -> None:
         )
 
 
+def _summary_split(root: Path) -> None:
+    _edit(
+        _mid(root, "scored/summary.json"),
+        lambda value: value.update(split="test"),
+    )
+
+
 def _prompt_twice(root: Path) -> None:
     _edit(
         _mid(root, "prepared/C1.json"),
@@ -1382,6 +1389,7 @@ def _prompt_twice(root: Path) -> None:
         (_receipt_run, "receipt_inconsistent"),
         (_spec_names_other, "spec_mismatch"),
         (_prompt_twice, "prompt_not_unique"),
+        (_summary_split, "split_mismatch"),
     ],
 )
 def test_each_contract_assert_fails_alone(
@@ -1824,6 +1832,305 @@ def test_the_exporter_imports_only_the_allowed_standard_library() -> None:
     assert "dfilterforge" not in imported
 
 
+def _reel(root: Path) -> Document:
+    return json.loads(exporter.export(root, "abc1234")["reel.json"])
+
+
+def _picked(reel: Document) -> tuple[str, str, str]:
+    pick = reel["pick"]
+    return pick["run_id"]["t"], pick["cond"], pick["item"]
+
+
+def _choice(reel: Document) -> Document:
+    """The parts of a Reel that reel-v1's steps 1 to 4 decide."""
+    return {
+        "candidates": reel["candidates"],
+        "condition": reel["candidate_condition"],
+        "highlight": reel["highlight"],
+        "pick": reel["pick"],
+        "pool": reel["pool"],
+        "states": [strip["states"] for strip in reel["strips"]],
+    }
+
+
+def test_reel_picks_the_fewest_disagreeing_frames(fixture: Fixture) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong((2,), (1,), (4,))
+    fixture.answers[(_SMALL, "C4", "i-0002")] = _wrong((2, 3), (1,), (4,))
+    # Not in the pool: the dotted run is the small slot's second rank.
+    fixture.answers[(_DOTTED, "C4", "i-0001")] = _wrong((2, 3), (1,), (4, 5, 6))
+    root = fixture.build()
+
+    reel = _reel(root)
+
+    assert reel["rule"] == "reel-v1" and reel["phase"] == "dev"
+    assert [item["role"] for item in reel["pool"]] == [
+        "anchor",
+        "small",
+        "mid",
+        "frontier",
+    ]
+    assert reel["candidate_condition"] == "C4"
+    assert reel["candidates"]["v"] == 2
+    assert _picked(reel) == (_SMALL, "C4", "i-0002")
+    assert reel["pick"]["disagreeing"]["v"] == 1
+    assert reel["pick"]["request"]["t"] == "Request for i-0002."
+    assert [node["t"] for node in reel["pick"]["answer"]["fields"]] == [
+        "dns.aaaa",
+        "ip.ttl",
+    ]
+    highlight = reel["highlight"]
+    assert (highlight["probe"], highlight["frame"]["v"]) == (2, 5)
+    assert highlight["kind"]["t"] == "witness"
+    assert highlight["request_selects"] and not highlight["filter_selects"]
+    assert reel["strips"][2]["states"] == ["tn", "tn", "tn", "tp", "fn", "tn"]
+    assert reel["repair_applies"] is True and reel["repair"] is None
+    assert reel["receipt_panel"]["repair"]["t"] == "not_run"
+    assert reel["receipt_panel"]["replay"][1]["t"] == _SMALL
+    assert reel["trace"] is None and reel["trace_reason"] == "not_traced"
+    assert reel["headline"]["compiled"]["v"] == 4 * 8
+    assert reel["headline"]["silent_wrong"]["v"] == 2
+    assert [
+        item["segments"]["silent_wrong"]["v"] for item in reel["board"]
+    ] == [
+        1,
+        1,
+        0,
+        0,
+    ]
+    assert len(reel["inputs_sha256"]) == 64
+    check_sources(root, {"reel.json": reel})
+
+
+def test_reel_ties_go_to_the_earlier_pool_run_then_the_lower_item(
+    tmp_path: Path,
+) -> None:
+    one_frame = _wrong((2,), (1,), (4, 5))
+    later = Fixture(tmp_path / "later")
+    later.answers[(_ANCHOR, "C4", "i-0002")] = one_frame
+    later.answers[(_SMALL, "C4", "i-0001")] = one_frame
+    lower = Fixture(tmp_path / "lower")
+    lower.answers[(_ANCHOR, "C4", "i-0002")] = one_frame
+    lower.answers[(_ANCHOR, "C4", "i-0001")] = one_frame
+
+    assert _picked(_reel(later.build())) == (_ANCHOR, "C4", "i-0002")
+    assert _picked(_reel(lower.build())) == (_ANCHOR, "C4", "i-0001")
+
+
+def test_reel_falls_back_from_c4_through_c1(tmp_path: Path) -> None:
+    typed = Fixture(tmp_path / "typed")
+    typed.answers[(_SMALL, "C3", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    typed.answers[(_ANCHOR, "C1", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    clean = Fixture(tmp_path / "clean")
+
+    fallback = _reel(typed.build())
+    nothing = _reel(clean.build())
+
+    assert fallback["candidate_condition"] == "C3"
+    assert fallback["candidates"]["v"] == 1
+    assert _picked(fallback) == (_SMALL, "C3", "i-0001")
+    assert fallback["repair_applies"] is False
+    assert nothing["candidate_condition"] is None
+    assert nothing["candidates"]["v"] == 0
+    assert nothing["pick"] is None and nothing["highlight"] is None
+    assert nothing["strips"] == [] and nothing["receipt_panel"] is None
+    assert nothing["headline"]["silent_wrong"]["v"] == 0
+
+
+@pytest.mark.parametrize(
+    ("candidate", "probe", "frame", "side"),
+    [
+        # Second and first disagree: the second wins.
+        (((2,), (), (4, 5)), 1, 1, "reference_only"),
+        # Second agrees: the first, at its lowest frame.
+        (((1,), (1,), (4,)), 0, 1, "candidate_only"),
+        (((2, 3, 6), (1,), (4,)), 0, 6, "candidate_only"),
+        # Only the third disagrees.
+        (((2, 3), (1,), (5,)), 2, 4, "reference_only"),
+    ],
+)
+def test_highlight_takes_the_second_then_first_then_third_probe(
+    fixture: Fixture,
+    candidate: tuple[tuple[int, ...], ...],
+    probe: int,
+    frame: int,
+    side: str,
+) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong(*candidate)
+    root = fixture.build()
+
+    highlight = _reel(root)["highlight"]
+
+    assert (highlight["probe"], highlight["frame"]["v"]) == (probe, frame)
+    assert highlight["filter_selects"] is (side == "candidate_only")
+    assert highlight["request_selects"] is (side == "reference_only")
+    assert highlight["frame"]["src"][2].startswith(f"/probes/{probe}/{side}/")
+
+
+def test_repair_traces_and_feedback_do_not_move_the_pick(
+    fixture: Fixture,
+) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0002")] = _wrong((2,), (1,), (4, 5))
+    fixture.answers[(_MID, "C4", "i-0001")] = _wrong((2,), (), (4, 5))
+    root = fixture.build()
+    before = _reel(root)
+
+    # A repair pass that would repair the pick and fail the other one.
+    repair = root / f"docs/results/dev-anchor-repair-{_DATE}/scored"
+    repair.mkdir(parents=True)
+    (repair / "outcomes.jsonl").write_text(
+        json.dumps(
+            {"condition": "C4", "item_id": "i-0002", "outcome": "strong_exact"}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _edit(
+        root / f"docs/results/{_ANCHOR}/scored/summary.json",
+        lambda value: value["not_measured"].update(repair_at_1="scored"),
+    )
+    # Traces of both candidates, one refused by the trace budget.
+    for run_id, item_id, result in (
+        (_ANCHOR, "i-0002", {"status": "trace_limit"}),
+        (_MID, "i-0001", {"exact": False}),
+    ):
+        receipt = f"docs/results/{run_id}/scored/receipts/C4/{item_id}.json"
+        _write(
+            root / f"docs/decisions/evidence/web/traces/{run_id}/C4/"
+            f"{item_id}.json",
+            {
+                "receipt_file_sha256": hashlib.sha256(
+                    (root / receipt).read_bytes()
+                ).hexdigest(),
+                "receipt_path": receipt,
+                "result": result,
+            },
+        )
+    # The feedback probe's frames change.
+    _edit(
+        root / "docs/decisions/evidence/web/captures.json",
+        lambda value: value["probes"][3]["frames"][0].update(name="renamed"),
+    )
+    after = _reel(root)
+
+    assert _picked(before) == (_ANCHOR, "C4", "i-0002")
+    assert _choice(after) == _choice(before)
+    assert after["trace_reason"] == "trace_limit"
+    assert after["receipt_panel"]["repair"]["t"] == "scored"
+    assert after["inputs_sha256"] != before["inputs_sha256"]
+
+
+def _settled(fixture: Fixture) -> None:
+    fixture.registration = _registration()
+    fixture.note = _note()
+    fixture.test_runs = (_PASS_A, _PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT)
+    one_frame = _wrong((2,), (1,), (4, 5))
+    two_frames = _wrong((2,), (1,), (4,))
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = one_frame
+    fixture.answers[(_DOTTED, "C4", "i-0002")] = one_frame
+    fixture.answers[(_PASS_B, "C4", "i-1001")] = one_frame
+    fixture.answers[(_TEST_SMALL, "C4", "i-1001")] = two_frames
+    fixture.answers[(_PASS_A, "C4", "i-1002")] = two_frames
+
+
+def test_the_test_phase_pools_pass_a_and_the_winners_never_pass_b(
+    fixture: Fixture,
+) -> None:
+    _settled(fixture)
+    root = fixture.build()
+
+    reel = _reel(root)
+
+    assert reel["phase"] == "test"
+    assert [item["role"] for item in reel["pool"]] == [
+        "pass_a",
+        "small",
+        "mid",
+        "frontier",
+    ]
+    assert [item["run_id"]["t"] for item in reel["pool"]][:2] == [
+        _PASS_A,
+        _TEST_SMALL,
+    ]
+    # Pass B holds the fewest frames and the dev runs fewer still.
+    assert _picked(reel) == (_PASS_A, "C4", "i-1002")
+    assert reel["candidates"]["v"] == 2
+    assert reel["strips"][0]["probe_id"]["t"] == "semantic-31"
+    assert reel["headline"]["silent_wrong"]["v"] == 2
+
+    (root / f"docs/results/{_TEST_FRONT}/scored/summary.json").unlink()
+    unsettled = _reel(root)
+
+    assert unsettled["phase"] == "dev"
+    # Before the test phase the registration still names the winners.
+    assert [item["run_id"]["t"] for item in unsettled["pool"]] == [
+        _ANCHOR,
+        _DOTTED,
+        _MID,
+        _FRONT,
+    ]
+    assert _picked(unsettled) == (_ANCHOR, "C4", "i-0001")
+
+
+def test_a_not_run_test_pass_leaves_the_pool(fixture: Fixture) -> None:
+    _settled(fixture)
+    fixture.test_runs = (_PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT)
+    fixture.registration = _registration(not_run=(_PASS_A,))
+    root = fixture.build()
+
+    reel = _reel(root)
+
+    assert reel["phase"] == "test"
+    assert [item["role"] for item in reel["pool"]] == [
+        "small",
+        "mid",
+        "frontier",
+    ]
+    assert _picked(reel) == (_TEST_SMALL, "C4", "i-1001")
+
+
+def test_a_silent_wrong_receipt_must_disagree_somewhere(
+    fixture: Fixture,
+) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = Answer(
+        "silent_wrong", _EXPECTED
+    )
+    root = fixture.build()
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "no_disagreement"
+
+
+def test_a_summary_without_a_case_mean_is_not_checked(
+    fixture: Fixture,
+) -> None:
+    root = fixture.build()
+    _edit(
+        _mid(root, "scored/summary.json"),
+        lambda value: value["conditions"]["C2"].update(silent_wrong_all=None),
+    )
+
+    assert "reel.json" in exporter.export(root, "abc1234")
+
+
+def test_a_slot_without_a_winner_leaves_the_pool(fixture: Fixture) -> None:
+    fixture.answers[(_MID, "C4", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    root = fixture.build()
+    _edit(
+        _ranking_path(root),
+        lambda value: value["slots"]["mid"].update(provisional_winner=None),
+    )
+
+    reel = _reel(root)
+
+    assert [item["role"] for item in reel["pool"]] == [
+        "anchor",
+        "small",
+        "frontier",
+    ]
+    assert reel["pick"] is None and reel["candidates"]["v"] == 0
+
+
 _HAS_DOCS = (_ROOT / "docs" / "results").is_dir()
 
 
@@ -1846,3 +2153,36 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
         for item in documents["board.json"]["selection"]["rows"]
     ][:2] == ["dev-qwen3-32b-2026-09-26", "dev-qwen3.5-9b-2026-09-26"]
     assert check_sources(_ROOT, documents) > 50_000
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_picks_the_registered_reel() -> None:
+    reel = json.loads(_committed()["reel.json"])
+
+    assert [item["run_id"]["t"] for item in reel["pool"]] == [
+        "dev-qwen3-32b-2026-09-26",
+        "dev-qwen3.5-9b-2026-09-26",
+        "dev-qwen3.5-122b-a10b-2026-09-26",
+        "dev-deepseek-v4-pro-0813-2026-09-26",
+    ]
+    assert reel["candidates"]["v"] == 27
+    assert _picked(reel) == ("dev-qwen3-32b-2026-09-26", "C4", "mei-0015")
+    assert reel["pick"]["request"]["t"] == (
+        "Show DNS AAAA questions or DNS NXDOMAIN messages."
+    )
+    assert reel["pick"]["answer"]["filter"]["t"] == (
+        "(dns.aaaa || dns.flags.rcode == 3)"
+    )
+    assert [
+        [item["n"]["v"] for item in strip["disagree"]]
+        for strip in reel["strips"]
+    ] == [[17], [3], [9]]
+    highlight = reel["highlight"]
+    assert highlight["probe_id"]["t"] == "semantic-17"
+    assert highlight["frame"]["v"] == 3
+    assert highlight["name"]["t"] == "udp-aaaa"
+    assert reel["headline"]["compiled"]["v"] == 284
+    assert reel["headline"]["silent_wrong"]["v"] == 65
+    check_sources(_ROOT, {"reel.json": reel})

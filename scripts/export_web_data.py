@@ -36,9 +36,21 @@ test run's summary.json.
 
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
-board.json, methodology.json, cases/<case_id>.json and
+board.json, methodology.json, reel.json, cases/<case_id>.json and
 receipts/<run_slug>/<condition>/<item_id>.json, where the run slug is the
 run id with each dot replaced by an underscore.
+
+reel.json projects the home page's Disproof Reel by the pre-registered
+rule reel-v1 (docs/decisions/disproof-reel.md once registered). Pool: in
+the test phase pass A then the small, mid and frontier winners' test runs,
+skipping runs not run; else the dev anchor then the winners' dev passes
+(test-runs.json's, else the ranking's provisional winners); pass B never.
+Candidates: pool items in C4 with ready gold and outcome silent_wrong,
+else C3, then C2, then C1. Pick: the fewest frames in candidate_only plus
+reference_only over the scored probes, ties to the earlier pool run, then
+the lower item id. Highlight: the second scored probe if it disagrees,
+else the first, else the third, and on it the lowest disagreeing frame.
+No repair outcome, feedback-probe result or trace is read before the pick.
 
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
@@ -134,6 +146,11 @@ _ARITY = {
     "sha256": 2,
     "input": 4,
 }
+REEL_RULE = "reel-v1"
+# reel-v1 step 2: C4 first, then C3, C2 and C1.
+_REEL_CONDITIONS = ("C4", "C3", "C2", "C1")
+# reel-v1 step 4: the second scored probe, then the first, then the third.
+_HIGHLIGHT = (1, 0, 2)
 _INPUT_PREFIX = "INPUT_JSON\n"
 # The POSIX file-type bits of st_mode, which Windows reports alike.
 _FILE_TYPE = 0o170000
@@ -1775,6 +1792,237 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
     }
 
 
+@dataclass(frozen=True, order=True)
+class Candidate:
+    """One Reel candidate; the ordering is reel-v1's pick order."""
+
+    disagreeing: int
+    position: int
+    item_id: str
+    label: str
+
+
+def disagreeing_src(repo: Repo, receipt: str) -> Src:
+    """Sums the frames in candidate_only and reference_only of a receipt."""
+    probes = _arr(
+        _obj(repo.json(receipt), receipt).get("probes"), f"{receipt} probes"
+    )
+    return [
+        "sum",
+        [
+            ["len", receipt, pointer("probes", index, side)]
+            for index in range(len(probes))
+            for side in ("candidate_only", "reference_only")
+        ],
+    ]
+
+
+def reel_candidates(
+    repo: Repo, pool: Sequence[Shown]
+) -> tuple[str | None, list[Candidate]]:
+    """Steps 2 and 3 of reel-v1: the first condition with candidates.
+
+    Reads only the pool runs' outcome rows and the candidates' receipts:
+    no repair outcome, feedback-probe result or predicate trace.
+    """
+    for label in _REEL_CONDITIONS:
+        found: list[Candidate] = []
+        for position, shown in enumerate(pool):
+            run = shown.run
+            for (each, item_id), item in sorted(run.rows.items()):
+                if (
+                    each == label
+                    and item.get("gold_status") == "ready"
+                    and run.outcome(each, item_id) == "silent_wrong"
+                ):
+                    receipt = run.receipt(label, item_id)
+                    found.append(
+                        Candidate(
+                            disagreeing=_int(
+                                repo.resolve(disagreeing_src(repo, receipt)),
+                                "disagreeing frames",
+                            ),
+                            position=position,
+                            item_id=item_id,
+                            label=label,
+                        )
+                    )
+        if found:
+            return label, found
+    return None, []
+
+
+def highlight_node(repo: Repo, captures: Captures, receipt: str) -> Node:
+    """Step 4 of reel-v1: the probe and the lowest frame to show first."""
+    probes = _arr(
+        _obj(repo.json(receipt), receipt).get("probes"), f"{receipt} probes"
+    )
+    for index in (place for place in _HIGHLIGHT if place < len(probes)):
+        probe = _obj(probes[index], f"{receipt} probe")
+        sides = [
+            (frame, side, position)
+            for side in ("candidate_only", "reference_only")
+            for position, frame in enumerate(_ints(probe.get(side), side))
+        ]
+        if not sides:
+            continue
+        frame, side, position = min(sides)
+        row_index = captures.index(
+            _text(probe.get("probe_id"), f"{receipt} probe_id")
+        )
+        return {
+            "probe": index,
+            "probe_id": repo.t(ptr(receipt, "probes", index, "probe_id")),
+            "frame": repo.v(ptr(receipt, "probes", index, side, position)),
+            "name": repo.t(frame_src(row_index, frame, "name")),
+            "kind": repo.t(frame_src(row_index, frame, "kind")),
+            "filter_selects": side == "candidate_only",
+            "request_selects": side == "reference_only",
+        }
+    raise ContractError("no_disagreement", f"{receipt} agrees on every probe")
+
+
+def _reel_pick(
+    repo: Repo, captures: Captures, run: Run, pick: Candidate
+) -> Document:
+    """The picked answer, its strips, highlight, trace and receipt panel."""
+    label, item_id = pick.label, pick.item_id
+    condition = run.condition(label)
+    receipt = run.receipt(label, item_id)
+    keys = {"condition": label, "item_id": item_id}
+    case_id = _text(run.rows[(label, item_id)].get("case_id"), "case_id")
+    position = run.completion[(label, item_id)]
+    not_measured = _obj(
+        _obj(repo.json(run.summary), run.summary).get("not_measured", {}),
+        f"{run.summary} not_measured",
+    )
+    trace, reason = trace_node(repo, run, label, item_id)
+    return {
+        "pick": {
+            "cond": label,
+            "item": item_id,
+            "case": case_id,
+            **run_header(repo, run),
+            "provider": repo.opt_t(
+                ptr(condition.completions, "completions", position, "provider")
+            ),
+            "condition": repo.t(
+                ptr(run.prepare, "conditions", condition.index, "label")
+            ),
+            "request": repo.t(
+                ["input", condition.prepared, item_id, "/intent"]
+            ),
+            "answer": answer_node(repo, run, label, item_id),
+            "reference_filter": repo.t(ptr(receipt, "reference_filter")),
+            "outcome": repo.t(row(run.outcomes, keys, "outcome")),
+            "disagreeing": repo.v(disagreeing_src(repo, receipt)),
+        },
+        "strips": probe_nodes(repo, captures, receipt, run.spec(case_id)),
+        "highlight": highlight_node(repo, captures, receipt),
+        "trace": trace,
+        "trace_reason": reason,
+        "receipt_panel": {
+            "sha256": repo.t(["sha256", receipt]),
+            "packet_set_hash": repo.t(
+                row(run.outcomes, keys, "packet_set_hash")
+            ),
+            "replay": replay_parts(repo, run, receipt),
+            "repair": (
+                repo.t(ptr(run.summary, "not_measured", "repair_at_1"))
+                if "repair_at_1" in not_measured
+                else None
+            ),
+        },
+        "repair_applies": label == "C4",
+    }
+
+
+def build_reel(
+    repo: Repo, captures: Captures, selection: Selection
+) -> Document:
+    """Projects the Disproof Reel by the pre-registered rule reel-v1.
+
+    Args:
+        repo: The repository.
+        captures: The committed frame tables.
+        selection: The shown runs and the pool, from ``select``.
+
+    Returns:
+        The rule id, the pool, the pick with its strips, highlight, trace
+        and receipt panel (or no pick when no pool answer is silent-wrong),
+        one bar per pool run, the headline counts and ``inputs_sha256``,
+        the SHA-256 of every input path and digest the Reel touched.
+    """
+    with repo.scope() as used:
+        repo.json(selection.ranking)
+        if selection.registered:
+            repo.json(TEST_RUNS)
+        pool = selection.pool
+        label, candidates = reel_candidates(repo, pool)
+        where: dict[str, list[str]] = {
+            "gold_status": ["ready"],
+            "outcome": ["silent_wrong"],
+        }
+        if label is not None:
+            where["condition"] = [label]
+        document: Document = {
+            "schema": "web-reel/1.0",
+            "rule": REEL_RULE,
+            "phase": "test" if selection.test_phase else "dev",
+            "pool": [
+                {**run_header(repo, shown.run), "role": shown.role}
+                for shown in pool
+            ],
+            "candidate_condition": label,
+            "candidates": repo.v(
+                ["sum", [shown.run.count(where) for shown in pool]]
+            ),
+            "pick": None,
+            "strips": [],
+            "highlight": None,
+            "trace": None,
+            "trace_reason": None,
+            "receipt_panel": None,
+            "repair_applies": None,
+            "repair": None,
+            "training": None,
+            "board": [
+                {
+                    **run_header(repo, shown.run),
+                    "role": shown.role,
+                    **segments(repo, shown.run),
+                }
+                for shown in pool
+            ],
+            "headline": {
+                name: repo.v(
+                    [
+                        "sum",
+                        [
+                            shown.run.count(
+                                {"gold_status": ["ready"], "outcome": outcomes}
+                            )
+                            for shown in pool
+                        ],
+                    ]
+                )
+                for name, outcomes in (
+                    ("compiled", list(_EXECUTED)),
+                    ("silent_wrong", ["silent_wrong"]),
+                )
+            },
+        }
+        if candidates:
+            pick = min(candidates)
+            document.update(
+                _reel_pick(repo, captures, pool[pick.position].run, pick)
+            )
+    document["inputs_sha256"] = hashlib.sha256(
+        render([[path, repo.inputs[path]] for path in sorted(used)])
+    ).hexdigest()
+    return document
+
+
 def build_site(
     repo: Repo, selection: Selection, source_commit: str
 ) -> Document:
@@ -1867,6 +2115,7 @@ def export(root: Path, source_commit: str) -> dict[str, bytes]:
     )
     files["board.json"] = render(build_board(repo, selection))
     files["methodology.json"] = render(build_methodology(repo, selection))
+    files["reel.json"] = render(build_reel(repo, captures, selection))
     files["routes.json"] = render(
         {
             "schema": "web-routes/1.0",
