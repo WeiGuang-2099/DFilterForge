@@ -6,7 +6,7 @@ import {Shell} from '@/app/_components/shell';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'DFilterForge Evaluation Lab',
+  title: {default: 'DFilterForge', template: '%s - DFilterForge'},
   description: 'Execution-grounded Wireshark display-filter evaluation.',
 };
 
