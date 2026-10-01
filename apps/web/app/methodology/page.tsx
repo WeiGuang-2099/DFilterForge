@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   title: 'Methodology',
 };
 
+const SHORTCUT_ABLATION = 'docs/ablations/006-shortcut-policy.md';
+
 // Names for the scored summary's not_measured keys. A key the page does not
 // know fails the build, so a new gap is never shown under the wrong name.
 const NOT_MEASURED: Readonly<Record<string, string>> = {
@@ -47,7 +49,12 @@ function Count({node}: {readonly node: NumNode}) {
   return <Num kind="int" node={node} />;
 }
 
-function MutantRow({name, counts}: {readonly name: string; readonly counts: Methodology['mutants']['all']}) {
+interface MutantRowProps {
+  readonly name: string;
+  readonly counts: Methodology['mutants']['all'];
+}
+
+function MutantRow({name, counts}: MutantRowProps) {
   return (
     <tr>
       <th scope="row">{name}</th>
@@ -196,7 +203,10 @@ export default function MethodologyPage() {
       </dl>
 
       <h2>Bootstrap</h2>
-      <p>Intervals come from case-level bootstrap resamples, as the anchor pass&apos;s summary records them.</p>
+      <p>
+        Intervals come from case-level bootstrap resamples, as the anchor pass&apos;s summary
+        records them.
+      </p>
       <dl>
         <Fact label="Ready cases resampled">
           <Count node={data.bootstrap.cases} />
@@ -245,8 +255,8 @@ export default function MethodologyPage() {
       <p>
         A filter that matches every labelled frame by counting frames, reading the capture clock
         or copying a generator constant scores shortcut, not strong exact. The{' '}
-        <a href={repositoryFile('docs/ablations/006-shortcut-policy.md')}>shortcut-policy ablation</a>{' '}
-        measured the policy on the gold and on the answers committed when it ran.
+        <a href={repositoryFile(SHORTCUT_ABLATION)}>shortcut-policy ablation</a> measured the
+        policy on the gold and on the answers committed when it ran.
       </p>
       <dl>
         <Fact label="Frame-number and time fields in the frozen catalog">

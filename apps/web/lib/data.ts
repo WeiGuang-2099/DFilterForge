@@ -51,8 +51,10 @@ const OP_ARITY: ReadonlyMap<string, number> = new Map([
 ]);
 
 // The exporter's allowed roots; a permalink is built from these paths.
-const INPUT_PATH =
-  /^(?:docs\/(?:results|decisions\/evidence|ablations\/evidence)\/[A-Za-z0-9._\/-]+|src\/dfilterforge\/held_out_freeze\.json)$/;
+const INPUT_PATH = new RegExp(
+  '^(?:docs/(?:results|decisions/evidence|ablations/evidence)/[A-Za-z0-9._/-]+' +
+    '|src/dfilterforge/held_out_freeze[.]json)$',
+);
 const COMMIT = /^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$/;
 
 class DataError extends Error {}

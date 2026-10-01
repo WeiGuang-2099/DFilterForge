@@ -116,7 +116,13 @@ function mismatches(value: Sourced): string[] {
 
 /** Decodes the entities React writes into attribute values. */
 function decodeEntities(text: string): string {
-  const named: Readonly<Record<string, string>> = {amp: '&', apos: "'", gt: '>', lt: '<', quot: '"'};
+  const named: Readonly<Record<string, string>> = {
+    amp: '&',
+    apos: "'",
+    gt: '>',
+    lt: '<',
+    quot: '"',
+  };
   return text.replace(
     /&(?:#([0-9]+)|#x([0-9a-fA-F]+)|([a-z]+));/g,
     (entity, decimal?: string, hex?: string, name?: string) => {

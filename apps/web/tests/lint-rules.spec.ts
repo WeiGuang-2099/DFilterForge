@@ -112,7 +112,9 @@ for (const {name, code, ...rest} of PLANTED) {
 }
 
 test('lint fails on dangerouslySetInnerHTML everywhere, tests included', async () => {
-  const code = 'export const F = ({h}: {h: string}) => <div dangerouslySetInnerHTML={{__html: h}} />;';
+  const code =
+    'export const F = ({h}: {h: string}) => ' +
+    '<div dangerouslySetInnerHTML={{__html: h}} />;';
 
   expect(await guardIds(code)).toEqual(['react/no-danger']);
   expect(await guardIds(code, 'tests/fixture.tsx')).toEqual(['react/no-danger']);
