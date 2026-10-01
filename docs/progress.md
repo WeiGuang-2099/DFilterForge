@@ -248,7 +248,10 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   - 66297e0 makes the site a static export under `/DFilterForge`, served by
     `scripts/serve.mjs` and tested with bundled Chromium. The base path is read
     from `PAGES_BASE_PATH` in `apps/web/scripts/base_path.mjs` only; an empty
-    value serves the site at the domain root.
+    value serves the site at the domain root. Its default, `/DFilterForge`,
+    is also written in the Dockerfile's `ARG`, the composite action's
+    `base-path` input and the CI loopback probe, which cannot import the
+    module; `apps/web/tests/base-path.spec.ts` pins those three to it.
   - 9126742 commits `docs/decisions/evidence/web/captures.json`.
   - 3df8722 adds `scripts/export_web_data.py`.
   - 0dcd8df projects the Reel by rule `reel-v1`.

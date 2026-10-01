@@ -45,6 +45,19 @@ import it. An empty value builds and serves the site at the domain root, as a
 host such as Cloudflare Pages needs, with no code change. Hosting is still
 undecided.
 
+The default itself is written in four places, because three files cannot
+import the module:
+- `DEFAULT_BASE_PATH` in `apps/web/scripts/base_path.mjs`;
+- `ARG PAGES_BASE_PATH` in `apps/web/Dockerfile`. A Docker build always sets
+  the variable from it, so the module's own default never applies there;
+- the `base-path` input default of `.github/actions/web-site/action.yml`,
+  which the build and the Playwright step both receive;
+- the loopback probe URL of the compose smoke in `.github/workflows/ci.yml`.
+
+`apps/web/tests/base-path.spec.ts` fails when any of the last three differs
+from the module's default, so a rename cannot leave CI green on the old
+prefix.
+
 The site is built in Docker. `apps/web/Dockerfile` has six stages: `export`,
 `data`, `deps`, `build`, `out` and `site`. The exporter and `next build` each
 run under `RUN --network=none`. CI's web job builds through the composite
