@@ -20,6 +20,8 @@ node_modules/
 .next/
 *.tsbuildinfo
 out/
+# Exported from committed files at build time; never committed.
+apps/web/data/
 coverage/
 playwright-report/
 test-results/
