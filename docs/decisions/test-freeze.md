@@ -74,13 +74,15 @@ the printed prefixes in `docs/protocol.md`, keep the receipt as
 
 ## Limits
 
-No code checks pass timing; the protocol states it and run manifests record
-it. The [test-run registry](test-runs.md) names every baseline test run, and the
-frozen-prompt test checks each published one against it. A call refuses a
-hashed-file edit made after its prepare (`prepare_code_mismatch`) before any
-request. The frozen-prompt test also fails on it, on a host and in the CI step
-that runs it with `docs/` mounted, while a prompt set under `docs/results`
-awaits a call. Since owner ruling G of 2026-10-01 the registry
+Only `scripts/test_passes.py` checks pass timing: it starts pass B only within
+24 hours of the counted pass A's first invocation, as the protocol requires. A
+call made by hand is not checked, and the run manifests record the timing
+either way. The [test-run registry](test-runs.md) names every baseline test
+run, and the frozen-prompt test checks each published one against it. A call
+refuses a hashed-file edit made after its prepare (`prepare_code_mismatch`)
+before any request. The frozen-prompt test also fails on it, on a host and in
+the CI step that runs it with `docs/` mounted, while a prompt set under
+`docs/results` awaits a call. Since owner ruling G of 2026-10-01 the registry
 (`evidence/test-runs.json`) decides that for a prompt set it names, as a
 prepare or as a run's own directory: it stays guarded, a `run_manifest.json`
 beside it or not, while any run over that prepare is `registered`, or is an
