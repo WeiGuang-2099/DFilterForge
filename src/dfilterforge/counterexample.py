@@ -18,11 +18,26 @@ The capture is untrusted input. Every offset is checked against the bytes
 its record holds, a compression pointer in a DNS question is refused, and
 any other surprise stops the round with ``facts_unreadable`` rather than
 showing a value tshark has not confirmed.
+
+A card comes from running the answer on its case's feedback specification
+through the unchanged ``live.evaluate_live`` and keeping only which frames
+it missed and which it selected wrongly. An answer that raises a code that
+makes an answer invalid gets an error card naming the code and, for a
+catalog or compile code, the field of its first predicate in reading order
+that raises that code alone. An answer the probe cannot separate gets no
+card. Otherwise the card holds at most three disagreeing frames, taken
+alternately from the missed and the wrongly selected ones in frame order,
+skipping a frame equal to one already taken but for its number and any
+ephemeral port. A card is canonical JSON of at most 1,024 bytes.
+
+No module that builds prompts, calls a model or scores imports this one.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping, Sequence
+from datetime import datetime
+from datetime import timezone
 import hashlib
 import ipaddress
 import os
@@ -37,10 +52,26 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+from dfilterforge.canonical import canonical_json
+from dfilterforge.catalog_runtime import bind_catalog
+from dfilterforge.compiler import compile_intent
+from dfilterforge.compiler import CompileError
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.evaluation import ProbeExpectationV1
+from dfilterforge.evaluation import ProbeResultV1
+from dfilterforge.evaluation import SemanticSpecV1
+from dfilterforge.field_catalog import CatalogError
 from dfilterforge.intent_ir import FrozenModel
+from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.intent_ir import validate_field_name
+from dfilterforge.intent_ir import walk_predicates
+from dfilterforge.live import evaluate_live
+from dfilterforge.model_feedback import FeedbackProbes
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
+from dfilterforge.scoring import candidate_error_code
+from dfilterforge.scoring import CANDIDATE_ERROR_CODES
+from dfilterforge.scoring import CANDIDATE_RESOURCE_CODES
 
 # Bit i of tshark's 12-bit tcp.flags value, in that order; the three bits
 # above AE are reserved and refused.
@@ -68,6 +99,16 @@ SHOWN_FIELDS: tuple[str, ...] = (
     "dns.qry.type",
 )
 MAX_FRAME_NUMBER = 100_000
+CARD_MAX_BYTES = 1024
+MAX_CARD_FRAMES = 3
+MAX_ERROR_FIELD_BYTES = 128
+# The generator's ephemeral ports; the repeat check reads them as one value.
+EPHEMERAL_PORTS = range(41000, 51255)
+_PORT_FIELDS = ("tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport")
+# The receipt evaluate_live returns is discarded but for two frame lists,
+# so its run identity is fixed and reaches nothing.
+_RUN_ID = "counterexample"
+_CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
 # tshark shows the DNS header fields for DNS and for mDNS, which it files
 # under its own protocol, so the frames to decode are the ones it gives the
 # DNS flags; the protocol test ``dns`` would leave mDNS frames without them.
@@ -477,3 +518,288 @@ def read_frame_facts(
                 f"tshark does not confirm the facts of frame {frame}",
             )
     return MappingProxyType(facts)
+
+
+class FrameFactV1(HeaderFactsV1):
+    """One frame where the answer and the labels disagree."""
+
+    frame: int = Field(ge=1, le=MAX_FRAME_NUMBER)
+    answer_matched: bool
+    should_match: bool
+
+    @model_validator(mode="after")
+    def validate_disagreement(self) -> "FrameFactV1":
+        """Shows only a frame the answer got wrong."""
+        if self.answer_matched == self.should_match:
+            raise ValueError("a card frame must be one the answer got wrong")
+        return self
+
+
+class FramesCardV1(FrozenModel):
+    """Up to three disagreeing frames, in the order they were chosen."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    frames: tuple[FrameFactV1, ...] = Field(
+        min_length=1, max_length=MAX_CARD_FRAMES
+    )
+
+    @model_validator(mode="after")
+    def validate_frames(self) -> "FramesCardV1":
+        """Shows each frame once."""
+        numbers = [fact.frame for fact in self.frames]
+        if len(set(numbers)) != len(numbers):
+            raise ValueError("a card shows each frame once")
+        return self
+
+
+class ErrorCardV1(FrozenModel):
+    """The code that makes the answer invalid, and the field that raised it.
+
+    ``field`` is the answer's own text, so it must be a field name of at
+    most 128 bytes.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    error: str
+    field: str | None = None
+
+    @field_validator("error")
+    @classmethod
+    def validate_error(cls, value: str) -> str:
+        """Accepts only a code that makes an answer invalid."""
+        if value not in CANDIDATE_ERROR_CODES:
+            raise ValueError("error must make an answer invalid")
+        return value
+
+    @field_validator("field")
+    @classmethod
+    def validate_field(cls, value: str | None) -> str | None:
+        """Accepts only a field name of at most 128 bytes."""
+        if value is None:
+            return None
+        if len(value.encode("utf-8")) > MAX_ERROR_FIELD_BYTES:
+            raise ValueError("field exceeds 128 bytes")
+        return validate_field_name(value)
+
+
+CounterexampleCardV1: TypeAlias = FramesCardV1 | ErrorCardV1
+
+
+def card_json(card: CounterexampleCardV1) -> str:
+    """Returns a card's canonical JSON under the tshark field names."""
+    return canonical_json(
+        card.model_dump(mode="json", by_alias=True, exclude_none=True)
+    )
+
+
+def _card_bytes(frames: Sequence[FrameFactV1]) -> int:
+    return len(card_json(FramesCardV1(frames=tuple(frames))).encode("utf-8"))
+
+
+def _alternate(
+    missed: Sequence[int], wrong: Sequence[int]
+) -> Iterator[tuple[int, bool]]:
+    """Yields missed and wrongly selected frames in turn, with the verdict."""
+    for index in range(max(len(missed), len(wrong))):
+        if index < len(missed):
+            yield missed[index], False
+        if index < len(wrong):
+            yield wrong[index], True
+
+
+def _repeat_key(fact: FrameFactV1) -> str:
+    """A frame's entry without its number, every ephemeral port one value."""
+    values = fact.model_dump(
+        by_alias=True, exclude_none=True, exclude={"frame"}
+    )
+    for name in _PORT_FIELDS:
+        port = values.get(name)
+        if isinstance(port, int) and port in EPHEMERAL_PORTS:
+            values[name] = "ephemeral"
+    return canonical_json(values)
+
+
+def frames_card(
+    probe: ProbeResultV1,
+    facts: Mapping[int, HeaderFactsV1],
+    max_bytes: int = CARD_MAX_BYTES,
+) -> FramesCardV1:
+    """Chooses the frames a card shows and caps its size.
+
+    Only the missed and the wrongly selected frames are read from the
+    probe result; no other label, count or filter reaches the card.
+
+    Args:
+        probe: The answer's result on its feedback probe.
+        facts: Confirmed facts of every frame of the capture.
+        max_bytes: The cap on the card's canonical JSON.
+
+    Returns:
+        A card of at most three frames, whole frames dropped from its end
+        while it exceeds the cap.
+
+    Raises:
+        CounterexampleError: With code ``card_aborted`` when there is no
+            frame to show, a frame has no facts or one frame alone exceeds
+            the cap.
+    """
+    chosen: list[FrameFactV1] = []
+    seen: set[str] = set()
+    missed, wrong = sorted(probe.reference_only), sorted(probe.candidate_only)
+    for frame, matched in _alternate(missed, wrong):
+        if frame not in facts:
+            raise CounterexampleError(
+                "card_aborted", f"Frame {frame} has no confirmed facts"
+            )
+        fact = FrameFactV1.model_validate(
+            {
+                "frame": frame,
+                "answer_matched": matched,
+                "should_match": not matched,
+                **facts[frame].model_dump(by_alias=True, exclude_none=True),
+            }
+        )
+        key = _repeat_key(fact)
+        if key in seen:
+            continue
+        seen.add(key)
+        chosen.append(fact)
+        if len(chosen) == MAX_CARD_FRAMES:
+            break
+    if not chosen:
+        raise CounterexampleError("card_aborted", "No frame disagrees")
+    while len(chosen) > 1 and _card_bytes(chosen) > max_bytes:
+        chosen.pop()
+    if _card_bytes(chosen) > max_bytes:
+        raise CounterexampleError("card_aborted", "One frame exceeds the cap")
+    return FramesCardV1(frames=tuple(chosen))
+
+
+class CardBuilder:
+    """Builds cards on the feedback probes, reading each capture once."""
+
+    def __init__(
+        self, feedback: FeedbackProbes, runner: TsharkRunner | None = None
+    ) -> None:
+        self._feedback = feedback
+        self._runner = runner if runner is not None else TsharkRunner()
+        self._captures = {
+            probe.probe_id: probe.capture_path for probe in feedback.probes
+        }
+        self._facts: dict[tuple[str, str], Mapping[int, HeaderFactsV1]] = {}
+
+    def card(
+        self, case_id: str, candidate: IntentIrV1 | str
+    ) -> CounterexampleCardV1 | None:
+        """Builds the card of one answer from its case's feedback probe.
+
+        Args:
+            case_id: The ready gold case the answer's item routes to.
+            candidate: The answer's typed IR, or a display filter.
+
+        Returns:
+            An error card, a frames card, or None when the feedback probe
+            cannot tell the answer from the labels.
+
+        Raises:
+            CounterexampleError: With code ``card_aborted`` when the failure
+                is the harness's, or a facts code from reading the capture.
+        """
+        spec = self._feedback.specs.get(case_id)
+        if spec is None or len(spec.probes) != 1:
+            raise CounterexampleError(
+                "card_aborted", "No single-probe feedback specification"
+            )
+        try:
+            receipt, _ = evaluate_live(
+                spec,
+                candidate,
+                self._feedback.capture_dir,
+                run_id=_RUN_ID,
+                created_at=_CREATED_AT,
+                code_revision=_RUN_ID,
+                runner=self._runner,
+            )
+        except DFilterForgeError as error:
+            return self._error_card(spec, candidate, error)
+        (probe,) = receipt.probes
+        if probe.exact:
+            return None
+        return frames_card(probe, self.facts(spec.probes[0]))
+
+    def facts(
+        self, expected: ProbeExpectationV1
+    ) -> Mapping[int, HeaderFactsV1]:
+        """Returns a feedback capture's confirmed facts, read on first use."""
+        key = (expected.probe_id, expected.capture_sha256)
+        if key not in self._facts:
+            capture = self._captures.get(expected.probe_id)
+            if capture is None:
+                raise CounterexampleError(
+                    "card_aborted", "The probe is not a feedback capture"
+                )
+            self._facts[key] = read_frame_facts(
+                capture, expected.capture_sha256, self._runner
+            )
+        return self._facts[key]
+
+    def _error_card(
+        self,
+        spec: SemanticSpecV1,
+        candidate: IntentIrV1 | str,
+        error: DFilterForgeError,
+    ) -> ErrorCardV1:
+        """Charges a code to the answer as scoring would, or stops."""
+        code = candidate_error_code(error)
+        if code is None or (
+            code in CANDIDATE_RESOURCE_CODES
+            and not self._reference_runs_clean(spec)
+        ):
+            raise CounterexampleError(
+                "card_aborted", f"{spec.task_id}: {error.code}"
+            ) from error
+        field = None
+        if isinstance(error, (CatalogError, CompileError)) and isinstance(
+            candidate, IntentIrV1
+        ):
+            field = self._refused_field(candidate, code)
+        return ErrorCardV1(error=code, field=field)
+
+    def _reference_runs_clean(self, spec: SemanticSpecV1) -> bool:
+        """Reruns the case's canonical IR, as scoring does for a bound."""
+        try:
+            receipt, _ = evaluate_live(
+                spec,
+                spec.canonical_ir,
+                self._feedback.capture_dir,
+                run_id=f"{_RUN_ID}-recheck",
+                created_at=_CREATED_AT,
+                code_revision=_RUN_ID,
+                runner=self._runner,
+            )
+        except DFilterForgeError:
+            return False
+        return all(probe.exact for probe in receipt.probes)
+
+    def _refused_field(self, candidate: IntentIrV1, code: str) -> str | None:
+        """The field of the first predicate that raises ``code`` alone.
+
+        The answer-level code comes from binding the sorted field names, so
+        each predicate is bound and compiled on its own, in reading order.
+        """
+        for _, predicate in walk_predicates(candidate.expression):
+            leaf = IntentIrV1(expression=predicate)
+            try:
+                compile_intent(leaf, bind_catalog(self._runner, (leaf,)))
+            except DFilterForgeError as error:
+                if candidate_error_code(error) is None:
+                    raise CounterexampleError(
+                        "card_aborted", f"Field lookup failed: {error.code}"
+                    ) from error
+                if error.code == code:
+                    field = predicate.field
+                    fits = len(field.encode("utf-8")) <= MAX_ERROR_FIELD_BYTES
+                    return field if fits else None
+        return None
