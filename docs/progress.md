@@ -464,16 +464,50 @@ Reports under the ignored `artifacts/` are not project evidence.
   `scripts/test_passes.py` 97%), the benchmark gate, adequacy, prepare,
   recall and the 20 committed re-score checks: overall status 0.
 
+## Test baselines sent and published: 2026-10-02
+
+The owner sent every registered baseline test pass with one
+`scripts/test_passes.py` run from `main` at 7aaade8 (summary in the ignored
+`artifacts/test-passes/summary-2026-10-01.json`; its date is UTC). All five
+ended `done (complete)`; no fallback (`-fb`) or outage re-run (`-r2`) row was
+needed, so those eleven rows stay `unused`.
+
+| Run | Completed | Served | Charged at most (USD) |
+| --- | ---: | --- | ---: |
+| `test-qwen3-32b-2026-09-26` (pass A) | 448 / 448 | DeepInfra | 0.0483 |
+| `test-qwen3-32b-passb-2026-09-26` (pass B) | 448 / 448 | DeepInfra | 0.0493 |
+| `test-qwen3.5-9b-2026-09-26` | 444 / 448 | DeepInfra | 0.0530 |
+| `test-qwen3.5-122b-a10b-2026-09-26` | 448 / 448 | Novita | 0.3988 |
+| `test-deepseek-v4-pro-0813-2026-09-26` | 426 / 448 | DeepInfra | 0.5473 |
+
+- Total charged upper bound 1.0967 USD. Thinking was honoured on every pass.
+- Pass B started at 19:29:54Z, 45 minutes after pass A (18:45:12Z), inside the
+  24-hour window.
+- The 26 items without a completed answer all ended on HTTP 429 after three
+  attempts: 22 for deepseek-v4-pro-0813 (21 in C1, 1 in C4) and 4 for
+  qwen3.5-9b (all C4). Under the protocol's retry rule the last attempt counts,
+  so they will score as `provider_failed` and stay in every denominator.
+  deepseek's C1 row is therefore depressed by rate limiting, which any reading
+  of its C2-C1 comparison must state.
+- Each run was published with `scripts/model_run.py publish` into
+  `docs/results/<run id>/`; the four new directories were first seeded with the
+  committed test `prepare.json` and `prepared/`, and pass A's directory kept
+  its committed prompts and controls byte for byte. The five rows in
+  `test-runs.json` are now `published` with commit `7aaade8`, so every row is
+  final and the frozen-prompt guard releases (guard, registry, test-pass and
+  held-out tests: 99 passed with `docs/` mounted).
+- Nothing is scored yet: owner decision OD4 holds scoring until the
+  `repair-cards` branch is merged.
+
 ## Planned next
 
-1. The [registered test runs](decisions/test-runs.md), sent with
-   `scripts/test_passes.py`: qwen/qwen3-32b passes A and B, then the slot
-   winners; the 12 hashed files stay unchanged until the last one, and no test
-   run is scored before the `repair-cards` branch merges.
+1. Score the five published test baselines once `repair-cards` is merged:
+   condition comparisons with case-level intervals, the A/A pair report, and
+   the baseline part of `docs/results/locked-test-v1.md`.
 2. The [repair round](decisions/repair-round.md) as registered: the
    `repair-cards` branch (card code, dev plans), then `repair-arms` with the
-   dev round, then, after the last baseline request, the test round and the
-   locked test result. Then the hosted static page generated from receipts,
+   dev round, then the test round (the last baseline request has been sent)
+   and the locked test result. Then the hosted static page generated from receipts,
    its Disproof Reel chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
