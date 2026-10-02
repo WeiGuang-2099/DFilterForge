@@ -86,8 +86,10 @@ temporary directory only, prints each row's state and every step the
 batch would take next, and sends and writes nothing. The batch
 never publishes, scores or reads gold; its summary gives each row's state
 and what the maintainer publishes, with each round's ``dfilterforge
-repair`` arguments. The step log, the summaries and the lock are written
-under artifacts/repair-arms/.
+repair`` arguments, and the charged upper bound of every run, each first
+run an ``-r2`` re-run replaced included, rounded up where it is printed.
+The step log, the summaries and the lock are written under
+artifacts/repair-arms/.
 
 Exit codes:
     0    Every row has a final state: done, not run or unused.
@@ -372,6 +374,15 @@ def _now() -> str:
 
 def _micro(usd: float) -> int:
     return round(usd * db.MICRO)
+
+
+def usd_up(usd: float) -> str:
+    """Spells a spend upper bound to four decimals, rounded up.
+
+    A bound rounded to nearest could print below the bound it states.
+    """
+    ten_thousandths = -(-_micro(usd) // 100)
+    return f"{ten_thousandths / 10_000:.4f}"
 
 
 def _sha256(path: Path) -> str:
@@ -1568,6 +1579,15 @@ def summary_row(row: Row, reading: Reading, ctx: Context) -> dict[str, Any]:
         run["action"] = run.pop("state")
         run["action_reason"] = run.pop("why")
         run.pop("commit_to", None)
+    # The first run an -r2 re-run replaced is still spent, and its
+    # manifest is kept as evidence, so its charges count here too.
+    first: dict[str, Any] | None = None
+    replaced = ctx.view(row.run_id).manifest
+    if reading.run_id == row.rerun_id and replaced is not None:
+        first = {
+            "run_id": row.run_id,
+            "charged_usd_upper_bound": replaced.charged_usd_upper_bound,
+        }
     return {
         "number": row.number,
         "slot": row.slot,
@@ -1584,7 +1604,17 @@ def summary_row(row: Row, reading: Reading, ctx: Context) -> dict[str, Any]:
         "kind": reading.kind,
         "maintainer": publish_step(row, reading, ctx),
         "run": run,
+        "first_run": first,
     }
+
+
+def charged_usd(row: dict[str, Any]) -> float:
+    """Returns a summary row's charged upper bound, any first run's too."""
+    run: dict[str, Any] = row["run"]
+    first: dict[str, Any] = row["first_run"] or {}
+    return float(run.get("charged_usd_upper_bound", 0.0)) + float(
+        first.get("charged_usd_upper_bound", 0.0)
+    )
 
 
 def round_line(base: str, rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -1632,9 +1662,7 @@ def summarize(ctx: Context) -> dict[str, Any]:
     """Reads every row's state from the run directories."""
     rows = [summary_row(row, read_row(row, ctx), ctx) for row in ctx.plan.rows]
     bases = dict.fromkeys(row.base_run for row in ctx.plan.rows)
-    spend = sum(
-        float(row["run"].get("charged_usd_upper_bound", 0.0)) for row in rows
-    )
+    spend = sum(charged_usd(row) for row in rows)
     return {
         "written_at": _now(),
         "split": ctx.plan.split,
@@ -1662,8 +1690,14 @@ def _row_line(row: dict[str, Any]) -> str:
         line += (
             f"; {run['completed']}/{row['items']} completed; reasoning"
             f" {run['reasoning_state']}; served {served}; last stop"
-            f" {run['stop_reasons'][-1]}; {run['charged_usd_upper_bound']:.4f}"
-            " USD charged at most"
+            f" {run['stop_reasons'][-1]};"
+            f" {usd_up(run['charged_usd_upper_bound'])} USD charged at most"
+        )
+    first = row["first_run"]
+    if first is not None:
+        line += (
+            f"; its first run {first['run_id']} charged at most"
+            f" {usd_up(first['charged_usd_upper_bound'])} USD"
         )
     maintainer = row["maintainer"]
     if "publish" in maintainer:
@@ -1692,9 +1726,11 @@ def write_summary(ctx: Context) -> tuple[Path, Path]:
     lines.append("")
     for line in document["rounds"]:
         lines.append(f"{line['base_run']}: {line['next']}")
+    total = float(document["charged_usd_upper_bound_total"])
     lines.append(
-        "total charged upper bound:"
-        f" {document['charged_usd_upper_bound_total']:.4f} USD"
+        f"total charged upper bound: {usd_up(total)} USD, rounded up"
+        f" ({total:.6f} exact), every first run an -r2 re-run replaced"
+        " included"
     )
     text_path = out_dir / f"{name}.txt"
     text_path.write_text(

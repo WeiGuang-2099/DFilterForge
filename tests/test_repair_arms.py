@@ -1032,6 +1032,54 @@ def test_an_outage_is_re_run_once_from_scratch_under_its_r2_id(
     ) in text.read_text(encoding="utf-8").splitlines()[0]
 
 
+def test_the_summary_counts_the_first_run_an_r2_re_run_replaced(
+    bench: Bench,
+) -> None:
+    script = (
+        bench.keyless()
+        + [OUTAGE, refuse("api_key_missing"), COMPLETE]
+        + [COMPLETE] * 11
+    )
+    assert bench.run(script) == 0
+    # The bound is every run manifest's, the outage's included.
+    manifests = list(
+        (bench.root / ra.PREPARE_ROOT).glob("*/runs/*/run_manifest.json")
+    )
+    assert len(manifests) == 13
+    read = RunManifestV1.model_validate_json
+    charged = sum(
+        read(path.read_bytes()).charged_usd_upper_bound for path in manifests
+    )
+    summary = bench.summary()
+    assert summary["charged_usd_upper_bound_total"] == pytest.approx(charged)
+    assert charged == pytest.approx(13 * _ITEMS * 10 / db.MICRO)
+    row = bench.rows()[ANCHOR_RES]
+    assert row["counted_run_id"] == _r2(ANCHOR_RES)
+    assert row["first_run"] == {
+        "run_id": ANCHOR_RES,
+        "charged_usd_upper_bound": pytest.approx(_ITEMS * 10 / db.MICRO),
+    }
+    assert bench.rows()[ANCHOR_BARE]["first_run"] is None
+    text = max((bench.root / ra.OUT_DIR).glob("summary-dev-*.txt"))
+    lines = text.read_text(encoding="utf-8").splitlines()
+    assert (
+        f"; 0.0001 USD charged at most; its first run {ANCHOR_RES} charged"
+        " at most 0.0001 USD;"
+    ) in lines[0]
+    assert lines[-1] == (
+        "total charged upper bound: 0.0003 USD, rounded up (0.000260 exact),"
+        " every first run an -r2 re-run replaced included"
+    )
+
+
+def test_a_printed_spend_bound_is_rounded_up() -> None:
+    assert ra.usd_up(0.00024) == "0.0003"
+    assert ra.usd_up(0.00021) == "0.0003"
+    assert ra.usd_up(0.0002) == "0.0002"
+    assert ra.usd_up(0.547306) == "0.5474"
+    assert ra.usd_up(0.0) == "0.0000"
+
+
 def test_an_outage_on_the_re_run_reports_the_row_not_run(bench: Bench) -> None:
     script = (
         bench.keyless()

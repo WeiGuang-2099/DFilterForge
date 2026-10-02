@@ -421,7 +421,9 @@ the summary gives:
   `docs/decisions/evidence/repair-arms/<run id>/`, which keeps its
   `run_manifest.json` and `attempts/`;
 - for a row counted by its `-r2` re-run, the same evidence directory for the
-  first run the re-run replaces.
+  first run the re-run replaces;
+- the charged upper bound of its run and of any first run its re-run
+  replaces. The total counts both, and every printed bound is rounded up.
 
 For each round it gives the `dfilterforge repair` arguments, with `--not-run
 ARM` for each arm the gate stopped.
