@@ -43,6 +43,7 @@ from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievalV1
+from dfilterforge.model_client import API_KEY_ENV
 
 _ROOT = Path(__file__).resolve().parents[1]
 Fields = dict[str, Any]
@@ -1941,6 +1942,44 @@ def test_an_unexpected_error_is_a_stop_never_a_refusal(bench: Bench) -> None:
         for line in bench.printed
     )
     assert not (bench.root / ra.OUT_DIR / ra.LOCK_NAME).exists()
+
+
+def test_the_real_invoker_withholds_the_key_from_a_keyless_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only a paid call's child sees the key; a preflight child never does.
+
+    Every other test replaces the invoker, so this runs the one the batch
+    builds, against a child that reports whether the key reached it.
+    """
+    monkeypatch.setenv(API_KEY_ENV, "not-a-credential")
+    child = "\n".join(
+        [
+            "import json, os, sys",
+            f"seen = {API_KEY_ENV!r} in os.environ",
+            "code = 'key_present' if seen else 'api_key_missing'",
+            "print(json.dumps({'error': {'code': code}}), file=sys.stderr)",
+            "sys.exit(9 if seen else 2)",
+        ]
+    )
+    argv = [
+        sys.executable,
+        "-c",
+        child,
+        "--prepare-dir",
+        f"{ra.PREPARE_ROOT}/{ANCHOR_RES}",
+        "--run-id",
+        ANCHOR_RES,
+    ]
+    printed: list[str] = []
+    invoke = ra.subprocess_invoke(tmp_path, printed.append, 5.0)
+
+    withheld = invoke(argv, False)
+    sent = invoke(argv, True)
+
+    assert (withheld.exit_code, withheld.error_code) == (2, "api_key_missing")
+    assert (sent.exit_code, sent.error_code) == (9, "key_present")
+    assert "not-a-credential" not in "\n".join(printed)
 
 
 def test_the_real_follow_up_reports_a_refusal_code(
