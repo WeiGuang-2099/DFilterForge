@@ -565,16 +565,178 @@ needed, so those eleven rows stay `unused`.
 - Nothing is scored yet: owner decision OD4 holds scoring until the
   `repair-cards` branch is merged.
 
+## Test baselines scored: 2026-10-02
+
+- **Branch.** `score-test-baselines` starts from `origin/main` at 0623248,
+  where PR #16 merged `repair-cards`, so OD4 no longer holds scoring. It adds
+  thirteen commits: four for the scoring, seven for the review fixes and two
+  for the final check. `git diff --name-only 0623248` lists only the five `scored/`
+  trees, `docs/results/locked-test-v1.md`, the pair evidence,
+  `tests/test_pair_report.py`, the CI workflow and this file: no
+  prepare-hashed file and no runner, live or replay code changed. No model
+  request was sent.
+- **Scored** (c3b9c5c). `dfilterforge score` with the code at 0623248, in
+  `dfilterforge-test:0.1.0` with `src/` mounted read-only and no network,
+  wrote `scored/` for the five published runs; `score --check` then reported
+  no difference for each (logs in the ignored `artifacts/ci/`). Outcomes over
+  each pass's 448 items:
+
+  | Run | `strong_exact` | `shortcut` | `silent_wrong` | `invalid` | `malformed` | `abstained` | `false_ready` | `provider_failed` |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | [`test-qwen3-32b-2026-09-26`](results/test-qwen3-32b-2026-09-26/scored/summary.json) | 185 | 0 | 49 | 60 | 9 | 135 | 10 | 0 |
+  | [`test-qwen3-32b-passb-2026-09-26`](results/test-qwen3-32b-passb-2026-09-26/scored/summary.json) | 184 | 1 | 47 | 59 | 12 | 135 | 10 | 0 |
+  | [`test-qwen3.5-9b-2026-09-26`](results/test-qwen3.5-9b-2026-09-26/scored/summary.json) | 154 | 0 | 51 | 43 | 27 | 161 | 8 | 4 |
+  | [`test-qwen3.5-122b-a10b-2026-09-26`](results/test-qwen3.5-122b-a10b-2026-09-26/scored/summary.json) | 218 | 2 | 38 | 34 | 6 | 146 | 4 | 0 |
+  | [`test-deepseek-v4-pro-0813-2026-09-26`](results/test-deepseek-v4-pro-0813-2026-09-26/scored/summary.json) | 247 | 0 | 27 | 22 | 4 | 106 | 20 | 22 |
+
+  The 26 HTTP 429 items scored `provider_failed`, as expected. CI's re-score
+  loop globs `docs/results/*/scored`, so it now checks 25 committed outputs
+  (20 before) with no workflow change.
+- **A/A pair evidence** (f6ea9e8). `dfilterforge pair` over pass A and
+  pass B, in the same image, wrote
+  [`evidence/aa-test-qwen3-32b-2026-09-26.json`](decisions/evidence/aa-test-qwen3-32b-2026-09-26.json).
+  - Settings and prompts are identical in all four conditions. From C1 to
+    C4, the changed answers are 42, 42, 39 and 46 of 112, the changed
+    outcomes 8, 9, 12 and 19, and the flipped cases 4, 5, 5 and 7 of 40.
+  - The noise bounds are 4.899 for C4-C2 and C4-C3 and 4.243 for C2-C1.
+    C4-C2 (net -1 of 21 discordant; pass B -3 of 23) and C2-C1 (-2 of 12;
+    -1 of 11) are within rerun noise in both passes. C4-C3 (-5 of 21; -9 of
+    21) is beyond it in both, with the sign not reversed.
+  - A new docs-mounted test derives the report again from the committed
+    passes and requires the evidence byte for byte, plus those counts. CI's
+    pair step now runs it beside the dev rerun test. With an evidence copy
+    whose first `changed_answers` reads 41 instead of 42, mounted over the
+    committed file, it failed (1 failed).
+- **Locked test result, baseline half** (e3aaf65):
+  [`results/locked-test-v1.md`](results/locked-test-v1.md). A local script
+  (`artifacts/ci/locked_test_v1.py`, ignored, with `--check`) generates it
+  from the files it links, and asserts the preconditions of each sentence
+  the page makes. Repair is marked not measured. The findings:
+  - **Primary, C4-C2.** No model's interval excludes zero: -0.075
+    (qwen3-32b), -0.100 (qwen3.5-9b), -0.063 (qwen3.5-122b-a10b) and 0.088
+    (deepseek-v4-pro-0813). Only qwen3.5-9b (net -6) and deepseek (+7)
+    exceed the bound, which is extrapolated beyond qwen3-32b, and they point in
+    opposite directions. qwen3.5-9b's reading is confounded by rate
+    limiting: over the 37 ready cases its C4 failures do not touch, its net
+    is -4 of 18, within the bound. The page states this as a negative result
+    for the typed contract.
+  - **C2-C1.** The only interval of the 12 comparisons that excludes zero is
+    deepseek's 0.138 [0.013, 0.263]. It is confounded by rate limiting: C1
+    lost 20 ready items in 15 cases, and 10 of the 11 cases where C2 was
+    better hold a C1 provider failure. Over the 25 ready cases its C1
+    failures do not touch, C2 is better in 1 and C1 in 3 (net -2, mean
+    difference -0.040, too few discordant cases for a reading): the sign
+    reverses.
+  - **C4-C3.** qwen3-32b's -0.100 [-0.250, 0.063] (net -5) is beyond rerun
+    noise, and so is pass B's -0.138 [-0.275, 0.000] (net -9); the sign is
+    not reversed. Both intervals include zero, so only the net count is
+    beyond noise. qwen3.5-122b-a10b's -0.125 [-0.263, 0.000] (net -9) is
+    beyond the extrapolated bound. No interval excludes zero.
+  - **Field context.** It is the same for every model: full coverage 0.350
+    and mean recall 0.592, at 16 names.
+  - **qwen3.5-9b's rate limiting.** Its 3 ready C4 failures touch 2 of the 13
+    cases where C2 was better and 3 of the 8 where C3 was better. Its C4-C3
+    reading stays within the bound over the untouched cases (net +3 of 13).
+- **Review fixes to the page** (c33dd18 to 6b6aac8, seven commits with
+  this log). Independent checkers recomputed the page from the committed
+  files; every finding was confirmed against the JSON and fixed in the
+  generator, and the page was regenerated, never hand-edited.
+  - **Spend.** deepseek-v4-pro-0813's charged bound, 0.547306 USD, had been
+    printed as 0.5473, below the bound. Bounds now round up (0.5474), and
+    the total reads at most 1.0967 USD with the exact sum, 1.096681, beside
+    it. qwen3.5-9b's price-derived spend is a lower bound too (139 retried
+    items, 4 without usage), as is deepseek's (440, 22).
+  - **Requests.** "448 requests per pass" held only for the three passes
+    with one invocation. The manifests record 597 requests for qwen3.5-9b
+    (448 + 139 + 10) and 1,202 for deepseek-v4-pro-0813 (448 + 440 + 314),
+    equal to the attempt log lines. The page now says 448 prompts per pass
+    and gives requests sent per pass.
+  - **Retries.** Every non-final attempt in every pass is a failed request
+    with HTTP 429. deepseek retried 440 of 448 items (C1 112, C2 111, C3
+    112, C4 105), 292 completed only on their third attempt, and it met 754
+    HTTP 429 responses before an item's last attempt; qwen3.5-9b retried 139
+    items and met 149. The other three passes retried none.
+  - **Rounding.** The page had printed exact halves with Python's float
+    formatting, so 51/80 = 0.6375 showed as 0.637 but 59/80 = 0.7375 as
+    0.738. Rates, differences and bounds now round the summaries' recorded
+    decimals with halves away from zero; 80 cells moved one unit away from
+    zero and no reading changed. All 152 rate cells equal their item count
+    rounded that way. Each run's `scored/summary.md` still formats the
+    binary float.
+  - **Wording.** The ready-gold note now says silent-wrong over compile-valid
+    items is a ratio of sums and that a failed request lowers silent-wrong
+    over all ready items and over-abstention, where lower reads as better,
+    rather than "counting against" every rate. The A/A rule bounds the
+    absolute net count. The rerun column gives pass B's reading and "sign
+    not reversed" instead of "replicated", which the protocol does not
+    define. The C4-C3 heading no longer states that field context did not
+    raise strong exact. The intro says the generator and the `score
+    --check` logs are local and that no CI step checks the page.
+  - **Receipts.** Every comparison row links its summary, outcomes and the
+    pair report; the lost-item rows link outcomes; the noise-bound rows
+    link both passes' summaries. All 211 links on the page resolve.
+  - No test reads the page or this log, so the changes need no test run;
+    `python artifacts/ci/locked_test_v1.py --check` reports that the page
+    matches.
+- **Checks.**
+  - **CI's two docs-mounted steps.** These ran in the test image under
+    compose's hardening, with the worktree's code and `docs/` mounted
+    read-only. The guard, registry, bake-off, test-pass and held-out step
+    gave 215 passed; the pair step gave 2 passed. The same seven targets on
+    the host gave 217 passed.
+  - **Static checks**, all rc 0: pyink, isort, pylint over CI's list (10.00/10),
+    pyright (0 errors) and lint-imports (5 contracts kept).
+  - **`tests/test_pair_report.py` in the image without `docs/`:** 26 passed,
+    2 skipped (the two committed-pair tests).
+  - **Re-checks of the committed trees.** `score --check` of all five runs
+    from a `git archive` export of e3aaf65, in the test image with no
+    network, reported no difference for each. The deepseek run, checked
+    again under the lab service's limits (1 CPU, 512 MB, read-only root, a
+    64 MB noexec `/tmp`), also reported none, in 143 s. The `lab` image
+    itself was not rebuilt, so CI's own re-score step has not run yet.
+- **Final check** (8bbad5f and this log).
+  - **Wording fix.** The page's lost-items section said each
+    `provider_failed` item "stays in every denominator", while its
+    ready-gold note says such an item is outside the denominator of
+    silent-wrong over compile-valid items, which counts only answers that
+    ran. The generator now says each stays in every rate over its gold's
+    items and names that exception, and the non-ready note says the same.
+    The page was regenerated, no number moved, and
+    `python artifacts/ci/locked_test_v1.py --check` reports that it matches.
+  - **Facts rechecked from the committed files.** `outcomes.jsonl` holds 26
+    `provider_failed` items, and `attempts/` gives each three attempts, all
+    HTTP 429: qwen3.5-9b C4 3 ready and 1 not_expressible; deepseek-v4-pro-0813
+    C1 20 ready (in 15 cases) and 1 needs_clarification, C4 1 not_expressible.
+    The discordant, first-better, second-better and net counts of all 15
+    condition comparisons (pass B included) equal the page's.
+  - **Pair report.** `dfilterforge pair` over pass A and pass B, run again
+    in the test image with no network, printed a report byte-identical to
+    the committed evidence (SHA-256 prefix `246d4294f93c`).
+  - **CI mirror** (`artifacts/ci/ci_mirror.sh score-test-final`, the test
+    image with the worktree's code mounted read-only and no network). It
+    started at 511a9b2; 8bbad5f landed during the run and changed only the
+    page, which no step reads. pyink, isort, pylint, pyright (0 errors) and
+    lint-imports (5 contracts kept) gave rc 0; pytest gave 1410 passed and 19
+    skipped, coverage 96.76 percent; the benchmark gate, adequacy, prepare
+    and recall steps gave rc 0; and `score --check` of all 25 committed
+    outputs (17 `scored/`, 4 `control-reference/`, 4 `control-mutation/`)
+    reported no difference.
+  - **CI's exact pylint line**, which adds `scripts/dev_bakeoff.py`,
+    `scripts/dev_bakeoff_configs.py` and `scripts/test_passes.py` to the
+    mirror's list, in the test image with a tmpfs `/tmp`: 10.00/10.
+  - **CI's two docs-mounted steps** at 8bbad5f, under compose's hardening:
+    215 passed and 2 passed.
+  - No repair plan is committed, so CI's repair-plan step checks none.
+
 ## Planned next
 
-1. Score the five published test baselines once `repair-cards` is merged:
-   condition comparisons with case-level intervals, the A/A pair report, and
-   the baseline part of `docs/results/locked-test-v1.md`.
-2. The [repair round](decisions/repair-round.md) as registered: the
-   `repair-cards` branch (card code, dev plans), then `repair-arms` with the
-   dev round, then the test round (the last baseline request has been sent)
-   and the locked test result. Then the hosted static page generated from receipts,
-   its Disproof Reel chosen by the registered rule `reel-v1`.
+1. The [repair round](decisions/repair-round.md) as registered. First, the
+   four dev plans and, now that the passes are scored, the four test plans
+   (`dfilterforge repair`; none is committed yet). Then `repair-arms` with
+   the dev round, then the test round. Last, the repair half of
+   [`results/locked-test-v1.md`](results/locked-test-v1.md).
+2. The hosted static page generated from receipts, with its Disproof Reel
+   chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
@@ -585,7 +747,12 @@ needed, so those eleven rows stay `unused`.
   run reached 28 captures and 4,200 exact pairs without a difference, but
   partial measurements are not release evidence.
 - Dev has 12 ready cases, so every dev comparison is inconclusive. Test-split
-  baselines, SFT, DPO, GRPO and the Pilot Go/No-Go decision are unmeasured.
+  repair, SFT, DPO, GRPO and the Pilot Go/No-Go decision are unmeasured.
+- The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
+  page applies it to the other three models as a named extrapolation.
+- `docs/results/locked-test-v1.md` is generated by a local, uncommitted
+  script, so no CI check ties the page to its files yet. CI has not run on
+  the `score-test-baselines` branch, which is not pushed.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive

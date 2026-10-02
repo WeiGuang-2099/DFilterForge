@@ -699,3 +699,50 @@ def test_the_committed_c1_and_c2_rerun_is_the_one_the_v2_note_reports() -> None:
         for side in ("first", "second")
     ]
     assert exact == [8, 9]
+
+
+_EVIDENCE = Path(__file__).parents[1] / "docs" / "decisions" / "evidence"
+
+
+def test_the_committed_test_a_a_pair_is_the_report_its_evidence_keeps() -> None:
+    """The test A/A pair, derived again from the two committed passes.
+
+    Pass A and pass B of qwen/qwen3-32b answered the frozen test prompts
+    with identical settings. The report derived from their committed
+    scored outcomes must equal the committed evidence byte for byte, so a
+    re-score that moves an outcome, or an edited evidence file, fails
+    here. The counts below are the ones the locked test result quotes:
+    the flipped cases per condition, and C4-C3 beyond the noise bound in
+    both passes with the same sign, while C4-C2 and C2-C1 stay inside it.
+
+    Like the dev pair above, it skips only when the whole results tree is
+    absent, and CI runs it in the step that mounts docs/.
+    """
+    if not _RESULTS.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
+    report = pair_runs(
+        _RESULTS / "test-qwen3-32b-2026-09-26",
+        _RESULTS / "test-qwen3-32b-passb-2026-09-26",
+    )
+    evidence = _EVIDENCE / "aa-test-qwen3-32b-2026-09-26.json"
+
+    assert f"{canonical_json(report)}\n".encode() == evidence.read_bytes()
+    assert report.settings_identical is True
+    assert all(item.prompts_identical for item in report.conditions)
+    changed = [item.changed_answers for item in report.conditions]
+    assert changed == [42, 42, 39, 46]
+    assert [item.flipped_cases for item in report.conditions] == [4, 5, 5, 7]
+    assert [
+        (
+            item.first,
+            item.second,
+            item.first_pass.within_noise,
+            item.second_pass.within_noise,
+            item.sign_reversed,
+        )
+        for item in report.comparisons
+    ] == [
+        ("C4", "C2", True, True, False),
+        ("C2", "C1", True, True, False),
+        ("C4", "C3", False, False, False),
+    ]

@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"ip.src","kind":"predicate","operator":"in_subnet","value":"192.0.2.0/24"},{"field":"ip.src","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}
