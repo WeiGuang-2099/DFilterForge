@@ -569,7 +569,8 @@ needed, so those eleven rows stay `unused`.
 
 - **Branch.** `score-test-baselines` starts from `origin/main` at 0623248,
   where PR #16 merged `repair-cards`, so OD4 no longer holds scoring. It adds
-  four commits. `git diff --name-only 0623248` lists only the five `scored/`
+  thirteen commits: four for the scoring, seven for the review fixes and two
+  for the final check. `git diff --name-only 0623248` lists only the five `scored/`
   trees, `docs/results/locked-test-v1.md`, the pair evidence,
   `tests/test_pair_report.py`, the CI workflow and this file: no
   prepare-hashed file and no runner, live or replay code changed. No model
@@ -693,6 +694,39 @@ needed, so those eleven rows stay `unused`.
     again under the lab service's limits (1 CPU, 512 MB, read-only root, a
     64 MB noexec `/tmp`), also reported none, in 143 s. The `lab` image
     itself was not rebuilt, so CI's own re-score step has not run yet.
+- **Final check** (8bbad5f and this log).
+  - **Wording fix.** The page's lost-items section said each
+    `provider_failed` item "stays in every denominator", while its
+    ready-gold note says such an item is outside the denominator of
+    silent-wrong over compile-valid items, which counts only answers that
+    ran. The generator now says each stays in every rate over its gold's
+    items and names that exception, and the non-ready note says the same.
+    The page was regenerated, no number moved, and
+    `python artifacts/ci/locked_test_v1.py --check` reports that it matches.
+  - **Facts rechecked from the committed files.** `outcomes.jsonl` holds 26
+    `provider_failed` items, and `attempts/` gives each three attempts, all
+    HTTP 429: qwen3.5-9b C4 3 ready and 1 not_expressible; deepseek-v4-pro-0813
+    C1 20 ready (in 15 cases) and 1 needs_clarification, C4 1 not_expressible.
+    The discordant, first-better, second-better and net counts of all 15
+    condition comparisons (pass B included) equal the page's.
+  - **Pair report.** `dfilterforge pair` over pass A and pass B, run again
+    in the test image with no network, printed a report byte-identical to
+    the committed evidence (SHA-256 prefix `246d4294f93c`).
+  - **CI mirror** (`artifacts/ci/ci_mirror.sh score-test-final`, the test
+    image with the worktree's code mounted read-only and no network). It
+    started at 511a9b2; 8bbad5f landed during the run and changed only the
+    page, which no step reads. pyink, isort, pylint, pyright (0 errors) and
+    lint-imports (5 contracts kept) gave rc 0; pytest gave 1410 passed and 19
+    skipped, coverage 96.76 percent; the benchmark gate, adequacy, prepare
+    and recall steps gave rc 0; and `score --check` of all 25 committed
+    outputs (17 `scored/`, 4 `control-reference/`, 4 `control-mutation/`)
+    reported no difference.
+  - **CI's exact pylint line**, which adds `scripts/dev_bakeoff.py`,
+    `scripts/dev_bakeoff_configs.py` and `scripts/test_passes.py` to the
+    mirror's list, in the test image with a tmpfs `/tmp`: 10.00/10.
+  - **CI's two docs-mounted steps** at 8bbad5f, under compose's hardening:
+    215 passed and 2 passed.
+  - No repair plan is committed, so CI's repair-plan step checks none.
 
 ## Planned next
 
