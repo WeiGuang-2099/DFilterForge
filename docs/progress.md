@@ -612,23 +612,71 @@ needed, so those eleven rows stay `unused`.
   from the files it links, and asserts the preconditions of each sentence
   the page makes. Repair is marked not measured. The findings:
   - **Primary, C4-C2.** No model's interval excludes zero: -0.075
-    (qwen3-32b), -0.100 (qwen3.5-9b), -0.062 (qwen3.5-122b-a10b) and 0.087
+    (qwen3-32b), -0.100 (qwen3.5-9b), -0.063 (qwen3.5-122b-a10b) and 0.088
     (deepseek-v4-pro-0813). Only qwen3.5-9b (net -6) and deepseek (+7)
     exceed the bound, which is extrapolated beyond qwen3-32b, and they point in
-    opposite directions. The page states this as a negative result for the
-    typed contract.
+    opposite directions. qwen3.5-9b's reading is confounded by rate
+    limiting: over the 37 ready cases its C4 failures do not touch, its net
+    is -4 of 18, within the bound. The page states this as a negative result
+    for the typed contract.
   - **C2-C1.** The only interval of the 12 comparisons that excludes zero is
     deepseek's 0.138 [0.013, 0.263]. It is confounded by rate limiting: C1
     lost 20 ready items in 15 cases, and 10 of the 11 cases where C2 was
-    better hold a C1 provider failure.
-  - **C4-C3.** qwen3-32b's -0.100 [-0.250, 0.062] (net -5) is beyond rerun
-    noise and replicated by pass B (net -9). qwen3.5-122b-a10b's -0.125
-    [-0.263, 0.000] (net -9) is beyond the extrapolated bound. No interval
-    excludes zero.
+    better hold a C1 provider failure. Over the 25 ready cases its C1
+    failures do not touch, C2 is better in 1 and C1 in 3 (net -2, mean
+    difference -0.040, too few discordant cases for a reading): the sign
+    reverses.
+  - **C4-C3.** qwen3-32b's -0.100 [-0.250, 0.063] (net -5) is beyond rerun
+    noise, and so is pass B's -0.138 [-0.275, 0.000] (net -9); the sign is
+    not reversed. Both intervals include zero, so only the net count is
+    beyond noise. qwen3.5-122b-a10b's -0.125 [-0.263, 0.000] (net -9) is
+    beyond the extrapolated bound. No interval excludes zero.
   - **Field context.** It is the same for every model: full coverage 0.350
     and mean recall 0.592, at 16 names.
   - **qwen3.5-9b's rate limiting.** Its 3 ready C4 failures touch 2 of the 13
-    cases where C2 was better and 3 of the 8 where C3 was better.
+    cases where C2 was better and 3 of the 8 where C3 was better. Its C4-C3
+    reading stays within the bound over the untouched cases (net +3 of 13).
+- **Review fixes to the page** (c33dd18 to 6b6aac8, seven commits with
+  this log). Independent checkers recomputed the page from the committed
+  files; every finding was confirmed against the JSON and fixed in the
+  generator, and the page was regenerated, never hand-edited.
+  - **Spend.** deepseek-v4-pro-0813's charged bound, 0.547306 USD, had been
+    printed as 0.5473, below the bound. Bounds now round up (0.5474), and
+    the total reads at most 1.0967 USD with the exact sum, 1.096681, beside
+    it. qwen3.5-9b's price-derived spend is a lower bound too (139 retried
+    items, 4 without usage), as is deepseek's (440, 22).
+  - **Requests.** "448 requests per pass" held only for the three passes
+    with one invocation. The manifests record 597 requests for qwen3.5-9b
+    (448 + 139 + 10) and 1,202 for deepseek-v4-pro-0813 (448 + 440 + 314),
+    equal to the attempt log lines. The page now says 448 prompts per pass
+    and gives requests sent per pass.
+  - **Retries.** Every non-final attempt in every pass is a failed request
+    with HTTP 429. deepseek retried 440 of 448 items (C1 112, C2 111, C3
+    112, C4 105), 292 completed only on their third attempt, and it met 754
+    HTTP 429 responses before an item's last attempt; qwen3.5-9b retried 139
+    items and met 149. The other three passes retried none.
+  - **Rounding.** The page had printed exact halves with Python's float
+    formatting, so 51/80 = 0.6375 showed as 0.637 but 59/80 = 0.7375 as
+    0.738. Rates, differences and bounds now round the summaries' recorded
+    decimals with halves away from zero; 80 cells moved one unit away from
+    zero and no reading changed. All 152 rate cells equal their item count
+    rounded that way. Each run's `scored/summary.md` still formats the
+    binary float.
+  - **Wording.** The ready-gold note now says silent-wrong over compile-valid
+    items is a ratio of sums and that a failed request lowers silent-wrong
+    over all ready items and over-abstention, where lower reads as better,
+    rather than "counting against" every rate. The A/A rule bounds the
+    absolute net count. The rerun column gives pass B's reading and "sign
+    not reversed" instead of "replicated", which the protocol does not
+    define. The C4-C3 heading no longer states that field context did not
+    raise strong exact. The intro says the generator and the `score
+    --check` logs are local and that no CI step checks the page.
+  - **Receipts.** Every comparison row links its summary, outcomes and the
+    pair report; the lost-item rows link outcomes; the noise-bound rows
+    link both passes' summaries. All 211 links on the page resolve.
+  - No test reads the page or this log, so the changes need no test run;
+    `python artifacts/ci/locked_test_v1.py --check` reports that the page
+    matches.
 - **Checks.**
   - **CI's two docs-mounted steps.** These ran in the test image under
     compose's hardening, with the worktree's code and `docs/` mounted
@@ -669,7 +717,8 @@ needed, so those eleven rows stay `unused`.
 - The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
   page applies it to the other three models as a named extrapolation.
 - `docs/results/locked-test-v1.md` is generated by a local, uncommitted
-  script, so no CI check ties the page to its files yet.
+  script, so no CI check ties the page to its files yet. CI has not run on
+  the `score-test-baselines` branch, which is not pushed.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
