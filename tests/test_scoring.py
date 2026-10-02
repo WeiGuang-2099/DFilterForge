@@ -64,6 +64,7 @@ from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelSplit
+from dfilterforge.run_store import served_values
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
 from dfilterforge.score_summary import ItemOutcomeV1
@@ -2146,6 +2147,52 @@ def test_effective_settings_matches_a_pinned_slug_to_its_display_name(
     assert settings.providers == (served,)
     assert settings.providers_distinct == 1
     assert settings.provider_changed is changed
+
+
+def test_served_reads_bare_records_by_the_scored_rule() -> None:
+    """The public helper flags what effective_settings flags, from records."""
+    pinned = RequestSettingsV1(
+        model_id=_MODEL_ID,
+        openrouter=OpenRouterOptionsV1(provider_order=("deepinfra/fp8",)),
+    )
+    answered = CompletionV1(
+        item_id="mei-0001",
+        status=CompletionStatusV1.COMPLETED,
+        response_text="{}",
+        latency_ms=1.0,
+        provider="DeepInfra",
+        response_model=_MODEL_ID,
+    )
+    unanswered = CompletionV1(
+        item_id="mei-0002",
+        status=CompletionStatusV1.FAILED,
+        error_code="http_error",
+        http_status=503,
+        latency_ms=1.0,
+        provider="Novita",
+        response_model="vendor/other",
+    )
+    elsewhere = answered.model_copy(
+        update={
+            "item_id": "mei-0003",
+            "provider": "Novita",
+            "response_model": "vendor/other",
+        }
+    )
+
+    pinned_only = served_values([answered, unanswered], pinned)
+    moved = served_values([answered, elsewhere], pinned)
+
+    assert (pinned_only.providers, pinned_only.models) == (
+        ("DeepInfra",),
+        (_MODEL_ID,),
+    )
+    assert not pinned_only.provider_changed
+    assert not pinned_only.model_changed
+    assert moved.providers == ("DeepInfra", "Novita")
+    assert moved.models == (_MODEL_ID, "vendor/other")
+    assert moved.provider_changed
+    assert moved.model_changed
 
 
 def test_effective_settings_counts_the_values_it_could_not_print(

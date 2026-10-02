@@ -10,10 +10,11 @@ mean flipped cases, and not replicated when the rerun reverses its sign.
 :func:`transitions` is the one count of outcome transitions, so a repair
 round reads each arm against its base pass the same way. :func:`pair_runs`
 reads two published, scored passes as scoring reads them, with every digest
-checked, and requires the same split, conditions, items and gold; the
-comparisons it reads against the noise are the ones each pass's committed
-summary holds. Nothing here executes a capture, and no answer text reaches
-a report or an error message: answers are only compared.
+checked, and :func:`read_pass` reads one, so a repair round reads its arm
+runs the same way. A pair requires the same split, conditions, items and
+gold; the comparisons it reads against the noise are the ones each pass's
+committed summary holds. Nothing here executes a capture, and no answer
+text reaches a report or an error message: answers are only compared.
 """
 
 from __future__ import annotations
@@ -175,8 +176,8 @@ class ConditionPass(NamedTuple):
     prompts_sha256: str
 
 
-class _Pass(NamedTuple):
-    """The parts of a published, scored pass a pair is read from."""
+class ScoredPass(NamedTuple):
+    """The parts of a published, scored pass a pair or a round reads."""
 
     manifest: RunManifestV1
     split: str
@@ -425,8 +426,16 @@ def _answers(batch: CompletionBatchV1) -> dict[str, str | None]:
     }
 
 
-def _read_pass(run_dir: Path) -> _Pass:
+def read_pass(run_dir: Path) -> ScoredPass:
     """Reads a published, scored pass, checking every digest as scoring does.
+
+    Args:
+        run_dir: The pass's published directory.
+
+    Returns:
+        Its run manifest and split, each condition's outcomes, stored
+        answers and prompt digest, the digest of its outcome file and its
+        committed summary.
 
     Raises:
         PairError: When the pass has no run manifest or is not scored.
@@ -458,7 +467,7 @@ def _read_pass(run_dir: Path) -> _Pass:
             "pair_unscored",
             f"{run_dir.name}: {SCORED_NAME}/{_SUMMARY_NAME} is not its summary",
         )
-    return _Pass(
+    return ScoredPass(
         manifest=loaded.manifest,
         split=split,
         conditions={
@@ -491,8 +500,8 @@ def pair_runs(first_dir: Path, second_dir: Path) -> PairReportV1:
             differ in split, conditions, items or gold.
         ScoringError: For any layout, manifest or split failure.
     """
-    first = _read_pass(first_dir)
-    second = _read_pass(second_dir)
+    first = read_pass(first_dir)
+    second = read_pass(second_dir)
     if first.split != second.split:
         raise PairError("pair_mismatch", "The passes are of different splits")
     if set(first.conditions) != set(second.conditions):

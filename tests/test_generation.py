@@ -2,16 +2,24 @@
 
 import hashlib
 import json
+from pathlib import Path
+from typing import cast
 
 from pydantic import ValidationError
 import pytest
 
+from dfilterforge.canonical import canonical_json
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.field_catalog import FieldType
 from dfilterforge.generation import condition_label
+from dfilterforge.generation import COUNTEREXAMPLE_PREFIX
 from dfilterforge.generation import DirectFilterResultV1
+from dfilterforge.generation import follow_up_prompt
+from dfilterforge.generation import FOLLOW_UP_TEXT
 from dfilterforge.generation import GenerationError
 from dfilterforge.generation import GenerationInputV1
+from dfilterforge.generation import MAX_CARD_BYTES
+from dfilterforge.generation import MAX_PROMPT_BYTES
 from dfilterforge.generation import MAX_RESPONSE_BYTES
 from dfilterforge.generation import OutputContractV1
 from dfilterforge.generation import parse_response
@@ -24,6 +32,9 @@ from dfilterforge.generation import RetrievedFieldV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import MissingSlot
+from dfilterforge.repair import PLAN_PATH
+from dfilterforge.repair_round import arm_run_ids
+from dfilterforge.repair_summary import ARMS
 
 _CONDITIONS = (
     (OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE, "C1"),
@@ -689,3 +700,390 @@ def test_blanket_clarification_is_representable_but_never_ready() -> None:
     assert isinstance(direct, DirectFilterResultV1)
     assert direct.status is GenerationStatus.NEEDS_CLARIFICATION
     assert direct.display_filter is None
+
+
+# The registered second user turn of the two-turn smoke, by digest, so a
+# wording change is visible here before any request carries it.
+_FOLLOW_UP_SHA256 = (
+    "d903bc2e346b20aca5625f97134312ccb51dbabb3c6392623325e4f2a9394d62"
+)
+_RESULTS = Path(__file__).parents[1] / "docs" / "results"
+
+
+def _first_turn() -> PreparedPromptV1:
+    return _batch(OutputContractV1.TYPED_IR, RetrievalV1.LEXICAL).prompts[0]
+
+
+def _with_roles(*roles: str) -> dict[str, object]:
+    """A first-turn prompt document whose messages carry these roles."""
+    document = _first_turn().model_dump(mode="json")
+    first = cast(list[dict[str, str]], document["messages"])
+    contents = (first[0]["content"], first[1]["content"], "{}", "Again.")
+    document["messages"] = [
+        {"role": role, "content": contents[min(index, 3)]}
+        for index, role in enumerate(roles)
+    ]
+    return document
+
+
+def test_follow_up_text_is_pinned() -> None:
+    encoded = FOLLOW_UP_TEXT.encode("utf-8")
+
+    assert FOLLOW_UP_TEXT == (
+        "Your filter was incorrect. Reply with a corrected answer in the "
+        "same JSON format."
+    )
+    assert hashlib.sha256(encoded).hexdigest() == _FOLLOW_UP_SHA256
+    assert len(encoded) == 81
+
+
+def test_follow_up_prompt_continues_with_the_answer_verbatim() -> None:
+    prompt = _first_turn()
+    answer = ' {"status": "ready"}\né'
+
+    continued = follow_up_prompt(prompt, answer)
+
+    assert [message.role for message in continued.messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert continued.messages[:2] == prompt.messages
+    assert continued.messages[2].content.encode("utf-8") == answer.encode(
+        "utf-8"
+    )
+    assert continued.messages[3].content == FOLLOW_UP_TEXT
+    assert continued.model_dump(exclude={"messages"}) == prompt.model_dump(
+        exclude={"messages"}
+    )
+    batch = PreparedBatchV1(
+        output_contract=prompt.output_contract,
+        retrieval=prompt.retrieval,
+        prompts=(continued,),
+    )
+    assert PreparedBatchV1.model_validate_json(canonical_json(batch)) == batch
+
+
+@pytest.mark.parametrize(
+    "roles",
+    [
+        ("user", "system"),
+        ("system",),
+        ("system", "user", "assistant"),
+        ("system", "user", "user", "assistant"),
+        ("system", "assistant", "user", "user"),
+        ("system", "user", "system", "user"),
+        ("system", "user", "assistant", "assistant"),
+        ("system", "user", "assistant", "user", "assistant", "user"),
+    ],
+)
+def test_prepared_prompts_accept_only_the_two_message_shapes(
+    roles: tuple[str, ...],
+) -> None:
+    for accepted in (
+        ("system", "user"),
+        ("system", "user", "assistant", "user"),
+    ):
+        PreparedPromptV1.model_validate(_with_roles(*accepted))
+
+    with pytest.raises(ValidationError):
+        PreparedPromptV1.model_validate(_with_roles(*roles))
+
+
+def test_a_second_turn_counts_every_message_toward_the_byte_budget() -> None:
+    document = _with_roles("system", "user", "assistant", "user")
+    messages = cast(list[dict[str, str]], document["messages"])
+    used = sum(len(m["content"].encode("utf-8")) for m in messages[:2])
+    messages[2]["content"] = "x" * (MAX_PROMPT_BYTES - used - 5)
+    messages[3]["content"] = "12345"
+    PreparedPromptV1.model_validate(document)
+
+    messages[3]["content"] = "123456"
+    with pytest.raises(ValidationError, match="prompt exceeds the byte limit"):
+        PreparedPromptV1.model_validate(document)
+
+
+def test_follow_up_prompt_refusals() -> None:
+    prompt = _first_turn()
+    used = sum(len(m.content.encode("utf-8")) for m in prompt.messages)
+    room = MAX_PROMPT_BYTES - used - len(FOLLOW_UP_TEXT.encode("utf-8"))
+    continued = follow_up_prompt(prompt, "x" * room)
+    assert len(continued.messages) == 4
+
+    cases = (
+        (continued, "{}", "follow_up_invalid"),
+        (prompt, "", "follow_up_invalid"),
+        (prompt, "\ud800", "follow_up_invalid"),
+        (prompt, "x" * (room + 1), "prompt_too_large"),
+    )
+    for base, answer, code in cases:
+        with pytest.raises(GenerationError) as caught:
+            follow_up_prompt(base, answer)
+        assert caught.value.code == code
+
+
+# The line a counterexample card follows, by digest, for the same reason.
+_COUNTEREXAMPLE_PREFIX_SHA256 = (
+    "5918ae3ab3515d45e8404c64db31ebc320d1f04426912762fa3893abca05327e"
+)
+# A frames card and an error card in the repair round's two shapes.
+_FRAMES_CARD = canonical_json(
+    {
+        "frames": [
+            {
+                "answer_matched": True,
+                "dns.flags.response": False,
+                "dns.qry.type": 1,
+                "frame": 1,
+                "ip.dsfield.ecn": 0,
+                "ip.dst": "198.51.100.1",
+                "ip.src": "192.0.2.129",
+                "ip.ttl": 64,
+                "should_match": False,
+                "udp.dstport": 53,
+                "udp.srcport": 41129,
+            },
+            {
+                "answer_matched": False,
+                "frame": 4,
+                "ip.dst": "192.0.2.10",
+                "ip.src": "198.51.100.7",
+                "should_match": True,
+                "tcp.dstport": 443,
+                "tcp.flags": ["SYN", "ACK"],
+                "tcp.len": 0,
+                "tcp.srcport": 41000,
+            },
+        ]
+    }
+)
+_ERROR_CARD = '{"error":"unknown_field","field":"dns.qry.nmae"}'
+# The nine two-turn smoke prompt sets prepared on 2026-09-26, by the C4
+# digest the smoke's plan.json records for each. The fixture holds their
+# three shared first turns and each smoke's two counted answers, copied from
+# artifacts/two-turn-smoke of the repair-multiturn worktree at 281b2ce.
+_SMOKE_C4_SHA256 = {
+    "dev-deepseek-v4-pro-0813-rs-2026-09-26": (
+        "3386b2e9dbfef44db55cd624b82f6d91e2c929821d1a38466cad6b763c082a13"
+    ),
+    "dev-glm-5.2-rs-2026-09-26": (
+        "3252677de24888940b5b0c19d2b89e84d3ea871d6cd1dbdaa189943b28b7786a"
+    ),
+    "dev-granite-4.2-8b-rs-2026-09-26": (
+        "d956075a70dfebd735443db4ba4174a8a9d98509767d02c301cd317c7f73138a"
+    ),
+    "dev-kimi-k2.6-rs-2026-09-26": (
+        "fae8f06f3d54fadbae3c9e0fcbdbe87fd5552be1e77392a9aeb7f7277e38c06c"
+    ),
+    "dev-ministral-8b-2512-rs-2026-09-26": (
+        "5d3103328b975671cd5355fb5dd60dd984e277d6c0b2e8669db15c74ca5005f1"
+    ),
+    "dev-nemotron-3-super-120b-a12b-rs-2026-09-26": (
+        "ebe5166fd3718b4c2d1a43d4520dec2a7140ccddfa88d8b9e6ff3cd58b9967ca"
+    ),
+    "dev-qwen3-32b-rs-2026-09-26": (
+        "ef4a27641c0ab6ba0bdeb2d0e6e8ccc6b248ebf086ea63bf80387a9f3f22c7b1"
+    ),
+    "dev-qwen3.5-122b-a10b-rs-2026-09-26": (
+        "ef4a27641c0ab6ba0bdeb2d0e6e8ccc6b248ebf086ea63bf80387a9f3f22c7b1"
+    ),
+    "dev-qwen3.5-9b-rs-2026-09-26": (
+        "87c7d3a2484f07d354577fee34c0ff806ff93b08ee81f8a1de98bb45ae839e2a"
+    ),
+}
+_SMOKE_FIXTURE = Path(__file__).parent / "data" / "smoke_second_turns.json"
+
+
+def _object_of(size: int, filler: str = "a") -> str:
+    """A canonical one-key JSON object of exactly ``size`` UTF-8 bytes.
+
+    The string value is ``filler`` repeated, padded with ``a`` to reach the
+    size, so a multi-byte filler gives fewer characters than bytes.
+    """
+    room = size - len('{"k":""}')
+    width = len(filler.encode("utf-8"))
+    text = filler * (room // width) + "a" * (room % width)
+    card = canonical_json({"k": text})
+    assert len(card.encode("utf-8")) == size
+    return card
+
+
+def test_counterexample_prefix_is_pinned() -> None:
+    encoded = COUNTEREXAMPLE_PREFIX.encode("utf-8")
+
+    assert COUNTEREXAMPLE_PREFIX == "\nCOUNTEREXAMPLE_JSON\n"
+    assert hashlib.sha256(encoded).hexdigest() == (
+        _COUNTEREXAMPLE_PREFIX_SHA256
+    )
+    assert len(encoded) == 21
+    assert MAX_CARD_BYTES == 1024
+
+
+def test_the_nine_smoke_prompt_sets_rebuild_byte_for_byte() -> None:
+    """Without a card, a second turn is the one the smoke prepared.
+
+    Each set is rebuilt from its first turns and counted answers, with the
+    card left out and passed as ``None``, and must hash to the digest the
+    smoke recorded, so the card moved no byte of a prompt set prepared
+    before it.
+    """
+    fixture = json.loads(_SMOKE_FIXTURE.read_text(encoding="utf-8"))
+    first_turns = {
+        prompt.item_id: prompt
+        for prompt in map(
+            PreparedPromptV1.model_validate,
+            cast(list[object], fixture["first_turns"]),
+        )
+    }
+    smokes = cast(list[dict[str, object]], fixture["smokes"])
+    digests: dict[str, str] = {}
+
+    for smoke in smokes:
+        prompts: list[PreparedPromptV1] = []
+        for entry in cast(list[dict[str, str]], smoke["answers"]):
+            first = first_turns[entry["item_id"]]
+            default = follow_up_prompt(first, entry["answer"])
+            assert follow_up_prompt(first, entry["answer"], None) == default
+            prompts.append(default)
+        batch = PreparedBatchV1(
+            output_contract=OutputContractV1.TYPED_IR,
+            retrieval=RetrievalV1.LEXICAL,
+            prompts=tuple(prompts),
+        )
+        data = (canonical_json(batch) + "\n").encode("utf-8")
+        reread = PreparedBatchV1.model_validate_json(data)
+        assert (canonical_json(reread) + "\n").encode("utf-8") == data
+        smoke_id = cast(str, smoke["smoke_id"])
+        digests[smoke_id] = hashlib.sha256(data).hexdigest()
+
+    assert len(smokes) == 9
+    assert digests == _SMOKE_C4_SHA256
+
+
+@pytest.mark.parametrize("card", [_FRAMES_CARD, _ERROR_CARD])
+def test_a_card_follows_the_follow_up_on_its_own_line(card: str) -> None:
+    prompt = _first_turn()
+    answer = ' {"status": "ready"}\né'
+
+    bare = follow_up_prompt(prompt, answer)
+    continued = follow_up_prompt(prompt, answer, card)
+
+    assert continued.messages[:3] == bare.messages[:3]
+    assert continued.messages[3].role == "user"
+    assert continued.messages[3].content == (
+        FOLLOW_UP_TEXT + COUNTEREXAMPLE_PREFIX + card
+    )
+    assert continued.messages[3].content.split("\n") == [
+        FOLLOW_UP_TEXT,
+        "COUNTEREXAMPLE_JSON",
+        card,
+    ]
+    assert continued.model_dump(exclude={"messages"}) == bare.model_dump(
+        exclude={"messages"}
+    )
+    batch = PreparedBatchV1(
+        output_contract=prompt.output_contract,
+        retrieval=prompt.retrieval,
+        prompts=(continued,),
+    )
+    assert PreparedBatchV1.model_validate_json(canonical_json(batch)) == batch
+
+
+def test_a_card_may_take_its_whole_byte_limit() -> None:
+    card = _object_of(MAX_CARD_BYTES)
+
+    continued = follow_up_prompt(_first_turn(), "{}", card)
+
+    assert continued.messages[3].content.endswith(COUNTEREXAMPLE_PREFIX + card)
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        pytest.param("", id="empty"),
+        pytest.param(" " + _ERROR_CARD, id="leading-space"),
+        pytest.param(_ERROR_CARD + "\n", id="trailing-newline"),
+        pytest.param(
+            '{"field":"dns.qry.nmae","error":"unknown_field"}',
+            id="unsorted-keys",
+        ),
+        pytest.param('{"error": "unknown_field"}', id="whitespace"),
+        pytest.param(
+            '{"error":"unknown_field","error":"unknown_field"}',
+            id="repeated-key",
+        ),
+        pytest.param('{"error":"\\u0075nknown_field"}', id="needless-escape"),
+        pytest.param('{"error":NaN}', id="not-a-number"),
+        pytest.param("[" + _ERROR_CARD + "]", id="array"),
+        pytest.param('"unknown_field"', id="string"),
+        pytest.param("1", id="number"),
+        pytest.param("null", id="null"),
+        pytest.param("true", id="boolean"),
+        pytest.param("{", id="truncated"),
+        pytest.param('{"error":"\ud800"}', id="lone-surrogate"),
+        pytest.param("[" * MAX_CARD_BYTES, id="deep-nesting"),
+        pytest.param(_object_of(MAX_CARD_BYTES + 1), id="one-byte-over"),
+        pytest.param(
+            _object_of(MAX_CARD_BYTES + 1, "é"),
+            id="one-byte-over-in-fewer-characters",
+        ),
+    ],
+)
+def test_a_card_must_be_one_canonical_json_object_within_its_limit(
+    card: str,
+) -> None:
+    with pytest.raises(GenerationError) as caught:
+        follow_up_prompt(_first_turn(), "{}", card)
+
+    assert caught.value.code == "follow_up_invalid"
+
+
+def test_a_card_shares_the_prompt_byte_budget() -> None:
+    prompt = _first_turn()
+    card = _object_of(MAX_CARD_BYTES)
+    last = FOLLOW_UP_TEXT + COUNTEREXAMPLE_PREFIX + card
+    used = sum(len(m.content.encode("utf-8")) for m in prompt.messages)
+    room = MAX_PROMPT_BYTES - used - len(last.encode("utf-8"))
+
+    continued = follow_up_prompt(prompt, "x" * room, card)
+    bare = follow_up_prompt(prompt, "x" * (room + 1))
+
+    assert sum(len(m.content.encode("utf-8")) for m in continued.messages) == (
+        MAX_PROMPT_BYTES
+    )
+    assert bare.messages[3].content == FOLLOW_UP_TEXT
+    with pytest.raises(GenerationError) as caught:
+        follow_up_prompt(prompt, "x" * (room + 1), card)
+    assert caught.value.code == "prompt_too_large"
+
+
+def test_committed_prepared_files_reserialize_byte_for_byte() -> None:
+    """Accepting a second turn changes no committed prompt file's bytes.
+
+    Every digest a prepare, a run manifest or a score recorded over these
+    files is therefore still the digest of the same bytes. A first turn has
+    two messages. Only an arm run of a committed repair plan, first run or
+    re-run, a test seed or a published run alike, may hold more: its bare
+    and counterexample prompts add the counted answer and the follow-up
+    turn, while its resample re-sends the first turn. CI runs this test
+    with docs/ mounted, since the test image carries no docs/ tree.
+    """
+    if not _RESULTS.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
+    paths = sorted(_RESULTS.glob("*/prepared/*.json"))
+    arms = {
+        run_id: arm
+        for plan in _RESULTS.glob(f"*/{PLAN_PATH.as_posix()}")
+        for arm in ARMS
+        for run_id in arm_run_ids(plan.parent.parent.name, arm)
+    }
+
+    assert paths
+    for path in paths:
+        data = path.read_bytes()
+        batch = PreparedBatchV1.model_validate_json(data)
+        arm = arms.get(path.parent.parent.name)
+        turns = 2 if arm in (None, "resample") else 4
+        assert (canonical_json(batch) + "\n").encode("utf-8") == data, path
+        assert all(len(p.messages) == turns for p in batch.prompts), path

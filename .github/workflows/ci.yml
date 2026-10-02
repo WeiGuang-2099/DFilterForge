@@ -22,7 +22,7 @@ jobs:
       - run: docker compose --profile dev build test
       - run: docker compose --profile dev run --rm test pyink --check src tests scripts
       - run: docker compose --profile dev run --rm test isort --check-only src tests scripts
-      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py
+      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py scripts/two_turn_smoke.py scripts/repair_arms.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
@@ -35,8 +35,10 @@ jobs:
         # the same rows, the caps meet the cap rule, the configs send the
         # ruled winners' routes), the bake-off ruling and smoke evidence
         # tests, the test-pass batch's committed-registry and note tests,
-        # the freeze quote test, and the frozen-prompt guard, so a commit
-        # that lets the note and the registry drift fails here.
+        # the repair-arm batch's tests of the committed passes, plans, caps
+        # and note (it builds every dev arm with the real follow-up step),
+        # the freeze quote test, and the frozen-prompt guard, so a
+        # commit that lets the note and the registry drift fails here.
         # The guard fails a branch that edits a prepare-hashed file while a
         # prompt set still awaits its call, rather than at the call step's
         # prepare_code_mismatch. The hosted test-run registry,
@@ -57,7 +59,8 @@ jobs:
           && python -m pytest -q -rs -p no:cacheprovider
           tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code
           tests/test_hosted_test_runs.py tests/test_dev_bakeoff.py
-          tests/test_test_passes.py tests/test_held_out.py'
+          tests/test_test_passes.py tests/test_repair_arms.py
+          tests/test_held_out.py'
       - name: Re-count the committed A/A reruns with the pair report
         # The suite above skips these tests for the same missing docs/
         # tree, and they are the only checks of the pair report against
@@ -73,6 +76,23 @@ jobs:
           && python -m pytest -q -rs -p no:cacheprovider
           tests/test_pair_report.py::test_the_committed_c1_and_c2_rerun_is_the_one_the_v2_note_reports
           tests/test_pair_report.py::test_the_committed_test_a_a_pair_is_the_report_its_evidence_keeps'
+      - name: Refuse committed second turns no repair plan checks
+        # score --check rebuilds only a prompt's first turn; the counted
+        # answer and follow-up of a second turn are checked by repair
+        # --check alone, for the arm runs named after a base pass with a
+        # committed plan. This fails on any other committed run holding a
+        # second turn, or a prompt set it cannot read. The second node
+        # re-serializes every committed prompt file byte for byte and holds
+        # each to two messages, or four for a bare or counterexample arm
+        # run of a committed plan. The suite skips both for the missing
+        # docs/ tree, and the test -d rules that out here.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_repair.py::test_every_committed_second_turn_is_an_arm_a_plan_checks
+          tests/test_generation.py::test_committed_prepared_files_reserialize_byte_for_byte'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test
@@ -119,10 +139,17 @@ jobs:
           done
           echo "re-scored $checked committed output directories"
           test "$checked" -gt 0
-      - name: Check committed repair plans offline
-        # Each plan is derived again from its base pass and the feedback
-        # probe and compared byte for byte; none is committed before the
-        # first repair round, so zero plans is not a failure.
+      - name: Check committed repair plans and rounds offline
+        # While no arm run sits beside its pass, each plan is derived again
+        # from the pass and the feedback probe and compared byte for byte.
+        # Once arm runs exist, the committed plan is the round's record: it
+        # is read and checked against the pass, never derived again, so a
+        # gold correction cannot break the check, and each arm's prompts
+        # are checked against it. Once every arm run is published and
+        # scored the round's summary is derived again too; an arm the gate
+        # stopped is read from repair/not_run.json and reported as not run.
+        # None is committed before the first repair round, so zero plans is
+        # not a failure.
         run: |
           checked=0
           for plan in docs/results/*/repair/plan.json; do
@@ -134,6 +161,20 @@ jobs:
             checked=$((checked + 1))
           done
           echo "checked $checked committed repair plans"
+      - name: Check committed repair pools offline
+        # Each pool is derived again from the committed summaries of the
+        # bases it names; zero pools is not a failure.
+        run: |
+          checked=0
+          for pooled in docs/results/repair-pool/*.json; do
+            [ -f "$pooled" ] || continue
+            docker compose --profile pilot run --rm lab repair-pool \
+              --results-dir /workspace/results \
+              --split "$(basename "$pooled" .json)" \
+              --check --code-revision "${{ github.sha }}"
+            checked=$((checked + 1))
+          done
+          echo "checked $checked committed repair pools"
 
   web:
     name: Web quality gates

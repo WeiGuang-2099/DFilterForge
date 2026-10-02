@@ -50,8 +50,10 @@ include = [
   "scripts/model_run.py",
   "scripts/probe_adequacy.py",
   "scripts/provider_reply_replay.py",
+  "scripts/repair_arms.py",
   "scripts/retrieval_recall.py",
   "scripts/test_passes.py",
+  "scripts/two_turn_smoke.py",
 ]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
@@ -160,6 +162,9 @@ forbidden_modules = [
   "dfilterforge.model_split",
   "dfilterforge.model_test_cases",
   "dfilterforge.repair",
+  "dfilterforge.repair_report",
+  "dfilterforge.repair_round",
+  "dfilterforge.repair_summary",
 ]
 
 [[tool.importlinter.contracts]]
@@ -173,4 +178,7 @@ forbidden_modules = [
   "dfilterforge.counterexample",
   "dfilterforge.model_feedback",
   "dfilterforge.repair",
+  "dfilterforge.repair_report",
+  "dfilterforge.repair_round",
+  "dfilterforge.repair_summary",
 ]

@@ -31,7 +31,10 @@ from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
 from dfilterforge.catalog_runtime import freeze_catalog
 from dfilterforge.completions import CompletionBatchV1
 from dfilterforge.completions import CompletionStatusV1
+from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import PrepareManifestV1
+from dfilterforge.completions import RepairItemV1
+from dfilterforge.completions import RepairPlanV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import TokenPricesV1
@@ -40,7 +43,9 @@ from dfilterforge.field_retrieval import FieldRetrievalError
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
 from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.generation import condition_label
+from dfilterforge.generation import COUNTEREXAMPLE_PREFIX
 from dfilterforge.generation import DirectFilterResultV1
+from dfilterforge.generation import FOLLOW_UP_TEXT
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievedFieldV1
@@ -58,6 +63,7 @@ from dfilterforge.model_split import ModelInputItemV1
 from dfilterforge.model_split import ModelSplitArtifacts
 from dfilterforge.run_store import check_manifest
 from dfilterforge.run_store import check_prepare
+from dfilterforge.run_store import check_prompts
 from dfilterforge.run_store import check_splits
 from dfilterforge.run_store import load_run
 from dfilterforge.runner import TsharkRunner
@@ -2508,6 +2514,903 @@ def test_publish_refuses_a_run_condition_its_prepare_did_not_record(
     assert error["error"]["code"] == "condition_mismatch"
     assert not output.exists()
     assert not list(output.parent.glob(".*.partial"))
+
+
+# The follow-up prepare: second-turn C4 prompts from a complete dev run.
+_FOLLOW_UP_ID = "dev-qwen3-32b-c4-rs-2026-09-20"
+_FOLLOW_UP_FILES = ("prepare.json", "prepared/C4.json")
+
+
+def _follow_up(source: Path, output: Path) -> int:
+    """Prepares second turns from one run directory."""
+    return model_run.main(
+        [
+            "follow-up",
+            "--from-run",
+            str(source),
+            "--output-dir",
+            str(output),
+            "--source-revision",
+            "test",
+        ]
+    )
+
+
+def _counted(run_dir: Path) -> CompletionBatchV1:
+    """Reads one run's counted C4 answers."""
+    return CompletionBatchV1.model_validate_json(
+        (run_dir / "completions" / "C4.json").read_bytes()
+    )
+
+
+def _run_manifest_at(run_dir: Path) -> RunManifestV1:
+    """Reads the manifest of one run directory."""
+    return RunManifestV1.model_validate_json(
+        (run_dir / "run_manifest.json").read_bytes()
+    )
+
+
+def _rewrite_answers(
+    run_dir: Path, changes: Mapping[str, dict[str, Any]]
+) -> None:
+    """Replaces some counted C4 answers, keeping the recorded digest true."""
+    batch = _counted(run_dir)
+    completions = tuple(
+        CompletionV1.model_validate(
+            answer.model_dump() | changes.get(answer.item_id, {})
+        )
+        for answer in batch.completions
+    )
+    data = canonical_json(batch.model_copy(update={"completions": completions}))
+    _rewrite_run_file(run_dir, "completions/C4.json", (data + "\n").encode())
+
+
+def test_follow_up_prepares_second_turns_without_network_or_gold(
+    c4_run: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Two C4 prompts continue the run's own answers, nothing else is read."""
+    monkeypatch.setattr(socket.socket, "connect", _no_sockets)
+    monkeypatch.setattr(model_run, "generate_model_split", _no_gold)
+    monkeypatch.setattr(model_run, "open_frozen_catalog", _no_gold)
+    output = tmp_path / "smoke" / _FOLLOW_UP_ID
+    output.parent.mkdir()
+    capsys.readouterr()
+
+    assert _follow_up(c4_run, output) == 0
+
+    assert sorted(_files(output)) == sorted(_FOLLOW_UP_FILES)
+    report = cast(dict[str, Any], json.loads(capsys.readouterr().out))
+    source = _run_manifest_at(c4_run)
+    prepare = _manifest(output)
+    batch = _batch(output, "C4")
+    first = {p.item_id: p for p in _batch(c4_run, "C4").prompts}
+    counted = {a.item_id: a for a in _counted(c4_run).completions}
+    assert prepare.item_ids == ("mei-0001", "mei-0002")
+    assert [c.label for c in prepare.conditions] == ["C4"]
+    assert prepare.split == "dev"
+    assert prepare.source_files == _SOURCE_MANIFEST()
+    assert (
+        prepare.catalog,
+        prepare.top_k,
+        prepare.model_inputs_sha256,
+    ) == (
+        source.prepare.catalog,
+        source.prepare.top_k,
+        source.prepare.model_inputs_sha256,
+    )
+    assert (
+        prepare.conditions[0].sha256
+        == hashlib.sha256(
+            (output / "prepared" / "C4.json").read_bytes()
+        ).hexdigest()
+    )
+    for prompt in batch.prompts:
+        assert prompt.messages[:2] == first[prompt.item_id].messages
+        assert prompt.messages[2].role == "assistant"
+        assert (
+            prompt.messages[2].content == counted[prompt.item_id].response_text
+        )
+        assert prompt.messages[3].content == FOLLOW_UP_TEXT
+    assert report["items"] == ["mei-0001", "mei-0002"]
+    assert report["source_run_id"] == _C4_RUN_ID
+    assert (
+        report["source_run_manifest_sha256"]
+        == hashlib.sha256(
+            (c4_run / "run_manifest.json").read_bytes()
+        ).hexdigest()
+    )
+    assert not list(output.parent.glob(".*.partial"))
+
+
+_FAILED: dict[str, Any] = {
+    "status": "failed",
+    "response_text": None,
+    "error_code": "provider_error",
+    "finish_reason": None,
+}
+_TRUNCATED: dict[str, Any] = {"finish_reason": "length"}
+_UNPARSEABLE: dict[str, Any] = {"response_text": '{"schema_version":"1.0"'}
+_ABSTAINED: dict[str, Any] = {
+    "response_text": canonical_json(
+        GenerationResultV1(status=GenerationStatus.NOT_EXPRESSIBLE)
+    )
+}
+
+
+def test_follow_up_skips_answers_that_cannot_open_a_second_turn(
+    c4_run: Path, tmp_path: Path
+) -> None:
+    """Failed, truncated, unparseable and non-ready answers are passed over."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    _rewrite_answers(
+        run_dir,
+        {
+            "mei-0001": _FAILED,
+            "mei-0002": _TRUNCATED,
+            "mei-0003": _UNPARSEABLE,
+            "mei-0004": _ABSTAINED,
+        },
+    )
+    output = tmp_path / _FOLLOW_UP_ID
+
+    assert _follow_up(run_dir, output) == 0
+
+    assert _manifest(output).item_ids == ("mei-0005", "mei-0006")
+
+
+@pytest.mark.parametrize("qualifying", [(), ("mei-0024",)])
+def test_follow_up_needs_two_ready_answers(
+    qualifying: tuple[str, ...],
+    c4_run: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fewer than two qualifying answers is its own refusal, before a request."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    _rewrite_answers(
+        run_dir,
+        {item: _TRUNCATED for item in _DEV_ITEM_IDS if item not in qualifying},
+    )
+    output = tmp_path / _FOLLOW_UP_ID
+    capsys.readouterr()
+
+    assert _follow_up(run_dir, output) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "ready_answers_missing"
+    assert not output.exists()
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def _rewrite_prompts(
+    run_dir: Path,
+    change: Callable[[PreparedPromptV1], PreparedPromptV1],
+    split: str = "dev",
+) -> None:
+    """Rewrites the run's C4 prompts and records every digest they move.
+
+    The prompt file's digest goes into prepare.json, and prepare.json and
+    its digest into the run manifest, so neither the digest check nor the
+    contract re-check objects, and only the guard a case aims at can.
+    """
+    path = run_dir / "prepared" / "C4.json"
+    batch = PreparedBatchV1.model_validate_json(path.read_bytes())
+    prompts = tuple(change(prompt) for prompt in batch.prompts)
+    data = canonical_json(batch.model_copy(update={"prompts": prompts}))
+    path.write_bytes((data + "\n").encode())
+    prepare = _manifest(run_dir)
+    digest = hashlib.sha256((data + "\n").encode()).hexdigest()
+    conditions = tuple(
+        condition.model_copy(update={"sha256": digest})
+        for condition in prepare.conditions
+    )
+    recorded = canonical_json(
+        prepare.model_copy(update={"split": split, "conditions": conditions})
+    )
+    (run_dir / "prepare.json").write_bytes((recorded + "\n").encode())
+
+    def _record(document: dict[str, Any]) -> None:
+        document["prepare"] = json.loads(recorded)
+        document["prepare_sha256"] = hashlib.sha256(
+            (recorded + "\n").encode()
+        ).hexdigest()
+
+    _edit_manifest(run_dir, _record)
+
+
+def _as_test_run(run_dir: Path) -> None:
+    """Makes a coherent test run: its manifest and every prompt say test.
+
+    A run whose prompts still said dev would be refused by the contract
+    re-check with the same code, whether or not the dev-only guard exists.
+    """
+    _rewrite_prompts(
+        run_dir,
+        lambda prompt: prompt.model_copy(update={"split": "test"}),
+        "test",
+    )
+
+    def _renamed(document: dict[str, Any]) -> None:
+        document["run_id"] = "test-qwen3-32b-c4-2026-09-20"
+
+    _edit_manifest(run_dir, _renamed)
+
+
+def _second_system_prompt(prompt: PreparedPromptV1) -> PreparedPromptV1:
+    """Gives the second item, which follow-up continues, another system turn."""
+    if prompt.item_id != "mei-0002":
+        return prompt
+    system = prompt.messages[0]
+    other = system.model_copy(update={"content": system.content + "\nAlso."})
+    return prompt.model_copy(update={"messages": (other, *prompt.messages[1:])})
+
+
+def _without_first_answer(run_dir: Path) -> None:
+    """Drops the first item's answer, keeping the recorded digest true.
+
+    It must be an item follow-up would continue: without the contract
+    re-check, a missing late answer would never be looked up.
+    """
+    batch = _counted(run_dir)
+    kept = tuple(a for a in batch.completions if a.item_id != "mei-0001")
+    data = canonical_json(batch.model_copy(update={"completions": kept}))
+    _rewrite_run_file(run_dir, "completions/C4.json", (data + "\n").encode())
+
+
+def _without_c4(document: dict[str, Any]) -> None:
+    """Relabels the one condition C3, in the prepare and in the run."""
+    prepared = cast(list[dict[str, Any]], document["prepare"]["conditions"])
+    prepared[0].update(label="C3", retrieval="none", path="prepared/C3.json")
+    ran = cast(list[dict[str, Any]], document["conditions"])
+    ran[0].update(
+        label="C3",
+        attempts_path="attempts/C3.jsonl",
+        completions_path="completions/C3.json",
+    )
+
+
+def _priceless(document: dict[str, Any]) -> None:
+    document["prices"] = None
+
+
+def _refusal_case(
+    name: str, c4_run: Path, incomplete_run: Path, tmp_path: Path
+) -> tuple[Path, Path]:
+    """Builds one unusable source or output for the follow-up refusals."""
+    output = tmp_path / _FOLLOW_UP_ID
+    if name == "run_incomplete":
+        return _run_copy(incomplete_run, tmp_path), output
+    run_dir = _run_copy(c4_run, tmp_path)
+    if name == "split_refused":
+        _as_test_run(run_dir)
+    elif name == "condition_mismatch":
+        _edit_manifest(run_dir, _without_c4)
+    elif name == "prices_missing":
+        _edit_manifest(run_dir, _priceless)
+    elif name == "hash_mismatch":
+        path = run_dir / "completions" / "C4.json"
+        path.write_bytes(path.read_bytes().replace(b"mei-0001", b"mei-0001 "))
+    elif name == "items_mismatch":
+        _without_first_answer(run_dir)
+    elif name == "system_prompt_unstable":
+        _rewrite_prompts(run_dir, _second_system_prompt)
+    elif name == "prepare_id_invalid":
+        output = tmp_path / "Smoke Output"
+    elif name == "output_exists":
+        output.mkdir()
+    return run_dir, output
+
+
+# The message names the guard: split_refused, condition_mismatch and
+# output_exists each have a second guard with the same code, so a case
+# checked by its code alone passes when its own guard is deleted.
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        ("run_incomplete", "Only a complete run can be published"),
+        ("split_refused", "Only a dev run can be continued"),
+        ("condition_mismatch", "The run did not prepare the C4 condition"),
+        ("prices_missing", "A published run must record its token prices"),
+        ("hash_mismatch", "A run file does not match its recorded digest"),
+        ("items_mismatch", "A published batch does not answer its own prompts"),
+        (
+            "system_prompt_unstable",
+            "One condition produced more than one system prompt",
+        ),
+        (
+            "prepare_id_invalid",
+            "The output directory name is not a valid prepare id",
+        ),
+        ("output_exists", "The prepare directory already exists"),
+    ],
+)
+def test_follow_up_refuses_unusable_sources_and_outputs(
+    code: str,
+    message: str,
+    c4_run: Path,
+    incomplete_run: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A source a publish would refuse, or a test run, is never continued.
+
+    Each case is refused by its own guard: a genuine test run, whose
+    prompts say test too, reaches the dev-only guard, and a batch that
+    answers other items than its prompts, with a true digest, reaches only
+    the contract re-check.
+    """
+    run_dir, output = _refusal_case(code, c4_run, incomplete_run, tmp_path)
+    existed = output.exists()
+    capsys.readouterr()
+
+    assert _follow_up(run_dir, output) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == {"code": code, "message": message}
+    assert output.exists() == existed
+    assert not existed or not any(output.iterdir())
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_follow_up_refuses_an_output_made_while_it_wrote(
+    c4_run: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An output that appears before the rename is refused, staging removed."""
+    output = tmp_path / _FOLLOW_UP_ID
+    manifest = getattr(model_run, "_follow_up_manifest")
+
+    def _raced(*arguments: Any) -> PrepareManifestV1:
+        (output / "prepared").mkdir(parents=True)
+        (output / "prepared" / "C4.json").write_bytes(b"{}\n")
+        return cast(PrepareManifestV1, manifest(*arguments))
+
+    monkeypatch.setattr(model_run, "_follow_up_manifest", _raced)
+    capsys.readouterr()
+
+    assert _follow_up(c4_run, output) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == {
+        "code": "output_exists",
+        "message": "The prepare directory already exists",
+    }
+    assert _files(output) == {"prepared/C4.json": b"{}\n"}
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_a_follow_up_prompt_set_is_called_and_published(
+    c4_run: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The call sends four ordered turns per item; publish keeps the set.
+
+    The published set then scores like any C4 run: scoring checks each
+    second turn by the first turn it continues, and re-scores it byte for
+    byte. No skip: scoring needs tshark 4.6.8 and the frozen field
+    catalog, as the end-to-end test above does.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    prepare_dir = tmp_path / "smoke" / _FOLLOW_UP_ID
+    prepare_dir.parent.mkdir()
+    assert _follow_up(c4_run, prepare_dir) == 0
+    artifacts = generate_model_split(tmp_path / "split")
+    answers = _GoldReplies(_dev_routing(artifacts))
+    config = tmp_path / "call.json"
+    with _provider(answers) as provider:
+        answers.received = provider.received
+        _write_config(config, provider.url)
+        assert _call(prepare_dir, config, run_id=_FOLLOW_UP_ID) == 0
+        bodies = [json.loads(r.body) for r in provider.received]
+
+    assert [[m["role"] for m in body["messages"]] for body in bodies] == [
+        ["system", "user", "assistant", "user"]
+    ] * 2
+    assert [body["messages"][3]["content"] for body in bodies] == [
+        FOLLOW_UP_TEXT
+    ] * 2
+    run_dir = prepare_dir / "runs" / _FOLLOW_UP_ID
+    manifest = _run_manifest_at(run_dir)
+    assert manifest.status == "complete"
+    assert [c.label for c in manifest.conditions] == ["C4"]
+    output = tmp_path / "docs" / "results" / _FOLLOW_UP_ID
+    assert _publish(run_dir, output) == 0
+    assert sorted(_files(output)) == sorted(_C4_FILES)
+    continued = _batch(prepare_dir, "C4")
+    assert [len(prompt.messages) for prompt in continued.prompts] == [4, 4]
+    items = {item.item_id: item for item in artifacts.inputs}
+    check_prompts({"C4": (continued, "")}, items)
+    check_prompts({"C4": (_batch(c4_run, "C4"), "")}, items)
+    scored = score_run(output, code_revision="follow-up-test")
+    assert scored.items == 2
+    assert scored.outcomes["strong_exact"] == 2
+    again = score_run(output, code_revision="follow-up-test", check=True)
+    assert again.differences == ()
+
+
+# A repair round's arms, prepared from a plan over the C4 run. The run ids
+# carry the arm's tag before the base run's date.
+_ARM_IDS: dict[str, str] = {
+    "resample": "dev-qwen3-32b-c4-res-2026-09-20",
+    "bare": "dev-qwen3-32b-c4-bare-2026-09-20",
+    "counterexample": "dev-qwen3-32b-c4-cx-2026-09-20",
+}
+_TEST_C4_RUN_ID = "test-qwen3-32b-c4-2026-09-20"
+_FRAMES_CARD = canonical_json(
+    {
+        "frames": [
+            {
+                "answer_matched": True,
+                "dns.flags.response": False,
+                "dns.qry.type": 1,
+                "frame": 1,
+                "ip.dsfield.ecn": 0,
+                "ip.dst": "198.51.100.1",
+                "ip.src": "192.0.2.129",
+                "ip.ttl": 64,
+                "should_match": False,
+                "udp.dstport": 53,
+                "udp.srcport": 41129,
+            }
+        ]
+    }
+)
+_ERROR_CARD = canonical_json({"error": "unknown_field", "field": "ip.ttll"})
+# One item of each card kind, in prepare order.
+_PLAN_ITEMS = (
+    RepairItemV1(
+        item_id="mei-0003",
+        base_outcome="silent_wrong",
+        card_kind="frames",
+        card=_FRAMES_CARD,
+    ),
+    RepairItemV1(
+        item_id="mei-0007",
+        base_outcome="invalid",
+        card_kind="error",
+        card=_ERROR_CARD,
+    ),
+    RepairItemV1(
+        item_id="mei-0012", base_outcome="silent_wrong", card_kind="none"
+    ),
+)
+_PLANNED = tuple(item.item_id for item in _PLAN_ITEMS)
+
+
+def _plan_document(
+    run_dir: Path, items: Sequence[RepairItemV1] = _PLAN_ITEMS
+) -> dict[str, Any]:
+    """Describes a plan of one run as ``dfilterforge repair`` derives it.
+
+    Only what the prepare step checks is real: the split, the base run id
+    and its manifest digest. The outcome and label digests stand in.
+    """
+    manifest = _run_manifest_at(run_dir)
+    split = manifest.prepare.split
+    return {
+        "split": split,
+        "base_run": manifest.run_id,
+        "base_run_manifest_sha256": hashlib.sha256(
+            (run_dir / "run_manifest.json").read_bytes()
+        ).hexdigest(),
+        "base_outcomes_sha256": "2" * 64,
+        "feedback_labels_sha256": "3" * 64,
+        "feedback_probe": "semantic-29" if split == "dev" else "semantic-35",
+        "items": [item.model_dump() for item in items],
+    }
+
+
+def _write_plan(path: Path, document: Mapping[str, Any]) -> Path:
+    """Writes a plan in the canonical encoding the repair command writes."""
+    plan = RepairPlanV1.model_validate(document)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes((canonical_json(plan) + "\n").encode("utf-8"))
+    return path
+
+
+def _arm(source: Path, output: Path, plan: Path | None, arm: str | None) -> int:
+    """Prepares one repair arm, or passes only the options given."""
+    options = [
+        *(["--plan", str(plan)] if plan is not None else []),
+        *(["--arm", arm] if arm is not None else []),
+    ]
+    return model_run.main(
+        [
+            "follow-up",
+            "--from-run",
+            str(source),
+            "--output-dir",
+            str(output),
+            "--source-revision",
+            "test",
+            *options,
+        ]
+    )
+
+
+def test_each_repair_arm_is_prepared_from_a_plan_without_network_or_gold(
+    c4_run: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The arms differ only in what follows the counted answer.
+
+    The plan is the trigger: mei-0003 stopped on its length, which the
+    smoke's readiness rule would pass over, and is continued all the same.
+    Each arm's prompts pass the scorer's first-turn check.
+    """
+    run_dir = _run_copy(c4_run, tmp_path)
+    _rewrite_answers(run_dir, {"mei-0003": _TRUNCATED})
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(run_dir))
+    monkeypatch.setattr(socket.socket, "connect", _no_sockets)
+    monkeypatch.setattr(model_run, "generate_model_split", _no_gold)
+    monkeypatch.setattr(model_run, "open_frozen_catalog", _no_gold)
+    source = _run_manifest_at(run_dir)
+    first = {p.item_id: p for p in _batch(run_dir, "C4").prompts}
+    counted = {a.item_id: a for a in _counted(run_dir).completions}
+    batches: dict[str, PreparedBatchV1] = {}
+
+    for arm, arm_id in _ARM_IDS.items():
+        output = tmp_path / "repair" / arm_id
+        output.parent.mkdir(exist_ok=True)
+        capsys.readouterr()
+        assert _arm(run_dir, output, plan, arm) == 0
+
+        report = cast(dict[str, Any], json.loads(capsys.readouterr().out))
+        prepare = _manifest(output)
+        batches[arm] = _batch(output, "C4")
+        assert sorted(_files(output)) == sorted(_FOLLOW_UP_FILES)
+        assert (prepare.prepare_id, prepare.split) == (arm_id, "dev")
+        assert prepare.item_ids == _PLANNED
+        assert [c.label for c in prepare.conditions] == ["C4"]
+        assert prepare.source_files == _SOURCE_MANIFEST()
+        assert (
+            prepare.catalog,
+            prepare.top_k,
+            prepare.model_inputs_sha256,
+        ) == (
+            source.prepare.catalog,
+            source.prepare.top_k,
+            source.prepare.model_inputs_sha256,
+        )
+        assert (report["arm"], report["items"]) == (arm, list(_PLANNED))
+        assert report["source_run_id"] == _C4_RUN_ID
+        assert (
+            report["plan_sha256"]
+            == hashlib.sha256(plan.read_bytes()).hexdigest()
+        )
+        assert report["conditions"]["C4"] == prepare.conditions[0].sha256
+
+    for prompt in batches["resample"].prompts:
+        assert prompt == first[prompt.item_id]
+    for prompt in batches["bare"].prompts:
+        assert prompt.messages[:2] == first[prompt.item_id].messages
+        assert prompt.messages[2].role == "assistant"
+        assert (
+            prompt.messages[2].content == counted[prompt.item_id].response_text
+        )
+        assert prompt.messages[3].content == FOLLOW_UP_TEXT
+    cards = {item.item_id: item.card for item in _PLAN_ITEMS}
+    for bare, card in zip(
+        batches["bare"].prompts, batches["counterexample"].prompts
+    ):
+        assert card.messages[:3] == bare.messages[:3]
+        shown = cards[card.item_id]
+        assert card.messages[3].content == (
+            FOLLOW_UP_TEXT
+            if shown is None
+            else FOLLOW_UP_TEXT + COUNTEREXAMPLE_PREFIX + shown
+        )
+    assert batches["counterexample"].prompts[2] == batches["bare"].prompts[2]
+    items = {
+        item.item_id: item
+        for item in generate_model_split(tmp_path / "split").inputs
+    }
+    for batch in batches.values():
+        check_prompts({"C4": (batch, "")}, items)
+    assert not list((tmp_path / "repair").glob(".*.partial"))
+
+
+def test_a_resample_of_every_item_is_the_base_prompt_file_byte_for_byte(
+    c4_run: Path, tmp_path: Path
+) -> None:
+    """Re-sending the frozen first turn writes the very same prompt file."""
+    base = _manifest(c4_run).conditions[0]
+    every = [
+        RepairItemV1(item_id=item, base_outcome="invalid", card_kind="none")
+        for item in _DEV_ITEM_IDS
+    ]
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(c4_run, every))
+    output = tmp_path / _ARM_IDS["resample"]
+
+    assert _arm(c4_run, output, plan, "resample") == 0
+
+    written = (output / "prepared" / "C4.json").read_bytes()
+    assert written == (c4_run / "prepared" / "C4.json").read_bytes()
+    resampled = _manifest(output)
+    assert resampled.conditions[0].sha256 == base.sha256
+    assert (
+        resampled.conditions[0].system_prompt_sha256
+        == base.system_prompt_sha256
+    )
+    assert (
+        resampled.empty_context_item_ids
+        == _manifest(c4_run).empty_context_item_ids
+    )
+
+
+def test_a_test_pass_is_continued_only_from_a_plan_and_called_once_admitted(
+    c4_run: Path,
+    held_out_prepared: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A test arm is prepared offline but sent only once the record admits it.
+
+    The smoke path still refuses every test run; a plan lifts only that
+    guard, and the call's admission check is unchanged.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    record = tmp_path / "held_out_freeze.json"
+    monkeypatch.setattr(held_out, "RECORD_PATH", record)
+    run_dir = _run_copy(c4_run, tmp_path)
+    _as_test_run(run_dir)
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(run_dir))
+    arm_id = "test-qwen3-32b-c4-cx-2026-09-20"
+    output = tmp_path / arm_id
+    capsys.readouterr()
+
+    assert _follow_up(run_dir, tmp_path / _FOLLOW_UP_ID) == 2
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "split_refused"
+    assert _arm(run_dir, output, plan, "counterexample") == 0
+
+    prepare = _manifest(output)
+    assert prepare.split == "test"
+    assert prepare.item_ids == _PLANNED
+    assert {p.split for p in _batch(output, "C4").prompts} == {"test"}
+    config = tmp_path / "call.json"
+    _write_record(record, held_out_prepared)
+    with _provider(_healthy) as provider:
+        _write_config(config, provider.url)
+        capsys.readouterr()
+        refused = _call(output, config, run_id=arm_id)
+        assert provider.received == []
+        error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+        assert (refused, error["error"]["code"]) == (2, "test_not_frozen")
+        _write_record(record, held_out_prepared, output)
+        assert _call(output, config, run_id=arm_id) == 0
+        bodies = [json.loads(r.body) for r in provider.received]
+    assert [len(body["messages"]) for body in bodies] == [4, 4, 4]
+    assert bodies[0]["messages"][3]["content"].endswith(_FRAMES_CARD)
+
+
+def test_a_counterexample_arm_is_called_published_and_scored_like_c4(
+    c4_run: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An arm run is an ordinary C4 run under its own result name.
+
+    No skip: scoring needs tshark 4.6.8 and the frozen field catalog, as
+    the end-to-end test above does.
+    """
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(c4_run))
+    arm_id = _ARM_IDS["counterexample"]
+    prepare_dir = tmp_path / "repair" / arm_id
+    prepare_dir.parent.mkdir()
+    assert _arm(c4_run, prepare_dir, plan, "counterexample") == 0
+    answers = _GoldReplies(_dev_routing(generate_model_split(tmp_path / "s")))
+    config = tmp_path / "call.json"
+    with _provider(answers) as provider:
+        answers.received = provider.received
+        _write_config(config, provider.url)
+        assert _call(prepare_dir, config, run_id=arm_id) == 0
+        assert len(provider.received) == len(_PLAN_ITEMS)
+    output = tmp_path / "docs" / "results" / arm_id
+
+    assert _publish(prepare_dir / "runs" / arm_id, output) == 0
+
+    scored = score_run(output, code_revision="repair-arm-test")
+    assert scored.items == len(_PLAN_ITEMS)
+    assert scored.outcomes["strong_exact"] == len(_PLAN_ITEMS)
+    again = score_run(output, code_revision="repair-arm-test", check=True)
+    assert again.differences == ()
+
+
+def _renamed_base(run_dir: Path) -> str:
+    """Renames the base run so that a tagged arm id overflows its name."""
+    long_id = f"dev-{'a' * 30}-2026-09-20"
+
+    def _rename(document: dict[str, Any]) -> None:
+        document["run_id"] = long_id
+
+    _edit_manifest(run_dir, _rename)
+    return f"dev-{'a' * 30}-cx-2026-09-20"
+
+
+def _plan_refusal(
+    name: str, c4_run: Path, tmp_path: Path
+) -> tuple[Path, Path, Path | None, str | None]:
+    """Builds one plan, arm and output that the follow-up step refuses."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    output = tmp_path / _ARM_IDS["counterexample"]
+    document = _plan_document(run_dir)
+    plan = tmp_path / "plan.json"
+    arm: str | None = "counterexample"
+    if name == "plan_alone":
+        arm = None
+    elif name == "arm_alone":
+        return run_dir, output, None, arm
+    elif name == "missing":
+        return run_dir, output, plan, arm
+    elif name == "oversized":
+        plan.write_bytes(b" " * ((1 << 20) + 1))
+        return run_dir, output, plan, arm
+    elif name == "unusable":
+        plan.write_bytes(b'{"schema_version":"repair-plan/1.0"}\n')
+        return run_dir, output, plan, arm
+    elif name == "reindented":
+        _write_plan(plan, document)
+        plan.write_text(
+            json.dumps(json.loads(plan.read_bytes()), indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        return run_dir, output, plan, arm
+    elif name == "other_run":
+        document["base_run"] = _PUBLISH_RUN_ID
+    elif name == "other_manifest":
+        document["base_run_manifest_sha256"] = "0" * 64
+    elif name == "other_split":
+        document.update(
+            split="test", base_run=_TEST_C4_RUN_ID, feedback_probe="semantic-35"
+        )
+    elif name == "empty":
+        document["items"] = []
+    elif name == "foreign_item":
+        document["items"][2]["item_id"] = "mei-0999"
+    elif name == "out_of_order":
+        document["items"].reverse()
+    elif name == "other_arm":
+        output = tmp_path / _ARM_IDS["bare"]
+    elif name == "untagged":
+        output = tmp_path / _C4_RUN_ID
+    elif name == "tag_after_date":
+        output = tmp_path / f"{_C4_RUN_ID}-cx"
+    elif name == "third_run":
+        output = tmp_path / "dev-qwen3-32b-c4-cx-r3-2026-09-20"
+    elif name == "overflow":
+        output = tmp_path / _renamed_base(run_dir)
+        document = _plan_document(run_dir)
+    _write_plan(plan, document)
+    return run_dir, output, plan, arm
+
+
+_GIVEN_TOGETHER = ("arm_invalid", "A repair plan and an arm are given together")
+_OTHER_PASS = ("plan_mismatch", "The plan was derived from another pass")
+_NOT_ITS_ITEMS = (
+    "plan_mismatch",
+    "The plan's items are not the pass's C4 items in prepare order",
+)
+_NOT_ITS_NAME = (
+    "arm_id_mismatch",
+    "The output is not named after the base run and its arm",
+)
+
+
+# The message names the guard where two guards share a code.
+@pytest.mark.parametrize(
+    ("name", "refusal"),
+    [
+        ("plan_alone", _GIVEN_TOGETHER),
+        ("arm_alone", _GIVEN_TOGETHER),
+        ("missing", ("plan_invalid", "A required file is missing")),
+        (
+            "oversized",
+            ("plan_too_large", "A recorded file is larger than its bound"),
+        ),
+        ("unusable", ("plan_invalid", "The repair plan is not usable")),
+        (
+            "reindented",
+            (
+                "plan_invalid",
+                "The repair plan is not in its canonical encoding",
+            ),
+        ),
+        ("other_run", _OTHER_PASS),
+        ("other_manifest", _OTHER_PASS),
+        ("other_split", _OTHER_PASS),
+        (
+            "empty",
+            ("plan_empty", "The plan triggers no item, so no arm is run"),
+        ),
+        ("foreign_item", _NOT_ITS_ITEMS),
+        ("out_of_order", _NOT_ITS_ITEMS),
+        ("other_arm", _NOT_ITS_NAME),
+        ("untagged", _NOT_ITS_NAME),
+        ("tag_after_date", _NOT_ITS_NAME),
+        ("third_run", _NOT_ITS_NAME),
+        (
+            "overflow",
+            (
+                "run_id_invalid",
+                "The arm's run id is not a usable result name",
+            ),
+        ),
+    ],
+)
+def test_follow_up_refuses_a_plan_that_does_not_fit_its_pass(
+    name: str,
+    refusal: tuple[str, str],
+    c4_run: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A plan of another pass, split or item order prepares nothing."""
+    run_dir, output, plan, arm = _plan_refusal(name, c4_run, tmp_path)
+    capsys.readouterr()
+
+    assert _arm(run_dir, output, plan, arm) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == dict(zip(("code", "message"), refusal))
+    assert not output.exists()
+    assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_an_arm_run_id_may_carry_the_one_re_run_tag(
+    c4_run: Path, tmp_path: Path
+) -> None:
+    """An outage is re-run once from scratch with r2 after the tag."""
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(c4_run))
+    output = tmp_path / "dev-qwen3-32b-c4-bare-r2-2026-09-20"
+
+    assert _arm(c4_run, output, plan, "bare") == 0
+
+    assert _manifest(output).prepare_id == output.name
+
+
+@pytest.mark.parametrize("arm", list(_ARM_IDS))
+@pytest.mark.parametrize(
+    ("change", "code", "message"),
+    [
+        (_FAILED, "follow_up_invalid", "The answer is empty"),
+        (
+            {"response_text": "x" * 65000},
+            "prompt_too_large",
+            "Prompt exceeds the byte limit",
+        ),
+    ],
+    ids=["failed", "over_budget"],
+)
+def test_a_round_whose_second_turn_cannot_be_built_is_refused_at_every_arm(
+    arm: str,
+    change: dict[str, Any],
+    code: str,
+    message: str,
+    c4_run: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The resample is refused too, so no arm of such a round is sent."""
+    run_dir = _run_copy(c4_run, tmp_path)
+    _rewrite_answers(run_dir, {"mei-0007": change})
+    plan = _write_plan(tmp_path / "plan.json", _plan_document(run_dir))
+    output = tmp_path / _ARM_IDS[arm]
+    capsys.readouterr()
+
+    assert _arm(run_dir, output, plan, arm) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"] == {"code": code, "message": message}
+    assert not output.exists()
+    assert not list(tmp_path.glob(".*.partial"))
 
 
 _README = Path(__file__).parents[1] / "README.md"
