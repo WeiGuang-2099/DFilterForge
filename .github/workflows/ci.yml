@@ -36,8 +36,8 @@ jobs:
         # ruled winners' routes), the bake-off ruling and smoke evidence
         # tests, the test-pass batch's committed-registry and note tests,
         # the repair-arm batch's tests of the committed passes, plans, caps
-        # and note (its dry run builds every dev arm with the real follow-up
-        # step), the freeze quote test, and the frozen-prompt guard, so a
+        # and note (it builds every dev arm with the real follow-up step),
+        # the freeze quote test, and the frozen-prompt guard, so a
         # commit that lets the note and the registry drift fails here.
         # The guard fails a branch that edits a prepare-hashed file while a
         # prompt set still awaits its call, rather than at the call step's

@@ -15,8 +15,12 @@ each pass's arms go resample, bare, then counterexample, each after the
 one before has a final state, as the note orders them. A row's run id is
 the pass's with ``-res``, ``-bare`` or ``-cx`` before its date. Its config
 is the committed bake-off config the pass sent, checked against the
-pass's run manifest. Its cap is the pass's slot's cap for the split, read
-from the note's caps table, so a raised cap is a committed edit there.
+pass's run manifest. Its cap is the slot's registered cap for the split,
+read from the note's caps table, which a raise never edits. A run whose
+budget stop is resumed takes the cap the note's raised caps table gives
+that run alone; a raise for a run with no budget stop to resume, or one
+not above the slot's cap, is refused, so no other arm and no outage
+re-run starts above the registered cap.
 
 Each row's prompt set is ``artifacts/repair/<arm run id>`` (ignored by
 git), where the call step also writes ``runs/<arm run id>``. Before
@@ -63,8 +67,8 @@ What follows a call, by the bake-off runner's own reading of a run
 - A complete pass whose every lasting failure is HTTP 400 or 404 is a
   refusal, not run: an arm has no fallback.
 - HTTP 401, 402 or 403 aborts. A budget stop after an answer stops the
-  batch until the slot's cap is raised in the note and committed. So does
-  anything the batch cannot read as a run.
+  batch until that run's cap is raised in the note's raised caps table
+  and committed. So does anything the batch cannot read as a run.
 
 Every step is read back from the run directories, so running the same
 command again skips finished rows and resumes unfinished ones.
@@ -83,8 +87,9 @@ Exit codes:
          paid call may have been sent: read steps.jsonl, fix the cause,
          then run the same command.
     2    Refused before any request: a pass, its plan or config, the
-         note's caps, a prompt set, a test seed or its admission, the
-         lock, git, uncommitted tooling or the keyless preflight.
+         note's caps or raised caps, a prompt set, a test seed or its
+         admission, the lock, git, uncommitted tooling or the keyless
+         preflight.
     3    Aborted: the key variable is not set (after the keyless
          preflight; nothing was sent), or the account refused a request
          (HTTP 401, 402 or 403). Fix it and run the same command.
@@ -217,7 +222,11 @@ ROLE_SLOTS = {
 }
 FALLBACK_SUFFIX = " fallback"
 CAPS_HEADER = "| Slot | Config | Dev cap | Test cap |"
+# The note's table of caps raised for one arm run each, after its budget
+# stop; the caps table above it keeps the registered caps.
+RAISED_HEADER = "| Arm run | Raised cap |"
 CAP_TEXT = re.compile(r"[0-9]+\.[0-9]{2}")
+SPLITS = ("dev", "test")
 # The follow-up step's codes for a second turn that cannot be built, from
 # an empty answer or over the 64 KiB prompt budget: it refuses every arm
 # of that pass, and the protocol reports the model's round not run.
@@ -275,7 +284,11 @@ class Cap(NamedTuple):
 
 
 class Row(NamedTuple):
-    """One arm run of one repaired pass, as the note names and caps it."""
+    """One arm run of one repaired pass, as the note names and caps it.
+
+    ``cap_usd`` is the slot's registered cap for the split, which both of
+    the row's runs take unless the note raises one of them.
+    """
 
     number: int
     slot: str
@@ -288,11 +301,15 @@ class Row(NamedTuple):
 
 
 class Plan(NamedTuple):
-    """The split and its rows, in the order they are sent."""
+    """The split and its rows, in the order they are sent.
+
+    ``raised`` holds the cap the note raises for one run each, by run id.
+    """
 
     split: str
     rows: tuple[Row, ...]
     wait_seconds: float
+    raised: dict[str, float]
 
 
 @dataclass
@@ -442,26 +459,96 @@ def _usd(cell: str, slot: str) -> float | None:
     return float(cell)
 
 
-def load_caps(text: str) -> dict[str, Cap]:
-    """Reads the note's caps table: each slot's config, dev and test cap.
+def _table(text: str, heading: str, name: str) -> list[tuple[str, list[str]]]:
+    """Returns the rows of the note's one table under a heading, with cells.
 
     Raises:
-        PlanError: If the table is missing or a row is malformed.
+        PlanError: If the note holds no such table, or more than one.
     """
     lines = text.splitlines()
-    starts = [i for i, line in enumerate(lines) if line.startswith(CAPS_HEADER)]
+    starts = [i for i, line in enumerate(lines) if line.startswith(heading)]
     if len(starts) != 1:
-        raise PlanError(f"{NOTE}: no single caps table ({CAPS_HEADER})")
-    caps: dict[str, Cap] = {}
+        raise PlanError(f"{NOTE}: no single {name} table ({heading})")
+    rows: list[tuple[str, list[str]]] = []
     for line in lines[starts[0] + 2 :]:
         if not line.startswith("|"):
             break
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        rows.append((line, cells))
+    return rows
+
+
+def load_caps(text: str) -> dict[str, Cap]:
+    """Reads the note's caps table: each slot's config, dev and test cap.
+
+    These are the registered caps; a raise is a row of the raised caps
+    table instead.
+
+    Raises:
+        PlanError: If the table is missing or a row is malformed.
+    """
+    caps: dict[str, Cap] = {}
+    for line, cells in _table(text, CAPS_HEADER, "caps"):
         if len(cells) < 4 or cells[0] in caps:
             raise PlanError(f"{NOTE}: unusable caps row {line!r}")
         slot, config = cells[0], cells[1].strip("`")
         caps[slot] = Cap(config, _usd(cells[2], slot), _usd(cells[3], slot))
     return caps
+
+
+def load_raised(text: str) -> dict[str, float]:
+    """Reads the note's raised caps table: one arm run's cap per row.
+
+    Raises:
+        PlanError: If the table is missing, or a row is malformed or names
+            a run twice.
+    """
+    raised: dict[str, float] = {}
+    for line, cells in _table(text, RAISED_HEADER, "raised caps"):
+        run_id = cells[0].strip("`") if cells else ""
+        if (
+            len(cells) != 2
+            or cells[0] != f"`{run_id}`"
+            or run_id in raised
+            or CAP_TEXT.fullmatch(cells[1]) is None
+        ):
+            raise PlanError(f"{NOTE}: unusable raised caps row {line!r}")
+        raised[run_id] = float(cells[1])
+    return raised
+
+
+def raised_caps(
+    rows: Sequence[Row], raised: dict[str, float], split: str
+) -> dict[str, float]:
+    """Keeps the split's raised caps, each one run's and above its slot's.
+
+    A raise of the other split's run is that split's to check.
+
+    Raises:
+        PlanError: If a raise names no arm run of either split or of this
+            split's rows, or is not above its slot's registered cap and
+            within the call step's bound.
+    """
+    runs = {
+        run_id: row for row in rows for run_id in (row.run_id, row.rerun_id)
+    }
+    kept: dict[str, float] = {}
+    for run_id, usd in raised.items():
+        named = run_id.split("-", 1)[0]
+        if named in SPLITS and named != split:
+            continue
+        row = runs.get(run_id)
+        if row is None:
+            raise PlanError(
+                f"{NOTE}: the raised cap of {run_id} names no {split} arm run"
+            )
+        if not row.cap_usd < usd <= db.MAX_USD:
+            raise PlanError(
+                f"{NOTE}: the raised cap of {run_id}, {usd:.2f} USD, is not"
+                f" above the {row.slot} {split} cap {row.cap_usd:.2f} USD"
+            )
+        kept[run_id] = usd
+    return kept
 
 
 def rows_for(
@@ -578,6 +665,10 @@ class Context:
         """Returns one arm run's prompt set, where its run is written."""
         return self.root / PREPARE_ROOT / run_id
 
+    def cap_usd(self, row: Row, run_id: str) -> float:
+        """Returns one run's cap: its own raised cap, else the slot's."""
+        return self.plan.raised.get(run_id, row.cap_usd)
+
     def view(self, run_id: str) -> Any:
         """Reads one arm run's directory without changing it."""
         return db.load_run(self.prepare_dir(run_id), run_id, model_run)
@@ -622,7 +713,7 @@ def read_run(row: Row, run_id: str, ctx: Context) -> Reading:
     blocked = ctx.prompts.blocked.get(run_id)
     if not view.exists and blocked is not None:
         return Reading(run_id, "blocked", blocked)
-    kind, state = classify(db.decide(view, _micro(row.cap_usd)))
+    kind, state = classify(db.decide(view, _micro(ctx.cap_usd(row, run_id))))
     return Reading(run_id, kind, state)
 
 
@@ -935,13 +1026,37 @@ def endpoint(row: Row, sizes: tuple[int, ...], ctx: Context) -> Any:
     return db.load_endpoint(path.stem, path.parent, model_run, {LABEL: sizes})
 
 
-def prepare_all(ctx: Context, write: bool) -> None:
-    """Checks the prompt set of every run that owes a call.
+def check_raise(run_id: str, ctx: Context) -> None:
+    """Requires a raised cap to resume its own run's budget stop.
+
+    The protocol resumes a budget stop only under a raised cap, so a
+    raise never starts a run, nor sends one that no budget stopped.
 
     Raises:
-        PlanError: If a prompt set or seed cannot be used, or a cap is
-            below one request's worst case; every test run without a
-            seed is named at once.
+        PlanError: If the note raises the run's cap but the run has no
+            invocation that stopped at its budget.
+    """
+    usd = ctx.plan.raised.get(run_id)
+    if usd is None:
+        return
+    manifest = ctx.view(run_id).manifest
+    invocations = () if manifest is None else manifest.invocations
+    if not any(spent.stop_reason == "budget" for spent in invocations):
+        raise PlanError(
+            f"{run_id}: {NOTE} raises its cap to {usd:.2f} USD, but it has"
+            " no budget stop to resume, and a raised cap only resumes one;"
+            " delete that row of the raised caps table, commit it and run"
+            " the same command"
+        )
+
+
+def prepare_all(ctx: Context, write: bool) -> None:
+    """Checks the prompt set and any raised cap of every run that owes a call.
+
+    Raises:
+        PlanError: If a prompt set or seed cannot be used, a raised cap
+            has no budget stop to resume, or a cap is below one request's
+            worst case; every test run without a seed is named at once.
     """
     missing: list[str] = []
     for row in ctx.plan.rows:
@@ -949,6 +1064,7 @@ def prepare_all(ctx: Context, write: bool) -> None:
         action = reading.state.action
         if action is None or action.kind not in ("start", "resume"):
             continue
+        check_raise(reading.run_id, ctx)
         try:
             check_prompts(row, reading.run_id, ctx, write)
         except SeedMissing as error:
@@ -958,11 +1074,13 @@ def prepare_all(ctx: Context, write: bool) -> None:
         if sizes is None:
             continue
         worst = endpoint(row, sizes, ctx).worst_micro_usd
-        if worst > _micro(row.cap_usd):
+        cap = ctx.cap_usd(row, reading.run_id)
+        if worst > _micro(cap):
             raise PlanError(
                 f"{reading.run_id}: one request may cost"
-                f" {worst / db.MICRO:.6f} USD, over the {row.slot} cap"
-                f" {row.cap_usd:.2f}; raise it in {NOTE} and commit"
+                f" {worst / db.MICRO:.6f} USD, over its {row.slot}"
+                f" {ctx.plan.split} cap {cap:.2f}; the protocol registers"
+                " that cap, so the owner rules on it before any request"
             )
     if missing:
         raise PlanError(
@@ -991,7 +1109,7 @@ def call_argv(row: Row, run_id: str, ctx: Context, resume: bool) -> list[str]:
         "--config",
         row.config,
         "--max-usd",
-        f"{row.cap_usd:.6f}",
+        f"{ctx.cap_usd(row, run_id):.6f}",
         "--source-revision",
         ctx.source_revision,
         "--min-interval-seconds",
@@ -1059,14 +1177,15 @@ def drive(row: Row, run_id: str, ctx: Context) -> Any:
             guardrail refused (401, 402 or 403).
         BatchStop: If the call step ended with an error envelope.
     """
-    cap = _micro(row.cap_usd)
+    usd = ctx.cap_usd(row, run_id)
+    cap = _micro(usd)
     action = db.decide(ctx.view(run_id), cap)
     if action.kind not in ("start", "resume"):
         return action
     argv = call_argv(row, run_id, ctx, action.kind == "resume")
     ctx.out(
         f"  {_now()} {run_id}: {action.kind}"
-        f" (cap {row.cap_usd:.2f} USD, {action.reason})"
+        f" (cap {usd:.2f} USD, {action.reason})"
     )
     result = ctx.invoke(argv, True)
     ctx.log(call_record(action.kind, row, run_id, argv, result))
@@ -1089,15 +1208,14 @@ def drive(row: Row, run_id: str, ctx: Context) -> Any:
     return db.decide(view, cap)
 
 
-def _stop_message(row: Row, run_id: str, action: Any) -> str:
+def _stop_message(run_id: str, action: Any, cap_usd: float) -> str:
     """Says what the owner does about a run stopped for them."""
     if action.reason == "budget":
-        split = run_id.split("-", 1)[0]
         return (
-            f"{run_id}: budget stop after an answer; raise the {row.slot}"
-            f" {split} cap in"
-            f" {NOTE}'s caps table above the last invocation's max_usd,"
-            " commit it and run the same command again"
+            f"{run_id}: budget stop after an answer at its cap"
+            f" {cap_usd:.2f} USD; raise this run's cap alone, in a row"
+            f" `{run_id}` of {NOTE}'s raised caps table above the last"
+            " invocation's max_usd, commit it and run the same command again"
         )
     if action.kind == "start":
         return f"{run_id}: the call step left no run directory"
@@ -1123,7 +1241,7 @@ def settle(row: Row, run_id: str, ctx: Context) -> Any:
         pause(db.RESUME_WAIT_SECONDS)
         action = drive(row, run_id, ctx)
     if action.kind in ("stopped", "start"):
-        raise BatchStop(_stop_message(row, run_id, action))
+        raise BatchStop(_stop_message(run_id, action, ctx.cap_usd(row, run_id)))
     return action
 
 
@@ -1141,6 +1259,7 @@ def _ready_rerun(row: Row, ctx: Context) -> bool:
     )
     pause(db.RESUME_WAIT_SECONDS)
     try:
+        check_raise(rerun, ctx)
         if rerun not in ctx.prompts.sizes:
             check_prompts(row, rerun, ctx, True)
         if rerun in ctx.prompts.blocked:
@@ -1310,9 +1429,10 @@ def summary_row(row: Row, reading: Reading, ctx: Context) -> dict[str, Any]:
     """Describes one row for the maintainer's publish step."""
     view = ctx.view(reading.run_id)
     sizes = _sizes_of(reading.run_id, ctx)
+    cap = ctx.cap_usd(row, reading.run_id)
     run: dict[str, Any] = {"run_id": reading.run_id, "exists": view.exists}
     if sizes is not None:
-        run = db.run_row(view, endpoint(row, sizes, ctx), _micro(row.cap_usd))
+        run = db.run_row(view, endpoint(row, sizes, ctx), _micro(cap))
         run["action"] = run.pop("state")
         run["action_reason"] = run.pop("why")
         run.pop("commit_to", None)
@@ -1324,7 +1444,8 @@ def summary_row(row: Row, reading: Reading, ctx: Context) -> dict[str, Any]:
         "run_id": row.run_id,
         "counted_run_id": reading.run_id,
         "config": row.config,
-        "cap_usd": row.cap_usd,
+        "cap_usd": cap,
+        "registered_cap_usd": row.cap_usd,
         "items": None if sizes is None else len(sizes),
         "state": reading.state.state,
         "reason": reading.state.reason,
@@ -1479,9 +1600,11 @@ def cap_table(ctx: Context) -> list[str]:
                 f"{len(sizes)} | {priced.worst_micro_usd / db.MICRO:.6f} |"
                 f" {priced.pass_worst_micro_usd / db.MICRO:.4f}"
             )
+        cap = ctx.cap_usd(row, reading.run_id)
+        raised = " raised" if cap != row.cap_usd else ""
         lines.append(
             f"{row.number} | {reading.run_id} | {Path(row.config).stem} |"
-            f" {bounds} | {row.cap_usd:.2f}"
+            f" {bounds} | {cap:.2f}{raised}"
         )
     lines.append(
         "the call step stops an arm run (budget) before a request whose worst"
@@ -1532,7 +1655,7 @@ def build_context(
     """Reads the passes, their plans and configs, and the note's caps.
 
     Raises:
-        PlanError: If a pass, plan, config or cap is not usable.
+        PlanError: If a pass, plan, config, cap or raised cap is not usable.
         ValueError: If a file does not parse.
         OSError: If a file cannot be read.
     """
@@ -1541,12 +1664,14 @@ def build_context(
     passes = dev_passes() if split == "dev" else registry_passes(root)
     if not passes:
         raise PlanError(f"no {split} pass is repaired")
-    caps = load_caps((root / NOTE).read_text(encoding="utf-8"))
+    note = (root / NOTE).read_text(encoding="utf-8")
+    caps = load_caps(note)
     configs = [check_pass(root, repaired) for repaired in passes]
     wait = db.INTERRUPT_GRACE_SECONDS + max(
         config.settings.timeout_seconds for config in configs
     )
-    plan = Plan(split, rows_for(passes, caps, split), wait)
+    rows = rows_for(passes, caps, split)
+    plan = Plan(split, rows, wait, raised_caps(rows, load_raised(note), split))
     return Context(
         layout=layout,
         plan=plan,

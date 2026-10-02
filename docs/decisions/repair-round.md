@@ -285,9 +285,20 @@ what is already spent, would exceed `--max-usd` (`_worst_case_micro_usd` in
 - **Against the plan's 12 USD.** The committed runs record at most 0.941
   USD (0.940394). With the registry's runs 1 to 5 at their caps, the total is
   at most 3.291 USD, and the arm caps bring it to at most 7.191 USD.
-- **Raising a cap.** A budget stop is resumed only under a raised cap,
-  committed first. `scripts/repair_arms.py` reads each arm run's cap from
-  the table above, so a raised cap is an edit of its row there.
+- **Raising a cap.** The table above keeps the caps the protocol registers,
+  and a raise never edits it. A budget stop after an answer is resumed only
+  under a cap raised for that arm run alone, above its last invocation's
+  `max_usd`, in a row of the raised caps table below, committed first. The
+  slot's other arm runs, and an outage re-run, keep the registered cap.
+  `scripts/repair_arms.py` reads each arm run's cap from its slot's row
+  above, or from its own row below. It refuses a raise of a run that has no
+  budget stop to resume, a raise not above the slot's cap, and a row naming
+  no arm run of its split.
+
+Raised caps, one arm run per row (none so far):
+
+| Arm run | Raised cap |
+| --- | ---: |
 
 The repair design estimated the expected spend from `cost.py`. These figures
 were not re-run, and they are lower bounds with no retries:
@@ -351,8 +362,9 @@ The batch takes every row from the protocol and this note:
   bare, then counterexample, each after the one before has a final state; an
   arm not run does not hold back the next.
 - **Run id, config and cap.** The arm run ids above; the repaired pass's own
-  config, checked against its run manifest; and the slot's cap for the split,
-  which the batch reads from the Caps table above.
+  config, checked against its run manifest; and the slot's registered cap for
+  the split, which the batch reads from the Caps table above, or the run's own
+  raised cap once a budget stop of that run is resumed.
 - **Prompt sets.** Each arm run answers `artifacts/repair/<arm run id>`
   (ignored by git), which `scripts/model_run.py follow-up --plan --arm`
   builds. Before anything is sent, the batch builds each owed set again in a
@@ -379,7 +391,7 @@ The batch takes every row from the protocol and this note:
   - A refusal (no answer, and only HTTP 400 or 404) is not run: an arm has no
     fallback.
   - HTTP 401, 402 or 403 aborts. A budget stop after an answer stops the batch
-    until the cap is raised in the Caps table and committed.
+    until that run's cap is raised in the raised caps table and committed.
 - **Not run by rule.** If a second turn would exceed the 64 KiB prompt budget,
   or its answer is empty, `follow-up` refuses every arm of that pass, so the
   round is reported not run. A plan with no item leaves its three rows unused.
@@ -466,8 +478,8 @@ unset DFILTERFORGE_MODEL_API_KEY
 | Exit | Meaning | What the owner does |
 | --- | --- | --- |
 | 0 | Every row has a final state: `done`, `not_run` or `unused`. | Hand the summary to the maintainer, who publishes, scores and checks each round (below). |
-| 1 | Stopped for the owner. The cause is one of: a budget stop after an answer; a call step that ended with an error or left no run directory; the invocation limit; an unreadable run directory; a test outage re-run whose seed is not committed yet; or an error the batch did not expect, after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the slot's cap for the split in the Caps table above the last `max_usd`, and commit. For a re-run without a seed, seed it and admit it (below). Then run the same command. |
-| 2 | Refused before any request. The cause is one of: a pass, its plan or its config; the Caps table; a prompt set; a test seed that is missing or not admitted; a registry row still `registered`; the lock; git; uncommitted tooling; or the keyless preflight. | Fix what the `refused` or `REFUSED` line names, then run the same command. A missing test seed means the seed and admission commits come first (below). Delete a held `artifacts/repair-arms/.lock` only when no batch or call step is running. |
+| 1 | Stopped for the owner. The cause is one of: a budget stop after an answer; a call step that ended with an error or left no run directory; the invocation limit; an unreadable run directory; a test outage re-run whose seed is not committed yet; or an error the batch did not expect, after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, add a row for the stopped run alone to the raised caps table, with a cap above its last `max_usd`, and commit; the Caps table stays as registered. For a re-run without a seed, seed it and admit it (below). Then run the same command. |
+| 2 | Refused before any request. The cause is one of: a pass, its plan or its config; the Caps table or the raised caps table; a prompt set; a test seed that is missing or not admitted; a registry row still `registered`; the lock; git; uncommitted tooling; or the keyless preflight. | Fix what the `refused` or `REFUSED` line names, then run the same command. A missing test seed means the seed and admission commits come first (below). Delete a held `artifacts/repair-arms/.lock` only when no batch or call step is running. |
 | 3 | Aborted: the key variable is not set (after the keyless preflight; nothing was sent), or the account refused a request with HTTP 401, 402 or 403. | Set the key, or fix the key, the credit or the account's guardrail, and run the same command. |
 | 130 | Interrupted with Ctrl-C after the request in flight finished; that request may be billed but not recorded. | Run the same command. If it says a call step is still running, let it exit and delete `artifacts/repair-arms/.lock` first. |
 

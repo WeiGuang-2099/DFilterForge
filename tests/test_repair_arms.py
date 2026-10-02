@@ -155,8 +155,11 @@ def _write_json(path: Path, value: Any) -> None:
     )
 
 
-def _note(rows: Sequence[tuple[str, str, str, str]] = _CAPS_ROWS) -> str:
-    """A repair note holding the caps table the batch reads."""
+def _note(
+    rows: Sequence[tuple[str, str, str, str]] = _CAPS_ROWS,
+    raised: Sequence[tuple[str, str]] = (),
+) -> str:
+    """A repair note holding the caps and raised caps tables the batch reads."""
     lines = [
         "# Repair round",
         "",
@@ -167,6 +170,12 @@ def _note(rows: Sequence[tuple[str, str, str, str]] = _CAPS_ROWS) -> str:
         *(f"| {s} | `{c}` | {d} | {t} | 0.01 | 0.09 |" for s, c, d, t in rows),
         "",
         "- Headroom.",
+        "",
+        "| Arm run | Raised cap |",
+        "| --- | ---: |",
+        *(f"| `{run}` | {usd} |" for run, usd in raised),
+        "",
+        "## Order",
     ]
     return "\n".join(lines) + "\n"
 
@@ -1070,17 +1079,109 @@ def test_a_budget_stop_waits_for_a_raised_and_committed_cap(
 ) -> None:
     assert bench.run(bench.keyless() + [BUDGET]) == ra.EXIT_STOPPED == 1
     stop = next(line for line in bench.printed if line.startswith("STOPPED"))
-    assert f"raise the anchor dev cap in {ra.NOTE}'s caps table" in stop
+    assert stop == (
+        f"STOPPED: {ANCHOR_RES}: budget stop after an answer at its cap 0.05"
+        f" USD; raise this run's cap alone, in a row `{ANCHOR_RES}` of"
+        f" {ra.NOTE}'s raised caps table above the last invocation's max_usd,"
+        " commit it and run the same command again"
+    )
     assert bench.run(bench.keyless()) == 1
     assert len(bench.paid()) == 0
-    rows = [
-        (s, c, "0.06" if s == "anchor" else d, t) for s, c, d, t in _CAPS_ROWS
-    ]
-    (bench.root / ra.NOTE).write_text(_note(rows), encoding="utf-8")
+    note = _note(raised=[(ANCHOR_RES, "0.06")])
+    (bench.root / ra.NOTE).write_text(note, encoding="utf-8")
     assert bench.run(bench.keyless() + [COMPLETE] * 12) == 0
     assert bench.paid()[0] == ANCHOR_RES
     assert bench.paid_argv()[0][-1] == "--resume"
-    assert _flag(bench.paid_argv()[0], "--max-usd") == "0.060000"
+    # The raise is the stopped run's alone: the slot's other arms start at
+    # the registered cap.
+    caps = [_flag(argv, "--max-usd") for argv in bench.paid_argv()]
+    assert caps[:3] == ["0.060000", "0.050000", "0.050000"]
+    assert bench.paid()[1:3] == [ANCHOR_BARE, ANCHOR_CX]
+    rows = bench.rows()
+    assert (rows[ANCHOR_RES]["cap_usd"], rows[ANCHOR_BARE]["cap_usd"]) == (
+        0.06,
+        0.05,
+    )
+    assert rows[ANCHOR_RES]["registered_cap_usd"] == 0.05
+
+
+def test_a_raise_only_resumes_a_budget_stop_of_its_own_run(
+    bench: Bench,
+) -> None:
+    # A raise of a run that has not started would start it above the cap
+    # the protocol registers.
+    note = _note(raised=[(ANCHOR_BARE, "0.06")])
+    (bench.root / ra.NOTE).write_text(note, encoding="utf-8")
+    assert bench.run([]) == 2
+    assert not bench.calls
+    assert (
+        f"REFUSED: {ANCHOR_BARE}: {ra.NOTE} raises its cap to 0.06 USD, but it"
+        " has no budget stop to resume, and a raised cap only resumes one;"
+        " delete that row of the raised caps table, commit it and run the"
+        " same command"
+    ) in bench.printed
+    # Nor does it resume a run that a pending item, not its budget, stopped.
+    (bench.root / ra.NOTE).write_text(_note(), encoding="utf-8")
+    assert bench.run(bench.keyless() + [PENDING, refuse("io_error")]) == 1
+    note = _note(raised=[(ANCHOR_RES, "0.06")])
+    (bench.root / ra.NOTE).write_text(note, encoding="utf-8")
+    assert bench.run([]) == 2
+    assert not bench.calls
+    assert any(
+        line.startswith(f"REFUSED: {ANCHOR_RES}: {ra.NOTE} raises its cap")
+        for line in bench.printed
+    )
+
+
+def test_an_outage_re_run_keeps_the_registered_cap(bench: Bench) -> None:
+    rerun = _r2(ANCHOR_RES)
+    note = _note(raised=[(rerun, "0.06")])
+    (bench.root / ra.NOTE).write_text(note, encoding="utf-8")
+    assert bench.run(bench.keyless() + [OUTAGE]) == 1
+    assert bench.paid() == [ANCHOR_RES]
+    stop = next(line for line in bench.printed if line.startswith("STOPPED"))
+    assert stop.startswith(
+        f"STOPPED: {rerun} owes the re-run of {ANCHOR_RES}'s outage, but"
+        f" {rerun}: {ra.NOTE} raises its cap to 0.06 USD, but it has no budget"
+        " stop to resume"
+    )
+    assert bench.run([]) == 2
+    assert not bench.calls
+    (bench.root / ra.NOTE).write_text(_note(), encoding="utf-8")
+    script = bench.keyless() + [COMPLETE] * 12
+    assert bench.run(script) == 0
+    assert bench.paid()[0] == rerun
+    assert _flag(bench.paid_argv()[0], "--max-usd") == "0.050000"
+
+
+@pytest.mark.parametrize(
+    ("raised", "match"),
+    [
+        ([(ANCHOR_RES, "0.05")], "is not above the anchor dev cap 0.05 USD"),
+        ([(ANCHOR_RES, "13.00")], "is not above the anchor dev cap"),
+        (
+            [(f"dev-qwen3-32b-xx-{_DATE}", "0.06")],
+            f"the raised cap of dev-qwen3-32b-xx-{_DATE} names no dev arm run",
+        ),
+        ([("other-run", "0.06")], "the raised cap of other-run names no dev"),
+    ],
+)
+def test_a_raise_the_note_cannot_hold_is_refused(
+    bench: Bench, raised: list[tuple[str, str]], match: str
+) -> None:
+    note = _note(raised=raised)
+    (bench.root / ra.NOTE).write_text(note, encoding="utf-8")
+    with pytest.raises(tp.PlanError, match=re.escape(match)):
+        bench.context()
+
+
+def test_a_raise_of_the_other_split_is_left_to_that_split(
+    bench: Bench,
+) -> None:
+    note = _note(raised=[(TEST_ARMS[0], "0.06")])
+    (bench.root / ra.NOTE).write_text(note, encoding="utf-8")
+    assert bench.context().plan.raised == {}
+    assert bench.context("test").plan.raised == {TEST_ARMS[0]: 0.06}
 
 
 def test_a_call_step_error_stops_and_the_same_command_resumes(
@@ -1353,7 +1454,8 @@ def test_a_cap_below_one_worst_request_is_refused(bench: Bench) -> None:
     assert not bench.calls
     assert (
         f"REFUSED: {DEV_ARMS[3]}: one request may cost 0.050001 USD, over"
-        f" the 8B cap 0.05; raise it in {ra.NOTE} and commit"
+        " its 8B dev cap 0.05; the protocol registers that cap, so the owner"
+        " rules on it before any request"
     ) in bench.printed
 
 
@@ -1567,6 +1669,21 @@ def test_a_pass_sent_otherwise_or_incomplete_is_refused(bench: Bench) -> None:
             "lists no anchor cap for qwen3-32b_deepinfra",
         ),
         (_note().replace("| 8B |", "| 9B |"), "lists no 8B cap"),
+        (
+            _note().replace("| Arm run | Raised cap |", "| Arm run |"),
+            "no single raised caps table",
+        ),
+        (
+            _note(raised=[(ANCHOR_RES, "0.06"), (ANCHOR_RES, "0.07")]),
+            "unusable raised caps row",
+        ),
+        (_note(raised=[(ANCHOR_RES, "0.1")]), "unusable raised caps row"),
+        (
+            _note(raised=[(ANCHOR_RES, "0.06")]).replace(
+                f"`{ANCHOR_RES}`", ANCHOR_RES
+            ),
+            "unusable raised caps row",
+        ),
     ],
 )
 def test_a_caps_table_the_batch_cannot_read_is_refused(
@@ -1584,6 +1701,12 @@ def test_the_caps_table_gives_each_slot_its_config_and_caps() -> None:
     )
     assert caps["8B fallback"] == ra.Cap(_FALLBACK_CONFIGS["small"], None, 0.05)
     assert list(caps) == [slot for slot, *_ in _CAPS_ROWS]
+    assert ra.load_raised(_note()) == {}
+    raised = [(ANCHOR_RES, "0.06"), (TEST_ARMS[11], "0.75")]
+    assert ra.load_raised(_note(raised=raised)) == {
+        ANCHOR_RES: 0.06,
+        TEST_ARMS[11]: 0.75,
+    }
 
 
 def test_the_dev_passes_are_the_bake_off_anchor_and_slot_winners() -> None:
@@ -1673,11 +1796,28 @@ def _committed_layout() -> Any:
 
 @pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
 def test_the_committed_passes_give_the_notes_arm_run_ids_and_caps() -> None:
+    """Each row takes the protocol's cap, and a raise only goes above it.
+
+    The note's caps table holds the registered caps, which a raise never
+    edits, so a budget stop resumed under a raised cap leaves this test
+    as it was.
+    """
     note = (_ROOT / ra.NOTE).read_text(encoding="utf-8")
+    protocol = (_ROOT / "docs" / "protocol.md").read_text(encoding="utf-8")
     listed = re.findall(
         r"^\| `((?:dev|test)-[^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$",
         note,
         re.MULTILINE,
+    )
+    # The protocol names the caps frontier first; the rows go anchor first.
+    assert (
+        "Each sends `--max-usd` 0.20, 0.10, 0.05 and 0.05 on dev and 0.50,"
+        " 0.30, 0.05 and 0.05 on test for the frontier, about 120B-class,"
+        " 8B-class and qwen/qwen3-32b passes"
+    ) in " ".join(protocol.split())
+    assert (_DEV_CAPS[::-1], _TEST_CAPS[::-1]) == (
+        [0.20, 0.10, 0.05, 0.05],
+        [0.50, 0.30, 0.05, 0.05],
     )
     for split, caps in (("dev", _DEV_CAPS), ("test", _TEST_CAPS)):
         ctx = ra.build_context(split, _committed_layout(), "test")
@@ -1691,20 +1831,26 @@ def test_the_committed_passes_give_the_notes_arm_run_ids_and_caps() -> None:
         assert [row.cap_usd for row in rows] == [
             c for c in caps for _ in range(3)
         ]
+        for row in rows:
+            for run_id in (row.run_id, row.rerun_id):
+                assert row.cap_usd <= ctx.cap_usd(row, run_id) <= db.MAX_USD
         assert _PASS_B not in {row.base_run for row in rows}
 
 
 @pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
-def test_a_dry_run_over_the_committed_dev_passes_builds_every_arm() -> None:
+def test_the_real_follow_up_builds_every_committed_dev_arm() -> None:
     """The real follow-up step builds each committed plan's three arms.
 
     Nothing is written outside a temporary directory, and every arm holds
-    its plan's items.
+    its plan's items. Each arm is built as the batch builds it, without
+    reading the ignored run directories CI never has, so a committed
+    raised cap or a published arm run leaves this test as it was.
     """
     ctx = ra.build_context("dev", _committed_layout(), "test")
     printed: list[str] = []
     ctx.out = printed.append
-    ra.prepare_all(ctx, False)
+    for row in ctx.plan.rows:
+        ra.check_prompts(row, row.run_id, ctx, False)
     planned = {
         base: len(
             json.loads(
@@ -1726,7 +1872,6 @@ def test_a_dry_run_over_the_committed_dev_passes_builds_every_arm() -> None:
         assert ctx.prompts.notes[row.run_id] == "would build"
         assert len(ctx.prompts.sizes[row.run_id]) == planned[row.base_run]
         assert not ctx.prepare_dir(row.run_id).exists()
-    assert len(ra.calls_due(ctx)) == 12
 
 
 @pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
