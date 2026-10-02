@@ -213,8 +213,24 @@ records as `published`:
 - for each slot, its `winner_<slot>` run, or else its `fallback_<slot>` run.
   An outage re-run counts.
 
-`aa_pass_b` is never repaired. Test trigger counts will exist only once
-those passes are scored, which OD4 holds back until `repair-cards` merges.
+`aa_pass_b` is never repaired. The four counted test passes were scored once
+`repair-cards` had merged (OD4), and their triggered items were counted on
+2026-10-02 from each pass's committed `scored/outcomes.jsonl`. The four test
+plans hold them, committed in b3a7d40 before any repair request. (Corrected
+2026-10-02: the registered text said these counts did not exist yet.)
+
+| Pass | Slot | Triggered items | Cases | Silent-wrong / invalid | Invalid codes |
+| --- | --- | ---: | ---: | --- | --- |
+| [`test-qwen3-32b-2026-09-26`](../results/test-qwen3-32b-2026-09-26/repair/plan.json) | anchor | 28 | 20 | 25 / 3 | 3 unknown_field |
+| [`test-qwen3.5-9b-2026-09-26`](../results/test-qwen3.5-9b-2026-09-26/repair/plan.json) | 8B | 15 | 11 | 11 / 4 | 3 unknown_field, 1 type_mismatch |
+| [`test-qwen3.5-122b-a10b-2026-09-26`](../results/test-qwen3.5-122b-a10b-2026-09-26/repair/plan.json) | 120B | 20 | 16 | 14 / 6 | 4 unknown_field, 1 type_mismatch, 1 unsupported_operator |
+| [`test-deepseek-v4-pro-0813-2026-09-26`](../results/test-deepseek-v4-pro-0813-2026-09-26/repair/plan.json) | frontier | 12 | 9 | 4 / 8 | 6 unknown_field, 2 type_mismatch |
+| Total | | 75 | 56 | 54 / 21 | |
+
+- Each pass has 80 ready C4 items.
+- All 75 triggered items have ready gold and finished with `stop`.
+- The test round is therefore 225 requests before retries: 75 items in each
+  of 3 arms.
 
 **Arm run ids for the planned passes:**
 
@@ -305,7 +321,10 @@ were not re-run, and they are lower bounds with no retries:
 - dev: about 0.126 USD over 108 requests (0.0043 for the 8B pass, 0.036 for
   120B, 0.081 for frontier and 0.0052 for the anchor);
 - test: about 0.42 USD over about 360 requests, projected from the dev trigger
-  rates. If all 80 ready C4 items triggered, it would be 1.03 USD.
+  rates. If all 80 ready C4 items triggered, it would be 1.03 USD. The
+  committed test plans superseded this design estimate: they give 225
+  requests (Test passes above), and the spend estimate was not re-run for
+  them.
 
 ## Order
 
@@ -318,30 +337,44 @@ were not re-run, and they are lower bounds with no retries:
    - the frame facts and the card, with the leak test;
    - the plan writer, `dfilterforge repair`;
    - the A/A pair report;
-   - ablation 008 on counterexample facts;
-   - the four dev plans, committed before any repair request.
+   - ablation 008 on counterexample facts.
 
    No test run is scored before it merges (OD4).
 4. **`repair-arms`.** This branch starts from `repair-multiturn` at 281b2ce
    and is never rebased. Its only hashed edits are `generation.py` (a second
    turn may carry a card) and `scripts/model_run.py` (`follow-up --plan PATH
    --arm ARM`). It also lets scoring rebuild the first turn of a
-   four-message prompt, and lets `repair` write and check round summaries.
-   The dev round runs from that worktree, alongside the baselines: prepare,
-   call, publish, score, then `repair`. Dev prompt sets need no admission.
+   four-message prompt, lets `repair` write and check round summaries, and
+   adds the owner's batch `scripts/repair_arms.py`. It carries the four dev
+   plans (5eb2bae) and the four test plans (b3a7d40), each committed before
+   any repair request. Both rounds run from the main checkout on `main` after
+   it merges (Commands below). Dev prompt sets need no admission.
 5. **After the last baseline request, on main.**
-   1. Commit the four test plans.
+   1. Commit the four test plans. Done on `repair-arms` in b3a7d40, before
+      the merge.
    2. Merge `repair-arms` with a merge commit.
-   3. Seed the 12 test arm prompt sets in `docs/results/<arm run id>/`.
-   4. Admit their digests in a commit of their own. That makes 13 of the
+   3. The dev round: the owner's dev command, then the maintainer's
+      publish, score, `repair` and pool for dev, each round committed whole.
+   4. A correction for any defect the dev round shows, in a commit that
+      names it. It comes before any test repair prompt is prepared, the
+      seeds below included.
+   5. Seed the 12 test arm prompt sets in `docs/results/<arm run id>/`.
+   6. Admit their digests in a commit of their own. That makes 13 of the
       record's 32 admitted prepares.
-   5. Send, publish and score the test arm runs, then write the round and
+   7. Send, publish and score the test arm runs, then write the round and
       pooled summaries.
-   6. Write the locked test result.
+   8. Write the locked test result.
 
    After the merge, any first-turn test pass (a late baseline, a fallback or
    an outage re-run) stops at `prepare_code_mismatch`. So every registry row
    must be final before the merge.
+
+   Corrected 2026-10-02. As registered, item 3 listed the four dev plans
+   under `repair-cards`, item 4 ran the dev round from the `repair-arms`
+   worktree alongside the baselines, and item 5 gave the dev round no place
+   between the merge and the test seeds. Every baseline request was sent
+   before `repair-arms` merged, and both rounds' plans were committed on
+   `repair-arms`, so items 3 to 5 now say so, as the Commands section does.
 
 ## Commands
 
@@ -554,7 +587,8 @@ Before, measured 2026-10-01:
   records `not_measured.repair_at_1` as `not_run`.
 - **Scoring refuses second turns.** It rebuilds first turns only, so it
   refuses a second-turn prompt set (`prompt_mismatch`).
-- **Triggered items.** The dev passes hold the 36 triggered items above.
+- **Triggered items.** The dev passes hold the 36 triggered items above, and
+  the test passes the 75 counted on 2026-10-02.
 
 After: not measured. The dev round fills it in: per model and arm, the
 repaired items, repair@1 with its strata, the transitions, `answer_unchanged`,
@@ -584,7 +618,6 @@ repaired items, repair@1 with its strata, the transitions, `answer_unchanged`,
   - the largest frame entry is about 333 B, so three frames come to about
     1,014 B.
 - **Expected spend.** The figures in Caps above are design estimates.
-- **Test trigger counts.**
 - **Repair behaviour.** How hosted models answer a repair turn, repair@1,
   and the arm comparisons.
 - **Ablation 008** on counterexample facts: Full (decode plus tshark
