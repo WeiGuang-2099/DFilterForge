@@ -7,9 +7,10 @@ Last updated: 2026-10-02
 The baseline test passes are sent, published and scored, and every hosted
 test-run registry row is final. On `repair-arms` the four dev and four test
 repair plans are committed, and `scripts/repair_arms.py` gives the owner one
-command per split for the arm runs. The dev repair round is next, from main
-once `repair-arms` merges; the test round follows any correction the dev round
-names, after its seeds and their admission are committed.
+command per split for the arm runs. The branch's PR check at eb7ebcd passed
+locally. The dev repair round is next, from main once `repair-arms` merges;
+the test round follows any correction the dev round names, after its seeds and
+their admission are committed.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -1166,16 +1167,97 @@ needed, so those eleven rows stay `unused`.
     `scripts/model_run.py`.
 - No model request was sent.
 
+## Repair arms PR check: 2026-10-02, branch repair-arms
+
+- **Branch.** At eb7ebcd, `repair-arms` holds 61 commits that `origin/main`
+  (7a8ec03) does not. 58 are ordinary commits and three are merges: two of
+  `repair-cards` (e5cb093, cdbc25f) and one of `origin/main` (846fc7b, with
+  parents 58114f6 and 7a8ec03). It carries `repair-multiturn` up to 281b2ce
+  without a rebase, because the smoke manifests record that head.
+  - `git diff --stat origin/main..HEAD` gives 34 files, 15,727 insertions
+    and 139 deletions.
+  - The files are CI's workflow, `pyproject.toml`, the repair and
+    second-turn notes, this file and the eight plans.
+  - Also three scripts (`model_run.py`, `two_turn_smoke.py`,
+    `repair_arms.py`), eight `src/dfilterforge` modules, nine test files and
+    one test data file.
+- **Hashed files.** The frozen test prompt set's `prepare.json` records 12
+  source digests.
+  - Every digest equals its blob on `origin/main`. On this branch exactly two
+    differ: `src/dfilterforge/generation.py` and `scripts/model_run.py`.
+  - The test-run registry and the freeze record are unchanged from
+    `origin/main`. The registry holds five `published` and eleven `unused`
+    rows, and the record still admits one prepare.
+- **Plans recounted from the committed `plan.json` files.**
+  - Dev: 36 items, 27 silent-wrong and 9 invalid. Probe `semantic-29`,
+    labels `be0c91824bb5`.
+  - Test: 75 items, 54 silent-wrong and 21 invalid. Probe `semantic-35`,
+    labels `c0b30949787e`. The 21 error cards are 16 `unknown_field`, 4
+    `type_mismatch` and 1 `unsupported_operator`.
+  - Each pass's item and outcome counts and each plan's SHA-256 equal the
+    tables in "Repair plans committed" above.
+  - The largest card is 717 B on dev and 715 B on test.
+  - `docs/results` holds no arm run directory and no seed.
+- **Runner.** `tests/test_repair_arms.py` collects 56 tests.
+- **CI python job mirror at eb7ebcd.** Run as `artifacts/ci/ci_mirror.sh
+  repair-arms-pr`, in the test image with the worktree's code mounted
+  read-only and no network. Overall status 0.
+  - The mirror reads pyink, isort, pylint, pyright and lint-imports from
+    `ci.yml`. All gave rc 0: pylint 10.00/10 on CI's line with
+    `scripts/repair_arms.py`, pyright 0 errors, lint-imports 5 contracts
+    kept.
+  - pytest: 1,766 passed and 24 skipped, coverage 96.77 percent.
+    `scripts/repair_arms.py` alone is at 96 percent.
+  - The four docs-mounted test nodes passed, the frozen-prompt guard among
+    them.
+  - The benchmark gate passed. The adequacy gate passed with 344 mutants, 4
+    waived survivors and 0 unwaived. Prepare and recall passed.
+  - `score --check` of all 25 committed outputs (17 `scored/`, 4
+    `control-reference/`, 4 `control-mutation/`) reported no difference.
+    `repair --check` of the 8 committed plans reported none either, and no
+    pool is committed.
+- **CI's three docs-mounted steps.**
+  - Each node list was run exactly as `ci.yml` gives it, in the test image
+    under the compose `test` service's limits. Those limits are: no network,
+    all capabilities dropped, read-only root, init, 128 pids,
+    no-new-privileges, 2 CPUs, 2 GB, and a 128 MB exec `/tmp`.
+  - The worktree's code and `docs/` were mounted read-only.
+  - Results: registration 271 passed, pair report 2 passed, second turn 1
+    passed.
+- **CI's exact pylint line**, under the same limits: 10.00/10, rc 0.
+- **Not run locally.** CI's `lab`-image steps did not run. The mirror runs
+  `score --check` and `repair --check` in the test image with the branch's
+  `src/` mounted, and the `lab` image was not rebuilt. The web and container
+  jobs did not run either; this branch touches neither `apps/` nor
+  `compose.yaml`.
+- No fix was needed, and no model request was sent.
+
 ## Planned next
 
-1. The [repair round](decisions/repair-round.md) as registered. The four dev
-   and four test plans and the owner's `scripts/repair_arms.py` are committed
-   on `repair-arms`, which merges next. Then the dev round from main
-   (`repair_arms.py --split dev`, then publish, score and `repair`), a
-   correction for any defect it shows, the 12 test arm prompt sets seeded and
-   admitted in commits of their own, and the test round (`--split test`).
-   Last, the repair half of
-   [`results/locked-test-v1.md`](results/locked-test-v1.md).
+1. The [repair round](decisions/repair-round.md) as registered, in this
+   order; its "Commands" section gives each command. `repair-arms` merges
+   first, with a merge commit.
+   1. **Owner: the dev round.** From the main checkout on `main`, in Windows
+      PowerShell 5.1 or Git Bash, with the key only in that shell:
+      `uv run --frozen python scripts/repair_arms.py --split dev`, after its
+      `--dry-run`.
+   2. **Maintainer: dev publish, score and check.** Publish and score each
+      `done` arm run, keep the evidence of each run not run, write each
+      pass's round summary with `dfilterforge repair` and check it with
+      `repair --check`, then the dev pool with `repair-pool` and its check.
+      Each round is committed whole.
+   3. **A correction for any defect the dev round shows,** in a commit that
+      names it, before any test repair prompt is prepared.
+   4. **Test seed and admission PR.** The 12 test arm prompt sets seeded in
+      `docs/results/<arm run id>/`, a pass's three in one commit, then their
+      `prepare.json` digests admitted in
+      `src/dfilterforge/held_out_freeze.json` in a commit of its own (13 of
+      the record's 32 admitted prepares).
+   5. **Owner: the test round,** once that PR is on `main`:
+      `repair_arms.py --split test`, the same way. Then the maintainer's
+      publish, score, `repair` and pool for test.
+   6. **The repair half of
+      [`results/locked-test-v1.md`](results/locked-test-v1.md).**
 2. The hosted static page generated from receipts, with its Disproof Reel
    chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
