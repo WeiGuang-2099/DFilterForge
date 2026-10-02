@@ -286,7 +286,8 @@ what is already spent, would exceed `--max-usd` (`_worst_case_micro_usd` in
   USD (0.940394). With the registry's runs 1 to 5 at their caps, the total is
   at most 3.291 USD, and the arm caps bring it to at most 7.191 USD.
 - **Raising a cap.** A budget stop is resumed only under a raised cap,
-  committed first.
+  committed first. `scripts/repair_arms.py` reads each arm run's cap from
+  the table above, so a raised cap is an edit of its row there.
 
 The repair design estimated the expected spend from `cost.py`. These figures
 were not re-run, and they are lower bounds with no retries:
@@ -331,40 +332,190 @@ were not re-run, and they are lower bounds with no retries:
    an outage re-run) stops at `prepare_code_mismatch`. So every registry row
    must be final before the merge.
 
-## Commands to come
+## Commands
 
-`dfilterforge repair`, `dfilterforge repair-pool` and the `--plan` and
-`--arm` options of `follow-up` do not exist yet; the two branches above add
-them. Run the commands from Git Bash at the repository root with
-`MSYS_NO_PATHCONV=1`. The lab container sees `docs/results` at
-`/workspace/results`.
+Every row of the [test-run registry](test-runs.md) was final before
+`repair-arms` merged, so both rounds run from `main` after that merge, with the
+commands below. `scripts/repair_arms.py` is the owner's one command per split;
+`tests/test_repair_arms.py` checks it against a scripted follow-up step and a
+scripted call step. No command carries a display filter or model text, and no
+argument passes through a shell.
 
-```text
-# 1 plan (lab, offline, no key); once all three arms are published and scored it also writes the summary
-docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/$PASS --code-revision $REV [--check]
-# 2 one prepare per arm (host, no key; reads no gold but the plan)
-uv run --frozen python scripts/model_run.py follow-up --from-run docs/results/$PASS \
-  --plan docs/results/$PASS/repair/plan.json --arm $ARM --output-dir artifacts/repair/$ARM_RUN --source-revision $REV
-# 3 test only: seed docs/results/$ARM_RUN with prepare.json and prepared/ (commit), then admit the digest (own commit)
-# 4 owner, key set: the repaired pass's config and the slot's cap; a resume adds --resume with the same options
-uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/repair/$ARM_RUN --run-id $ARM_RUN \
-  --config docs/decisions/evidence/bakeoff/configs/$CONFIG.json --gate-first --max-attempts 3 \
-  --min-interval-seconds 1.0 --max-usd $CAP --source-revision $REV
-uv run --frozen python scripts/model_run.py publish --run-dir artifacts/repair/$ARM_RUN/runs/$ARM_RUN --output docs/results/$ARM_RUN
-docker compose --profile pilot run --rm lab score --run-dir /workspace/results/$ARM_RUN --code-revision $REV
-# 5 check the round, then pool a split's four rounds
-docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/$PASS --code-revision $REV --check
-docker compose --profile pilot run --rm lab repair-pool --split $SPLIT --base ... --code-revision $REV [--check]
+### Owner command
+
+The batch takes every row from the protocol and this note:
+- **Passes.** Dev: the four dev passes above. Test: the registry's `published`
+  rows in a repaired role, one per slot; pass B is never repaired. The test
+  split is refused while any registry row is still `registered`.
+- **Order.** Anchor, 8B, 120B, then frontier. Each pass's arms go resample,
+  bare, then counterexample, each after the one before has a final state; an
+  arm not run does not hold back the next.
+- **Run id, config and cap.** The arm run ids above; the repaired pass's own
+  config, checked against its run manifest; and the slot's cap for the split,
+  which the batch reads from the Caps table above.
+- **Prompt sets.** Each arm run answers `artifacts/repair/<arm run id>`
+  (ignored by git), which `scripts/model_run.py follow-up --plan --arm`
+  builds. Before anything is sent, the batch builds each owed set again in a
+  temporary directory and refuses an existing set that differs from that
+  build, its creation time and source revision aside.
+  - Dev: a missing set is that build. Dev sets need no admission.
+  - Test: the committed seed `docs/results/<arm run id>/prepare.json` and
+    `prepared/` must equal that build, and the freeze record must admit its
+    `prepare.json`. The ignored set is the seed byte for byte; a missing one is
+    copied from it. With no seed the batch refuses and names every missing one.
+- **Calls.** Each owed run is first called with the key withheld and must stop
+  at `api_key_missing`. Paid calls start only with the key set and with the
+  tooling, this note, the plans and any test seeds committed. Each is
+  `scripts/model_run.py call` with the pass's config, `--max-usd` at the cap,
+  `--source-revision` at HEAD, `--gate-first`, `--max-attempts 3` and
+  `--min-interval-seconds 1.0`.
+- **After a call.**
+  - Pending items are resumed after 60 s with the same options and `--resume`.
+  - A gate stop, or a resumed pass that stops at the gate, is not run and is
+    never moved to another provider.
+  - An outage is re-run once from scratch as the arm's `-r2` run, from its own
+    prompt set (on test, its own seed and admission). A second outage, or an
+    `-r2` id too long for a result name, is not run.
+  - A refusal (no answer, and only HTTP 400 or 404) is not run: an arm has no
+    fallback.
+  - HTTP 401, 402 or 403 aborts. A budget stop after an answer stops the batch
+    until the cap is raised in the Caps table and committed.
+- **Not run by rule.** If a second turn would exceed the 64 KiB prompt budget,
+  or its answer is empty, `follow-up` refuses every arm of that pass, so the
+  round is reported not run. A plan with no item leaves its three rows unused.
+
+The batch never publishes, scores or reads gold. `--dry-run` makes the same
+checks, builds each owed prompt set in a temporary directory only, and prints
+each row's state and the follow-up and call steps it would take; it sends and
+writes nothing.
+
+The step log `steps.jsonl`, the summaries `summary-<split>-<date>.json` and
+`.txt`, and the lock go to `artifacts/repair-arms/` (ignored). For each row,
+the summary gives:
+- its state (`done`, `not_run`, `unused` or `owed`) and the reason;
+- the run it counts, its first run or its `-r2` re-run;
+- for a `done` run, its publish command;
+- for a run not run that left a directory, the evidence directory
+  `docs/decisions/evidence/repair-arms/<run id>/`, which keeps its
+  `run_manifest.json` and `attempts/`;
+- for a row counted by its `-r2` re-run, the same evidence directory for the
+  first run the re-run replaces.
+
+For each round it gives the `dfilterforge repair` arguments, with `--not-run
+ARM` for each arm the gate stopped.
+
+Windows PowerShell 5.1, the dev round, at the main checkout. If `git switch
+main` or `git pull --ff-only` fails, for instance on uncommitted changes, stop
+there and fix that first:
+
+```powershell
+Set-Location D:\codeproject\acourse-code\DFilterForge
+git switch main
+git pull --ff-only
+$env:PYTHONIOENCODING = "utf-8"
+uv run --frozen python scripts/repair_arms.py --split dev --dry-run
+$secure = Read-Host -AsSecureString "OpenRouter key"
+$env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
+Remove-Variable secure
+uv run --frozen python scripts/repair_arms.py --split dev
+"exit code: $LASTEXITCODE"
+Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
 ```
 
-The variables:
-- `$ARM` is `resample`, `bare` or `counterexample`.
-- `$ARM_RUN` is the arm run id from the table above.
-- `$CONFIG` is the repaired pass's config.
+The test round, the same way, once its seeds and their admission are on main:
 
-No command carries a display filter or model text. CI then re-checks every
-`repair/plan.json` and every `repair-pool/*.json` with `--check`, beside its
-existing re-score loop.
+```powershell
+Set-Location D:\codeproject\acourse-code\DFilterForge
+git switch main
+git pull --ff-only
+$env:PYTHONIOENCODING = "utf-8"
+uv run --frozen python scripts/repair_arms.py --split test --dry-run
+$secure = Read-Host -AsSecureString "OpenRouter key"
+$env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
+Remove-Variable secure
+uv run --frozen python scripts/repair_arms.py --split test
+"exit code: $LASTEXITCODE"
+Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
+```
+
+Git Bash, at the same checkout (`read -rsp` keeps the key off the screen and
+out of the history), the dev round:
+
+```bash
+cd /d/codeproject/acourse-code/DFilterForge
+git switch main
+git pull --ff-only
+uv run --frozen python scripts/repair_arms.py --split dev --dry-run
+read -rsp "OpenRouter key: " DFILTERFORGE_MODEL_API_KEY && echo && export DFILTERFORGE_MODEL_API_KEY
+uv run --frozen python scripts/repair_arms.py --split dev; echo "exit code: $?"
+unset DFILTERFORGE_MODEL_API_KEY
+```
+
+and the test round:
+
+```bash
+cd /d/codeproject/acourse-code/DFilterForge
+git switch main
+git pull --ff-only
+uv run --frozen python scripts/repair_arms.py --split test --dry-run
+read -rsp "OpenRouter key: " DFILTERFORGE_MODEL_API_KEY && echo && export DFILTERFORGE_MODEL_API_KEY
+uv run --frozen python scripts/repair_arms.py --split test; echo "exit code: $?"
+unset DFILTERFORGE_MODEL_API_KEY
+```
+
+| Exit | Meaning | What the owner does |
+| --- | --- | --- |
+| 0 | Every row has a final state: `done`, `not_run` or `unused`. | Hand the summary to the maintainer, who publishes, scores and checks each round (below). |
+| 1 | Stopped for the owner. The cause is one of: a budget stop after an answer; a call step that ended with an error or left no run directory; the invocation limit; an unreadable run directory; a test outage re-run whose seed is not committed yet; or an error the batch did not expect, after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, raise the slot's cap for the split in the Caps table above the last `max_usd`, and commit. For a re-run without a seed, seed it and admit it (below). Then run the same command. |
+| 2 | Refused before any request. The cause is one of: a pass, its plan or its config; the Caps table; a prompt set; a test seed that is missing or not admitted; a registry row still `registered`; the lock; git; uncommitted tooling; or the keyless preflight. | Fix what the `refused` or `REFUSED` line names, then run the same command. A missing test seed means the seed and admission commits come first (below). Delete a held `artifacts/repair-arms/.lock` only when no batch or call step is running. |
+| 3 | Aborted: the key variable is not set (after the keyless preflight; nothing was sent), or the account refused a request with HTTP 401, 402 or 403. | Set the key, or fix the key, the credit or the account's guardrail, and run the same command. |
+| 130 | Interrupted with Ctrl-C after the request in flight finished; that request may be billed but not recorded. | Run the same command. If it says a call step is still running, let it exit and delete `artifacts/repair-arms/.lock` first. |
+
+### Maintainer: seed, publish, score and check
+
+These run from the main checkout's root in Git Bash, with the lab image
+rebuilt from main (`docker compose --profile pilot build lab`). The lab
+container sees `docs/results` at `/workspace/results`.
+
+The variables:
+- `$REV` is `$(git rev-parse --short HEAD)`.
+- `$PASS` is a repaired pass's run id, and `$SPLIT` is `dev` or `test`.
+- `$ARM` is `resample`, `bare` or `counterexample`, and `$ARM_RUN` is its arm
+  run id from the table above.
+- `$RUN` is the run a `done` row counts: its arm run id, or its `-r2` re-run.
+
+```bash
+REV=$(git rev-parse --short HEAD)
+# test only, after the dev round and any correction it names: a pass's three seeds in one commit,
+# then their prepare.json digests appended to admitted_prepares in src/dfilterforge/held_out_freeze.json in a commit of its own
+uv run --frozen python scripts/model_run.py follow-up --from-run docs/results/$PASS \
+  --plan docs/results/$PASS/repair/plan.json --arm $ARM --output-dir docs/results/$ARM_RUN --source-revision $REV
+sha256sum docs/results/$ARM_RUN/prepare.json
+# after an execution that exits 0: each done row, published and scored
+uv run --frozen python scripts/model_run.py publish --run-dir artifacts/repair/$RUN/runs/$RUN --output docs/results/$RUN
+MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab score --run-dir /workspace/results/$RUN --code-revision $REV
+# each run not run that left a directory, and each first run an -r2 re-run replaced:
+# copy its run_manifest.json and attempts/ to docs/decisions/evidence/repair-arms/<its run id>/
+# each pass, once its three rows are final: the round summary (add --not-run ARM for each gate-stopped arm), then its check
+MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/$PASS --code-revision $REV
+MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/$PASS --code-revision $REV --check
+# each split, once its rounds are written: the pool, then its check
+MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results \
+  --split $SPLIT --base $PASS1 --base $PASS2 --base $PASS3 --base $PASS4 --code-revision $REV
+MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results \
+  --split $SPLIT --code-revision $REV --check
+```
+
+- **Commit a round whole.** Commit a pass's published arm runs, their
+  `scored/` trees and its `repair/` files together. CI's repair step refuses a
+  pass that has some arm runs or seeds beside it but not all three (or
+  `repair/not_run.json` for the missing ones).
+- **Not run beyond the gate.** `repair --not-run` records only gate stops,
+  and at most two arms. An arm not run for another reason (an outage on its
+  re-run, a refusal), or a round with no arm run, has no record in the repair
+  tooling yet: the owner rules on it before that round's summary is written.
+- **CI re-checks.** CI then re-checks every `repair/plan.json` and every
+  `repair-pool/*.json` with `--check`, beside its existing re-score loop.
 
 ## Before and after
 

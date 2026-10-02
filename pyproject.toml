@@ -50,6 +50,7 @@ include = [
   "scripts/model_run.py",
   "scripts/probe_adequacy.py",
   "scripts/provider_reply_replay.py",
+  "scripts/repair_arms.py",
   "scripts/retrieval_recall.py",
   "scripts/test_passes.py",
   "scripts/two_turn_smoke.py",
