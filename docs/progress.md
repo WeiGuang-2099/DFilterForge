@@ -6,8 +6,10 @@ Last updated: 2026-10-02
 
 The baseline test passes are sent, published and scored, and every hosted
 test-run registry row is final. On `repair-arms` the four dev and four test
-repair plans are committed; the dev repair round is next, and the test round
-follows any correction the dev round names.
+repair plans are committed, and `scripts/repair_arms.py` gives the owner one
+command per split for the arm runs. The dev repair round is next, from main
+once `repair-arms` merges; the test round follows any correction the dev round
+names, after its seeds and their admission are committed.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -1085,14 +1087,95 @@ needed, so those eleven rows stay `unused`.
     8 committed plans report no difference; no pool is committed.
 - No model request was sent.
 
+## Repair arm runner: 2026-10-02, branch repair-arms
+
+- **Owner command** (d9e43fc). `scripts/repair_arms.py --split dev|test
+  [--dry-run]` sends one split's arm runs. It is a new file rather than a mode
+  of `scripts/test_passes.py`: that batch is driven by the test-run registry
+  over one shared prompt copy, while an arm run has its own prompt set, built
+  by `follow-up` from a plan, on both splits. It loads `test_passes.py` by path
+  and reuses its registry reading, refusals, row states, prompt-copy check,
+  layout and exit codes, and through it `dev_bakeoff.py`'s reading of a run,
+  invoker, lock and endpoint pricing. It never publishes, scores or reads gold.
+  - **Rows.** Dev: the four dev passes. Test: the registry's `published` rows
+    in a repaired role, one per slot; pass B is never repaired, and the split
+    is refused while a row is still `registered`. Passes go anchor, 8B, 120B,
+    frontier; arms go resample, bare, counterexample.
+  - **Config and cap.** Each row sends its pass's config, checked against the
+    pass's run manifest (settings, prices, host, attempts and pacing). Its cap
+    is read from the repair note's caps table for the slot and split, so a
+    raised cap is an edit of that table.
+  - **Prompt sets.** `artifacts/repair/<arm run id>`, built by the in-process
+    `follow-up` step. An existing set must equal a fresh build, its creation
+    time and source revision aside. On test the set must be the committed,
+    admitted seed `docs/results/<arm run id>/` byte for byte, and the seed
+    must equal a fresh build.
+  - **Chains.** Resumes, gate stops, refusals and aborts follow the bake-off
+    runner's reading of a run; an outage is re-run once as `-r2` from its own
+    prompt set. A `follow-up` refusal for `prompt_too_large` or
+    `follow_up_invalid` reports the round not run, and `plan_empty` leaves its
+    rows unused.
+- **Tests.** `tests/test_repair_arms.py`: 56 tests against a scripted
+  follow-up step and a scripted call step, 3 of them on the committed passes,
+  plans and note. Those 3 skip without `docs/`, so CI's registration step,
+  which mounts `docs/`, now runs the file. With `docs/` mounted, the real
+  follow-up step builds all 12 dev arms in a temporary directory, with 10, 7,
+  8 and 11 items, the plans' counts. CI's pylint line and pyright's include
+  list name the script.
+- **Repair note.** "Commands to come" is replaced by "Commands": the owner's
+  command for each split in Windows PowerShell 5.1 and Git Bash, the
+  exit-code table, and the maintainer's seed, publish, score, `repair` and
+  `repair-pool` commands.
+- **Keyless dev run.** Run on the host with `uv run --frozen` in a temporary
+  git copy of d9e43fc's code, configs, note, registry and the eight repaired
+  passes; `DFILTERFORGE_MODEL_API_KEY` unset; `UV_OFFLINE=1`.
+  - `--split dev --dry-run`: exit 0, nothing written.
+  - `--split dev`: built the 12 prompt sets, then all 12 rows stopped at
+    `api_key_missing` in the keyless preflight; exit 3, nothing sent.
+  - The same command again: the 12 sets were found equal to a fresh build,
+    and the 12 preflight calls stopped at `api_key_missing`; exit 3.
+  - Worst request against the cap, by pass (resample, bare, counterexample):
+
+    | Pass | Items | Worst request (USD) | Full-arm worst (USD) | Cap |
+    | --- | ---: | --- | --- | ---: |
+    | `dev-qwen3-32b-2026-09-26` | 10 | 0.000995, 0.001109, 0.001115 | 0.0098, 0.0105, 0.0108 | 0.05 |
+    | `dev-qwen3.5-9b-2026-09-26` | 7 | 0.000854, 0.000966, 0.001040 | 0.0058, 0.0066, 0.0070 | 0.05 |
+    | `dev-qwen3.5-122b-a10b-2026-09-26` | 8 | 0.008662, 0.009148, 0.009343 | 0.0687, 0.0720, 0.0736 | 0.10 |
+    | `dev-deepseek-v4-pro-0813-2026-09-26` | 11 | 0.012175, 0.012904, 0.013584 | 0.1306, 0.1391, 0.1447 | 0.20 |
+
+    The full-arm figure is one attempt per item at its worst case.
+- **Test split.** `--split test`, with and without `--dry-run`: exit 2,
+  refused before any call, naming all 12 missing seeds
+  (`docs/results/test-*-{res,bare,cx}-2026-09-26`). No test prompt set was
+  built. This branch adds no seed and admits no digest.
+- **CI python job mirror at d9e43fc** (`artifacts/ci/ci_mirror.sh
+  runner-d9e43fc`, the test image with the worktree's code mounted read-only
+  and no network): overall status 0. 1,766 tests passed and 24 skipped (56
+  and 3 more than at b3a7d40), with 96.77 percent coverage; the new script
+  alone is at 96 percent.
+  - pyink, isort, pyright (0 errors) and lint-imports (5 contracts kept)
+    pass. The four docs-mounted test nodes, the benchmark gate, the adequacy
+    gate (344 mutants, 4 waived survivors, 0 unwaived), prepare and recall
+    pass.
+  - `score --check` of all 25 committed outputs and `repair --check` of the
+    8 committed plans report no difference; no pool is committed.
+  - CI's registration step with `docs/` mounted: 271 passed (215 before, plus
+    the 56 new tests). The pair-report and second-turn steps: 3 passed.
+  - CI's exact pylint line gives rc 0. Against `origin/main`, the only
+    prepare-hashed files changed are still `generation.py` and
+    `scripts/model_run.py`.
+- No model request was sent.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered. The four dev
-   and four test plans are committed on `repair-arms`, which merges next.
-   Then the dev round (prepare, call, publish, score, then `repair`), a
-   correction for any defect it shows, the 12 test arm prompt sets seeded
-   and admitted in commits of their own, and the test round. Last, the
-   repair half of [`results/locked-test-v1.md`](results/locked-test-v1.md).
+   and four test plans and the owner's `scripts/repair_arms.py` are committed
+   on `repair-arms`, which merges next. Then the dev round from main
+   (`repair_arms.py --split dev`, then publish, score and `repair`), a
+   correction for any defect it shows, the 12 test arm prompt sets seeded and
+   admitted in commits of their own, and the test round (`--split test`).
+   Last, the repair half of
+   [`results/locked-test-v1.md`](results/locked-test-v1.md).
 2. The hosted static page generated from receipts, with its Disproof Reel
    chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -1112,7 +1195,14 @@ needed, so those eleven rows stay `unused`.
   script, so no CI check ties the page to its files yet. PR #17 merged the
   `score-test-baselines` branch into main (7a8ec03).
 - CI has not run on `repair-arms`, which is not pushed; only the local
-  mirror above has.
+  mirrors above have.
+- `scripts/repair_arms.py` has sent no paid call. Its sending path is tested
+  only against a scripted call step, and its keyless path against the real
+  call step.
+- The repair tooling records only gate stops as an arm not run
+  (`repair --not-run`, at most two arms). An arm not run after an outage on
+  its re-run or a refusal, or a round with no arm run, has no record yet; the
+  owner would rule on it before that round's summary.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
