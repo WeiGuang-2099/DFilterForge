@@ -35,7 +35,10 @@ temporary directory: no socket, no key, no gold, the plan read as data.
   ``prepare.json`` the freeze record admits. The ignored copy is that seed
   byte for byte: a missing copy is copied from it, and a copy that differs
   is refused. No seed, no test request: the test round waits for its seed
-  and admission commits.
+  and admission commits. While no test arm run has a seed, nothing is
+  built and every missing seed is named, since the protocol prepares no
+  test repair prompt before the dev round's corrections; a seed's
+  admission is checked before its build.
 A second turn the follow-up step cannot build (``prompt_too_large`` or
 ``follow_up_invalid``) refuses every arm of that pass, so its round is not
 run, as the protocol says. A plan that triggers no item leaves its rows
@@ -871,32 +874,57 @@ def install(source: Path, target: Path) -> None:
         raise
 
 
-def check_seed(row: Row, run_id: str, built: Path, ctx: Context) -> Path:
-    """Ties a test arm's committed seed to a fresh build and the record.
+def admitted_seed(run_id: str, ctx: Context) -> Path | None:
+    """Returns a test arm's committed seed once the record admits it.
+
+    It is read before anything is built, so a seed the record does not
+    admit is refused without preparing a test repair prompt.
+
+    Returns:
+        The seed's directory, or None when no seed is committed.
 
     Raises:
-        SeedMissing: If no seed is committed.
-        PlanError: If the record does not admit it or it differs from
-            what follow-up builds now.
+        PlanError: If the record does not admit it.
     """
     seed = ctx.root / RESULTS / run_id
-    spelled = f"{RESULTS}/{run_id}"
     if not (seed / "prepare.json").is_file():
-        raise SeedMissing(spelled)
+        return None
     digest = _sha256(seed / "prepare.json")
     if digest not in ctx.layout.admitted:
         raise PlanError(
-            f"{spelled}/prepare.json (sha256 {digest[:12]}) is not admitted;"
-            f" append its digest to admitted_prepares in {FREEZE_RECORD} in"
-            " a commit of its own, then run the same command"
+            f"{RESULTS}/{run_id}/prepare.json (sha256 {digest[:12]}) is not"
+            " admitted; append its digest to admitted_prepares in"
+            f" {FREEZE_RECORD} in a commit of its own, then run the same"
+            " command"
         )
+    return seed
+
+
+def seeding_begun(ctx: Context) -> bool:
+    """Says whether any test arm run of the plan has a committed seed.
+
+    The protocol prepares no test repair prompt before the dev round's
+    corrections, and the seeding step is the first to prepare one.
+    """
+    return any(
+        (ctx.root / RESULTS / run_id / "prepare.json").is_file()
+        for row in ctx.plan.rows
+        for run_id in (row.run_id, row.rerun_id)
+    )
+
+
+def check_seed(row: Row, run_id: str, built: Path, seed: Path) -> None:
+    """Requires a test arm's admitted seed to equal a fresh build.
+
+    Raises:
+        PlanError: If it differs from what follow-up builds now.
+    """
     changed = differences(built, seed)
     if changed:
         raise PlanError(
-            f"{spelled}: {', '.join(changed)} differ from what follow-up"
-            f" builds now from {RESULTS}/{row.base_run} and its plan"
+            f"{RESULTS}/{run_id}: {', '.join(changed)} differ from what"
+            f" follow-up builds now from {RESULTS}/{row.base_run} and its plan"
         )
-    return seed
 
 
 def _blocked(code: str | None, row: Row, run_id: str) -> Any | None:
@@ -951,26 +979,25 @@ def build_now(
 
 
 def place(
-    row: Row, run_id: str, built: Path, ctx: Context, write: bool
+    row: Row, run_id: str, source: Path, ctx: Context, write: bool
 ) -> Path:
-    """Ties the prompt set a run answers to a fresh build of it.
+    """Ties the prompt set a run answers to the one it should answer.
 
-    A missing dev prompt set is the build; a test one is its committed
-    seed, which must equal the build. With ``write`` false nothing is
+    ``source`` is a fresh build for a dev run, and for a test run its
+    committed, admitted seed, already found equal to a fresh build. A
+    missing prompt set is a copy of it. With ``write`` false nothing is
     put in place and a missing prompt set is only reported.
 
     Returns:
         The directory whose prompts the run answers, or would answer.
 
     Raises:
-        SeedMissing: If a test run has no committed seed.
-        PlanError: If a prompt set, seed or copy is not what it should be.
+        PlanError: If a prompt set or copy is not what it should be.
     """
     target = ctx.prepare_dir(run_id)
     spelled = f"{PREPARE_ROOT}/{run_id}"
     notes = ctx.prompts.notes
     seeded = ctx.plan.split == "test"
-    source = check_seed(row, run_id, built, ctx) if seeded else built
     if target.exists() and not (target / "prepare.json").is_file():
         raise PlanError(f"{spelled} exists but holds no prepare.json")
     if not target.exists():
@@ -991,7 +1018,7 @@ def place(
         )
         notes[run_id] = "the committed seed, byte for byte"
     else:
-        changed = differences(built, target)
+        changed = differences(source, target)
         if changed:
             raise PlanError(
                 f"{spelled}: {', '.join(changed)} differ from what follow-up"
@@ -1006,16 +1033,29 @@ def place(
 def check_prompts(row: Row, run_id: str, ctx: Context, write: bool) -> None:
     """Builds a run's prompt set now and ties the one it answers to it.
 
+    A test run's seed is read and its admission checked first. A missing
+    seed is still built, so that a follow-up refusal the protocol reports
+    gives the run its final state; the caller builds one only once the
+    seeding has begun.
+
     Raises:
         SeedMissing: If a test run has no committed seed.
-        PlanError: If follow-up refuses, or a prompt set, seed or copy
-            differs from what it should be.
+        PlanError: If a test seed is not admitted, follow-up refuses, or
+            a prompt set, seed or copy differs from what it should be.
     """
+    seeded = ctx.plan.split == "test"
+    seed = admitted_seed(run_id, ctx) if seeded else None
     with TemporaryDirectory(prefix="repair-arms-") as scratch:
         built = build_now(row, run_id, ctx, Path(scratch))
         if built is None:
             return
-        answered = place(row, run_id, built, ctx, write)
+        source = built
+        if seeded:
+            if seed is None:
+                raise SeedMissing(f"{RESULTS}/{run_id}")
+            check_seed(row, run_id, built, seed)
+            source = seed
+        answered = place(row, run_id, source, ctx, write)
         spelled = f"{PREPARE_ROOT}/{run_id}"
         ctx.prompts.sizes[run_id] = read_prompts(answered, spelled).sizes[LABEL]
 
@@ -1053,44 +1093,59 @@ def check_raise(run_id: str, ctx: Context) -> None:
 def prepare_all(ctx: Context, write: bool) -> None:
     """Checks the prompt set and any raised cap of every run that owes a call.
 
+    On the test split nothing is built until some test arm run has a
+    committed seed: before that, every owed run's seed is named at once.
+
     Raises:
         PlanError: If a prompt set or seed cannot be used, a raised cap
             has no budget stop to resume, or a cap is below one request's
             worst case; every test run without a seed is named at once.
     """
-    missing: list[str] = []
+    owed: list[tuple[Row, str]] = []
     for row in ctx.plan.rows:
         reading = read_row(row, ctx)
         action = reading.state.action
-        if action is None or action.kind not in ("start", "resume"):
-            continue
-        check_raise(reading.run_id, ctx)
+        if action is not None and action.kind in ("start", "resume"):
+            owed.append((row, reading.run_id))
+    if ctx.plan.split == "test" and owed and not seeding_begun(ctx):
+        # No test repair prompt is prepared before the seeding step.
+        raise PlanError(
+            _seeds_first([f"{RESULTS}/{run_id}" for _, run_id in owed])
+        )
+    missing: list[str] = []
+    for row, run_id in owed:
+        check_raise(run_id, ctx)
         try:
-            check_prompts(row, reading.run_id, ctx, write)
+            check_prompts(row, run_id, ctx, write)
         except SeedMissing as error:
             missing.append(str(error))
             continue
-        sizes = ctx.prompts.sizes.get(reading.run_id)
+        sizes = ctx.prompts.sizes.get(run_id)
         if sizes is None:
             continue
         worst = endpoint(row, sizes, ctx).worst_micro_usd
-        cap = ctx.cap_usd(row, reading.run_id)
+        cap = ctx.cap_usd(row, run_id)
         if worst > _micro(cap):
             raise PlanError(
-                f"{reading.run_id}: one request may cost"
+                f"{run_id}: one request may cost"
                 f" {worst / db.MICRO:.6f} USD, over its {row.slot}"
                 f" {ctx.plan.split} cap {cap:.2f}; the protocol registers"
                 " that cap, so the owner rules on it before any request"
             )
     if missing:
-        raise PlanError(
-            "the test round needs its seed and admission commits first: no"
-            f" committed seed in {', '.join(missing)}. Seed each with"
-            " scripts/model_run.py follow-up --output-dir"
-            f" {RESULTS}/<arm run id> and commit it, then append each"
-            f" prepare.json digest to admitted_prepares in {FREEZE_RECORD}"
-            " in a commit of its own"
-        )
+        raise PlanError(_seeds_first(missing))
+
+
+def _seeds_first(missing: Sequence[str]) -> str:
+    """Says which test seeds the round waits for, and how to commit them."""
+    return (
+        "the test round needs its seed and admission commits first: no"
+        f" committed seed in {', '.join(missing)}. Seed each with"
+        " scripts/model_run.py follow-up --output-dir"
+        f" {RESULTS}/<arm run id> and commit it, then append each"
+        f" prepare.json digest to admitted_prepares in {FREEZE_RECORD}"
+        " in a commit of its own"
+    )
 
 
 # What the batch sends.

@@ -375,6 +375,9 @@ The batch takes every row from the protocol and this note:
     `prepared/` must equal that build, and the freeze record must admit its
     `prepare.json`. The ignored set is the seed byte for byte; a missing one is
     copied from it. With no seed the batch refuses and names every missing one.
+    While no test arm run has a seed, it builds nothing before that refusal,
+    and it checks a seed's admission before building it, so no test repair
+    prompt is prepared before the seeding step.
 - **Calls.** Each owed run is first called with the key withheld and must stop
   at `api_key_missing`. Paid calls start only with the key set and with the
   tooling, this note, the plans and any test seeds committed. Each is

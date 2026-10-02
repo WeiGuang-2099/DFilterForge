@@ -1478,6 +1478,40 @@ def test_the_test_round_waits_for_its_seed_and_admission_commits(
     assert bench.run([]) == 2
     assert not bench.calls
     assert not (bench.root / ra.PREPARE_ROOT).exists()
+    # No test repair prompt was prepared, not even in a temporary directory.
+    assert not bench.follow_ups
+
+
+def test_a_test_seed_is_checked_for_admission_before_it_is_built(
+    bench: Bench, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bench.split = "test"
+    for run_id in TEST_ARMS:
+        bench.seed(run_id, admit=run_id != TEST_ARMS[0])
+    bench.follow_ups.clear()
+    assert bench.run([], ["--dry-run"]) == 2
+    assert capsys.readouterr().err.startswith(
+        f"refused: docs/results/{TEST_ARMS[0]}/prepare.json (sha256"
+    )
+    assert not bench.follow_ups
+
+
+def test_once_seeding_begins_a_round_follow_up_cannot_build_is_not_run(
+    bench: Bench,
+) -> None:
+    bench.split = "test"
+    for run_id in TEST_ARMS[:3] + TEST_ARMS[6:]:
+        bench.seed(run_id)
+    # The 8B pass's second turns cannot be built, so it can get no seed.
+    bench.refusals[_TEST_PASSES[1]] = "prompt_too_large"
+    preflight = bench.keyless()
+    assert len(preflight) == 9
+    assert bench.run(preflight + [COMPLETE] * 9) == 0
+    assert bench.paid() == TEST_ARMS[:3] + TEST_ARMS[6:]
+    rows = bench.rows()
+    for run_id in TEST_ARMS[3:6]:
+        assert rows[run_id]["state"] == "not_run"
+        assert rows[run_id]["reason"].startswith("the round is not run")
 
 
 def test_a_test_arm_answers_its_admitted_seed_byte_for_byte(
