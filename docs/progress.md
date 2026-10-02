@@ -1147,13 +1147,17 @@ needed, so those eleven rows stay `unused`.
     The full-arm figure is one attempt per item at its worst case.
 - **Test split.** `--split test`, with and without `--dry-run`: exit 2,
   refused before any call, naming all 12 missing seeds
-  (`docs/results/test-*-{res,bare,cx}-2026-09-26`). No test prompt set was
-  built. This branch adds no seed and admits no digest.
+  (`docs/results/test-*-{res,bare,cx}-2026-09-26`). Corrected after review:
+  this line first said no test prompt set was built, which was false. At
+  d9e43fc the batch built each owed test arm's prompt set with `follow-up`
+  in a temporary directory before it found the seed missing, so all 12 were
+  built and deleted before that refusal; nothing was kept and nothing was
+  sent. This branch adds no seed and admits no digest.
 - **CI python job mirror at d9e43fc** (`artifacts/ci/ci_mirror.sh
   runner-d9e43fc`, the test image with the worktree's code mounted read-only
-  and no network): overall status 0. 1,766 tests passed and 24 skipped (56
-  and 3 more than at b3a7d40), with 96.77 percent coverage; the new script
-  alone is at 96 percent.
+  and no network): overall status 0. 1,766 tests passed and 24 skipped (53
+  and 3 more than at b3a7d40, the 56 new tests), with 96.77 percent
+  coverage; the new script alone is at 96 percent.
   - pyink, isort, pyright (0 errors) and lint-imports (5 contracts kept)
     pass. The four docs-mounted test nodes, the benchmark gate, the adequacy
     gate (344 mutants, 4 waived survivors, 0 unwaived), prepare and recall
