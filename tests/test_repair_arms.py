@@ -1184,6 +1184,96 @@ def test_a_raise_of_the_other_split_is_left_to_that_split(
     assert bench.context("test").plan.raised == {TEST_ARMS[0]: 0.06}
 
 
+def _keep(bench: Bench, run_id: str, into: str) -> None:
+    """Commits a run's manifest as the maintainer's publish or evidence step."""
+    run_dir = bench.root / ra.PREPARE_ROOT / run_id / "runs" / run_id
+    target = bench.root / into / run_id
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(run_dir / "run_manifest.json", target / "run_manifest.json")
+
+
+def _lost_refusal(bench: Bench) -> str:
+    refusal = next(line for line in bench.printed if line.startswith("REFUSED"))
+    assert refusal.startswith(
+        "REFUSED: the repository records these arm runs, but their run"
+        " directories under artifacts/repair are gone, so the batch would"
+        " send them again: "
+    )
+    assert refusal.endswith(
+        ". Run the same command from the checkout that sent them, or the"
+        " owner rules on each"
+    )
+    return refusal
+
+
+def test_a_published_dev_run_whose_directory_is_gone_is_never_sent_again(
+    bench: Bench,
+) -> None:
+    assert bench.run(bench.keyless() + [COMPLETE] * 12) == 0
+    for run_id in DEV_ARMS:
+        _keep(bench, run_id, ra.RESULTS)
+    # Another checkout, a clean or a fresh clone: the ignored copies are gone.
+    shutil.rmtree(bench.root / ra.PREPARE_ROOT)
+    bench.follow_ups.clear()
+    assert bench.run([]) == 2
+    assert not bench.calls and not bench.follow_ups
+    refusal = _lost_refusal(bench)
+    for run_id in DEV_ARMS:
+        assert f"{run_id} (docs/results/{run_id}/run_manifest.json)" in refusal
+    assert bench.run([], ["--dry-run"]) == 2
+    assert not bench.calls and not bench.follow_ups
+
+
+def test_a_published_test_run_whose_directory_is_gone_is_never_sent_again(
+    bench: Bench,
+) -> None:
+    bench.split = "test"
+    for run_id in TEST_ARMS:
+        bench.seed(run_id)
+    assert bench.run(bench.keyless() + [COMPLETE] * 12) == 0
+    # Each run is published beside its committed seed.
+    for run_id in TEST_ARMS:
+        _keep(bench, run_id, ra.RESULTS)
+    shutil.rmtree(bench.root / ra.PREPARE_ROOT)
+    assert bench.run([]) == 2
+    assert not bench.calls
+    refusal = _lost_refusal(bench)
+    assert all(run_id in refusal for run_id in TEST_ARMS)
+    assert not (bench.root / ra.PREPARE_ROOT).exists()
+
+
+def test_kept_evidence_or_a_not_run_record_holds_a_run_back_too(
+    bench: Bench,
+) -> None:
+    assert bench.run(bench.keyless() + [GATED] + [COMPLETE] * 11) == 0
+    _keep(bench, ANCHOR_RES, ra.EVIDENCE_DIR)
+    shutil.rmtree(bench.root / ra.PREPARE_ROOT / ANCHOR_RES)
+    assert bench.run([]) == 2
+    assert not bench.calls
+    lost = _lost_refusal(bench).split("send them again: ")[1]
+    evidence = f"{ra.EVIDENCE_DIR}/{ANCHOR_RES}/run_manifest.json"
+    assert lost.startswith(f"{ANCHOR_RES} ({evidence}).")
+    shutil.rmtree(bench.root / ra.EVIDENCE_DIR)
+    record = bench.root / ra.RESULTS / _DEV[0] / ra.NOT_RUN_PATH
+    record.write_text(
+        '{"arms":{"resample":"gate_stop"},'
+        '"schema_version":"repair-not-run/1.0"}\n',
+        encoding="utf-8",
+    )
+    assert bench.run([]) == 2
+    assert f"{ANCHOR_RES} (docs/results/{_DEV[0]}/repair/not_run.json)" in (
+        _lost_refusal(bench)
+    )
+    # A record the batch cannot read is never taken for no record.
+    record.write_text("[", encoding="utf-8")
+    assert bench.run([]) == 2
+    assert not bench.calls
+    # A record naming another arm leaves this one to its directory.
+    record.write_text('{"arms":{"bare":"gate_stop"}}\n', encoding="utf-8")
+    assert bench.run(bench.keyless() + [COMPLETE]) == 0
+    assert bench.paid() == [ANCHOR_RES]
+
+
 def test_a_call_step_error_stops_and_the_same_command_resumes(
     bench: Bench,
 ) -> None:

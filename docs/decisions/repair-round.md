@@ -378,6 +378,13 @@ The batch takes every row from the protocol and this note:
     While no test arm run has a seed, it builds nothing before that refusal,
     and it checks a seed's admission before building it, so no test repair
     prompt is prepared before the seeding step.
+- **Committed runs.** The batch reads each run's state from its directory under
+  `artifacts/repair`, which git ignores. So before anything is built or sent
+  it refuses a run the repository records while that directory is gone: a run
+  published in `docs/results/<run id>/`, one whose evidence is kept in
+  `docs/decisions/evidence/repair-arms/<run id>/`, or an arm the pass's
+  `repair/not_run.json` names. It would otherwise send that run again. Run
+  both rounds from the one checkout that keeps `artifacts/`.
 - **Calls.** Each owed run is first called with the key withheld and must stop
   at `api_key_missing`. Paid calls start only with the key set and with the
   tooling, this note, the plans and any test seeds committed. Each is
@@ -482,7 +489,7 @@ unset DFILTERFORGE_MODEL_API_KEY
 | --- | --- | --- |
 | 0 | Every row has a final state: `done`, `not_run` or `unused`. | Hand the summary to the maintainer, who publishes, scores and checks each round (below). |
 | 1 | Stopped for the owner. The cause is one of: a budget stop after an answer; a call step that ended with an error or left no run directory; the invocation limit; an unreadable run directory; a test outage re-run whose seed is not committed yet; or an error the batch did not expect, after a paid call may have been sent. | Read the `STOPPED` line, the summary and `steps.jsonl`. For a budget stop, add a row for the stopped run alone to the raised caps table, with a cap above its last `max_usd`, and commit; the Caps table stays as registered. For a re-run without a seed, seed it and admit it (below). Then run the same command. |
-| 2 | Refused before any request. The cause is one of: a pass, its plan or its config; the Caps table or the raised caps table; a prompt set; a test seed that is missing or not admitted; a registry row still `registered`; the lock; git; uncommitted tooling; or the keyless preflight. | Fix what the `refused` or `REFUSED` line names, then run the same command. A missing test seed means the seed and admission commits come first (below). Delete a held `artifacts/repair-arms/.lock` only when no batch or call step is running. |
+| 2 | Refused before any request. The cause is one of: a pass, its plan or its config; the Caps table or the raised caps table; a committed arm run whose run directory under `artifacts/repair` is gone; a prompt set; a test seed that is missing or not admitted; a registry row still `registered`; the lock; git; uncommitted tooling; or the keyless preflight. | Fix what the `refused` or `REFUSED` line names, then run the same command. A missing test seed means the seed and admission commits come first (below). Delete a held `artifacts/repair-arms/.lock` only when no batch or call step is running. |
 | 3 | Aborted: the key variable is not set (after the keyless preflight; nothing was sent), or the account refused a request with HTTP 401, 402 or 403. | Set the key, or fix the key, the credit or the account's guardrail, and run the same command. |
 | 130 | Interrupted with Ctrl-C after the request in flight finished; that request may be billed but not recorded. | Run the same command. If it says a call step is still running, let it exit and delete `artifacts/repair-arms/.lock` first. |
 

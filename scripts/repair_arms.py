@@ -74,7 +74,13 @@ What follows a call, by the bake-off runner's own reading of a run
   and committed. So does anything the batch cannot read as a run.
 
 Every step is read back from the run directories, so running the same
-command again skips finished rows and resumes unfinished ones.
+command again skips finished rows and resumes unfinished ones. Those
+directories are ignored by git, so before anything is built or sent the
+batch refuses a run that the repository records while its run directory
+is gone: one published in ``docs/results/<run id>/``, one whose evidence
+is kept in ``docs/decisions/evidence/repair-arms/<run id>/``, or an arm
+the pass's ``repair/not_run.json`` names. It would otherwise send that
+run again from scratch.
 ``--dry-run`` makes the same checks, builds each owed prompt set in a
 temporary directory only, prints each row's state and every step the
 batch would take next, and sends and writes nothing. The batch
@@ -90,9 +96,9 @@ Exit codes:
          paid call may have been sent: read steps.jsonl, fix the cause,
          then run the same command.
     2    Refused before any request: a pass, its plan or config, the
-         note's caps or raised caps, a prompt set, a test seed or its
-         admission, the lock, git, uncommitted tooling or the keyless
-         preflight.
+         note's caps or raised caps, a committed arm run whose run
+         directory is gone, a prompt set, a test seed or its admission,
+         the lock, git, uncommitted tooling or the keyless preflight.
     3    Aborted: the key variable is not set (after the keyless
          preflight; nothing was sent), or the account refused a request
          (HTTP 401, 402 or 403). Fix it and run the same command.
@@ -186,6 +192,8 @@ EVIDENCE_DIR = "docs/decisions/evidence/repair-arms"
 LOCK_NAME = ".lock"
 STEP_LOG = "steps.jsonl"
 PLAN_PATH = "repair/plan.json"
+# The round's record of the arms the gate stopped, beside the pass.
+NOT_RUN_PATH = "repair/not_run.json"
 FREEZE_RECORD = "src/dfilterforge/held_out_freeze.json"
 LABEL = "C4"
 # The note's order: a model's arm runs go resample, bare, counterexample.
@@ -1066,6 +1074,73 @@ def endpoint(row: Row, sizes: tuple[int, ...], ctx: Context) -> Any:
     return db.load_endpoint(path.stem, path.parent, model_run, {LABEL: sizes})
 
 
+def committed_records(run_id: str, ctx: Context) -> list[str]:
+    """Names what the repository holds of one arm run, if anything.
+
+    A run is published in ``docs/results/<run id>/``, or, when it is not
+    run or an ``-r2`` re-run replaced it, its manifest is kept as
+    evidence. A test seed alone, with no run manifest, is not a run.
+    """
+    return [
+        spelled
+        for spelled in (
+            f"{RESULTS}/{run_id}/run_manifest.json",
+            f"{EVIDENCE_DIR}/{run_id}/run_manifest.json",
+        )
+        if (ctx.root / spelled).is_file()
+    ]
+
+
+def not_run_record(row: Row, ctx: Context) -> str | None:
+    """Returns the pass's not-run record when it names the row's arm.
+
+    A record the batch cannot read is returned too, so it is never taken
+    for the absence of one.
+    """
+    spelled = f"{RESULTS}/{row.base_run}/{NOT_RUN_PATH}"
+    path = ctx.root / spelled
+    if not path.is_file():
+        return None
+    try:
+        arms: object = json.loads(path.read_text(encoding="utf-8"))["arms"]
+        named = isinstance(arms, dict) and row.arm in arms
+    except (OSError, ValueError, KeyError, TypeError):
+        named = True
+    return spelled if named else None
+
+
+def check_committed(ctx: Context) -> None:
+    """Refuses a run the repository records while its run directory is gone.
+
+    The batch reads each run's state from its directory under
+    ``artifacts/repair``, which git ignores, so a run published or kept as
+    evidence there, then lost to another checkout, a clean or a fresh
+    clone, would read as never started and be sent again.
+
+    Raises:
+        PlanError: Naming each such run and the record that holds it.
+    """
+    lost: list[str] = []
+    for row in ctx.plan.rows:
+        runs = (row.run_id, row.rerun_id)
+        for run_id in runs:
+            if not ctx.view(run_id).exists:
+                lost.extend(
+                    f"{run_id} ({spelled})"
+                    for spelled in committed_records(run_id, ctx)
+                )
+        record = not_run_record(row, ctx)
+        if record is not None and not any(ctx.view(r).exists for r in runs):
+            lost.append(f"{row.run_id} ({record})")
+    if lost:
+        raise PlanError(
+            "the repository records these arm runs, but their run"
+            f" directories under {PREPARE_ROOT} are gone, so the batch would"
+            f" send them again: {'; '.join(lost)}. Run the same command from"
+            " the checkout that sent them, or the owner rules on each"
+        )
+
+
 def check_raise(run_id: str, ctx: Context) -> None:
     """Requires a raised cap to resume its own run's budget stop.
 
@@ -1097,10 +1172,12 @@ def prepare_all(ctx: Context, write: bool) -> None:
     committed seed: before that, every owed run's seed is named at once.
 
     Raises:
-        PlanError: If a prompt set or seed cannot be used, a raised cap
-            has no budget stop to resume, or a cap is below one request's
+        PlanError: If the repository records a run whose run directory
+            is gone, a prompt set or seed cannot be used, a raised cap has
+            no budget stop to resume, or a cap is below one request's
             worst case; every test run without a seed is named at once.
     """
+    check_committed(ctx)
     owed: list[tuple[Row, str]] = []
     for row in ctx.plan.rows:
         reading = read_row(row, ctx)
