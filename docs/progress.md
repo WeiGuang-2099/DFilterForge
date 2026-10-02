@@ -1236,6 +1236,107 @@ needed, so those eleven rows stay `unused`.
   `compose.yaml`.
 - No fix was needed, and no model request was sent.
 
+## Repair arms review fixes: 2026-10-02, branch repair-arms
+
+A review of def2b8a confirmed ten findings; eight commits fix them, each with
+a test where one is possible. Every check below ran in the test image with
+the worktree's code mounted read-only and no network.
+
+- **Raised caps (bfd1ad2).** A budget-stop raise used to be an edit of the
+  slot's row in the note's Caps table, which gave the raise to all three arms
+  and their `-r2` re-runs, and the docs test pinned that table, so the
+  documented remedy turned CI's registration step red. The Caps table now
+  keeps the registered caps. A new raised caps table in the repair note holds
+  one arm run per row, and the batch gives that cap to that run alone. It
+  refuses a raise of a run with no budget stop to resume, one not above its
+  slot's cap, and one naming no arm run of its split. The docs test ties the
+  registered caps to the protocol's sentence and holds every run's cap at or
+  above them.
+  - Checked: with a row raising `dev-deepseek-v4-pro-0813-res-2026-09-26` to
+    0.30 in a copy of `docs/`, the batch gave that run 0.30 and its bare and
+    cx runs and every `-r2` 0.20. CI's registration step over that copy
+    passed (282 at bfd1ad2).
+  - The docs test of the committed dev plans now builds each arm with the
+    real follow-up step directly, rather than through the batch's state
+    reading, which a committed raise or a published arm run would change in
+    CI.
+- **Seeds before builds (daf8cf7).** While no test arm run has a committed
+  seed, the batch names every missing seed and builds nothing. It checks a
+  seed's admission before building it. Once seeding has begun, a missing seed
+  is still built, so a pass whose second turns `follow-up` refuses (a round
+  not run, which can never get a seed) reaches its final state.
+  - Checked over the committed tree: the test split's refusal came after 0
+    `follow-up` builds, where d9e43fc made 12.
+- **Committed runs (8ed7d1d).** Before anything is built or sent, the batch
+  refuses (exit 2) a run that the repository records while its directory
+  under `artifacts/repair` is gone. Such a run is published in
+  `docs/results/<run id>/`, keeps a manifest in
+  `docs/decisions/evidence/repair-arms/<run id>/`, or is an arm the pass's
+  `repair/not_run.json` names (or a record the batch cannot read).
+  - Before this fix, a published dev or test round whose ignored copies were
+    deleted was sent again in full.
+  - The three new tests fail with the guard removed.
+- **Spend summary (c8c692d).** Each summary row carries `first_run`, the
+  charged bound of the first run an `-r2` re-run replaced, and the total
+  adds it. Every printed bound is rounded up to four decimals, the total with
+  its exact value beside it.
+  - Checked: an outage followed by a complete `-r2` and 11 complete rows gives
+    a total equal to the sum of all 13 run manifests (0.000260 USD), printed
+    as 0.0003.
+- **Keyless invoker test (0a141d6).** A new test runs the batch's own
+  invoker against a child that reports whether the key variable reached it:
+  absent for a keyless call, present for a paid one. Changing the invoker to
+  pass the key to every child now fails that test; before, all 56 tests
+  passed with that change.
+- **Second-turn prompt files (a578066).** A committed prompt now holds two
+  messages, or four in a bare or counterexample arm run, first run or re-run,
+  named after a pass with a committed plan.
+  `tests/test_generation.py::test_committed_prepared_files_reserialize_byte_for_byte`
+  now runs in CI's second-turn step with `docs/` mounted.
+  - Checked: with the three `test-qwen3.5-9b` arm seeds built into a copy of
+    `docs/`, the old test failed on `test-qwen3.5-9b-bare-2026-09-26`, and the
+    new step's two nodes passed.
+- **Repair note (f856409).** Order items 3 to 5 now say that the plans were
+  committed on `repair-arms` and that both rounds run from `main` after its
+  merge. They also place the dev round and any correction it names between
+  the merge and the test seeds, and they say they were corrected.
+  - The Test passes section gives the per-pass test counts, recounted from
+    the committed plans and outcomes: 75 items in 56 cases, 54 silent-wrong
+    and 21 invalid, 225 requests.
+  - The "about 360 requests" figure is marked as the superseded design
+    estimate, and "Test trigger counts" left "Not measured yet".
+- **This log (f70432b).** The keyless test-split line above no longer says
+  that no test prompt set was built. The mirror rise from b3a7d40 is 53
+  passed and 3 skipped, the 56 new tests.
+- **Prepare-hashed files.** Against `origin/main`, still only
+  `src/dfilterforge/generation.py` and `scripts/model_run.py` differ from the
+  digests the frozen test prompt set records.
+- **CI's docs-mounted steps and pylint at f70432b**, under the compose `test`
+  service's limits (no network, all capabilities dropped, read-only root,
+  init, 128 pids, no-new-privileges, 2 CPUs, 2 GB, a 128 MB exec `/tmp`):
+  - registration: 290 passed (271 before, plus the 19 new tests in
+    `tests/test_repair_arms.py`, which now collects 75);
+  - pair report: 2 passed;
+  - second turn: 2 passed, the reserialize node included;
+  - CI's exact pylint line: 10.00/10, rc 0.
+- **CI python job mirror at f70432b** (`artifacts/ci/ci_mirror.sh
+  review-fixes-f70432b`): overall status 0.
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept) pass.
+  - pytest: 1,785 passed and 24 skipped (19 and 0 more than at d9e43fc), with
+    96.82 percent coverage; `scripts/repair_arms.py` alone is at 97 percent.
+  - The five docs-mounted test nodes the mirror finds in `ci.yml` pass, the
+    reserialize node and the frozen-prompt guard among them.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 25 committed outputs (17 `scored/`, 4
+    `control-reference/`, 4 `control-mutation/`) and `repair --check` of the
+    8 committed plans report no difference; no pool is committed.
+- **Not run locally.** CI's `lab`-image steps, the web job and the container
+  job did not run; the mirror runs the `lab` checks in the test image with
+  the branch's `src/` mounted.
+- No model request was sent.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered, in this
@@ -1283,8 +1384,8 @@ needed, so those eleven rows stay `unused`.
 - CI has not run on `repair-arms`, which is not pushed; only the local
   mirrors above have.
 - `scripts/repair_arms.py` has sent no paid call. Its sending path is tested
-  only against a scripted call step, and its keyless path against the real
-  call step.
+  only against a scripted call step, its keyless path against the real call
+  step, and its invoker's key withholding against a stub child.
 - The repair tooling records only gate stops as an arm not run
   (`repair --not-run`, at most two arms). An arm not run after an outage on
   its re-run or a refusal, or a round with no arm run, has no record yet; the
