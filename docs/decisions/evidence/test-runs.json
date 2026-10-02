@@ -52,9 +52,9 @@
       "prepare": "docs/results/test-qwen3-32b-2026-09-26",
       "conditional_on": null,
       "trigger": null,
-      "status": "registered",
+      "status": "published",
       "reason": null,
-      "commit": null
+      "commit": "7aaade8"
     },
     {
       "role": "aa_pass_b",
@@ -68,9 +68,9 @@
       "prepare": "docs/results/test-qwen3-32b-2026-09-26",
       "conditional_on": null,
       "trigger": null,
-      "status": "registered",
+      "status": "published",
       "reason": null,
-      "commit": null
+      "commit": "7aaade8"
     },
     {
       "role": "winner_small",
@@ -84,9 +84,9 @@
       "prepare": "docs/results/test-qwen3-32b-2026-09-26",
       "conditional_on": null,
       "trigger": null,
-      "status": "registered",
+      "status": "published",
       "reason": null,
-      "commit": null
+      "commit": "7aaade8"
     },
     {
       "role": "winner_mid",
@@ -100,9 +100,9 @@
       "prepare": "docs/results/test-qwen3-32b-2026-09-26",
       "conditional_on": null,
       "trigger": null,
-      "status": "registered",
+      "status": "published",
       "reason": null,
-      "commit": null
+      "commit": "7aaade8"
     },
     {
       "role": "winner_frontier",
@@ -116,9 +116,9 @@
       "prepare": "docs/results/test-qwen3-32b-2026-09-26",
       "conditional_on": null,
       "trigger": null,
-      "status": "registered",
+      "status": "published",
       "reason": null,
-      "commit": null
+      "commit": "7aaade8"
     },
     {
       "role": "fallback_small",
