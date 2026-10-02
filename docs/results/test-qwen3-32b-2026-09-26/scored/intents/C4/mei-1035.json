@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.port","kind":"predicate","operator":"ne","value":443},{"child":{"field":"udp.port","kind":"predicate","operator":"exists","value":null},"kind":"not"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

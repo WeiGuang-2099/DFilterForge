@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp","kind":"predicate","operator":"exists","value":null},{"field":"tcp.flags.ack","kind":"predicate","operator":"eq","value":true},{"child":{"field":"tcp.flags.syn","kind":"predicate","operator":"eq","value":true},"kind":"not"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

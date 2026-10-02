@@ -1,0 +1,1 @@
+{"case_id":"nc-that-flag","missing_slots":["field","value"],"rationale":"TCP segments with one particular flag set; which flag is never named. A flag is its own field or a bit of the flag byte, so either slot names what is missing.","split":"test","status":"needs_clarification"}

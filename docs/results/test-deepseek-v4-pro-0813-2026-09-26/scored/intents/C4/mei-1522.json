@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"cflow.drop_packets","kind":"predicate","operator":"exists","value":null},{"field":"cflow.packets_dropped","kind":"predicate","operator":"exists","value":null},{"field":"cflow.drop_total_packets","kind":"predicate","operator":"exists","value":null}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}

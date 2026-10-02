@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dst.port","kind":"predicate","operator":"eq","value":443},{"child":{"field":"src.addr","kind":"predicate","operator":"in_subnet","value":"192.0.2.0/24"},"kind":"not"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
