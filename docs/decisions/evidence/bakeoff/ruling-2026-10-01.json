@@ -1,0 +1,194 @@
+{
+  "schema": "bakeoff-ruling/1.0",
+  "date": "2026-10-01",
+  "rule": "docs/decisions/model-bakeoff.md rules 4 to 6: a run-gate survivor whose two-turn smoke fails drops; of the survivors, the earliest-listed one at most 4 below the best survivor's strong-exact ready count (C1 to C4, 96) wins the slot; the reserve runs only when a slot has no survivor",
+  "margin": 4,
+  "ranking": "docs/decisions/evidence/bakeoff/ranking-2026-09-26.json",
+  "smoke": {
+    "plan": "docs/decisions/evidence/bakeoff/smoke/plan.json",
+    "summary": "docs/decisions/evidence/bakeoff/smoke/summary-2026-10-01.json",
+    "verdicts": "docs/decisions/evidence/bakeoff/smoke/verdicts",
+    "prepared_at": "2d305e0",
+    "sent_from": "281b2ce",
+    "sent_on": "2026-10-01",
+    "charged_usd_upper_bound_total": 0.011482
+  },
+  "owner_rulings": {
+    "K": {
+      "date": "2026-10-01",
+      "candidate": "kimi-k2.6",
+      "smoke_id": "dev-kimi-k2.6-rs-2026-09-26",
+      "runs": [
+        "dev-kimi-k2.6-rs-2026-09-26",
+        "dev-kimi-k2.6-rs2-2026-09-26"
+      ],
+      "judge_verdict": "rerun_owed",
+      "ruling": "not_measured",
+      "retried": false,
+      "attempts": 12,
+      "http_429": 12,
+      "charged_usd_upper_bound": 0.0,
+      "why": "Parasail, the pinned provider, answered HTTP 429 to all 12 attempts (2 items, 3 attempts each, 2 runs), so no reply was served and nothing was charged; the smoke rule reads that as a harness failure owed a re-run, never a fail. It changes no ruling: kimi-k2.6's count, 68, is below glm-5.2's 72, so the best survivor count is 72 whether or not kimi-k2.6 survives, and deepseek-v4-pro-0813, listed first at 70, is within 4 of it either way."
+    }
+  },
+  "anchor": {
+    "run_id": "dev-qwen3-32b-2026-09-26",
+    "smoke_id": "dev-qwen3-32b-rs-2026-09-26",
+    "smoke": "pass",
+    "informational": true
+  },
+  "slots": {
+    "small": {
+      "candidates": [
+        {
+          "rank": 1,
+          "candidate": "qwen3.5-9b",
+          "run_id": "dev-qwen3.5-9b-2026-09-26",
+          "strong_exact_ready": 42,
+          "run_gates": "pass",
+          "smoke_id": "dev-qwen3.5-9b-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        },
+        {
+          "rank": 2,
+          "candidate": "ministral-8b-2512",
+          "run_id": "dev-ministral-8b-2512-2026-09-26",
+          "strong_exact_ready": 39,
+          "run_gates": "pass",
+          "smoke_id": "dev-ministral-8b-2512-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        },
+        {
+          "rank": 3,
+          "candidate": "granite-4.2-8b",
+          "run_id": "dev-granite-4.2-8b-2026-09-26",
+          "strong_exact_ready": 18,
+          "run_gates": "pass",
+          "smoke_id": "dev-granite-4.2-8b-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        }
+      ],
+      "best_survivor_count": 42,
+      "floor": 38,
+      "reserve": "not_run",
+      "winner": {
+        "candidate": "qwen3.5-9b",
+        "run_id": "dev-qwen3.5-9b-2026-09-26",
+        "qualified_through": "pass",
+        "config": "qwen3.5-9b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3.5-9b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      }
+    },
+    "mid": {
+      "candidates": [
+        {
+          "rank": 1,
+          "candidate": "qwen3.5-122b-a10b",
+          "run_id": "dev-qwen3.5-122b-a10b-2026-09-26",
+          "strong_exact_ready": 57,
+          "run_gates": "pass",
+          "smoke_id": "dev-qwen3.5-122b-a10b-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        },
+        {
+          "rank": 2,
+          "candidate": "mistral-medium-3-5",
+          "run_id": "dev-mistral-medium-3-5-2026-09-26",
+          "strong_exact_ready": 51,
+          "run_gates": "drop",
+          "smoke_id": null,
+          "smoke": "not_run",
+          "status": "dropped",
+          "owner_ruling": null
+        },
+        {
+          "rank": 3,
+          "candidate": "nemotron-3-super-120b-a12b",
+          "run_id": "dev-nemotron-3-super-120b-a12b-2026-09-26",
+          "strong_exact_ready": 37,
+          "run_gates": "pass",
+          "smoke_id": "dev-nemotron-3-super-120b-a12b-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        }
+      ],
+      "best_survivor_count": 57,
+      "floor": 53,
+      "reserve": "not_run",
+      "winner": {
+        "candidate": "qwen3.5-122b-a10b",
+        "run_id": "dev-qwen3.5-122b-a10b-2026-09-26",
+        "qualified_through": "pass",
+        "config": "qwen3.5-122b-a10b_novita_enabled-false",
+        "model_id": "qwen/qwen3.5-122b-a10b",
+        "slug": "novita",
+        "reasoning_switch": "enabled_false"
+      }
+    },
+    "frontier": {
+      "candidates": [
+        {
+          "rank": 1,
+          "candidate": "deepseek-v4-pro-0813",
+          "run_id": "dev-deepseek-v4-pro-0813-2026-09-26",
+          "strong_exact_ready": 70,
+          "run_gates": "pass",
+          "smoke_id": "dev-deepseek-v4-pro-0813-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        },
+        {
+          "rank": 2,
+          "candidate": "glm-5.2",
+          "run_id": "dev-glm-5.2-2026-09-26",
+          "strong_exact_ready": 72,
+          "run_gates": "pass",
+          "smoke_id": "dev-glm-5.2-rs-2026-09-26",
+          "smoke": "pass",
+          "status": "survivor",
+          "owner_ruling": null
+        },
+        {
+          "rank": 3,
+          "candidate": "kimi-k2.6",
+          "run_id": "dev-kimi-k2.6-2026-09-26",
+          "strong_exact_ready": 68,
+          "run_gates": "pass",
+          "smoke_id": "dev-kimi-k2.6-rs-2026-09-26",
+          "smoke": "not_measured",
+          "status": "unresolved",
+          "owner_ruling": "K"
+        }
+      ],
+      "best_survivor_count": 72,
+      "floor": 68,
+      "reserve": "not_run",
+      "winner": {
+        "candidate": "deepseek-v4-pro-0813",
+        "run_id": "dev-deepseek-v4-pro-0813-2026-09-26",
+        "qualified_through": "pass",
+        "config": "deepseek-v4-pro-0813_deepinfra_enabled-false",
+        "model_id": "deepseek/deepseek-v4-pro-0813",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false"
+      }
+    }
+  },
+  "winners": {
+    "small": "qwen/qwen3.5-9b",
+    "mid": "qwen/qwen3.5-122b-a10b",
+    "frontier": "deepseek/deepseek-v4-pro-0813"
+  }
+}

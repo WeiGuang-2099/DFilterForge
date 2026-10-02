@@ -136,6 +136,10 @@ to it, and 2 when it refused.
 # The rule the judge applies and the batch that resumes and re-runs by it
 # share one file, so a run and its verdict can never be read two ways.
 # pylint: disable=too-many-lines
+# scripts/test_passes.py repeats this batch's sibling loader and its
+# ending dispatch on purpose: each owner batch is a standalone file loaded
+# by path, and neither may import the other.
+# pylint: disable=duplicate-code
 
 from __future__ import annotations
 

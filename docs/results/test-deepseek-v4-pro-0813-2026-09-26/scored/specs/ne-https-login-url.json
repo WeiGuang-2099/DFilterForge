@@ -1,0 +1,1 @@
+{"case_id":"ne-https-login-url","missing_slots":[],"rationale":"HTTPS requests for the /login page when the traffic is encrypted and no decryption keys are available; the URL path is inside TLS.","split":"test","status":"not_expressible"}

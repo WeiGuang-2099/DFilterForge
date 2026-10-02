@@ -3626,33 +3626,415 @@ def test_readme_names_only_the_recorded_first_run_model() -> None:
     assert _readme_run_id(section) in intro
 
 
+# The hosted test-run registry (docs/decisions/test-runs.md): which runs
+# answer the frozen test prompts and how far each has got.
+_REGISTRY = (
+    Path(__file__).parents[1]
+    / "docs"
+    / "decisions"
+    / "evidence"
+    / "test-runs.json"
+)
+_REGISTRY_STATUSES = frozenset({"registered", "published", "not_run", "unused"})
+
+
+class _RegisteredRun(NamedTuple):
+    """One row of the hosted test-run registry, as the guard reads it."""
+
+    run_id: str
+    config: str
+    prepare: str
+    conditional_on: str | None
+    status: str
+    reason: str | None
+    commit: str | None
+
+
+def _registered_runs(path: Path) -> tuple[_RegisteredRun, ...]:
+    """Reads the registry's rows, or none when no registry is committed."""
+    if not path.is_file():
+        return ()
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["schema"] == "test-runs/1.0"
+    return tuple(
+        _RegisteredRun(
+            run_id=row["run_id"],
+            config=row["config"],
+            prepare=row["prepare"],
+            conditional_on=row["conditional_on"],
+            status=row["status"],
+            reason=row["reason"],
+            commit=row["commit"],
+        )
+        for row in document["runs"]
+    )
+
+
+def _awaits_a_request(
+    run: _RegisteredRun, runs: Mapping[str, _RegisteredRun]
+) -> bool:
+    """Says whether a registered run may still send a request.
+
+    A ``registered`` row may. So may an ``unused`` conditional row, a
+    fallback rule 7 may have triggered or an outage re-run, once the run
+    it names is ``not_run``, until the registry registers it or gives the
+    reason it stays unused.
+    """
+    if run.status == "registered":
+        return True
+    if run.status != "unused" or run.conditional_on is None:
+        return False
+    condition = runs.get(run.conditional_on)
+    if condition is None:
+        return True
+    return condition.status == "not_run" and not run.reason
+
+
+def _published_problems(
+    root: Path, run: _RegisteredRun, prepare: Path
+) -> list[str]:
+    """Names what keeps a published row's run from being the registered one.
+
+    The run must be complete in ``docs/results/<run id>`` over the
+    registered prompts, with the row's config settings, and ``commit``
+    must be the source revision its first invocation recorded.
+    """
+    path = root / "docs" / "results" / run.run_id / "run_manifest.json"
+    if not path.is_file():
+        return ["docs/results holds no run_manifest.json for it"]
+    manifest = RunManifestV1.model_validate_json(path.read_bytes())
+    config = json.loads((root / run.config).read_text(encoding="utf-8"))
+    registered: dict[str, object] = {
+        "run id": run.run_id,
+        "status": "complete",
+        "prepare digest": hashlib.sha256(prepare.read_bytes()).hexdigest(),
+        "settings": RequestSettingsV1.model_validate(config["settings"]),
+        "commit": run.commit,
+    }
+    recorded: dict[str, object] = {
+        "run id": manifest.run_id,
+        "status": manifest.status,
+        "prepare digest": manifest.prepare_sha256,
+        "settings": manifest.settings,
+        "commit": manifest.invocations[0].source_revision,
+    }
+    return [
+        f"its run manifest records another {key}"
+        for key, value in registered.items()
+        if recorded[key] != value
+    ]
+
+
+def _registry_problems(root: Path, runs: Sequence[_RegisteredRun]) -> list[str]:
+    """Names every registry row the results tree or the registry contradicts.
+
+    A row leaves the guard only as ``published``, its run in
+    ``docs/results/<run id>``, or as ``not_run`` with a reason; no other
+    row may have a run manifest there. A conditional row runs only once
+    the run it names is ``not_run``.
+    """
+    results = root / "docs" / "results"
+    by_id = {run.run_id: run for run in runs}
+    problems: list[str] = []
+    if len(by_id) != len(runs):
+        problems.append("a run id is registered twice")
+    for run in runs:
+        name = f"{run.run_id} ({run.status})"
+        prepare = root / run.prepare / "prepare.json"
+        if run.status not in _REGISTRY_STATUSES:
+            problems.append(f"{name}: no registry status")
+        if prepare.parent.parent != results or not prepare.is_file():
+            problems.append(f"{name}: its prepare is no prompt set in results")
+            continue
+        if run.status == "published":
+            problems.extend(
+                f"{name}: {problem}"
+                for problem in _published_problems(root, run, prepare)
+            )
+        elif (results / run.run_id / "run_manifest.json").exists():
+            problems.append(f"{name}: docs/results holds its run_manifest.json")
+        if run.status == "not_run" and not run.reason:
+            problems.append(f"{name}: not run without a reason")
+        if run.conditional_on is None:
+            if run.status == "unused":
+                problems.append(f"{name}: only a conditional run is unused")
+        elif run.conditional_on not in by_id:
+            problems.append(f"{name}: its condition is not registered")
+        elif (
+            run.status != "unused"
+            and by_id[run.conditional_on].status != "not_run"
+        ):
+            problems.append(f"{name}: {run.conditional_on} is not not_run")
+        seeded = results / run.run_id / "prepare.json"
+        if seeded.is_file() and seeded.read_bytes() != prepare.read_bytes():
+            problems.append(f"{name}: its directory holds other prompts")
+    return problems
+
+
+def _guarded_prompt_sets(
+    root: Path, runs: Sequence[_RegisteredRun]
+) -> list[Path]:
+    """Lists the prompt sets under docs/results a call may still answer.
+
+    A prompt set the registry names, as a prepare or as a run's own
+    directory, stays guarded while any run over that prepare awaits a
+    request, whether or not a run manifest sits beside it. Any other
+    prompt set is guarded until its ``run_manifest.json`` is.
+    """
+    results = root / "docs" / "results"
+    by_id = {run.run_id: run for run in runs}
+    awaiting = {run.prepare for run in runs if _awaits_a_request(run, by_id)}
+    named: dict[str, str] = {}
+    for run in runs:
+        named[Path(run.prepare).name] = run.prepare
+        named[run.run_id] = run.prepare
+    guarded: list[Path] = []
+    for path in sorted(results.glob("*/prepare.json")):
+        prepare = named.get(path.parent.name)
+        if prepare is None:
+            if not (path.parent / "run_manifest.json").exists():
+                guarded.append(path.parent)
+        elif prepare in awaiting:
+            guarded.append(path.parent)
+    return guarded
+
+
 def test_frozen_prompts_awaiting_a_call_match_the_model_side_code() -> None:
-    """A committed prompt set still waiting for its call matches the tree.
+    """A committed prompt set still waiting for a call matches the tree.
 
     The call refuses with ``prepare_code_mismatch`` as soon as a file that
     decides a prompt differs from the digest its ``prepare.json`` recorded,
     so an edit to one of those files after the freeze would otherwise
-    surface only at the paid step. A results directory that already holds
-    its published ``run_manifest.json`` was checked by its own call and is
-    left alone, so later edits stay free once a run is in.
+    surface only at the paid step. The frozen test prompts stay guarded
+    while any run the hosted test-run registry lists over them may still
+    send a request, so pass A's run manifest beside them releases nothing
+    (owner ruling G, 2026-10-01), and the registry must agree with
+    docs/results. Any other results directory that already holds its
+    published ``run_manifest.json`` was checked by its own call and is
+    left alone.
     """
     if not _RESULTS.is_dir():
         pytest.skip("the test image carries no docs/ tree")
+    root = _RESULTS.parents[1]
+    runs = _registered_runs(_REGISTRY)
     current = _SOURCE_MANIFEST()
-    awaiting = [
-        path.parent
-        for path in sorted(_RESULTS.glob("*/prepare.json"))
-        if not (path.parent / "run_manifest.json").exists()
-    ]
+    problems = _registry_problems(root, runs)
+    record = held_out.load_record()
 
-    for run_dir in awaiting:
+    assert not problems, problems
+    # Without the registry, a manifest beside the frozen prompts would
+    # release them again.
+    if record is not None and (_RESULTS / record.prepare.prepare_id).is_dir():
+        frozen = f"docs/results/{record.prepare.prepare_id}"
+        assert frozen in {run.prepare for run in runs}, "no registered run"
+    for run_dir in _guarded_prompt_sets(root, runs):
         recorded = dict(_manifest(run_dir).source_files)
         changed = sorted(
             name
             for name in set(recorded) | set(current)
             if recorded.get(name) != current.get(name)
         )
-        assert not changed, f"{run_dir.name}: re-freeze after {changed}"
+        assert not changed, f"{run_dir.name} awaits a call; {changed} changed"
+
+
+# Registry fixtures: pass A answers its own prepare id, as on test.
+_PASS_A = _RUN_ID
+_PASS_A_R2 = "dev-fake-r2-2026-09-20"
+_PASS_B = "dev-fake-passb-2026-09-20"
+_PASS_B_R2 = "dev-fake-passb-r2-2026-09-20"
+_WINNER = "dev-other-2026-09-20"
+_FALLBACK = "dev-other-fb-2026-09-20"
+_CONFIG_NAME = "call.json"
+
+
+@pytest.fixture(name="answered", scope="module")
+def fixture_answered(
+    prepared: Path, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Answers the shared dev prompt set once, for the registry tests."""
+    prepare_dir = tmp_path_factory.mktemp("registry") / prepared.name
+    shutil.copytree(prepared, prepare_dir)
+    config = prepare_dir.parent / _CONFIG_NAME
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(API_KEY_ENV, _API_KEY)
+        with _provider(_healthy) as provider:
+            _write_config(config, provider.url)
+            assert _call(prepare_dir, config) == 0
+    return prepare_dir
+
+
+def _results_tree(
+    answered: Path, root: Path, published: Sequence[str] = (_PASS_A,)
+) -> Path:
+    """Lays out docs/results as publishing these runs would leave it.
+
+    Returns:
+        The registered prompt set, pass A's directory.
+    """
+    results = root / "docs" / "results"
+    shutil.copy(answered.parent / _CONFIG_NAME, root / _CONFIG_NAME)
+    manifest = _run_manifest(answered)
+    for run_id in dict.fromkeys((_PASS_A, *published)):
+        target = results / run_id
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copy(answered / "prepare.json", target / "prepare.json")
+        if run_id in published:
+            copy = manifest.model_copy(update={"run_id": run_id})
+            (target / "run_manifest.json").write_text(
+                copy.model_dump_json(), encoding="utf-8"
+            )
+    return results / _PASS_A
+
+
+def _row(
+    run_id: str,
+    status: str,
+    *,
+    conditional_on: str | None = None,
+    reason: str | None = None,
+    commit: str | None = None,
+) -> _RegisteredRun:
+    """Builds one registry row over the fixture prompt set."""
+    if status == "published" and commit is None:
+        commit = "test"  # The source revision every fixture call records.
+    return _RegisteredRun(
+        run_id=run_id,
+        config=_CONFIG_NAME,
+        prepare=f"docs/results/{_PASS_A}",
+        conditional_on=conditional_on,
+        status=status,
+        reason=reason,
+        commit=commit,
+    )
+
+
+def test_a_registered_run_keeps_its_prompt_set_guarded_beside_a_manifest(
+    answered: Path, tmp_path: Path
+) -> None:
+    """Pass A's publish releases nothing while pass B may still be sent."""
+    prompt_set = _results_tree(answered, tmp_path)
+    seeded = tmp_path / "docs" / "results" / _PASS_B
+    seeded.mkdir()
+    shutil.copy(prompt_set / "prepare.json", seeded / "prepare.json")
+    runs = (_row(_PASS_A, "published"), _row(_PASS_B, "registered"))
+
+    assert not _registry_problems(tmp_path, runs)
+    assert _guarded_prompt_sets(tmp_path, runs) == [prompt_set, seeded]
+    # Without the registry, the manifest beside the prompts released them.
+    assert _guarded_prompt_sets(tmp_path, ()) == [seeded]
+
+
+def test_finished_runs_release_their_prompt_set(
+    answered: Path, tmp_path: Path
+) -> None:
+    """Published, ruled-not-run and untriggered rows hold nothing back."""
+    _results_tree(answered, tmp_path, published=(_PASS_A, _FALLBACK))
+    # A seeded directory whose run was not sent no longer blocks either.
+    seeded = tmp_path / "docs" / "results" / _PASS_B
+    seeded.mkdir()
+    shutil.copy(
+        tmp_path / "docs" / "results" / _PASS_A / "prepare.json", seeded
+    )
+    runs = (
+        _row(_PASS_A, "published"),
+        _row(_PASS_B, "not_run", reason="pass B stopped at the gate"),
+        _row(_WINNER, "not_run", reason="stopped at the gate"),
+        _row(_FALLBACK, "published", conditional_on=_WINNER),
+        _row(_PASS_A_R2, "unused", conditional_on=_PASS_A),
+        _row(
+            _PASS_B_R2,
+            "unused",
+            conditional_on=_PASS_B,
+            reason="pass B stopped at the gate; it was no outage",
+        ),
+    )
+
+    assert not _registry_problems(tmp_path, runs)
+    assert not _guarded_prompt_sets(tmp_path, runs)
+
+
+def test_a_triggered_fallback_keeps_the_guard(
+    answered: Path, tmp_path: Path
+) -> None:
+    """A conditional run whose condition failed is due until ruled on."""
+    prompt_set = _results_tree(answered, tmp_path)
+    stopped = _row(_WINNER, "not_run", reason="stopped at the gate")
+    for fallback in (
+        _row(_FALLBACK, "registered", conditional_on=_WINNER),
+        _row(_FALLBACK, "unused", conditional_on=_WINNER),
+    ):
+        runs = (_row(_PASS_A, "published"), stopped, fallback)
+
+        assert not _registry_problems(tmp_path, runs)
+        assert _guarded_prompt_sets(tmp_path, runs) == [prompt_set]
+    ruled = _row(
+        _FALLBACK,
+        "unused",
+        conditional_on=_WINNER,
+        reason="the winner's stop was an outage, not a gate stop",
+    )
+    runs = (_row(_PASS_A, "published"), stopped, ruled)
+    assert not _guarded_prompt_sets(tmp_path, runs)
+
+
+@pytest.mark.parametrize(
+    ("rows", "problem"),
+    [
+        ((_row(_PASS_B, "published"),), "holds no run_manifest.json"),
+        ((_row(_PASS_A, "registered"),), "holds its run_manifest.json"),
+        ((_row(_PASS_A, "not_run", reason="x"),), "holds its run_manifest"),
+        ((_row(_PASS_A, "published", commit="0123abc"),), "another commit"),
+        ((_row(_PASS_B, "not_run"),), "not run without a reason"),
+        ((_row(_PASS_B, "unused"),), "only a conditional run is unused"),
+        (
+            (
+                _row(_PASS_A, "published"),
+                _row(_PASS_A_R2, "registered", conditional_on=_PASS_A),
+            ),
+            f"{_PASS_A} is not not_run",
+        ),
+        ((_row(_FALLBACK, "unused", conditional_on=_WINNER),), "condition"),
+        ((_row(_PASS_B, "bogus"),), "no registry status"),
+        ((_row(_PASS_B, "registered"),) * 2, "registered twice"),
+    ],
+)
+def test_a_status_the_results_tree_contradicts_fails_the_guard(
+    answered: Path,
+    tmp_path: Path,
+    rows: tuple[_RegisteredRun, ...],
+    problem: str,
+) -> None:
+    """A row cannot leave the guard by a status docs/results does not show."""
+    _results_tree(answered, tmp_path)
+
+    problems = _registry_problems(tmp_path, rows)
+
+    assert any(problem in entry for entry in problems), problems
+
+
+def test_a_published_row_must_be_the_run_its_directory_holds(
+    answered: Path, tmp_path: Path
+) -> None:
+    """Another run's manifest or other prompts never count as published."""
+    prompt_set = _results_tree(answered, tmp_path)
+    moved = tmp_path / "docs" / "results" / _PASS_B
+    shutil.copytree(prompt_set, moved)
+    (tmp_path / "docs" / "results" / _WINNER).mkdir()
+    (tmp_path / "docs" / "results" / _WINNER / "prepare.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    runs = (
+        _row(_PASS_A, "published"),
+        _row(_PASS_B, "published"),
+        _row(_WINNER, "registered"),
+    )
+
+    problems = _registry_problems(tmp_path, runs)
+
+    assert problems == [
+        f"{_PASS_B} (published): its run manifest records another run id",
+        f"{_WINNER} (registered): its directory holds other prompts",
+    ]
 
 
 def test_readme_call_config_is_the_recorded_first_run() -> None:
