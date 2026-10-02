@@ -4,10 +4,10 @@ Last updated: 2026-10-02
 
 ## Current slice
 
-The test split is frozen, the slot winners are fixed, every hosted test run is
-registered, and the repair round and the Disproof Reel's selection rule are
-pre-registered; the paid test passes follow once the registration merges, sent
-by the owner with one command, `scripts/test_passes.py`.
+The baseline test passes are sent, published and scored, and every hosted
+test-run registry row is final. On `repair-arms` the four dev and four test
+repair plans are committed; the dev repair round is next, and the test round
+follows any correction the dev round names.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -1009,13 +1009,90 @@ needed, so those eleven rows stay `unused`.
     215 passed and 2 passed.
   - No repair plan is committed, so CI's repair-plan step checks none.
 
+## Repair plans committed: 2026-10-02, branch repair-arms
+
+- **Main merged** (846fc7b). `repair-arms` merged `origin/main` at 7a8ec03
+  with a merge commit, never rebased. Every test-run registry row is final
+  (five published, eleven unused), so the frozen-prompt guard releases:
+  `test_frozen_prompts_awaiting_a_call_match_the_model_side_code` now passes
+  on this branch, whose only hashed edits are still `generation.py` and
+  `scripts/model_run.py`.
+  - Conflicts in `ci.yml`, `pyproject.toml` and this file kept both sides:
+    CI's pylint line and pyright's include list name both
+    `scripts/test_passes.py` and `scripts/two_turn_smoke.py`, and the pair
+    step runs main's two committed-pair tests beside the arms' second-turn
+    step.
+  - With both owner batches on one pylint line, R0801 flagged the sibling
+    loader and ending dispatch that `test_passes.py` repeats from
+    `two_turn_smoke.py` (pylint rc 8). `two_turn_smoke.py` now disables
+    `duplicate-code` with its reason, as `retrieval_recall.py` does; CI's
+    exact pylint line then gives 10.00/10, rc 0.
+- **Dev plans** (5eb2bae). `dfilterforge repair` in plan mode, in
+  `dfilterforge-test:0.1.0` with the branch's `src/` mounted, no network and
+  `docs/results` mounted read-write, wrote `repair/plan.json` for the four
+  dev passes; `repair --check` with `docs/results` read-only reported no
+  difference for each (exit 0). Feedback probe `semantic-29`, labels
+  `be0c91824bb5`.
+
+  | Pass | Triggered | Silent-wrong / invalid | Cases | Cards: frames / error / none | Plan SHA-256 |
+  | --- | ---: | --- | ---: | --- | --- |
+  | [`dev-qwen3-32b-2026-09-26`](results/dev-qwen3-32b-2026-09-26/repair/plan.json) | 10 | 6 / 4 | 6 | 6 / 4 / 0 | `53e110395c3e` |
+  | [`dev-qwen3.5-9b-2026-09-26`](results/dev-qwen3.5-9b-2026-09-26/repair/plan.json) | 7 | 5 / 2 | 6 | 5 / 2 / 0 | `387a330981b6` |
+  | [`dev-qwen3.5-122b-a10b-2026-09-26`](results/dev-qwen3.5-122b-a10b-2026-09-26/repair/plan.json) | 8 | 7 / 1 | 7 | 7 / 1 / 0 | `6f746e8e067b` |
+  | [`dev-deepseek-v4-pro-0813-2026-09-26`](results/dev-deepseek-v4-pro-0813-2026-09-26/repair/plan.json) | 11 | 9 / 2 | 7 | 9 / 2 / 0 | `c2e75d74b17a` |
+
+  - The counts equal the [repair note's](decisions/repair-round.md) table
+    (36 items in 26 cases, 27 silent-wrong and 9 invalid). Each plan's item
+    ids equal the C4 items whose committed `scored/outcomes.jsonl` outcome
+    is `silent_wrong` or `invalid`, all with ready gold and finish_reason
+    `stop`. The error cards' codes are those of the note's table.
+  - The qwen3.5-9b plan's digest is the one ablation 008's receipt and the
+    earlier scratch run recorded.
+- **Test plans** (b3a7d40), the same way, for the four counted test passes
+  the registry publishes: `aa_pass_a` and the three slot winners; pass B is
+  never repaired. The plan stage reproduced the freeze record's
+  feedback-label digest `c0b30949787e` (full digest equal in each plan), so
+  it did not refuse with `feedback_labels_mismatch`; `repair --check`
+  reported no difference for each (exit 0). Feedback probe `semantic-35`.
+
+  | Pass | Triggered of 80 ready C4 | Silent-wrong / invalid | Cases of 40 | Cards: frames / error / none | Plan SHA-256 |
+  | --- | ---: | --- | ---: | --- | --- |
+  | [`test-qwen3-32b-2026-09-26`](results/test-qwen3-32b-2026-09-26/repair/plan.json) | 28 | 25 / 3 | 20 | 25 / 3 / 0 | `67ba5bcbfa4d` |
+  | [`test-qwen3.5-9b-2026-09-26`](results/test-qwen3.5-9b-2026-09-26/repair/plan.json) | 15 | 11 / 4 | 11 | 11 / 4 / 0 | `c0f297cb96e0` |
+  | [`test-qwen3.5-122b-a10b-2026-09-26`](results/test-qwen3.5-122b-a10b-2026-09-26/repair/plan.json) | 20 | 14 / 6 | 16 | 14 / 6 / 0 | `a66dca952c6e` |
+  | [`test-deepseek-v4-pro-0813-2026-09-26`](results/test-deepseek-v4-pro-0813-2026-09-26/repair/plan.json) | 12 | 4 / 8 | 9 | 4 / 8 / 0 | `9281abbc3631` |
+
+  - 75 items in all, every one with ready gold and finish_reason `stop`, so
+    the test round is 225 requests, not the note's design estimate of about
+    360. The 21 error cards are 16 `unknown_field`, 4 `type_mismatch` and 1
+    `unsupported_operator`, each with `field`. The largest card is 715 B.
+  - Only plans are committed: `docs/results` holds no arm run directory
+    (`-res`, `-bare`, `-cx`), and CI's second-turn test passes. No test
+    repair prompt was prepared, since a defect the dev round shows must be
+    corrected first.
+- **CI python job mirror at b3a7d40** (`artifacts/ci/ci_mirror.sh
+  merge-plans-b3a7d40`, the test image with the worktree's code mounted
+  read-only and no network): 1,713 tests passed, 21 skipped, 96.84 percent
+  coverage.
+  - pyink, isort, pylint on CI's exact line (rc 0), pyright (0 errors) and
+    lint-imports (5 contracts kept) pass.
+  - The four docs-mounted test nodes pass, the frozen-prompt guard among
+    them. CI's whole registration step, which the mirror reads only one
+    node of, run alone with `docs/` mounted: 215 passed.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 25 committed outputs and `repair --check` of the
+    8 committed plans report no difference; no pool is committed.
+- No model request was sent.
+
 ## Planned next
 
-1. The [repair round](decisions/repair-round.md) as registered. First, the
-   four dev plans and, now that the passes are scored, the four test plans
-   (`dfilterforge repair`; none is committed yet). Then `repair-arms` with
-   the dev round, then the test round. Last, the repair half of
-   [`results/locked-test-v1.md`](results/locked-test-v1.md).
+1. The [repair round](decisions/repair-round.md) as registered. The four dev
+   and four test plans are committed on `repair-arms`, which merges next.
+   Then the dev round (prepare, call, publish, score, then `repair`), a
+   correction for any defect it shows, the 12 test arm prompt sets seeded
+   and admitted in commits of their own, and the test round. Last, the
+   repair half of [`results/locked-test-v1.md`](results/locked-test-v1.md).
 2. The hosted static page generated from receipts, with its Disproof Reel
    chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -1032,8 +1109,10 @@ needed, so those eleven rows stay `unused`.
 - The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
   page applies it to the other three models as a named extrapolation.
 - `docs/results/locked-test-v1.md` is generated by a local, uncommitted
-  script, so no CI check ties the page to its files yet. CI has not run on
-  the `score-test-baselines` branch, which is not pushed.
+  script, so no CI check ties the page to its files yet. PR #17 merged the
+  `score-test-baselines` branch into main (7a8ec03).
+- CI has not run on `repair-arms`, which is not pushed; only the local
+  mirror above has.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive
