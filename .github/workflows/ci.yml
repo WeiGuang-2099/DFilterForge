@@ -81,14 +81,18 @@ jobs:
         # answer and follow-up of a second turn are checked by repair
         # --check alone, for the arm runs named after a base pass with a
         # committed plan. This fails on any other committed run holding a
-        # second turn, or a prompt set it cannot read. The suite skips it
-        # for the missing docs/ tree, and the test -d rules that out here.
+        # second turn, or a prompt set it cannot read. The second node
+        # re-serializes every committed prompt file byte for byte and holds
+        # each to two messages, or four for a bare or counterexample arm
+        # run of a committed plan. The suite skips both for the missing
+        # docs/ tree, and the test -d rules that out here.
         run: >-
           docker compose --profile dev run --rm
           --volume "$PWD/docs:/workspace/docs:ro"
           test sh -c 'test -d /workspace/docs/results
           && python -m pytest -q -rs -p no:cacheprovider
-          tests/test_repair.py::test_every_committed_second_turn_is_an_arm_a_plan_checks'
+          tests/test_repair.py::test_every_committed_second_turn_is_an_arm_a_plan_checks
+          tests/test_generation.py::test_committed_prepared_files_reserialize_byte_for_byte'
       - name: Verify semantic oracle and mutation witnesses
         run: >-
           docker compose --profile dev run --rm test

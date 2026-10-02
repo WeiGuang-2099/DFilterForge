@@ -32,6 +32,9 @@ from dfilterforge.generation import RetrievedFieldV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import MissingSlot
+from dfilterforge.repair import PLAN_PATH
+from dfilterforge.repair_round import arm_run_ids
+from dfilterforge.repair_summary import ARMS
 
 _CONDITIONS = (
     (OutputContractV1.DISPLAY_FILTER, RetrievalV1.NONE, "C1"),
@@ -1059,15 +1062,28 @@ def test_committed_prepared_files_reserialize_byte_for_byte() -> None:
     """Accepting a second turn changes no committed prompt file's bytes.
 
     Every digest a prepare, a run manifest or a score recorded over these
-    files is therefore still the digest of the same bytes.
+    files is therefore still the digest of the same bytes. A first turn has
+    two messages. Only an arm run of a committed repair plan, first run or
+    re-run, a test seed or a published run alike, may hold more: its bare
+    and counterexample prompts add the counted answer and the follow-up
+    turn, while its resample re-sends the first turn. CI runs this test
+    with docs/ mounted, since the test image carries no docs/ tree.
     """
     if not _RESULTS.is_dir():
         pytest.skip("the test image carries no docs/ tree")
     paths = sorted(_RESULTS.glob("*/prepared/*.json"))
+    arms = {
+        run_id: arm
+        for plan in _RESULTS.glob(f"*/{PLAN_PATH.as_posix()}")
+        for arm in ARMS
+        for run_id in arm_run_ids(plan.parent.parent.name, arm)
+    }
 
     assert paths
     for path in paths:
         data = path.read_bytes()
         batch = PreparedBatchV1.model_validate_json(data)
+        arm = arms.get(path.parent.parent.name)
+        turns = 2 if arm in (None, "resample") else 4
         assert (canonical_json(batch) + "\n").encode("utf-8") == data, path
-        assert all(len(p.messages) == 2 for p in batch.prompts), path
+        assert all(len(p.messages) == turns for p in batch.prompts), path
