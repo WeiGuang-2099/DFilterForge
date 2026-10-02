@@ -1,0 +1,13 @@
+anchor A qwen3-32b dev-qwen3-32b-rs-2026-09-26: pass (informational); items mei-0001, mei-0002; runs dev-qwen3-32b-rs-2026-09-26; served DeepInfra
+small 1 qwen3.5-9b dev-qwen3.5-9b-rs-2026-09-26: pass; items mei-0001, mei-0003; runs dev-qwen3.5-9b-rs-2026-09-26; served DeepInfra
+small 2 ministral-8b-2512 dev-ministral-8b-2512-rs-2026-09-26: pass; items mei-0001, mei-0002; runs dev-ministral-8b-2512-rs-2026-09-26; served Mistral
+small 3 granite-4.2-8b dev-granite-4.2-8b-rs-2026-09-26: pass; items mei-0001, mei-0003; runs dev-granite-4.2-8b-rs-2026-09-26; served DeepInfra
+mid 1 qwen3.5-122b-a10b dev-qwen3.5-122b-a10b-rs-2026-09-26: pass; items mei-0001, mei-0002; runs dev-qwen3.5-122b-a10b-rs-2026-09-26; served Novita
+mid 3 nemotron-3-super-120b-a12b dev-nemotron-3-super-120b-a12b-rs-2026-09-26: pass; items mei-0001, mei-0002; runs dev-nemotron-3-super-120b-a12b-rs-2026-09-26; served DeepInfra
+frontier 1 deepseek-v4-pro-0813 dev-deepseek-v4-pro-0813-rs-2026-09-26: pass; items mei-0001, mei-0002; runs dev-deepseek-v4-pro-0813-rs-2026-09-26; served DeepInfra
+frontier 2 glm-5.2 dev-glm-5.2-rs-2026-09-26: pass; items mei-0001, mei-0002; runs dev-glm-5.2-rs-2026-09-26; served Alibaba
+frontier 3 kimi-k2.6 dev-kimi-k2.6-rs-2026-09-26: rerun_owed [mei-0001:only_transient_failures, mei-0002:only_transient_failures]; items mei-0001, mei-0002; runs dev-kimi-k2.6-rs-2026-09-26, dev-kimi-k2.6-rs2-2026-09-26; served -
+
+small: smoke passed by qwen3.5-9b, ministral-8b-2512, granite-4.2-8b
+mid: smoke passed by qwen3.5-122b-a10b, nemotron-3-super-120b-a12b
+frontier: smoke passed by deepseek-v4-pro-0813, glm-5.2

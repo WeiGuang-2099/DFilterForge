@@ -51,6 +51,7 @@ include = [
   "scripts/probe_adequacy.py",
   "scripts/provider_reply_replay.py",
   "scripts/retrieval_recall.py",
+  "scripts/test_passes.py",
 ]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"

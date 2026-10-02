@@ -198,3 +198,63 @@ results.
   not its endpoint, so `mistral/eu` against `mistral/zdr` cannot be checked.
 - A hybrid that reports no reasoning-token count is judged only when its pass
   ends, so it spends up to its cap before it drops; this is accepted.
+
+## Smoke verdicts and slot winners: 2026-10-01
+
+Added after the smoke; the rules above are unchanged. The owner sent the
+smokes on 2026-10-01 between 11:50 and 12:06 UTC with
+`scripts/two_turn_smoke.py` from the branch `repair-multiturn` at 281b2ce,
+which had prepared them at 2d305e0 from the runner summary committed here as
+`evidence/bakeoff/summary-2026-09-26.json` (same SHA-256) and then judged them.
+That branch, with its note `second-turn.md`, merges only after the last
+baseline test request. Every run sent its counted pass's config with the
+registered call options; each served provider was the pinned one and each
+served model the one requested, and the runs were charged at most 0.0115 USD in
+all. `evidence/bakeoff/<run id>/` holds each smoke run's manifest and attempt
+log, and `evidence/bakeoff/smoke/` the smoke plan, its summary and the nine
+verdicts.
+
+| Slot | # | Candidate | Smoke run | Items | Served | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| Anchor | A | qwen3-32b | dev-qwen3-32b-rs-2026-09-26 | mei-0001, mei-0002 | DeepInfra | pass (informational) |
+| 8B | 1 | qwen3.5-9b | dev-qwen3.5-9b-rs-2026-09-26 | mei-0001, mei-0003 | DeepInfra | pass |
+| 8B | 2 | ministral-8b-2512 | dev-ministral-8b-2512-rs-2026-09-26 | mei-0001, mei-0002 | Mistral | pass |
+| 8B | 3 | granite-4.2-8b | dev-granite-4.2-8b-rs-2026-09-26 | mei-0001, mei-0003 | DeepInfra | pass |
+| 120B | 1 | qwen3.5-122b-a10b | dev-qwen3.5-122b-a10b-rs-2026-09-26 | mei-0001, mei-0002 | Novita | pass |
+| 120B | 2 | mistral-medium-3-5 | none: dropped at the run gates (134 of 160) | | | |
+| 120B | 3 | nemotron-3-super-120b-a12b | dev-nemotron-3-super-120b-a12b-rs-2026-09-26 | mei-0001, mei-0002 | DeepInfra | pass |
+| Frontier | 1 | deepseek-v4-pro-0813 | dev-deepseek-v4-pro-0813-rs-2026-09-26 | mei-0001, mei-0002 | DeepInfra | pass |
+| Frontier | 2 | glm-5.2 | dev-glm-5.2-rs-2026-09-26 | mei-0001, mei-0002 | Alibaba | pass |
+| Frontier | 3 | kimi-k2.6 | dev-kimi-k2.6-rs-2026-09-26 and dev-kimi-k2.6-rs2-2026-09-26 | mei-0001, mei-0002 | none | not measured (ruling K) |
+
+In every pass both replies completed with finish_reason stop, parsed under the
+C4 contract, showed no reasoning and reported 0 reasoning tokens.
+
+Ruling K. The owner ruled on 2026-10-01 that kimi-k2.6's smoke is not measured
+and is not retried. Parasail, its pinned provider, answered HTTP 429 to all 12
+attempts of its two runs (two items, three attempts each), so nothing was
+served and 0 USD was charged. The smoke rule reads that as a harness failure
+owed a re-run, never a fail, so kimi-k2.6 neither survives nor drops by its
+smoke. The ruling changes no winner: kimi-k2.6's count, 68, is below glm-5.2's
+72, so the best survivor's count is 72 whether or not kimi-k2.6 survives, and
+deepseek-v4-pro-0813, listed first at 70, is within 4 of it either way.
+
+Rule 5, with mistral-medium-3-5 dropped at the run gates and no smoke failed:
+
+| Slot | Survivors (count) | Best | Floor | Winner |
+| --- | --- | ---: | ---: | --- |
+| 8B | qwen3.5-9b 42, ministral-8b-2512 39, granite-4.2-8b 18 | 42 | 38 | qwen/qwen3.5-9b |
+| 120B | qwen3.5-122b-a10b 57, nemotron-3-super-120b-a12b 37 | 57 | 53 | qwen/qwen3.5-122b-a10b |
+| Frontier | deepseek-v4-pro-0813 70, glm-5.2 72 (kimi-k2.6 68, not measured) | 72 | 68 | deepseek/deepseek-v4-pro-0813 |
+
+The floor is the best survivor's count less 4, and each winner is the
+earliest-listed survivor at or above it. Every slot has a survivor, so no
+reserve runs (rule 6). Each winner qualified through its first pass, so by rule
+7 its test passes send that pass's model, slug and switch: qwen/qwen3.5-9b on
+`deepinfra`, qwen/qwen3.5-122b-a10b on `novita` and
+deepseek/deepseek-v4-pro-0813 on `deepinfra`, each `enabled_false`. No other
+candidate gets a test pass, and these counts are no effect (see Not an effect).
+`evidence/bakeoff/ruling-2026-10-01.json` (schema `bakeoff-ruling/1.0`) holds
+this ruling; `tests/test_dev_bakeoff.py` checks it against the ranking, the
+runner summary, the verdicts and the copied evidence, and checks that each
+winner stays the same however a smoke not measured would have ended.

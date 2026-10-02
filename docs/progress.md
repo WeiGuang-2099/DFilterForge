@@ -4,8 +4,11 @@ Last updated: 2026-10-01
 
 ## Current slice
 
-The test split is frozen and the bake-off dev passes are scored; the two-turn
-smoke is next. Reports under the ignored `artifacts/` are not project evidence.
+The test split is frozen, the slot winners are fixed, every hosted test run is
+registered, and the repair round and the Disproof Reel's selection rule are
+pre-registered; the paid test passes follow once the registration merges, sent
+by the owner with one command, `scripts/test_passes.py`.
+Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -202,6 +205,265 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
   and `run_manifest.json`, the step failed (exit 1) with the same re-freeze
   message. The ci.yml comment and the test-freeze Limits now say so.
 
+## Two-turn smoke and slot winners: 2026-10-01
+
+- The owner sent the nine smokes from `repair-multiturn` at 281b2ce (prepared
+  at 2d305e0 from the committed runner summary, same SHA-256) between 11:50
+  and 12:06 UTC, charged at most 0.0115 USD. The anchor's smoke
+  (informational) and seven candidates' smokes passed (kimi-k2.6's was not
+  measured; see the next bullet): both replies completed with finish_reason
+  stop, parsed under C4 and reported 0 reasoning tokens; every served provider
+  and model was the pinned one.
+- kimi-k2.6 met HTTP 429 from Parasail on all 12 attempts of two runs (0 USD);
+  the owner ruled its smoke not measured and not retried (ruling K). It moves
+  no winner: deepseek-v4-pro-0813 (70) is within 4 of glm-5.2 (72) whether or
+  not kimi-k2.6 (68) survives.
+- Rule 5 winners: qwen/qwen3.5-9b (42 of 96, best 42), qwen/qwen3.5-122b-a10b
+  (57, best 57), deepseek/deepseek-v4-pro-0813 (70, best 72), each through its
+  first pass, so no fallback or reserve runs. Evidence: smoke manifests and
+  attempt logs in `decisions/evidence/bakeoff/<run id>/`, plan, summary and
+  verdicts in `decisions/evidence/bakeoff/smoke/`, the ruling in the [bake-off
+  note](decisions/model-bakeoff.md) and `ruling-2026-10-01.json`, which three
+  host tests in `tests/test_dev_bakeoff.py` check (116 passed in the test
+  image with `docs/` mounted; 111 passed and 5 skipped without it).
+
+## Hosted test runs registered: 2026-10-01
+
+- [`decisions/test-runs.md`](decisions/test-runs.md), linked from the
+  protocol's Models paragraph and part of the protocol, registers 16 hosted
+  runs over the frozen test prompts before any test request: the A/A pair
+  `test-qwen3-32b-2026-09-26` and `test-qwen3-32b-passb-2026-09-26`, the three
+  slot winners on their counted passes' routes, their listed fallbacks for a
+  rule 7 gate stop, and one `-r2` outage re-run for each of those eight. Every
+  run uses a committed bake-off config. `evidence/test-runs.json`
+  (`test-runs/1.0`) holds the same rows and each run's status: 5 registered,
+  11 unused.
+- Caps are twice the counted dev pass's spend times 448/160 plus one worst-case
+  test request, rounded up to 0.05 USD: 0.10 per A/A pass, 0.15 small, 0.75
+  mid, 1.25 frontier, and the same for each fallback and re-run. The five
+  planned runs hold 2.35 USD of caps (about 1.10 USD expected), all 16 hold
+  9.00 USD, and the committed runs so far record at most 0.941 USD
+  (0.940394).
+- `tests/test_hosted_test_runs.py` (6 host tests) checks the run ids, the
+  ruled winners and the anchor, the configs and quantizations, the admitted
+  prepare, the cap rule, and that the note lists the JSON's rows. In the test
+  image with `docs/` mounted 6 passed; without it 6 skipped. Eight deliberate
+  breakages (a cap too low or too high, pass B tagged `-res`, a swapped
+  fallback config, a quantization in the note, a winner's model, a slug, the
+  prepare) each failed it.
+- The frozen-prompt guard now reads the registry (owner ruling G):
+  `test_frozen_prompts_awaiting_a_call_match_the_model_side_code` keeps
+  `docs/results/test-qwen3-32b-2026-09-26` and every registered run's
+  directory guarded while any row is `registered`, or is `unused` while the run
+  it names is `not_run` and it gives no reason, even with pass A's run manifest
+  beside the prompts. It also fails on a row `docs/results` contradicts and
+  when no row names the frozen prompts; other prompt sets keep the manifest
+  rule. 14 unit tests on tmp fixtures cover a
+  registered row beside a manifest, a finished registry, a triggered fallback
+  and ten contradicted statuses.
+- In the test image with `docs/` mounted the CI step command passed on this
+  tree (exit 0). On a scratch copy with `src/dfilterforge/text_limits.py`
+  edited it failed (exit 1, `test-qwen3-32b-2026-09-26 awaits a call;
+  ['src/dfilterforge/text_limits.py'] changed`), and failed the same way with a
+  pass A run manifest beside the prompts and its row published, where the
+  guard as at 4111d8d passed. With every row published or not run it passed
+  despite the edit; a row marked published without its manifest, and a
+  deleted registry beside pass A's manifest (`no registered run`), failed.
+
+## Repair round registered: 2026-10-01
+
+- `docs/protocol.md` now registers the repair round before any test request,
+  as the owner decided on 2026-10-01 (OD1 to OD4 in the [repair
+  note](decisions/repair-round.md)):
+  - The repair@1 bullet defines the estimator: repaired over triggered case
+    shares on the repaired pass's ready-case vectors.
+  - A new section, Repair, fixes the trigger, the three arms (`-res`,
+    `-bare`, `-cx`), the feedback-probe card and its 13 header fields, the
+    scoring and comparisons, the arm run ids and per-slot caps, admission and
+    corrections.
+  - No freeze quote changed: `tests/test_held_out.py` passes on the host.
+- **Repaired passes.** These are pass A and the three winners' counted test
+  passes, plus the four counted dev passes as a pipeline check.
+  - The dev passes hold 36 triggered C4 items (anchor 10, qwen3.5-9b 7,
+    qwen3.5-122b-a10b 8, deepseek-v4-pro-0813 11; 27 silent-wrong, 9 invalid),
+    counted from the committed outcomes. All have ready gold and finished
+    with `stop`.
+  - So the dev round is 108 requests.
+- **Arm run ids.** Arm runs are not registry rows.
+  - `test-runs.json` states their naming rule under `repair_arms`, and the
+    note lists the 24 ids of the planned passes.
+  - Over all 18 runs that can be repaired, 106 of the 108 arm and re-run ids
+    fit the result-name pattern.
+  - Two do not fit. Both are outage re-runs of an arm over the frontier
+    fallback's own outage re-run, and such an arm is reported not run.
+- **Caps.** The arm caps total 3.90 USD (1.20 dev, 2.70 test). With the
+  at most 0.941 USD recorded so far and the registry's runs 1 to 5 at their
+  caps, OpenRouter spend stays within 7.191 USD of the plan's 12 USD.
+  - Each cap covers at least two requests at the 64 KiB prompt bound, the
+    call step's pre-request bound at the config's prices.
+  - The largest dev counterexample prompt with a full card is 7,667 B.
+- **New host test.** `test_repair_arm_runs_follow_the_registered_naming` in
+  `tests/test_hosted_test_runs.py` passes (7 passed in that file). Each of
+  five deliberate breakages made it fail: a listed id, an unnamed unfit id,
+  a changed tag, the protocol's example id, and pass B made repairable.
+- **Not measured.** No repair request has been sent, and every committed
+  summary still records `repair_at_1` as `not_run`. The card figures and
+  expected costs in the note are the repair design's scratch measurements and
+  have not been re-run.
+
+## Disproof Reel rule registered: 2026-10-01
+
+- [`decisions/disproof-reel.md`](decisions/disproof-reel.md) fixes rule
+  `reel-v1`, the headline definition and the dev-display rule, with the text
+  of the web design that the owner approved as decision D2. It is committed
+  before any test or repair answer exists.
+  - The note adds the repair round's repair-trajectory sentence. That
+    sentence applies when the pick has no repair row of its own.
+  - It also gives a dated reading of the rule against the committed registry
+    (`test-runs/1.0` statuses and roles, and the winners' dev passes from
+    the bake-off ruling). No choice made today changes.
+- **Checked on today's data.** A script applied steps 1 to 4 to the
+  committed files. It read only the registry, the ruling, the pool runs'
+  outcomes and their C4 receipts.
+  - The test phase is off, so the pool is the dev anchor and the three
+    winners' dev passes.
+  - 27 C4 silent-wrong candidates. Three tie at 3 disagreeing frames, and
+    pool order picks `dev-qwen3-32b-2026-09-26` C4 `mei-0015`. The filter
+    `(dns.aaaa || dns.flags.rcode == 3)` misses one labelled frame on each
+    scored probe.
+  - The highlight is semantic-17, frame 3.
+  - Headline over the dev pool: M is 284 and N is 65.
+- **No code yet.** No exporter exists. `scripts/export_web_data.py` is the
+  web track's.
+
+## Test-pass batch and registration check: 2026-10-01
+
+- `scripts/test_passes.py` is the owner's one command for the 16 registered
+  runs (Owner command in the [test-run note](decisions/test-runs.md), for Git
+  Bash and Windows PowerShell 5.1, with exit codes 0, 1, 2, 3 and 130). It
+  reads `evidence/test-runs.json` and sends pass A, pass B within 24 hours of
+  the counted pass A's first invocation whatever pass A shows unless a gate
+  stop reports the A/A pair not run (corrected on 2026-10-02; until then the
+  batch sent pass B only after a complete pass A), then the small, mid and
+  frontier winners. Each run is one `scripts/model_run.py call`
+  argument list, no shell, with the row's run id, config and cap and
+  `--gate-first --max-attempts 3 --min-interval-seconds 1.0`.
+  - It resumes pending items after 60 s, sends a winner's listed fallback
+    after a gate stop on the first answer, and re-runs an outage once under its
+    `-r2` row. A gate stop of pass A or pass B, a refusal and a resumed pass
+    that stops at the gate are reported not run.
+  - It stops for the owner on a budget stop after an answer, a closed pass B
+    window or a call step error, and aborts on HTTP 401, 402 or 403. A row
+    the registry marks `published`, `not_run`, or `unused` with a reason is
+    never sent.
+  - It reuses the bake-off batch's run reading, gate, resume and outage
+    decisions, invoker and lock; `scripts/dev_bakeoff.py` is unchanged. Its
+    summary in `artifacts/test-passes/` gives each row its state, publish or
+    evidence target and registry update.
+  - The note now states that a refusal has no registered fallback (rule 7
+    gives test passes one for a gate stop only) and that a triggered fallback
+    or re-run is sent in the same execution, its status written in the
+    publishing commit.
+- `tests/test_test_passes.py` holds 54 tests: 52 drive the batch with a
+  scripted call step over an eight-item synthetic test prompt set (order,
+  pass B after A and its 24-hour window, rule 7, the anchor's gate stop, the
+  outage re-run, 401 to 403, the budget stop and a raised cap, a missing or
+  unadmitted prompt copy, the keyless preflight, a resume after exit 1,
+  rulings, the lock and interrupts, and 21 unusable registries or configs);
+  2 read the committed registry, prompts and note and skip without `docs/`.
+  In the mirror's suite they cover 97% of the script (statements and
+  branches). CI's pylint list and pyright include it.
+- Keyless check from this worktree, the key unset in the process, user and
+  machine scopes: with no prompt copy the batch refused (exit 2) and printed
+  the restore commands for both shells. After the printed Git Bash restore,
+  `--dry-run` exited 0 and wrote nothing, and the batch called all 16 runs
+  with the key withheld, each stopping at `api_key_missing`, then aborted
+  (exit 3); no run directory was created and no request was sent.
+- Branch `register-test-runs` holds ten commits over 4111d8d, and none of the
+  12 prepare-hashed files changed (`git diff --name-only 4111d8d`). The four
+  sections above record the smoke verdicts, ruling K and the slot winners;
+  the registry and the guard it holds (ruling G); the repair round (OD1 to
+  OD4); and the Reel rule `reel-v1`.
+- Tests: in the test image with `docs/` mounted, `tests/test_held_out.py`,
+  `tests/test_hosted_test_runs.py`, `tests/test_dev_bakeoff.py`,
+  `tests/test_test_passes.py` and the frozen-prompt guard gave 201 passed, and
+  the CI guard step's command alone exited 0; the four files on the host gave
+  200 passed. The CI mirror (`artifacts/ci/ci_mirror.sh
+  register-test-runs-impl`, working tree, read-only mounts, at b6a1beb)
+  returned rc 0 for pyink, isort, pylint, pyright, lint-imports, pytest (1235
+  passed, 16 skipped, coverage 96.52%), the benchmark gate, adequacy, prepare,
+  recall and the 20 committed re-score checks: overall status 0. The mirror's
+  pylint list predates the bake-off scripts; CI's list, `scripts/test_passes.py`
+  included, rated 10.00/10 (rc 0).
+
+## Registration review fixes: 2026-10-02
+
+- A review of this branch at 12df7ba confirmed ten findings, three of them
+  the same freeze-note sentence. Eight commits fix them; none of the 12
+  prepare-hashed files changed (`git diff --name-only 4111d8d`).
+- **A ruling no longer cuts a chain** (4ca3d9a). At an exit-1 stop the
+  summary proposes statuses such as pass A `not_run` with its `-r2`
+  published, or a winner `not_run` with its fallback `registered`. Once the
+  owner committed them, the batch read the ruling as the chain's end: it
+  never resumed the re-run or fallback, exited 0, and proposed a false
+  "ended not_run without ..." `unused` reason whose commit would release the
+  frozen-prompt guard. Now a run ruled `not_run` that left a directory
+  triggers what that directory shows, read without sending, and a
+  conditional row that is `registered` or has a directory is never called
+  unused; if no chain reaches it, the batch stops (exit 1). Four new cases
+  commit the summary's statuses and a raised cap after a budget stop and run
+  the same command again (pass B after pass A's re-run, a fallback left
+  registered or unused, pass A's re-run); each resumes the stopped run and
+  ends with exit 0. They and two cases of an unreached conditional row failed
+  on the batch as at 12df7ba (6 failed).
+- **Pass B whatever pass A shows but the gate** (fd5027e). The batch skipped
+  pass B after any pass A that was not complete; the protocol sends it
+  whatever A shows unless the bake-off note reports the pair not run, which
+  rule 7 does only at the gate. Pass B is now held back only when pass A's
+  chain ends at the gate (pass A, its `-r2` run or a resumed pass); after a
+  refused pass A, or an outage on its re-run too, pass B is sent. Its 24
+  hours run from the counted pass A's first invocation, the `-r2` run's once
+  that has a manifest, else pass A's; with neither, the batch stops for the
+  owner. On the batch before it, 7 tests failed: the new cases (a refusal,
+  an outage twice, a refused pass A at 24 h and at 24 h plus 1 s, a pass A
+  ruled published or not run with no run) and the owner-ruling test, whose
+  pair reason now reads "incomplete". The gate cases now also cover pass A's
+  re-run and its resumed pass.
+- **Caps** (60a819b). The note's Caps table carries the registered caps;
+  `tests/test_hosted_test_runs.py` checks the cap rule (each table figure
+  equals the recomputed one to 5e-7 USD) and the 2.35 and 9.00 USD totals
+  against it, and each row's cap only for being at or above its config's
+  registered cap. On a scratch copy of `docs/`, test-qwen3.5-9b-2026-09-26
+  raised from 0.15 to 0.20 USD in both the note and the JSON passed (8
+  passed); the JSON at 0.25 against the note's 0.20 failed the row equality,
+  and 0.10 in both failed the floor.
+- **CI** (19b80e4). The docs-mounted step now also runs
+  `tests/test_hosted_test_runs.py`, `tests/test_dev_bakeoff.py`,
+  `tests/test_test_passes.py` and `tests/test_held_out.py`. Its command, in
+  the test image under compose's hardening (read-only root, no network, caps
+  dropped) with the worktree's code and `docs/` mounted read-only: 215 passed,
+  exit 0, no skip; without the `docs/` mount, exit 1 at `test -d`; with the
+  0.15 USD caps raised in `test-runs.json` but not in the note, 1 failed,
+  exit 1.
+- **Notes.** The test-freeze Limits now says `scripts/test_passes.py` checks
+  pass B's timing (79a0761); the smoke line counts seven passing candidates
+  besides the anchor (2871005); both owner blocks run `git switch main`
+  before `git pull --ff-only`, which a note test checks (7f98e18; in a
+  scratch clone on `bakeoff-results` the batch was absent, and after the
+  switch `--dry-run` reached the missing-prompt-copy refusal); the spend
+  bounds round up to 0.941, 3.291 and 7.191 USD (exact sum 0.940394,
+  010b204).
+- **Checks.** `tests/test_test_passes.py` holds 67 tests (2 read the
+  committed docs) and `tests/test_hosted_test_runs.py` 8. In the test image
+  with `docs/` mounted, pyink, isort, pylint over CI's list (10.00/10),
+  pyright and lint-imports returned 0; the five files of the CI docs step
+  gave 215 passed there and 215 passed on the host. The CI mirror
+  (`artifacts/ci/ci_mirror.sh register-test-runs-fix`, working tree at
+  010b204, read-only mounts) returned rc 0 for pyink, isort, pylint,
+  pyright, lint-imports, pytest (1248 passed, 17 skipped, coverage 96.53%;
+  `scripts/test_passes.py` 97%), the benchmark gate, adequacy, prepare,
+  recall and the 20 committed re-score checks: overall status 0.
+
 ## Repair cards: 2026-10-01
 
 - **Branch.** `repair-cards` (079ba82 to cc96d36) starts from 86cd624. It is
@@ -270,16 +532,16 @@ smoke is next. Reports under the ignored `artifacts/` are not project evidence.
 
 ## Planned next
 
-1. The two-turn smoke, built on the branch `repair-multiturn`, sent by the
-   owner as a second command; a candidate that fails it gives way by rule 5.
-2. Register every hosted test run (run id, model id, provider, settings) before
-   the first test request, pass A as `test-qwen3-32b-2026-09-26`, and say what
-   releases the CI frozen-prompt guard if pass A never publishes there; then
-   qwen/qwen3-32b passes A and B and the slot winners on test; the 12 hashed
-   files stay unchanged until the last one.
-3. Counterexample repair with three feedback arms, the feedback sent as a
-   second conversational turn; hosted static page generated from receipts.
-4. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
+1. The [registered test runs](decisions/test-runs.md), sent with
+   `scripts/test_passes.py`: qwen/qwen3-32b passes A and B, then the slot
+   winners; the 12 hashed files stay unchanged until the last one, and no test
+   run is scored before the `repair-cards` branch merges.
+2. The [repair round](decisions/repair-round.md) as registered: the
+   `repair-cards` branch (card code, dev plans), then `repair-arms` with the
+   dev round, then, after the last baseline request, the test round and the
+   locked test result. Then the hosted static page generated from receipts,
+   its Disproof Reel chosen by the registered rule `reel-v1`.
+3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
    control, three seeds each; GRPO variance gate measured.
 
 ## Blocked or unverified
