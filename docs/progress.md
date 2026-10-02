@@ -464,6 +464,72 @@ Reports under the ignored `artifacts/` are not project evidence.
   `scripts/test_passes.py` 97%), the benchmark gate, adequacy, prepare,
   recall and the 20 committed re-score checks: overall status 0.
 
+## Repair cards: 2026-10-01
+
+- **Branch.** `repair-cards` (079ba82 to cc96d36) starts from 86cd624. It is
+  local and unmerged, it changes none of the 12 prepare-hashed files, and no
+  model request was sent for it.
+- **Shared codes.** Scoring names its 13 codes that make an answer invalid in
+  one place (079ba82: `CANDIDATE_ERROR_CODES`, `candidate_error_code`), so a
+  card and the scorer charge the same code.
+- **Cards** (`dfilterforge.counterexample`, 9e6cb85 and a0289d3).
+  - A bounded decoder reads 13 header fields of each feedback frame from one
+    hash-checked copy of the capture.
+  - tshark confirms every frame with a filter built only from the typed values.
+  - A card comes from running the answer on its split's feedback probe alone.
+    It is one of three:
+    - the invalid code and the answer's first refused field;
+    - no card, when the probe cannot separate the answer;
+    - at most three disagreeing frames, as canonical JSON of at most 1,024 B.
+- **Commands** (7b0a66f, ba9418d, f29066e).
+  - The paired-case statistics of `score_summary` are public.
+  - `dfilterforge repair` writes or checks `repair/plan.json`
+    (`repair-plan/1.0`) for a scored base pass, and CI checks every committed
+    plan.
+  - Import contracts keep scoring and prompt building from loading
+    `counterexample` or `repair`.
+  - `dfilterforge pair` reports the changed answers, outcome transitions and
+    flipped cases of two scored passes.
+- **[Ablation 008](ablations/008-counterexample-facts.md), `keep_full`**
+  (cc96d36).
+  - Full confirms 62/62 and 63/63 feedback frames (961 shown values). Its card
+    entries determine the feedback labels of 52/52 ready cases; membership
+    facts alone determine 0/52.
+  - The four counted 2026-09-26 dev passes trigger 36 items: qwen3.5-9b 7,
+    qwen3.5-122b-a10b 8, deepseek-v4-pro-0813 11, qwen3-32b 10. They get 27
+    frames cards and 9 error cards; every item gets a card, and the largest is
+    717 B.
+  - Facts and cards take 10.7 percent longer, all of it the one-time facts
+    read of the two captures.
+  - No repair plan is committed yet.
+- **CI python job mirror at cc96d36:** 1,329 tests passed, 5 skipped, 96.73
+  percent coverage.
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept) pass.
+  - The benchmark gate, the adequacy gate (344 mutants, 4 waived survivors,
+    0 unwaived), prepare and recall pass.
+  - `score --check` of all 20 committed outputs passes with no difference.
+- **Review fixes** (8f1b811, 493026b, 6d587a2): three test gaps a mutation
+  review of the branch confirmed, each closed by a test that kills its mutant
+  in the test image.
+  - The plan stage's prompt check: a base whose triggered item asks something
+    else, with every digest derived from those bytes, is refused with
+    `prompt_mismatch`, no card built and no plan written. With the
+    `check_prompts` call removed, the test fails and the other 57 pass.
+  - The DNS name bound: a 256-byte question name is refused with "DNS
+    question name exceeds 255 bytes" and a 255-byte one is read. Counting the
+    name without its terminator, the test fails.
+  - The committed-pair test (dev-qwen3-32b C1 and C2 rerun) ran nowhere in CI,
+    because the test image has no docs/ tree. A second docs-mounted CI step
+    now runs it, and it skips only when docs/results is absent: with the tree
+    present and the two passes missing, it fails.
+- **CI python job mirror at 6d587a2:** 1,330 tests passed, 5 skipped, 96.73
+  percent coverage.
+  - Static checks, the gates, prepare and recall pass as at cc96d36.
+  - The mirror now runs both docs-mounted CI steps: the frozen-prompt guard
+    and the committed-pair test each pass (1 passed).
+  - `score --check` of all 20 committed outputs passes with no difference.
+
 ## Test baselines sent and published: 2026-10-02
 
 The owner sent every registered baseline test pass with one

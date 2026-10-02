@@ -33,6 +33,7 @@ from dfilterforge.completions import PrepareManifestV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import TokenPricesV1
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import evaluate_probe
 from dfilterforge.evaluation import EvaluationReceiptV1
@@ -547,6 +548,52 @@ def test_unattributable_errors_stop_scoring(
     assert error.value.code == "item_aborted"
     assert str(error.value) == f"C1 mei-0001: {code}"
     assert _REFERENCE not in str(error.value)
+
+
+def test_the_codes_that_make_an_answer_invalid_are_named_once() -> None:
+    """The repair round's error card reads the set the scorer charges."""
+    resource = {"timeout", "output_limit", "frame_limit"}
+
+    assert scoring_module.CANDIDATE_RESOURCE_CODES == resource
+    assert scoring_module.CANDIDATE_ERROR_CODES == (
+        {code for _, code in _ATTRIBUTABLE} | resource
+    )
+    assert not scoring_module.CANDIDATE_ERROR_CODES & {
+        code for _, code in _UNATTRIBUTABLE
+    }
+
+
+@pytest.mark.parametrize(
+    "error_type,code",
+    [
+        *_ATTRIBUTABLE,
+        *(
+            (RunnerError, code)
+            for code in ("timeout", "output_limit", "frame_limit")
+        ),
+    ],
+)
+def test_a_candidate_code_counts_only_from_the_boundary_that_owns_it(
+    error_type: type[Exception], code: str
+) -> None:
+    owned = error_type(code, "bounded message")
+
+    assert isinstance(owned, DFilterForgeError)
+    assert scoring_module.candidate_error_code(owned) == code
+    assert (
+        scoring_module.candidate_error_code(LiveError(code, "bounded message"))
+        is None
+    )
+
+
+@pytest.mark.parametrize("error_type,code", _UNATTRIBUTABLE)
+def test_a_harness_code_is_never_the_candidates(
+    error_type: type[Exception], code: str
+) -> None:
+    error = error_type(code, "bounded message")
+
+    assert isinstance(error, DFilterForgeError)
+    assert scoring_module.candidate_error_code(error) is None
 
 
 def test_receipt_probes_decide_strong_exact_or_silent_wrong(
