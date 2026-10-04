@@ -7,7 +7,8 @@ registers test runs adds a test-runs/1.0 registry of 16 rows, its note's
 Runs table and the test runs it publishes. A test resolver written apart
 from the exporter re-derives every sourced value from those raw files. The
 tests of the committed tree skip where the test image carries no docs/
-tree.
+tree; one of them repeats the registered dev Reel check on a copy of the
+tree with the planned test runs registered again.
 """
 
 from __future__ import annotations
@@ -2907,3 +2908,120 @@ def test_the_committed_tree_picks_the_registered_reel() -> None:
     assert reel["headline"]["compiled"]["v"] == 971
     assert reel["headline"]["silent_wrong"]["v"] == 165
     check_sources(_ROOT, {"reel.json": reel})
+
+
+# What a dev-phase export reads besides the ranking's runs: the evidence
+# trees, which hold the ranking, the ruling and test-runs.json, the
+# registry note and the held-out freeze record.
+_DEV_INPUTS = (
+    "docs/decisions/evidence",
+    "docs/decisions/test-runs.md",
+    "docs/ablations/evidence",
+    _FREEZE,
+)
+
+
+def _ranking_runs() -> list[str]:
+    """The anchor and every candidate run of the latest committed ranking."""
+    bakeoff = _ROOT / "docs" / "decisions" / "evidence" / "bakeoff"
+    ranking = json.loads(
+        sorted(bakeoff.glob("ranking-*.json"))[-1].read_text(encoding="utf-8")
+    )
+    return [
+        ranking["anchor"]["run_id"],
+        *(
+            candidate["run_id"]
+            for slot in ranking["slots"].values()
+            for candidate in slot["candidates"]
+        ),
+    ]
+
+
+def _copy_run(root: Path, run_id: str) -> None:
+    """Copies a committed run's directory without its repair/ directory.
+
+    No repair file is an input to reel-v1's steps 1 to 4
+    (docs/decisions/disproof-reel.md), so the copy leaves them out.
+    """
+    source = _ROOT / "docs" / "results" / run_id
+    shutil.copytree(
+        source,
+        root / "docs" / "results" / run_id,
+        ignore=lambda directory, _: (
+            ["repair"] if Path(directory) == source else []
+        ),
+    )
+
+
+def _registered_again(value: Document) -> None:
+    # The five planned rows, registered on 2026-10-01 and published since.
+    for entry in value["runs"][:5]:
+        entry["status"] = "registered"
+
+
+@pytest.fixture(name="dev_tree")
+def dev_tree_fixture(tmp_path: Path) -> Iterator[Path]:
+    """A copy of the committed tree as the 2026-10-01 dev check found it.
+
+    It holds no test-run directory, and its test-runs.json has the five
+    planned rows registered, as they were that day, so the test phase is
+    off for the reason docs/decisions/disproof-reel.md gives ("Checked on
+    today's data"). The copy is removed at the end: /tmp in the CI test
+    container is a small tmpfs.
+    """
+    root = tmp_path / "dev"
+    try:
+        for relative in _DEV_INPUTS:
+            source = _ROOT / relative
+            if source.is_dir():
+                shutil.copytree(source, root / relative)
+            else:
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, root / relative)
+        for run_id in _ranking_runs():
+            _copy_run(root, run_id)
+        _edit(root / _TEST_RUNS, _registered_again)
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_dev_pool_picks_the_registered_dev_reel(
+    dev_tree: Path,
+) -> None:
+    # disproof-reel.md asks the exporter's tests to repeat its dev check,
+    # and the committed tree has since moved to the test phase, so the
+    # check runs on the copy.
+    reel = _reel(dev_tree)
+
+    assert reel["phase"] == "dev"
+    # The dev anchor, then the winners the registry's ruling names.
+    assert [item["run_id"]["t"] for item in reel["pool"]] == [
+        "dev-qwen3-32b-2026-09-26",
+        "dev-qwen3.5-9b-2026-09-26",
+        "dev-qwen3.5-122b-a10b-2026-09-26",
+        "dev-deepseek-v4-pro-0813-2026-09-26",
+    ]
+    assert reel["candidates"]["v"] == 27
+    # Three candidates tie at three frames; pool order picks the anchor's.
+    assert _picked(reel) == ("dev-qwen3-32b-2026-09-26", "C4", "mei-0015")
+    assert reel["pick"]["request"]["t"] == (
+        "Show DNS AAAA questions or DNS NXDOMAIN messages."
+    )
+    assert reel["pick"]["answer"]["filter"]["t"] == (
+        "(dns.aaaa || dns.flags.rcode == 3)"
+    )
+    assert [
+        [item["n"]["v"] for item in strip["disagree"]]
+        for strip in reel["strips"]
+    ] == [[17], [3], [9]]
+    highlight = reel["highlight"]
+    assert highlight["probe_id"]["t"] == "semantic-17"
+    assert highlight["frame"]["v"] == 3
+    assert highlight["name"]["t"] == "udp-aaaa"
+    assert reel["headline"]["compiled"]["v"] == 284
+    assert reel["headline"]["silent_wrong"]["v"] == 65
+    check_sources(dev_tree, {"reel.json": reel})
