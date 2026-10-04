@@ -42,7 +42,7 @@
       {
         "date": "2026-10-04",
         "ruling": "docs/decisions/evidence/repair-arms/ruling-2026-10-04.json",
-        "text": "The winner_frontier run's arm runs, test-deepseek-v4-pro-0813-res-2026-09-26, test-deepseek-v4-pro-0813-bare-2026-09-26 and test-deepseek-v4-pro-0813-cx-2026-09-26, send the fallback_frontier row's config, deepseek-v4-pro-0813_nextbit_enabled-false, under the repair frontier test cap of 0.50 USD, which the repair note's Caps table gives, not this registry's 1.25. No row or status here changes."
+        "text": "The winner_frontier run's arm runs, test-deepseek-v4-pro-0813-res-2026-09-26, test-deepseek-v4-pro-0813-bare-2026-09-26 and test-deepseek-v4-pro-0813-cx-2026-09-26, and their outage re-runs, test-deepseek-v4-pro-0813-res-r2-2026-09-26, test-deepseek-v4-pro-0813-bare-r2-2026-09-26 and test-deepseek-v4-pro-0813-cx-r2-2026-09-26, send the fallback_frontier row's config, deepseek-v4-pro-0813_nextbit_enabled-false, under the repair frontier test cap of 0.50 USD, which the repair note's Caps table gives, not this registry's 1.25. No row or status here changes."
       }
     ]
   },

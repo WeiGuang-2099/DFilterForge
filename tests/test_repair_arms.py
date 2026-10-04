@@ -2634,7 +2634,19 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     bakeoff = _read("docs/decisions/model-bakeoff.md")
     _, section = bakeoff.split("## Repair arms' provider: 2026-10-04", 1)
     assert f"`{_FALLBACK_CONFIGS['frontier']}`" in section
-    assert registry["repair_arms"]["amended"][0]["ruling"] == _MOVE_RULING
+    (amended,) = registry["repair_arms"]["amended"]
+    assert amended["ruling"] == _MOVE_RULING
+    # The registry names every test arm run the move sends, -r2 included,
+    # in its JSON entry and in its note's dated paragraph.
+    test_id = re.compile(r"test-[a-z0-9][a-z0-9.-]{0,31}-\d{4}-\d{2}-\d{2}")
+    moved_test = sorted(
+        run for runs in test_move["arm_runs"].values() for run in runs
+    )
+    note = " ".join(_read("docs/decisions/test-runs.md").split())
+    _, paragraph = note.split("Amended 2026-10-04 (owner ruling OD5", 1)
+    paragraph, _ = paragraph.split("## ", 1)
+    for text in (amended["text"], paragraph):
+        assert sorted(set(test_id.findall(text))) == moved_test
     locked = " ".join(_read(f"{ra.RESULTS}/locked-test-v1.md").split())
     assert (
         f"it met {baseline_429_before_last} HTTP 429 responses before an"
