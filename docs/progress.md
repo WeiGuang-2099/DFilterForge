@@ -1650,7 +1650,8 @@ the worktree's code mounted read-only and no network.
     committed tree.
   - 114171d mirrors the registry reading, the Reel pool and the pick in
     the TypeScript resolver.
-  - Review fixes, one commit each:
+  - Review fixes, one commit per finding, except the TypeScript refusals,
+    which took two (97bb621 and 56b8c96):
     - e073ab1, d7b31d3 and d9d5a74 add exporter cases for an unknown
       trigger, a row that names itself, a note numbered from 0, a note
       with an extra row, an empty `not_run` reason and a run manifest
@@ -1670,7 +1671,8 @@ the worktree's code mounted read-only and no network.
       measured yet" through a new fmt kind, `unmeasured`, and the
       `<Unmeasured>` component. The consistency test fails such a value
       shown with any other kind. The dev anchor's own
-      `repair/summary.json` stops the export too.
+      `repair/summary.json` stops the export too, in either phase. d3ff716
+      keeps that stop for the dev phase only (next section).
 - The exporter's reading of `docs/decisions/evidence/test-runs.json`:
   - Schema `test-runs/1.0`, else `schema_invalid`, exit 2. `note` must be
     `docs/decisions/test-runs.md`, else `note_mismatch`.
@@ -1784,9 +1786,15 @@ the worktree's code mounted read-only and no network.
     and the pages must show the pair report's reading, the comparisons
     `results/locked-test-v1.md` marks confounded, and the HTTP 429 losses;
   - Reel step 5: no test `-cx` arm run is scored and `reel.json` keeps
-    `repair` null. Once main holds a repair round summary for the dev
-    anchor or a pool run, merging main stops the export and CI's export
-    steps with `repair_unread` until step 5 is built;
+    `repair` null. Once main holds a scored repair result for a Reel pool
+    run (its `repair/summary.json`, its scored `-cx` arm or that arm's
+    `-r2` re-run) or the pool split's `repair-pool` file, merging main
+    stops the export and CI's export steps with `repair_unread`. In the
+    test phase the pool is pass A and the slot winners' test runs, so the
+    dev repair round on branch `dev-repair-round` stops nothing (next
+    section). Building step 5 lifts the Reel's stop. The first pool run's
+    `repair/summary.json`, pass A's, also stops the methodology page,
+    which must first read the round's summary;
   - the methodology page's bootstrap block, still taken from the dev
     anchor's summary;
   - the board, case, receipt and Reel pages, with the rules the web site
@@ -1797,3 +1805,74 @@ the worktree's code mounted read-only and no network.
   - a first CI run on GitHub;
   - this file's header, Current slice and Planned next. They are main's
     lines, so they are updated at the last merge before the push.
+
+## Web data: the methodology's repair status follows the phase, 2026-10-04, branch web-data
+
+- Why: at df04ade the methodology page took its `not_measured` status from
+  the dev anchor's summary in both phases, and the export stopped with
+  `repair_unread` whenever the anchor's `repair/summary.json` existed. The
+  local branch `dev-repair-round` (1d07612, read only) commits that file,
+  and those of `dev-qwen3.5-9b-2026-09-26` and
+  `dev-qwen3.5-122b-a10b-2026-09-26`, for the dev repair round. The df04ade
+  exporter on a `git archive` of that branch's `docs/` and
+  `held_out_freeze.json`, plus `web-data`'s `captures.json`, exits 1 with
+  `repair_unread` on the anchor's file. Merging that round would have
+  turned the export and CI red, although the test-phase site never shows
+  the dev round.
+- d3ff716 takes the page's `not_measured` statuses from the run whose
+  repair round the site reports. In the test phase that is the first test
+  pool run: pass A whenever it is published, else the published winner or
+  fallback of the first slot that has one, and no run, with no status
+  listed, when the pool is empty. In the dev phase it is the dev anchor.
+  Only that run's `repair/summary.json` stops the methodology
+  (`repair_unread`); the Reel's pool guard from 787fded is unchanged. The
+  bootstrap block and the rest of the page stay with the dev anchor in both
+  phases, and the page's wording names no source run for its "Not measured
+  yet" section, so it was not changed.
+- The TypeScript resolver mirrors the rule in the same commit:
+  `repairStatusSummary()` names the cited summary and refuses that one
+  file. `tests/registry.spec.ts` covers it in both phases, and
+  `tests/consistency.spec.ts` checks that the built methodology page takes
+  its statuses from that summary and pins pass A's for the committed tree.
+- Proof, on scratch copies only:
+  - Exporter: of the new cases, the three test-phase citing cases (pass A;
+    the small winner without pass A; no run with only pass B published,
+    each with the anchor's `repair/summary.json` present), the test-phase
+    stop on pass A's file, and the outside-the-pool case with the anchor's
+    file added fail on df04ade's exporter. The dev-phase stop on the
+    anchor's file passes there, as it should: that behaviour is kept.
+  - Exporter mutants, each failing its named cases: the anchor in both
+    phases (the three citing cases, the test-phase stop and the
+    outside-the-pool case); the methodology's own check removed (both
+    stop cases, with DID NOT RAISE); only a published `aa_pass_a` counted
+    (the small-winner case); an empty test pool falling back to the
+    anchor (the empty-pool case).
+  - Resolver: all 5 new `registry.spec.ts` cases fail on df04ade's
+    resolver, which has no such method. The same four mutants fail their
+    matching cases.
+  - The new consistency check fails on the `out/` left from the 69d237e
+    checks, whose methodology page cites the dev anchor's summary, and
+    passes after a Docker rebuild at d3ff716.
+  - On the `dev-repair-round` tree above, d3ff716's exporter exits 0 with
+    1,935 files; `methodology.json` cites
+    `test-qwen3-32b-2026-09-26`'s summary and its bootstrap still the dev
+    anchor's. The three committed-tree tests pass there with d3ff716's
+    exporter and tests; with df04ade's, two of them fail.
+- Checks at d3ff716, on the host:
+  - `tests/test_export_web_data.py`: 152 passed and 2 skipped (the
+    symbolic-link tests) in 66.43 s, committed-tree tests included.
+  - pyink and isort pass on the two web scripts and the test. pylint on
+    the two web scripts rates 10.00/10 and exits 0. pylint on the test
+    exits 24, as it does at df04ade, with the same message kinds and one
+    more missing function docstring, for the one test function added net.
+    pyright with `--pythonplatform Linux` reports 0 errors.
+  - `pnpm web:typecheck` and `pnpm web:lint` exit 0.
+  - Two host exports are byte-identical: 1,935 files and 27,410,977 bytes,
+    1 byte more than at 69d237e, from `methodology.json` (16,213 bytes).
+  - Docker `--target out` gives 29 files and 923,064 bytes. Playwright on
+    it: 148 passed in 11.4 s on two workers (61 registry, 41 lint-rule, 14
+    formatter, 13 smoke, 12 consistency, 4 resolver, 3 base-path).
+  - Not run at d3ff716: the CI python job mirror, the test-image steps,
+    Docker `--target data` and the Compose `web` service.
+- Still open: the items of the section above, with the Reel step 5 item as
+  corrected there.

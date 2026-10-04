@@ -178,7 +178,9 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
     `/runs/<i>`. An `unused` row is left out, because its condition never
     occurred. Today the list is empty;
   - `aa` and `repair` stay null (Limits).
-- `methodology.json`.
+- `methodology.json`: everything from the dev anchor, in both phases, but
+  its `not_measured` statuses, which come from the run its repair line
+  cites (What fails).
 - `reel.json`: the Disproof Reel projected by rule `reel-v1`.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
@@ -251,10 +253,27 @@ are:
   `repair/summary.json`, the scored summary of its `-cx` arm run or that
   arm's `-r2` re-run, or the pool split's `repair-pool/<split>.json`. Step 5
   of `reel-v1` is not built, so the export stops rather than drop the
-  repair turn; `tests/support/resolve.ts` refuses the same files. The dev
-  anchor's own `repair/summary.json` stops it too, in either phase: the
-  methodology page says its repair round is not measured yet, and the
-  scorer keeps `repair_at_1: not_run` in the anchor's summary after a round.
+  repair turn. `tests/support/resolve.ts` refuses exactly these files in
+  `reelPool()`, for the pool of the current phase;
+- a scored repair round of the run the methodology page cites
+  (`repair_unread`): that run's `repair/summary.json`. The page shows the
+  run's `not_measured` statuses as "not measured yet", and the scorer keeps
+  `repair_at_1: not_run` there after a round. The page's repair line
+  describes the repair round the site reports, so the run depends on the
+  phase:
+  - in the test phase, the first test pool run: pass A whenever pass A is
+    published, else the published winner or fallback of the first of the
+    small, mid and frontier slots that has one, and no run when the pool is
+    empty, in which case the page lists no status;
+  - in the dev phase, with no registry or before every registry row is
+    final, the dev anchor.
+
+  So in the test phase the dev anchor's `repair/summary.json`, the dev
+  repair round, stops nothing. `tests/support/resolve.ts` refuses exactly
+  that one file in `repairStatusSummary()`, which names the cited summary,
+  and the consistency test checks that the built methodology page takes its
+  statuses from that summary. Building step 5 does not lift this stop: the
+  methodology page must first read the round's summary.
 
 It exits 2 when an input cannot be read, a flag is invalid or the output
 directory is not empty. That includes a registry whose schema tag is not
@@ -309,7 +328,10 @@ sets and source ops before a page renders.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool
-  or another pick than the ones it pins for the committed tree.
+  or another pick than the ones it pins for the committed tree, and when
+  the built methodology page takes its `not_measured` statuses from another
+  summary than the one `repairStatusSummary()` names. The value checks
+  alone cannot tell: every summary still says `not_run` after a round.
 - **The Python side.** `tests/test_export_web_data.py` holds a second
   independent resolver and an AST allowlist that keeps the exporter on the
   standard library. Its committed-tree tests export the committed files and
@@ -350,14 +372,20 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path) |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged) |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured
 
 Two exports are measured. The dev data was exported at 07d91ca, before this
 branch had a test-run registry. The test phase is exported at 69d237e, the
-code these figures describe; the commits after it change only docs.
+code these figures describe. Of the commits after it, only d3ff716 changes
+code: `methodology.json` takes its `not_measured` status from pass A's
+summary instead of the dev anchor's, which adds 1 byte. At d3ff716 the
+export has the same 1,935 files in 27,410,977 bytes, `methodology.json` is
+16,213 bytes, and two host exports are byte-identical. The Docker static
+export has 29 files in 923,064 bytes, `methodology/index.html` 107,899 of
+them. The other figures below were not measured again.
 
 | Export | Files | Bytes | Receipts | Cases | Sourced values |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -533,7 +561,9 @@ pnpm --filter @dfilterforge/web test:e2e
   summary, in the test phase too. The methodology page says its intervals
   come from bootstrap resamples "as the anchor pass's summary records
   them", so it stays true. Which pass it cites once the board renders test
-  intervals is left to the board pull request.
+  intervals is left to the board pull request. Only the page's
+  `not_measured` statuses follow the phase (What fails); its "Not measured
+  yet" section names no source run.
 - Step 5 of `reel-v1` is not built. No test `-cx` arm run is scored and no
   `repair-pool` file exists, so no repair row exists yet, and `reel.json`
   keeps `repair` null. The export stops with `repair_unread` once one
