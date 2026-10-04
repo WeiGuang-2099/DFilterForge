@@ -1,11 +1,35 @@
 import {expect, test} from '@playwright/test';
 
+import type {NumNode} from '../lib/data';
 import {fmt, FMT_KINDS, isFmtKind} from '../lib/fmt';
+import type {FmtKind} from '../lib/fmt';
+import type {Num} from '../lib/sourced';
 import {visible} from '../lib/visible';
 
 // lib/fmt.ts is the only formatter, and the consistency test formats each
 // re-derived value with it, so a wrong format would pass that test. These
 // cases pin what each kind shows.
+
+/** The kinds <Num> accepts, read from its props. */
+type NumKind = Parameters<typeof Num>[0]['kind'];
+
+// One value per kind <Num> accepts, of the type a NumNode holds. The
+// compiler checks this record against NumKind both ways: a kind <Num>
+// refuses is an excess property here, and a kind <Num> accepts that is not
+// listed is a missing one. So a kind added to FMT_KINDS fails typecheck
+// here until it is listed, if fmt formats a NumNode value with it, or
+// excluded from <Num>'s kind prop. Without this, a string-only kind passes
+// typecheck and lint on <Num> and throws only in next build.
+const NUM_KIND_SAMPLES: Readonly<Record<NumKind, NumNode['v']>> = {
+  int: 3,
+  num: 0.5,
+  bool: true,
+  ints: [3, 9],
+};
+
+function isNumKind(kind: FmtKind): kind is NumKind {
+  return Object.hasOwn(NUM_KIND_SAMPLES, kind);
+}
 
 test('int shows a safe integer in plain digits', () => {
   expect(fmt(0, 'int')).toBe('0');
@@ -150,4 +174,20 @@ test('every kind is named', () => {
   }
   expect(isFmtKind('percent')).toBe(false);
   expect(isFmtKind('')).toBe(false);
+});
+
+test('Num accepts exactly the kinds that format a number node', () => {
+  // NUM_KIND_SAMPLES keeps the string-only kinds off <Num> at compile time.
+  // This checks that each kind it lists formats its sample, and that no
+  // kind left out could format any of them.
+  for (const kind of FMT_KINDS.filter(isNumKind)) {
+    expect(() => fmt(NUM_KIND_SAMPLES[kind], kind), kind).not.toThrow();
+  }
+  const others = FMT_KINDS.filter((kind) => !isNumKind(kind));
+  expect(others).toEqual(['text', 'unmeasured', 'split']);
+  for (const kind of others) {
+    for (const value of Object.values(NUM_KIND_SAMPLES)) {
+      expect(() => fmt(value, kind), `${kind} ${JSON.stringify(value)}`).toThrow(TypeError);
+    }
+  }
 });

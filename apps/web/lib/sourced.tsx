@@ -42,7 +42,10 @@ function permalink(source: Src): string | null {
 
 interface NumProps {
   readonly node: NumNode;
-  readonly kind: Exclude<FmtKind, 'text' | 'unmeasured'>;
+  // Leaves out fmt's string-only kinds, which throw on every value a NumNode
+  // holds. A kind added to FMT_KINDS fails typecheck in tests/fmt.spec.ts
+  // until it is either excluded here or listed in NUM_KIND_SAMPLES there.
+  readonly kind: Exclude<FmtKind, 'text' | 'unmeasured' | 'split'>;
 }
 
 /** Renders a sourced number, boolean or integer list, linked to its file. */
