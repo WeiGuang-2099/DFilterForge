@@ -1892,6 +1892,98 @@ the key variable, and nothing was pushed.
   registered ids and sent on NextBit (OD5, OD8); then the owner's test
   round.
 
+## Owner confirmation and review fixes: 2026-10-05, branch dev-repair-round
+
+On 2026-10-05 the owner confirmed the maintainer defaults OD6, OD7 and OD8.
+Four commits on `dev-repair-round` record that and fix what the review of
+918bed9 found: 39166f2, dabaf6c, 3c3ad82 and 53a55e9. No model request was
+sent, no command set the key variable, nothing was pushed, and none of the
+12 prepare-hashed files changed against bff373c.
+
+- **The confirmation (39166f2).** OD5 stays the owner's ruling of
+  2026-10-04. OD6 (the dev frontier arms re-run on NextBit under the `-nb`
+  ids, the six DeepInfra runs reported not run and kept as evidence only),
+  OD7 (one outage re-run on NextBit, `-nb-r2` on dev and `-r2` on test, and
+  no third provider) and OD8 (the test frontier arms keep their registered
+  ids and change only their config) are maintainer defaults the owner
+  confirmed on 2026-10-05.
+  - The protocol's amendment, the repair note's Owner decisions and its
+    amendment labels, the bake-off note, the registry's amendment in
+    `test-runs.md` and `test-runs.json`, the batch's docstring and the
+    progress lines that called the OD6 re-run "ruled" now say so. Each
+    repair-note label names the decisions its passage rests on; none whose
+    passage states OD6, OD7 or OD8 content is labelled OD5 alone.
+  - The ruling is now schema `repair-arms-ruling/1.1`. OD6 to OD8 have `by`
+    `default_confirmed`, a `confirmation` record names the owner, 2026-10-05
+    and OD6 to OD8, and each move's `decided_by` names every decision it
+    rests on with who settled it and when.
+  - The ruling test pins the attribution in each of the six files it
+    reads. Served each file's previous text in turn, and the ruling's also
+    with only its schema raised to 1.1, it failed in 7 of 7 cases, each on
+    that file's assertion; with the committed texts it passed.
+  - The sections above dated 2026-10-04 keep what was true when they were
+    written: OD6 to OD8 waited for the owner's paid dev command. That wait
+    is over.
+- **The progress facts (dabaf6c).** The Current slice no longer credits the
+  frontier 429s to DeepInfra: recounted from the six runs' committed
+  attempts, all 198 have HTTP status 429 and provider null, so they show
+  429 on the DeepInfra-pinned route only. The Blocked line that said
+  `repair-arms` was not pushed now says PR #18 merged it as bff373c, and that
+  no CI result for that PR is recorded here.
+- **The moved runs' follow-up line (3c3ad82).** For each moved dev run the
+  dry run printed `--output-dir artifacts/repair/<registered first id>`.
+  - Before: in the worktree, beside the copies of the main checkout's
+    DeepInfra run directories and with the `-nb` sets set aside, each of the
+    three printed commands, run as printed, exited 2 with `output_exists`.
+  - After: the line reads `--output-dir
+    artifacts/repair-arms/build/<-nb run id>/<registered first id>`, still
+    ending ", installed as artifacts/repair/<-nb run id>". Run as printed,
+    each exited 0. `differences` found nothing between each built set and
+    the `-nb` set the keyless batch installed at 918bed9. Their
+    `prepared/C4.json` SHA-256 prefixes, `43b396f05b3e`, `b4fb01c575b7` and
+    `2fb03e788c2d`, equal the replaced DeepInfra runs' sets'. A second dry
+    run after those builds printed the same output.
+  - `test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept`
+    runs each printed line through the scripted follow-up step, which
+    refuses an existing output. Before the change it failed on
+    `(False, 'output_exists') == (True, None)`; after, it passed. The
+    existing moved-pass test now pins the new line.
+- **The dry run's expected lines (53a55e9).** The repair note's Commands and
+  Planned next 1.1 say that step 1, the dry run, prints "would build" and an
+  "installed as" follow-up line for each `-nb` set only until step 2 has
+  built the sets, and "equal to what follow-up builds now" after that. Read
+  from the worktree's dry run, both exiting 0: with the `-nb` sets absent,
+  3 "would build" and 3 follow-up lines; with them in place, 3 "equal to
+  what follow-up builds now" and no "installed as" line.
+- **The ignored copies.** The verify of 918bed9 left copies in the
+  worktree's `artifacts/repair` (3.6 MB) and `artifacts/repair-arms` (396
+  KB), which git ignores. Both are deleted, with the `build/` directory the
+  hand runs above made. The main checkout's `artifacts/` was not touched;
+  its `artifacts/repair` still holds 15 run directories.
+- **Checks at 53a55e9.**
+  - In `dfilterforge-test:0.1.0`
+    (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`),
+    with `src`, `tests`, `scripts`, `docs`, `pyproject.toml`, `README.md`
+    and `pcap_lab` mounted read-only and no network:
+    `tests/test_repair_arms.py`, `tests/test_repair.py`,
+    `tests/test_hosted_test_runs.py` and `tests/test_test_passes.py` gave
+    297 passed, none skipped.
+  - On the host, with `uv run --frozen --offline --extra dev`: pyink (96
+    files unchanged), isort, pylint on `scripts/repair_arms.py` (10.00/10,
+    exit 0) and `pyright --pythonplatform Linux` (0 errors) pass. Host
+    pytest of the same four files gave 292 passed, 2 skipped and 3 failed:
+    three `tests/test_repair.py` tests that make symlinks, which Windows
+    refuses here (WinError 1314); they pass in the container. Before the
+    ignored copies were deleted, the host run also failed
+    `test_the_real_follow_up_builds_every_committed_dev_arm`, which reads
+    the worktree's `artifacts/repair`.
+  - Not run: the full suite, the gates, lint-imports and CI's lab loops.
+    The only code files changed are `scripts/repair_arms.py` and
+    `tests/test_repair_arms.py`.
+- **Not run.** No paid request was sent, so NextBit has served no repair
+  arm. Planned next keeps its order; only its attribution and the dry run's
+  expected lines changed.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered and amended on
