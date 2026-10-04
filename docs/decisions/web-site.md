@@ -162,7 +162,12 @@ are:
 - a bad run id, or a slug collision;
 - receipt frame sets that disagree with their specification, or
   specifications that differ between runs;
-- a registered test run that `model-bakeoff.md` does not name.
+- a registered test run that `model-bakeoff.md` does not name;
+- scored repair results for the Reel's pool (`repair_unread`): a pool run's
+  `repair/summary.json`, the scored summary of its `-cx` arm run or that
+  arm's `-r2` re-run, or the pool split's `repair-pool/<split>.json`. Step 5
+  of `reel-v1` is not built, so the export stops rather than drop the
+  repair turn; `tests/support/resolve.ts` refuses the same files.
 
 It exits 2 when an input cannot be read, a flag is invalid or the output
 directory is not empty.

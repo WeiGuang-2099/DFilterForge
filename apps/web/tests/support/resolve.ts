@@ -720,17 +720,26 @@ export class Resolver {
    * anchor, then each slot winner's dev pass, slots.<slot>.winner.run_id of
    * the ruling test-runs.json names or, with no registry, the ranking's
    * provisional_winner, a slot without one skipped. Pass B is never pooled.
+   * Throws, as the exporter stops, once scored repair results exist for the
+   * pool (refuseUnreadRepair).
    */
   reelPool(): string[] {
     const settled = this.settled();
-    if (settled !== null) {
-      const published = (role: string): string | undefined =>
-        settled.find((entry) => entry.role === role)?.runId;
-      return [
-        published('aa_pass_a'),
-        ...SLOTS.map((slot) => published(`winner_${slot}`) ?? published(`fallback_${slot}`)),
-      ].filter((runId): runId is string => runId !== undefined);
-    }
+    const pool = settled === null ? this.devPool() : this.testPool(settled);
+    this.refuseUnreadRepair(pool, settled === null ? 'dev' : 'test');
+    return pool;
+  }
+
+  private testPool(settled: readonly TestRun[]): string[] {
+    const published = (role: string): string | undefined =>
+      settled.find((entry) => entry.role === role)?.runId;
+    return [
+      published('aa_pass_a'),
+      ...SLOTS.map((slot) => published(`winner_${slot}`) ?? published(`fallback_${slot}`)),
+    ].filter((runId): runId is string => runId !== undefined);
+  }
+
+  private devPool(): string[] {
     const ranking = this.ranking();
     const pool = [string(record(ranking['anchor'], 'anchor')['run_id'], 'anchor run')];
     const registration = this.registration();
@@ -745,6 +754,34 @@ export class Resolver {
       }
     }
     return pool;
+  }
+
+  /**
+   * Refuses scored repair results while reel-v1 step 5 is not built: once
+   * repair runs are scored, the Reel shows the pick's counterexample-arm
+   * turn, which neither the exporter nor this resolver reads yet. Throws
+   * when the pool split's docs/results/repair-pool/<split>.json exists, or
+   * for a pool run its repair/summary.json, or the scored summary of its
+   * -cx arm run or that arm's -r2 re-run, named as repair-round.md names
+   * them: the tag before the date, -r2 after the tag.
+   */
+  private refuseUnreadRepair(pool: readonly string[], split: string): void {
+    const files = [`docs/results/repair-pool/${split}.json`];
+    for (const runId of pool) {
+      const parts = runId.split('-');
+      const stem = parts.slice(0, -3).join('-');
+      const date = parts.slice(-3).join('-');
+      files.push(
+        `docs/results/${runId}/repair/summary.json`,
+        `docs/results/${stem}-cx-${date}/scored/summary.json`,
+        `docs/results/${stem}-cx-r2-${date}/scored/summary.json`,
+      );
+    }
+    for (const file of files) {
+      if (this.exists(file)) {
+        refuse(`${file} holds scored repair results, which reel-v1 step 5 would show`);
+      }
+    }
   }
 
   /**

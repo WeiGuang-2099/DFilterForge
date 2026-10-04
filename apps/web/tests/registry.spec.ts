@@ -683,6 +683,51 @@ for (const noted of NOTED) {
   });
 }
 
+// reel-v1 step 5 is not built, so scored repair results for the pool stop
+// the Reel, as they stop the exporter: a pool run's round summary, its
+// scored counterexample arm or that arm's re-run, or the split's pool file.
+const REPAIRED: readonly {readonly phase: string; readonly file: string}[] = [
+  {phase: 'test', file: `docs/results/${PASS_A}/repair/summary.json`},
+  {phase: 'test', file: `docs/results/test-pass-a-cx-${DATE}/scored/summary.json`},
+  {phase: 'test', file: `docs/results/test-frontier-cx-r2-${DATE}/scored/summary.json`},
+  {phase: 'test', file: 'docs/results/repair-pool/test.json'},
+  {phase: 'dev', file: `docs/results/${ANCHOR}/repair/summary.json`},
+  {phase: 'dev', file: `docs/results/dev-mid-cx-${DATE}/scored/summary.json`},
+  {phase: 'dev', file: 'docs/results/repair-pool/dev.json'},
+];
+
+for (const {phase, file} of REPAIRED) {
+  test(`scored repair results in ${file} stop the ${phase}-phase Reel`, () => {
+    const runs = registry();
+    if (phase === 'dev') {
+      at(runs, FRONTIER).status = 'registered';
+    }
+    commit(runs);
+
+    expect(new Resolver(root).reelPool()).toHaveLength(4);
+
+    put(file, {schema: 'repair-summary/1.0'});
+
+    expect(() => new Resolver(root).reelPool()).toThrow(`${file} holds scored repair results`);
+  });
+}
+
+test('repair results outside the pool leave the Reel alone', () => {
+  commit(registry());
+  for (const file of [
+    // Pass B is never pooled.
+    `docs/results/${PASS_B}/repair/summary.json`,
+    `docs/results/test-pass-b-cx-${DATE}/scored/summary.json`,
+    // A dev pass and the dev split, in the test phase.
+    `docs/results/${DEV_MID}/repair/summary.json`,
+    'docs/results/repair-pool/dev.json',
+  ]) {
+    put(file, {schema: 'repair-summary/1.0'});
+  }
+
+  expect(new Resolver(root).reelPool()).toEqual([PASS_A, SMALL, MID, FRONTIER]);
+});
+
 test('the Reel picks the fewest frames, then the earlier pool run and lower item, C4 first', () => {
   // With no registry the pool is the anchor and the ranking's provisional
   // winners, so the ruled small winner's 0-frame answer is never a candidate.

@@ -2852,6 +2852,57 @@ def test_an_empty_test_pool_has_no_pick(fixture: Fixture) -> None:
     check_sources(root, {"reel.json": reel})
 
 
+@pytest.mark.parametrize(
+    ("phase", "path"),
+    [
+        ("test", f"docs/results/{_PASS_A}/repair/summary.json"),
+        ("test", f"docs/results/test-anchor-cx-{_DATE}/scored/summary.json"),
+        ("test", f"docs/results/test-front-cx-r2-{_DATE}/scored/summary.json"),
+        ("test", "docs/results/repair-pool/test.json"),
+        ("dev", f"docs/results/{_ANCHOR}/repair/summary.json"),
+        ("dev", f"docs/results/dev-mid-cx-{_DATE}/scored/summary.json"),
+        ("dev", "docs/results/repair-pool/dev.json"),
+    ],
+)
+def test_scored_repair_results_stop_the_export_until_step_5_is_built(
+    fixture: Fixture, phase: str, path: str
+) -> None:
+    if phase == "test":
+        _settled(fixture)
+    root = fixture.build()
+    reel = _reel(root)
+    assert reel["phase"] == phase and reel["repair"] is None
+
+    # A pool run's round summary, its scored counterexample arm or that
+    # arm's re-run, or the split's pooled comparison: step 5 would apply.
+    _write(root / path, {"schema": "repair-summary/1.0"})
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "repair_unread"
+    assert path in str(caught.value)
+
+
+def test_repair_results_outside_the_pool_leave_the_export_alone(
+    fixture: Fixture,
+) -> None:
+    _settled(fixture)
+    root = fixture.build()
+    before = exporter.export(root, "abc1234")
+
+    for path in (
+        # Pass B is never pooled.
+        f"docs/results/{_PASS_B}/repair/summary.json",
+        f"docs/results/test-anchor-rerun-cx-{_DATE}/scored/summary.json",
+        # A dev pass and the dev split, in the test phase.
+        f"docs/results/{_MID}/repair/summary.json",
+        "docs/results/repair-pool/dev.json",
+    ):
+        _write(root / path, {"schema": "repair-summary/1.0"})
+
+    assert exporter.export(root, "abc1234") == before
+
+
 @pytest.mark.parametrize("phase", ["dev", "test"])
 def test_the_reel_hashes_the_ruling(fixture: Fixture, phase: str) -> None:
     _settled(fixture)

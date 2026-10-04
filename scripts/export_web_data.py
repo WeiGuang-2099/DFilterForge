@@ -67,6 +67,10 @@ reference_only over the scored probes, ties to the earlier pool run, then
 the lower item id. Highlight: the second scored probe if it disagrees,
 else the first, else the third, and on it the lowest disagreeing frame.
 No repair outcome, feedback-probe result or trace is read before the pick.
+Step 5, the pick's counterexample-arm turn once repair runs are scored, is
+not built: the export stops instead (``repair_unread``) once a pool run's
+repair round summary or scored -cx arm run, or the pool split's
+repair-pool file, is committed.
 
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
@@ -2277,6 +2281,58 @@ def _reel_pick(
     }
 
 
+def _arm_runs(run_id: str, tag: str) -> tuple[str, str]:
+    """Names a pass's arm run and the arm's outage re-run.
+
+    docs/decisions/repair-round.md puts the arm's tag before the date, and
+    a re-run's -r2 after the tag: test-x-cx-2026-09-26, then
+    test-x-cx-r2-2026-09-26.
+    """
+    stem, year, month, day = run_id.rsplit("-", 3)
+    date = f"{year}-{month}-{day}"
+    return f"{stem}-{tag}-{date}", f"{stem}-{tag}-r2-{date}"
+
+
+def check_repair_unread(repo: Repo, selection: Selection) -> None:
+    """Refuses scored repair results while reel-v1 step 5 is not built.
+
+    Once repair runs are scored, step 5 shows the pick's
+    structured-counterexample turn, the -cx arm run of the pick's pass,
+    and the repair round's numbers come from its summaries
+    (docs/decisions/disproof-reel.md). The exporter reads none of them yet,
+    so it stops rather than export reel.json with no repair turn and every
+    repair status at its default. Existence alone is checked; nothing is
+    read.
+
+    Args:
+        repo: The repository.
+        selection: The shown runs and the pool, from ``select``.
+
+    Raises:
+        ContractError: With code ``repair_unread`` when the pool split's
+            docs/results/repair-pool/<split>.json exists, or for a pool run
+            its docs/results/<run>/repair/summary.json, or the
+            scored/summary.json of its -cx arm run or that arm's -r2
+            re-run.
+    """
+    split = "test" if selection.test_phase else "dev"
+    paths = [f"{RESULTS}/repair-pool/{split}.json"]
+    for shown in selection.pool:
+        run_id = shown.run.run_id
+        paths.append(f"{RESULTS}/{run_id}/repair/summary.json")
+        paths.extend(
+            f"{RESULTS}/{arm}/scored/summary.json"
+            for arm in _arm_runs(run_id, "cx")
+        )
+    for path in paths:
+        if repo.exists(path):
+            raise ContractError(
+                "repair_unread",
+                f"{path} holds scored repair results, which the exporter "
+                "does not read until reel-v1 step 5 is built",
+            )
+
+
 def build_reel(
     repo: Repo, captures: Captures, selection: Selection
 ) -> Document:
@@ -2292,7 +2348,12 @@ def build_reel(
         and receipt panel (or no pick when no pool answer is silent-wrong),
         one bar per pool run, the headline counts and ``inputs_sha256``,
         the SHA-256 of every input path and digest the Reel touched.
+
+    Raises:
+        ContractError: As ``check_repair_unread`` raises, before anything
+            is built, and for an input that breaks the contract.
     """
+    check_repair_unread(repo, selection)
     with repo.scope() as used:
         repo.json(selection.ranking)
         # The 2026-10-01 check read test-runs.json and the ruling it names
