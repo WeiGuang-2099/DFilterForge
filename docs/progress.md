@@ -2006,6 +2006,107 @@ sent, no command set the key variable, nothing was pushed, and none of the
   arm. Planned next keeps its order; only its attribution and the dry run's
   expected lines changed.
 
+## Review fixes at 03eca2e: 2026-10-05, branch dev-repair-round
+
+A review of 03eca2e confirmed four minor findings, and four commits fix
+them: 45b39ba, 716362b, 4d48a68 and b6ab13b. The last two change the batch
+and add tests. OD5 stays the owner's ruling of 2026-10-04, and OD6 to OD8
+stay maintainer defaults confirmed by the owner on 2026-10-05. No model
+request was sent, no command set the key variable, nothing was pushed, and
+none of the 12 prepare-hashed files changed against bff373c (`git diff`
+printed nothing).
+
+- **Which 2026-10-04 sections the confirmation changed (45b39ba).** The
+  2026-10-05 section said every section dated 2026-10-04 kept what was true
+  when written, and that OD6 to OD8 all waited for the owner's paid dev
+  command. 39166f2 had rewritten the OD6 lines in two of those sections,
+  and at f90674e only OD6 was tied to the paid dev command: in the ruling's
+  OD6 text, in lines 101 and 723 of the repair note, and in four progress
+  lines. The bullet now names the two sections 39166f2 updated and the two
+  it left, says that only OD6 was tied to that command, and carries a dated
+  correction.
+- **The 429 bullet (716362b).** The 2026-10-04 bullet "Not changed: the
+  progress lines" said they already read only "HTTP 429 from the
+  DeepInfra-pinned route". At 918bed9, which added that bullet, the Current
+  slice read "The frontier arms got only HTTP 429 from DeepInfra"
+  (`git show 918bed9:docs/progress.md`). The bullet now carries a dated
+  correction, and the dabaf6c bullet says it disproves it.
+- **A follow-up refusal gives its reason (4d48a68).** For a refusal the
+  protocol does not report, the batch used to tell the owner to run the
+  printed follow-up line "to read why". That line builds in a fixed place,
+  and follow-up refuses an existing output before any other check.
+  - Before: the new test's two cases failed on the old hint. One named
+    `artifacts/repair-arms/build/<-nb run id>/<registered first id>`, where
+    the case had built the set by hand. The other named
+    `artifacts/repair/dev-qwen3.5-122b-a10b-cx-2026-09-26`, where the
+    keyless run had installed the set.
+  - After: the in-process follow-up returns its message with its code, and
+    the refusal quotes it.
+    `test_a_follow_up_refusal_gives_its_reason_with_built_sets_in_place`
+    passed for both cases. The test of the real follow-up step now pins
+    its message, "A required file is missing".
+  - A real dry run was made in the worktree, with copies of the main
+    checkout's 15 run directories and the three moved sets built by hand
+    under `artifacts/repair-arms/build/`. For that one dry run the frontier
+    pass's `repair/plan.json` was rewritten with indent 2, then copied
+    back; `git status` showed it unchanged. The dry run exited 2 with:
+    "refused: dev-deepseek-v4-pro-0813-res-nb-2026-09-26: follow-up refused
+    (plan_invalid) to build its prompt set from
+    docs/results/dev-deepseek-v4-pro-0813-2026-09-26 and its plan: The
+    repair plan is not in its canonical encoding".
+- **The printed follow-up command runs as printed (b6ab13b).**
+  - Before, at 4d48a68: the dev dry run (exit 0) printed `python
+    scripts/model_run.py follow-up ... --source-revision 4d48a68, installed
+    as artifacts/repair/<-nb run id>`. In Git Bash, `python` resolves to the
+    system Python 3.12, which has no `dfilterforge`. Run literally in Git
+    Bash and in Windows PowerShell 5.1, the first line exited 1 with
+    `ModuleNotFoundError: No module named 'dfilterforge'`.
+  - After: each moved set gets two lines,
+    `uv run --frozen python scripts/model_run.py follow-up ...
+    --source-revision <rev>` and `# installed as artifacts/repair/<-nb run
+    id>`. Each pair was pasted whole and run as printed from the worktree
+    root:
+    - in Git Bash, each exited 0;
+    - after those builds were moved aside, in Windows PowerShell
+      5.1.26100.9444, each exited 0 again.
+  - `differences` found nothing between each set built in either shell and
+    the replaced DeepInfra run's set. The `prepared/C4.json` SHA-256
+    prefixes were `43b396f05b3e`, `b4fb01c575b7` and `2fb03e788c2d`.
+  - A dry run at b6ab13b printed the same output apart from the revision.
+  - The tests:
+    - The printed-line test now takes every word after the script through
+      `scripts/model_run.py`'s own parser.
+    - The moved-pass test pins the comment line.
+    - A docs-mounted test ties `HOST_PYTHON` to the repair note's
+      follow-up command.
+
+    Against the code before the change all three failed; after, they
+    passed. The repair note's Commands, Planned next 1.1 and the 3c3ad82
+    bullet above, with a dated correction, describe the new lines.
+- **The ignored copies.** The copies these checks put in the worktree's
+  `artifacts/repair` and `artifacts/repair-arms`, built sets included, are
+  deleted; only the tracked `artifacts/.gitkeep` remains. The main
+  checkout's `artifacts/` was only read, and its `artifacts/repair` still
+  holds 15 run directories.
+- **Checks at b6ab13b.**
+  - In `dfilterforge-test:0.1.0`
+    (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`),
+    with `src`, `tests`, `scripts`, `docs`, `pyproject.toml`, `README.md`
+    and `pcap_lab` mounted read-only and no network, the four test files
+    `tests/test_repair_arms.py`, `tests/test_repair.py`,
+    `tests/test_hosted_test_runs.py` and `tests/test_test_passes.py` gave
+    300 passed, none skipped.
+  - On the host, with `uv run --frozen --offline --extra dev`, these passed:
+    - pyink, with 96 files unchanged;
+    - isort;
+    - pylint on `scripts/repair_arms.py`, at 10.00/10;
+    - `pyright --pythonplatform Linux`, with 0 errors.
+  - Host pytest of the same four files gave 295 passed, 2 skipped and 3
+    failed. The failures are the three symlink tests above (WinError 1314).
+  - Not run: the full suite, the gates, lint-imports and CI's lab loops.
+    The only code files changed are `scripts/repair_arms.py` and
+    `tests/test_repair_arms.py`.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered and amended on
