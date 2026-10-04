@@ -1221,7 +1221,8 @@ def test_test_rows_appear_only_when_every_registered_run_is_final(
     board = documents["board.json"]
     assert [
         (item["role"], item["run_id"]["t"]) for item in board["test"]["rows"]
-    ] == list(_PLANNED)
+    ] == [item for item in _PLANNED if item[0] != "aa_pass_b"]
+    assert board["test"]["rerun"]["run_id"]["t"] == _PASS_B
     assert board["test"]["not_run"] == []
     first = board["test"]["rows"][0]
     metric = first["conditions"][3]["metrics"]["strong_exact"]
@@ -1237,6 +1238,78 @@ def test_test_rows_appear_only_when_every_registered_run_is_final(
     assert documents["site.json"]["phase"]["test"] is True
     assert {"case": "case-t"} in documents["routes.json"]["cases"]
     check_sources(root, documents)
+
+
+def test_the_test_phase_board_rows_are_the_pool_and_pass_b_is_the_rerun(
+    fixture: Fixture,
+) -> None:
+    _register(fixture, _registration(), *(run for _, run in _PLANNED))
+    root = fixture.build()
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    # locked-test-v1.md: pass A is the counted pass, and pass B serves only
+    # as its rerun, so the rows are the Reel's pool and never pass B.
+    test = documents["board.json"]["test"]
+    assert [item["role"] for item in test["rows"]] == [
+        "aa_pass_a",
+        "winner_small",
+        "winner_mid",
+        "winner_frontier",
+    ]
+    assert [item["run_id"]["t"] for item in test["rows"]] == [
+        item["run_id"]["t"] for item in documents["reel.json"]["pool"]
+    ]
+    rerun = test["rerun"]
+    assert (rerun["role"], rerun["run_id"]["t"]) == ("aa_pass_b", _PASS_B)
+    summary = f"docs/results/{_PASS_B}/scored/summary.json"
+    comparisons = list(_nodes(rerun["comparisons"]))
+    assert comparisons and all(
+        node["src"][:2] == ["ptr", summary]
+        and node["src"][2].startswith("/comparisons/0/")
+        for node in comparisons
+    )
+    assert test["not_run"] == []
+    # Pass B is still a shown run, with its receipts.
+    assert _PASS_B in [run["run_id"] for run in documents["site.json"]["runs"]]
+    assert any(
+        item["run"] == _PASS_B for item in documents["routes.json"]["receipts"]
+    )
+    check_sources(root, documents)
+
+
+def test_a_not_run_pass_b_leaves_the_board_no_rerun(fixture: Fixture) -> None:
+    registration = _registration()
+    _stop(registration, _PASS_B, "outage")
+    _register(
+        fixture, registration, _PASS_A, _TEST_SMALL, _TEST_MID, _TEST_FRONT
+    )
+    root = fixture.build()
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    test = documents["board.json"]["test"]
+    assert [item["role"] for item in test["rows"]] == [
+        "aa_pass_a",
+        "winner_small",
+        "winner_mid",
+        "winner_frontier",
+    ]
+    assert test["rerun"] is None
+    assert test["not_run"] == [
+        {
+            "role": "aa_pass_b",
+            "run_id": {
+                "t": _PASS_B,
+                "src": ["ptr", _TEST_RUNS, "/runs/1/run_id"],
+            },
+            "reason": {
+                "t": "outage",
+                "src": ["ptr", _TEST_RUNS, "/runs/1/reason"],
+            },
+        }
+    ]
+    check_sources(root, {"board.json": documents["board.json"]})
 
 
 def test_a_published_run_without_a_summary_keeps_the_test_phase_off(
@@ -2780,16 +2853,21 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
         "dev-qwen3.5-9b-2026-09-26",
     ]
     # Every registry row is final: the five planned runs are published and
-    # scored, and the eleven conditional rows are unused.
+    # scored, and the eleven conditional rows are unused. The rows are the
+    # four pool runs; pass B is only pass A's rerun.
     assert [
         (item["role"], item["run_id"]["t"]) for item in board["test"]["rows"]
     ] == [
         ("aa_pass_a", "test-qwen3-32b-2026-09-26"),
-        ("aa_pass_b", "test-qwen3-32b-passb-2026-09-26"),
         ("winner_small", "test-qwen3.5-9b-2026-09-26"),
         ("winner_mid", "test-qwen3.5-122b-a10b-2026-09-26"),
         ("winner_frontier", "test-deepseek-v4-pro-0813-2026-09-26"),
     ]
+    rerun = board["test"]["rerun"]
+    assert (rerun["role"], rerun["run_id"]["t"]) == (
+        "aa_pass_b",
+        "test-qwen3-32b-passb-2026-09-26",
+    )
     assert board["test"]["not_run"] == []
     assert check_sources(_ROOT, documents) > 150_000
 

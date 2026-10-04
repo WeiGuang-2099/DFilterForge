@@ -1639,11 +1639,23 @@ def _test_row(repo: Repo, shown: Shown) -> Node:
 
 
 def build_board(repo: Repo, selection: Selection) -> Document:
-    """Dev counts as model selection; test rates only from summaries."""
+    """Dev counts as model selection; test rates only from summaries.
+
+    The test rows are the Reel's test pool in pool order. Pass B is never a
+    row: locked-test-v1.md counts pass A and keeps pass B only as its rerun,
+    so the published aa_pass_b run appears as ``rerun`` alone, null when it
+    is not published. It stays a shown run with receipts and cases.
+    """
     test: Node | None = None
     if selection.test_phase:
+        # The registration lets at most one published row fill a slot.
+        rerun = next(
+            (shown for shown in selection.tests if shown.role == "aa_pass_b"),
+            None,
+        )
         test = {
-            "rows": [_test_row(repo, shown) for shown in selection.tests],
+            "rows": [_test_row(repo, shown) for shown in selection.pool],
+            "rerun": None if rerun is None else _test_row(repo, rerun),
             # Every not_run row with its reason; an unused row is left out,
             # because its condition never occurred.
             "not_run": [
