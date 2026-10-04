@@ -1619,3 +1619,181 @@ the worktree's code mounted read-only and no network.
   under the limits, still holds: the site is recorded-only.
 - Still open: the same items as after the review fixes, plus hosting
   (decision D1) and the two registration commits (decision D2).
+
+## Web data on the registered test runs: 2026-10-04, branch web-data
+
+- `web-data` now builds the site on main's registered, scored test runs.
+  The branch is still local: nothing is pushed and no pull request is open.
+  Every check below ran at 69d237e; the two commits after it, dffcc8c (the
+  [web site](decisions/web-site.md) note) and this entry, change only docs.
+- `git diff --name-only bff373c..69d237e` lists 46 files: none of the 12
+  prepare-hashed files, and none of `runner.py`, `live.py` or `replay.py`.
+- 10dae61 merges main (bff373c) into `web-data` (a79d548) with a merge
+  commit whose parents are a79d548, then bff373c.
+  - The only conflict was `.github/workflows/ci.yml`. The resolution keeps
+    main's text with its two repair checks first, then `web-data`'s four
+    web steps, and `web-data`'s web job. Its blob is
+    ea0100ba08271dd31015a20537d3b09ffd4be1c4, unchanged since.
+  - At the merge, the two committed-tree exporter tests failed with
+    `role_invalid` on main's registry roles, as expected, until def05f4.
+- The commits after the merge:
+  - b4bde9d checks the registry's rows against the Runs table of
+    `docs/decisions/test-runs.md`, numbered from 1 and in order. The
+    exporter no longer reads `model-bakeoff.md`.
+  - 0bbf3fd takes the winners' dev passes from the ruling the registry
+    names (`slots.<slot>.winner.run_id`) and hashes the ruling into the
+    Reel's inputs.
+  - def05f4 reads the registered roles and statuses, and the test-phase
+    rule of `disproof-reel.md`.
+  - 628e1ba makes pass B the board's `rerun`, never a board row.
+  - 61030fc repeats the registered dev Reel check on a copy of the
+    committed tree.
+  - 114171d mirrors the registry reading, the Reel pool and the pick in
+    the TypeScript resolver.
+  - Review fixes, one commit each:
+    - e073ab1, d7b31d3 and d9d5a74 add exporter cases for an unknown
+      trigger, a row that names itself, a note numbered from 0, a note
+      with an extra row, an empty `not_run` reason and a run manifest
+      under a `registered` row. Each fails with DID NOT RAISE against the
+      mutant it targets.
+    - 93db036 pins `board.json`'s `not_run` list to role order.
+    - d586d65, 1b2cbf7 and c88c985 add TypeScript cases: fewest frames
+      before pool position, an unscored published row, an empty test pool,
+      and the registry refusals of the exporter's broken-registration test.
+    - 97bb621 and 56b8c96 make the TypeScript resolver refuse what the
+      exporter refuses: the registry's schema, note, Runs table and run
+      ids, and the ruling in both phases.
+    - 787fded stops the export with `repair_unread` once scored repair
+      results exist for the Reel's pool, until Reel step 5 is built. The
+      TypeScript resolver refuses the same files.
+    - 69d237e shows a summary's `not_measured` status `not_run` as "not
+      measured yet" through a new fmt kind, `unmeasured`, and the
+      `<Unmeasured>` component. The consistency test fails such a value
+      shown with any other kind. The dev anchor's own
+      `repair/summary.json` stops the export too.
+- The exporter's reading of `docs/decisions/evidence/test-runs.json`:
+  - Schema `test-runs/1.0`, else `schema_invalid`, exit 2. `note` must be
+    `docs/decisions/test-runs.md`, else `note_mismatch`.
+  - For each row: one of the eight roles (`role_invalid`); a run id that
+    fits the result-name pattern (`run_id_invalid`), starts with `test-`
+    (`split_mismatch`) and is unique (`run_repeated`); one of the four
+    statuses (`status_invalid`); a reason on each `not_run` row
+    (`not_run_invalid`).
+  - Then conditions as the frozen-prompt guard reads them
+    (`condition_invalid`), the five planned rows in order
+    (`role_missing`), no run manifest or scored summary under a row that
+    is not published (`not_run_scored`), and at most one published row
+    per slot (`role_invalid`).
+  - Then the Runs table (`run_unregistered`) and the ruling: schema
+    `bakeoff-ruling/1.0` with a winner run id per slot (`schema_invalid`,
+    exit 2), a `dev-` prefix (`split_mismatch`), and a winner the ranking
+    shows (`pool_unshown`).
+  - The test phase is on once no row is `registered`, every published
+    row's run is scored and every other row is final. A published but
+    unscored row keeps it off, with no error.
+  - The shown test runs are the published rows in role order. The Reel's
+    test pool is pass A, then each slot's published winner, else its
+    published fallback. Pass B is only the board's `rerun`. The board's
+    `not_run` lists the `not_run` rows with sourced reasons.
+- On the committed tree the test phase is on. Of the registry's 16 rows,
+  rows 1 to 5 are published, each with `scored/summary.json`, and the other
+  11 are unused. 15 runs are shown: the ten dev passes, then the five test
+  passes in role order.
+- The export at 69d237e:
+  - 1,935 files and 27,410,976 bytes, with 1,854 receipts and 76 cases.
+    The resolver in `tests/test_export_web_data.py` re-derives all 150,084
+    sourced values (100,433 strings and 49,651 numbers, booleans or integer
+    arrays) with no mismatch.
+  - On the host, with Python 3.12.10, two exports take 5.736 s and 5.544 s
+    and are byte-identical.
+  - In the test image, CI's export-twice step takes 68.629 s, and the two
+    exports are identical under `diff -r`.
+  - `/tmp`, a 128 MB tmpfs in the test service, ends the export-twice step
+    at 59,548 KB of 131,072 KB (46 percent). The exporter and evidence
+    tests peak at 20,460 KB in samples taken every 0.2 s, which can miss a
+    shorter spike.
+- Rule `reel-v1` on the test phase picks `test-qwen3-32b-2026-09-26` C4
+  `mei-1038`:
+  - The pool is pass A and the three slot winners' test runs, with 54 C4
+    silent-wrong candidates. Only the pick has 3 disagreeing frames; the
+    next fewest is 4.
+  - The answer `(tcp.srcport == 443 && tcp.completeness.fin == true)`
+    misses frames 59, 60 and 66 on semantic-31, -37 and -43. The highlight
+    is semantic-37, frame 60, `server-fin-ack`.
+  - Headline over the test pool: M is 971 and N is 165.
+- The 2026-10-01 dev check still holds. On a copy of the committed dev
+  inputs with rows 1 to 5 set back to `registered`, the exporter picks
+  `dev-qwen3-32b-2026-09-26` C4 `mei-0015` from 27 candidates, with M 284
+  and N 65. The `registered` edit is not what keeps that copy in the dev
+  phase: the copy holds no test run. With the five test runs copied in and
+  the edit dropped, the phase moves to test and the test fails.
+- Tests and checks at 69d237e:
+  - Host: `tests/test_export_web_data.py` has 148 passed and 2 skipped in
+    149.79 s; the skips are the symbolic-link tests, which need privileges
+    on Windows. `tests/test_export_web_evidence.py` fails only its 5 known
+    Windows path-separator cases.
+  - Host static checks: pyink, isort, pylint on the two web scripts
+    (10.00/10) and lint-imports (5 contracts kept) pass. pyright reports 0
+    errors with `--pythonplatform Linux` and in the test image.
+  - CI's four web steps, run as written in the test image under
+    `-p dfilterforge-webcheck` with read-only mounts, pass: pylint
+    10.00/10, the evidence check (8 probes, 480 frames), 174 exporter and
+    evidence tests in 125.93 s, and two identical exports.
+  - Playwright: 142 tests pass in 15.7 s on two workers against the
+    Docker-built `out/`: 56 registry, 41 lint-rule, 14 formatter, 13
+    smoke, 11 consistency, 4 resolver and 3 base-path.
+    `pnpm web:typecheck` and `pnpm web:lint` pass. Host Node is 24.21.0;
+    CI pins 20.20.2.
+- Docker builds at 69d237e:
+  - `--target out` gives 29 files and 923,059 bytes. It takes 19.515 s
+    with the export and build stages rebuilt (export 4.1 s, `next build`
+    8.1 s) and 3.416 s cached. The cached and rebuilt trees differ only in
+    the Next build id.
+  - `--target data` gives 1,935 files and 27,410,976 bytes. It takes
+    15.434 s with the export rebuilt and 6.672 s cached. `diff -r` against
+    the test-image export and against the host export is empty.
+  - The Compose `web` service, built and started under
+    `-p dfilterforge-webcheck`, answers 200 at
+    `http://127.0.0.1:3000/DFilterForge/`.
+- The CI python job mirror at 69d237e passes all 58 steps in 3,400 s. It
+  runs in the test image with the branch's code mounted read-only and a
+  128 MB `/tmp`:
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept);
+  - 1,955 tests passed and 28 skipped in 1,187.49 s, with 97.10 percent
+    coverage;
+  - with `docs/` mounted, 5 test nodes and 7 test files give 468 passes
+    and no skip, the frozen-prompt guard and 150 exporter tests included;
+  - the benchmark and adequacy gates, prepare and recall;
+  - `score --check` over 25 directories (17 scored, 4 control-reference and
+    4 control-mutation) with no difference, `repair --check` over 8 plans,
+    and `repair-pool --check` over 0 pools, since none is committed.
+
+  The mirror runs the score and repair checks in the test image, not CI's
+  lab image, and without the Compose hardening.
+- actionlint 1.7.7 reports no finding, and `ci.yml` holds exactly one
+  `127.0.0.1:3000` probe.
+- Closed: the "two registration commits" (decision D2) that both web
+  sections above list as open. `disproof-reel.md` landed in 6f2beb9, and
+  `test-runs.json` with `test-runs.md` in 6819a52. Both are ancestors of
+  7aaade8, the source revision pass A's first invocation recorded at
+  2026-10-01T18:45:12Z, so rule `reel-v1` and the registry predate every
+  test answer.
+- Still open:
+  - the A/A reading and the confound notes: `board.json` keeps `aa` null,
+    and the pages must show the pair report's reading, the comparisons
+    `results/locked-test-v1.md` marks confounded, and the HTTP 429 losses;
+  - Reel step 5: no test `-cx` arm run is scored and `reel.json` keeps
+    `repair` null. Once main holds a repair round summary for the dev
+    anchor or a pool run, merging main stops the export and CI's export
+    steps with `repair_unread` until step 5 is built;
+  - the methodology page's bootstrap block, still taken from the dev
+    anchor's summary;
+  - the board, case, receipt and Reel pages, with the rules the web site
+    note now lists for them;
+  - predicate traces for the Reel pool, now the four test passes, and
+    pinning base images by digest;
+  - hosting (decision D1);
+  - a first CI run on GitHub;
+  - this file's header, Current slice and Planned next. They are main's
+    lines, so they are updated at the last merge before the push.
