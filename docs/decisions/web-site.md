@@ -178,9 +178,13 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
     `/runs/<i>`. An `unused` row is left out, because its condition never
     occurred. Today the list is empty;
   - `aa` and `repair` stay null (Limits).
-- `methodology.json`: everything from the dev anchor, in both phases, but
-  its `not_measured` statuses, which come from the run its repair line
-  cites (What fails).
+- `methodology.json`: the prompt conditions, `top_k`, the bootstrap block
+  and the scoring environment from the dev anchor, in both phases; the
+  probes and witnesses from `captures.json`, the mutant counts and
+  categories from the test-freeze gate receipt, the shortcut audit from
+  ablation 006's evidence and the admitted prepares from
+  `held_out_freeze.json`, none of them a run; and the `not_measured`
+  statuses from the run its repair line cites (What fails).
 - `reel.json`: the Disproof Reel projected by rule `reel-v1`.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.

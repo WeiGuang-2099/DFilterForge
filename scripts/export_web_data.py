@@ -72,13 +72,17 @@ not built: the export stops instead (``repair_unread``) once a pool run's
 repair round summary or scored -cx arm run, or the pool split's
 repair-pool file, is committed.
 
-methodology.json takes everything from the dev anchor but its not_measured
-statuses, which describe the repair round the site reports: in the test
-phase they come from the first test pool run's summary, pass A whenever it
-is published, and are empty with an empty pool; else from the dev
-anchor's. A repair round summary of that run stops the export
-(``repair_unread``), since the scorer keeps ``repair_at_1: not_run`` after
-a round.
+methodology.json takes its run values, the prompt conditions, top_k, the
+bootstrap block and the scoring environment, from the dev anchor in both
+phases. Its probes and witnesses come from the captures file, its mutant
+counts and categories from the test-freeze gate record, its shortcut audit
+from the shortcut-policy ablation evidence and its admitted prepares from
+the held-out freeze record. Its not_measured statuses describe the repair
+round the site reports: in the test phase they come from the first test
+pool run's summary, pass A whenever it is published, and are empty with an
+empty pool; else from the dev anchor's. A repair round summary of that run
+stops the export (``repair_unread``), since the scorer keeps
+``repair_at_1: not_run`` after a round.
 
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
@@ -2096,8 +2100,11 @@ def _not_measured(repo: Repo, run: Run | None) -> list[Node]:
 def build_methodology(repo: Repo, selection: Selection) -> Document:
     """Conditions, bootstrap, environment, gates and what is unmeasured.
 
-    Everything but the not_measured statuses comes from the dev anchor, in
-    either phase; those come from ``repair_status_run``.
+    The conditions, top_k, bootstrap and environment come from the dev
+    anchor in either phase, and the not_measured statuses from
+    ``repair_status_run``. The rest comes from no run: probes and witnesses
+    from CAPTURES, mutants and their categories from GATE, shortcuts from
+    SHORTCUTS and admitted prepares from FREEZE.
     """
     anchor = selection.rows[0].run
     not_measured = _not_measured(repo, repair_status_run(selection))

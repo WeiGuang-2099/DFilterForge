@@ -1826,9 +1826,11 @@ the worktree's code mounted read-only and no network.
   listed, when the pool is empty. In the dev phase it is the dev anchor.
   Only that run's `repair/summary.json` stops the methodology
   (`repair_unread`); the Reel's pool guard from 787fded is unchanged. The
-  bootstrap block and the rest of the page stay with the dev anchor in both
-  phases, and the page's wording names no source run for its "Not measured
-  yet" section, so it was not changed.
+  page's other run values, the prompt conditions, `top_k`, the bootstrap
+  block and the scoring environment, stay with the dev anchor in both
+  phases; its probes, mutant counts, shortcut audit and admitted prepares
+  come from no run and were not touched. The page's wording names no
+  source run for its "Not measured yet" section, so it was not changed.
 - The TypeScript resolver mirrors the rule in the same commit:
   `repairStatusSummary()` names the cited summary and refuses that one
   file. `tests/registry.spec.ts` covers it in both phases, and
