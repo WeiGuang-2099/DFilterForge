@@ -2,10 +2,12 @@
 
 A fixture repository in tmp_path holds a bake-off ranking with five dev runs
 (one with a dotted id), a bake-off ruling, the frame tables and the global
-evidence, each file in the shape the committed ones take. A test resolver
-written apart from the exporter re-derives every sourced value from those
-raw files. The test of the committed tree skips where the test image
-carries no docs/ tree.
+evidence, each file in the shape the committed ones take. A test that
+registers test runs adds a test-runs/1.0 registry of 16 rows, its note's
+Runs table and the test runs it publishes. A test resolver written apart
+from the exporter re-derives every sourced value from those raw files. The
+tests of the committed tree skip where the test image carries no docs/
+tree.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import shutil
 import sys
 from types import ModuleType
 from typing import Any, cast
@@ -59,6 +62,16 @@ _TEST_FRONT = f"test-front-{_DATE}"
 # Beside the ranking, as the committed ruling is; the exporter reads it only
 # through test-runs.json's "ruling" field.
 _RULING = f"docs/decisions/evidence/bakeoff/ruling-{_DATE}.json"
+_TEST_RUNS = "docs/decisions/evidence/test-runs.json"
+# The planned rows of a test-runs/1.0 registry, in its order; every other
+# row is a fallback or an outage re-run that names one.
+_PLANNED = (
+    ("aa_pass_a", _PASS_A),
+    ("aa_pass_b", _PASS_B),
+    ("winner_small", _TEST_SMALL),
+    ("winner_mid", _TEST_MID),
+    ("winner_frontier", _TEST_FRONT),
+)
 _ALLOWED = (
     "docs/results/",
     "docs/decisions/evidence/",
@@ -1052,26 +1065,97 @@ def test_the_source_check_holds_a_cap_to_the_contract(
             check_sources(root, {name: broken(change)})
 
 
-def _registration(
-    *, not_run: tuple[str, ...] = (), slots: bool = True
+def _tag(run_id: str, tag: str) -> str:
+    """Names a fallback (fb) or an outage re-run (r2) as test-runs.md does."""
+    return f"{run_id.removesuffix(f'-{_DATE}')}-{tag}-{_DATE}"
+
+
+def _row(
+    role: str,
+    run_id: str,
+    status: str,
+    trigger: str | None = None,
+    conditional_on: str | None = None,
+    reason: str | None = None,
 ) -> Document:
-    runs = [
-        {"role": "pass_a", "run_id": _PASS_A},
-        {"role": "pass_b", "run_id": _PASS_B},
+    """One test-runs/1.0 row, with the fields the exporter reads."""
+    return {
+        "conditional_on": conditional_on,
+        "reason": reason,
+        "role": role,
+        "run_id": run_id,
+        "status": status,
+        "trigger": trigger,
+    }
+
+
+def _registration() -> Document:
+    """A test-runs/1.0 registry in the committed shape, 16 rows.
+
+    The five planned rows are published. Each winner's fallback is an
+    unused gate_stop row, and each planned and fallback row has an unused
+    outage re-run. Every unused row names a published or unused run, so the
+    registry is final once the five planned runs are scored.
+    """
+    planned = [_row(role, run_id, "published") for role, run_id in _PLANNED]
+    fallbacks = [
+        _row(
+            role.replace("winner_", "fallback_"),
+            _tag(run_id, "fb"),
+            "unused",
+            "gate_stop",
+            run_id,
+        )
+        for role, run_id in _PLANNED[2:]
     ]
-    if slots:
-        runs += [
-            {"role": "small", "run_id": _TEST_SMALL},
-            {"role": "mid", "run_id": _TEST_MID},
-            {"role": "frontier", "run_id": _TEST_FRONT},
-        ]
-    return {"not_run": list(not_run), "ruling": _RULING, "runs": runs}
+    reruns = [
+        _row(
+            item["role"],
+            _tag(item["run_id"], "r2"),
+            "unused",
+            "outage",
+            item["run_id"],
+        )
+        for item in planned + fallbacks
+    ]
+    return {
+        "note": "docs/decisions/test-runs.md",
+        "ruling": _RULING,
+        "runs": planned + fallbacks + reruns,
+        "schema": "test-runs/1.0",
+    }
+
+
+def _at(registration: Document, run_id: str) -> Document:
+    """The one registry row of a run."""
+    (found,) = [
+        item for item in registration["runs"] if item["run_id"] == run_id
+    ]
+    return found
+
+
+def _stop(registration: Document, run_id: str, reason: str) -> None:
+    """Rules a run not_run with a reason, as the owner records a stop.
+
+    Every unused row that names it gets a reason too: without one, the
+    frozen-prompt guard still waits for that row, and so does the test
+    phase.
+    """
+    for item in registration["runs"]:
+        if item["run_id"] == run_id:
+            item.update(status="not_run", reason=reason)
+        elif item["conditional_on"] == run_id and item["status"] == "unused":
+            item["reason"] = f"{run_id} ended by {reason}; not sent"
+
+
+def _publish(registration: Document, run_id: str) -> None:
+    _at(registration, run_id).update(status="published", reason=None)
 
 
 def _note(runs: list[Document] | None = None, prose: str = "") -> str:
     """Renders test-runs.md: prose, the Runs table, then a numbered table.
 
-    The Runs table lists the given registry rows, by default those of
+    The Runs table lists the given registry rows, by default all 16 of
     ``_registration()``, in the committed note's column order.
     """
     listed = _registration()["runs"] if runs is None else runs
@@ -1097,12 +1181,21 @@ def _note(runs: list[Document] | None = None, prose: str = "") -> str:
     )
 
 
-def test_test_rows_appear_only_when_every_registered_run_is_settled(
+def _register(
+    fixture: Fixture, registration: Document, *test_runs: str
+) -> None:
+    """Commits a registry, its note's Runs table and the given test runs."""
+    fixture.registration = registration
+    fixture.note = _note(registration["runs"])
+    fixture.test_runs = test_runs
+
+
+def test_test_rows_appear_only_when_every_registered_run_is_final(
     fixture: Fixture,
 ) -> None:
-    fixture.registration = _registration()
-    fixture.note = _note()
-    fixture.test_runs = (_PASS_A, _PASS_B, _TEST_SMALL, _TEST_MID)
+    registration = _registration()
+    _at(registration, _TEST_FRONT)["status"] = "registered"
+    _register(fixture, registration, _PASS_A, _PASS_B, _TEST_SMALL, _TEST_MID)
     root = fixture.build()
 
     partial = _documents(exporter.export(root, "abc1234"))
@@ -1120,20 +1213,16 @@ def test_test_rows_appear_only_when_every_registered_run_is_settled(
         run["run_id"] for run in partial["site.json"]["runs"] if run["pool"]
     ] == [_ANCHOR, _DOTTED, _MID, _FRONT]
 
-    _edit(
-        root / "docs/decisions/evidence/test-runs.json",
-        lambda value: value["not_run"].append(_TEST_FRONT),
-    )
+    _publish(registration, _TEST_FRONT)
+    fixture.test_runs += (_TEST_FRONT,)
+    fixture.build()
     documents = _documents(exporter.export(root, "abc1234"))
 
     board = documents["board.json"]
-    assert [item["role"] for item in board["test"]["rows"]] == [
-        "pass_a",
-        "pass_b",
-        "small",
-        "mid",
-    ]
-    assert board["test"]["not_run"][0]["run_id"]["t"] == _TEST_FRONT
+    assert [
+        (item["role"], item["run_id"]["t"]) for item in board["test"]["rows"]
+    ] == list(_PLANNED)
+    assert board["test"]["not_run"] == []
     first = board["test"]["rows"][0]
     metric = first["conditions"][3]["metrics"]["strong_exact"]
     assert metric["value"]["src"] == [
@@ -1150,49 +1239,311 @@ def test_test_rows_appear_only_when_every_registered_run_is_settled(
     check_sources(root, documents)
 
 
-def _second_pass_a(doc: Document) -> None:
-    doc["runs"].append({"role": "pass_a", "run_id": f"test-x-{_DATE}"})
+def test_a_published_run_without_a_summary_keeps_the_test_phase_off(
+    fixture: Fixture,
+) -> None:
+    _register(fixture, _registration(), *(run for _, run in _PLANNED))
+    root = fixture.build()
+    # Published but not scored yet, as test-runs.md allowed before the
+    # repair-cards merge: the phase waits, and nothing is wrong.
+    shutil.rmtree(root / f"docs/results/{_TEST_MID}/scored")
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    assert documents["board.json"]["test"] is None
+    assert documents["board.json"]["test_registered"] is True
+    assert documents["site.json"]["phase"]["test"] is False
+    assert documents["reel.json"]["phase"] == "dev"
+    assert not any(
+        item["run"].startswith("test-")
+        for item in documents["routes.json"]["receipts"]
+    )
 
 
-def _no_pass_b(doc: Document) -> None:
-    doc["runs"].pop(1)
+def test_an_unused_row_whose_named_run_is_not_run_waits_for_a_reason(
+    fixture: Fixture,
+) -> None:
+    registration = _registration()
+    _at(registration, _TEST_FRONT).update(status="not_run", reason="outage")
+    _register(fixture, registration, _PASS_A, _PASS_B, _TEST_SMALL, _TEST_MID)
+    root = fixture.build()
+    path = root / _TEST_RUNS
+
+    def phase() -> bool:
+        site = json.loads(exporter.export(root, "abc1234")["site.json"])
+        return site["phase"]["test"]
+
+    assert phase() is False
+    _edit(
+        path,
+        lambda value: _at(value, _tag(_TEST_FRONT, "fb")).update(
+            reason="an outage is no gate stop"
+        ),
+    )
+    # The frontier re-run still names a not_run run and gives no reason.
+    assert phase() is False
+    _edit(
+        path,
+        lambda value: _at(value, _tag(_TEST_FRONT, "r2")).update(
+            reason="the owner ruled the re-run not sent"
+        ),
+    )
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    assert documents["site.json"]["phase"]["test"] is True
+    assert [item["role"] for item in documents["reel.json"]["pool"]] == [
+        "aa_pass_a",
+        "winner_small",
+        "winner_mid",
+    ]
+    assert documents["board.json"]["test"]["not_run"] == [
+        {
+            "role": "winner_frontier",
+            "run_id": {
+                "t": _TEST_FRONT,
+                "src": ["ptr", _TEST_RUNS, "/runs/4/run_id"],
+            },
+            "reason": {
+                "t": "outage",
+                "src": ["ptr", _TEST_RUNS, "/runs/4/reason"],
+            },
+        }
+    ]
+    check_sources(root, documents)
 
 
-def _unknown_not_run(doc: Document) -> None:
-    doc["not_run"].append(f"test-x-{_DATE}")
+def test_a_published_fallback_fills_its_slot(fixture: Fixture) -> None:
+    fallback = _tag(_TEST_SMALL, "fb")
+    registration = _registration()
+    _stop(registration, _TEST_SMALL, "gate stop")
+    _publish(registration, fallback)
+    _register(
+        fixture,
+        registration,
+        _PASS_A,
+        _PASS_B,
+        fallback,
+        _TEST_MID,
+        _TEST_FRONT,
+    )
+    root = fixture.build()
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    pool = documents["reel.json"]["pool"]
+    assert [item["role"] for item in pool] == [
+        "aa_pass_a",
+        "fallback_small",
+        "winner_mid",
+        "winner_frontier",
+    ]
+    assert pool[1]["run_id"]["t"] == fallback
+    pooled = {
+        run["run_id"]: run["pool"] for run in documents["site.json"]["runs"]
+    }
+    assert pooled[fallback] is True and pooled[_PASS_B] is False
+    assert [
+        item["run_id"]["t"]
+        for item in documents["board.json"]["test"]["not_run"]
+    ] == [_TEST_SMALL]
 
 
-def _dev_pass_a(doc: Document) -> None:
-    doc["runs"][0]["run_id"] = _ANCHOR
+def test_a_published_outage_rerun_keeps_its_role(fixture: Fixture) -> None:
+    rerun = _tag(_TEST_MID, "r2")
+    registration = _registration()
+    _stop(registration, _TEST_MID, "outage")
+    _publish(registration, rerun)
+    _register(
+        fixture, registration, _PASS_A, _PASS_B, _TEST_SMALL, rerun, _TEST_FRONT
+    )
+    root = fixture.build()
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    mid = documents["reel.json"]["pool"][2]
+    assert (mid["role"], mid["run_id"]["t"]) == ("winner_mid", rerun)
+    assert [
+        (item["role"], item["run_id"]["t"])
+        for item in documents["board.json"]["test"]["not_run"]
+    ] == [("winner_mid", _TEST_MID)]
+    check_sources(root, {"board.json": documents["board.json"]})
 
 
-def _scored_not_run(doc: Document) -> None:
-    doc["not_run"].append(_PASS_A)
+def test_a_registry_of_another_schema_exits_two(
+    fixture: Fixture, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registration = _registration()
+    registration["schema"] = "test-runs/0.9"
+    _register(fixture, registration)
+    root = fixture.build()
+
+    with pytest.raises(exporter.ExportError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "schema_invalid"
+    status = exporter.main(
+        [
+            "--repo",
+            str(root),
+            "--out",
+            str(tmp_path / "out"),
+            "--source-commit",
+            "abc1234",
+        ]
+    )
+
+    assert status == 2
+    assert json.loads(capsys.readouterr().err)["error"]["code"] == (
+        "schema_invalid"
+    )
+
+
+def _unknown_role(value: Document, _: Path) -> None:
+    _at(value, _TEST_MID)["role"] = "winner_huge"
+
+
+def _mid_and_its_rerun_published(value: Document, _: Path) -> None:
+    # A run and the re-run naming it cannot both be published under the
+    # condition rule, so here the re-run names a stopped pass B: only the
+    # one-per-slot rule refuses the second published mid row.
+    _stop(value, _PASS_B, "gate stop")
+    _publish(value, _tag(_TEST_MID, "r2"))
+    _at(value, _tag(_TEST_MID, "r2"))["conditional_on"] = _PASS_B
+
+
+def _rerun_and_fallback_published(value: Document, _: Path) -> None:
+    _stop(value, _TEST_MID, "outage")
+    _publish(value, _tag(_TEST_MID, "r2"))
+    _publish(value, _tag(_TEST_MID, "fb"))
+
+
+def _unknown_status(value: Document, _: Path) -> None:
+    _at(value, _TEST_MID)["status"] = "done"
+
+
+def _repeated_run_id(value: Document, _: Path) -> None:
+    _at(value, _TEST_FRONT)["run_id"] = _TEST_MID
+
+
+def _dev_run_id(value: Document, _: Path) -> None:
+    _at(value, _PASS_A)["run_id"] = _ANCHOR
+
+
+def _malformed_run_id(value: Document, _: Path) -> None:
+    _at(value, _PASS_A)["run_id"] = f"test-Bad_X-{_DATE}"
+
+
+def _not_run_without_a_reason(value: Document, _: Path) -> None:
+    _at(value, _TEST_MID)["status"] = "not_run"
+
+
+def _dangling_condition(value: Document, _: Path) -> None:
+    _at(value, _tag(_TEST_MID, "fb"))["conditional_on"] = f"test-x-{_DATE}"
+
+
+def _trigger_without_a_named_run(value: Document, _: Path) -> None:
+    _at(value, _tag(_TEST_MID, "fb"))["conditional_on"] = None
+
+
+def _planned_row_unused(value: Document, _: Path) -> None:
+    _at(value, _TEST_MID)["status"] = "unused"
+
+
+def _fallback_beside_its_published_winner(value: Document, _: Path) -> None:
+    _at(value, _tag(_TEST_SMALL, "fb")).update(
+        status="not_run", reason="outage"
+    )
+
+
+def _no_mid_winner(value: Document, _: Path) -> None:
+    # Drops winner_mid and every row its condition chain reaches, so only
+    # the planned roles are wrong.
+    dropped = {_TEST_MID}
+    for item in value["runs"]:
+        if item["conditional_on"] in dropped:
+            dropped.add(item["run_id"])
+    value["runs"] = [
+        item for item in value["runs"] if item["run_id"] not in dropped
+    ]
+
+
+def _planned_rows_out_of_order(value: Document, _: Path) -> None:
+    runs = value["runs"]
+    runs[2], runs[3] = runs[3], runs[2]
+
+
+def _scored_not_run(value: Document, root: Path) -> None:
+    _stop(value, _TEST_MID, "outage")
+    _write(
+        root / f"docs/results/{_TEST_MID}/scored/summary.json",
+        {"run": _TEST_MID},
+    )
+
+
+def _unused_with_a_manifest(_: Document, root: Path) -> None:
+    _write(
+        root / f"docs/results/{_tag(_TEST_MID, 'fb')}/run_manifest.json",
+        {"run_id": _tag(_TEST_MID, "fb")},
+    )
+
+
+def _another_note(value: Document, _: Path) -> None:
+    value["note"] = "docs/decisions/model-bakeoff.md"
 
 
 @pytest.mark.parametrize(
-    ("edit", "code"),
+    ("edit", "code", "named"),
     [
-        (_second_pass_a, "role_invalid"),
-        (_no_pass_b, "role_missing"),
-        (_unknown_not_run, "not_run_invalid"),
-        (_dev_pass_a, "split_mismatch"),
-        (_scored_not_run, "not_run_scored"),
+        (_unknown_role, "role_invalid", "'winner_huge'"),
+        (_mid_and_its_rerun_published, "role_invalid", _tag(_TEST_MID, "r2")),
+        (_rerun_and_fallback_published, "role_invalid", _tag(_TEST_MID, "fb")),
+        (_unknown_status, "status_invalid", "'done'"),
+        (_repeated_run_id, "run_repeated", f"row 5 repeats {_TEST_MID}"),
+        (_dev_run_id, "split_mismatch", _ANCHOR),
+        (_malformed_run_id, "run_id_invalid", "test-Bad_X"),
+        (_not_run_without_a_reason, "not_run_invalid", _TEST_MID),
+        (_dangling_condition, "condition_invalid", f"test-x-{_DATE}"),
+        (
+            _trigger_without_a_named_run,
+            "condition_invalid",
+            _tag(_TEST_MID, "fb"),
+        ),
+        (_planned_row_unused, "condition_invalid", _TEST_MID),
+        (
+            _fallback_beside_its_published_winner,
+            "condition_invalid",
+            f"{_TEST_SMALL} is published",
+        ),
+        (_no_mid_winner, "role_missing", "winner_small, winner_frontier,"),
+        (
+            _planned_rows_out_of_order,
+            "role_missing",
+            "winner_mid, winner_small",
+        ),
+        (_scored_not_run, "not_run_scored", f"{_TEST_MID} holds scored/"),
+        (
+            _unused_with_a_manifest,
+            "not_run_scored",
+            f"{_tag(_TEST_MID, 'fb')} holds run_manifest.json",
+        ),
+        (_another_note, "note_mismatch", "note"),
     ],
 )
 def test_a_broken_registration_fails(
-    fixture: Fixture, edit: Callable[[Document], None], code: str
+    fixture: Fixture,
+    edit: Callable[[Document, Path], None],
+    code: str,
+    named: str,
 ) -> None:
     registration = _registration()
-    edit(registration)
-    fixture.registration = registration
-    fixture.note = _note()
-    fixture.test_runs = (_PASS_A,)
+    edit(registration, fixture.root)
+    # The note lists the edited rows, so only the edit can fail.
+    _register(fixture, registration)
     root = fixture.build()
 
     with pytest.raises(exporter.ContractError) as caught:
         exporter.export(root, "abc1234")
     assert caught.value.code == code
+    assert named in str(caught.value)
 
 
 def _ruling_schema(_: Document, ruling: Document) -> None:
@@ -2262,9 +2613,7 @@ def test_repair_traces_and_feedback_do_not_move_the_pick(
 
 
 def _settled(fixture: Fixture) -> None:
-    fixture.registration = _registration()
-    fixture.note = _note()
-    fixture.test_runs = (_PASS_A, _PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT)
+    _register(fixture, _registration(), *(run for _, run in _PLANNED))
     one_frame = _wrong((2,), (1,), (4, 5))
     two_frames = _wrong((2,), (1,), (4,))
     fixture.answers[(_ANCHOR, "C4", "i-0001")] = one_frame
@@ -2283,15 +2632,8 @@ def test_the_test_phase_pools_pass_a_and_the_winners_never_pass_b(
     reel = _reel(root)
 
     assert reel["phase"] == "test"
-    assert [item["role"] for item in reel["pool"]] == [
-        "pass_a",
-        "small",
-        "mid",
-        "frontier",
-    ]
-    assert [item["run_id"]["t"] for item in reel["pool"]][:2] == [
-        _PASS_A,
-        _TEST_SMALL,
+    assert [(item["role"], item["run_id"]["t"]) for item in reel["pool"]] == [
+        item for item in _PLANNED if item[0] != "aa_pass_b"
     ]
     # Pass B holds the fewest frames and the dev runs fewer still.
     assert _picked(reel) == (_PASS_A, "C4", "i-1002")
@@ -2316,19 +2658,42 @@ def test_the_test_phase_pools_pass_a_and_the_winners_never_pass_b(
 
 def test_a_not_run_test_pass_leaves_the_pool(fixture: Fixture) -> None:
     _settled(fixture)
-    fixture.test_runs = (_PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT)
-    fixture.registration = _registration(not_run=(_PASS_A,))
+    registration = _registration()
+    _stop(registration, _PASS_A, "outage")
+    _register(
+        fixture, registration, _PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT
+    )
     root = fixture.build()
 
     reel = _reel(root)
 
     assert reel["phase"] == "test"
     assert [item["role"] for item in reel["pool"]] == [
-        "small",
-        "mid",
-        "frontier",
+        "winner_small",
+        "winner_mid",
+        "winner_frontier",
     ]
     assert _picked(reel) == (_TEST_SMALL, "C4", "i-1001")
+
+
+def test_an_empty_test_pool_has_no_pick(fixture: Fixture) -> None:
+    _settled(fixture)
+    registration = _registration()
+    for run_id in (_PASS_A, _TEST_SMALL, _TEST_MID, _TEST_FRONT):
+        _stop(registration, run_id, "outage")
+    # Only pass B is published, and it has a silent-wrong answer.
+    _register(fixture, registration, _PASS_B)
+    root = fixture.build()
+
+    reel = _reel(root)
+
+    assert reel["phase"] == "test"
+    assert reel["pool"] == [] and reel["board"] == []
+    assert reel["pick"] is None and reel["candidate_condition"] is None
+    assert reel["candidates"]["v"] == 0
+    assert reel["headline"]["compiled"]["v"] == 0
+    assert reel["headline"]["silent_wrong"]["v"] == 0
+    check_sources(root, {"reel.json": reel})
 
 
 @pytest.mark.parametrize("phase", ["dev", "test"])
@@ -2407,13 +2772,26 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
     documents = _documents(_committed())
 
     routes = documents["routes.json"]
-    assert len(routes["receipts"]) == 651
-    assert len(routes["cases"]) == 20
+    assert len(routes["receipts"]) == 1854
+    assert len(routes["cases"]) == 76
+    board = documents["board.json"]
+    assert [item["run_id"]["t"] for item in board["selection"]["rows"]][:2] == [
+        "dev-qwen3-32b-2026-09-26",
+        "dev-qwen3.5-9b-2026-09-26",
+    ]
+    # Every registry row is final: the five planned runs are published and
+    # scored, and the eleven conditional rows are unused.
     assert [
-        item["run_id"]["t"]
-        for item in documents["board.json"]["selection"]["rows"]
-    ][:2] == ["dev-qwen3-32b-2026-09-26", "dev-qwen3.5-9b-2026-09-26"]
-    assert check_sources(_ROOT, documents) > 50_000
+        (item["role"], item["run_id"]["t"]) for item in board["test"]["rows"]
+    ] == [
+        ("aa_pass_a", "test-qwen3-32b-2026-09-26"),
+        ("aa_pass_b", "test-qwen3-32b-passb-2026-09-26"),
+        ("winner_small", "test-qwen3.5-9b-2026-09-26"),
+        ("winner_mid", "test-qwen3.5-122b-a10b-2026-09-26"),
+        ("winner_frontier", "test-deepseek-v4-pro-0813-2026-09-26"),
+    ]
+    assert board["test"]["not_run"] == []
+    assert check_sources(_ROOT, documents) > 150_000
 
 
 @pytest.mark.skipif(
@@ -2422,28 +2800,32 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
 def test_the_committed_tree_picks_the_registered_reel() -> None:
     reel = json.loads(_committed()["reel.json"])
 
+    assert reel["phase"] == "test"
     assert [item["run_id"]["t"] for item in reel["pool"]] == [
-        "dev-qwen3-32b-2026-09-26",
-        "dev-qwen3.5-9b-2026-09-26",
-        "dev-qwen3.5-122b-a10b-2026-09-26",
-        "dev-deepseek-v4-pro-0813-2026-09-26",
+        "test-qwen3-32b-2026-09-26",
+        "test-qwen3.5-9b-2026-09-26",
+        "test-qwen3.5-122b-a10b-2026-09-26",
+        "test-deepseek-v4-pro-0813-2026-09-26",
     ]
-    assert reel["candidates"]["v"] == 27
-    assert _picked(reel) == ("dev-qwen3-32b-2026-09-26", "C4", "mei-0015")
+    assert reel["candidate_condition"] == "C4"
+    assert reel["candidates"]["v"] == 54
+    assert _picked(reel) == ("test-qwen3-32b-2026-09-26", "C4", "mei-1038")
     assert reel["pick"]["request"]["t"] == (
-        "Show DNS AAAA questions or DNS NXDOMAIN messages."
+        "I want every TCP segment with FIN set whose source port is 443, "
+        "whether or not ACK is also set. Judge by the port alone; a FIN sent "
+        "to destination port 443 from some other source port doesn't belong."
     )
     assert reel["pick"]["answer"]["filter"]["t"] == (
-        "(dns.aaaa || dns.flags.rcode == 3)"
+        "(tcp.srcport == 443 && tcp.completeness.fin == true)"
     )
     assert [
         [item["n"]["v"] for item in strip["disagree"]]
         for strip in reel["strips"]
-    ] == [[17], [3], [9]]
+    ] == [[59], [60], [66]]
     highlight = reel["highlight"]
-    assert highlight["probe_id"]["t"] == "semantic-17"
-    assert highlight["frame"]["v"] == 3
-    assert highlight["name"]["t"] == "udp-aaaa"
-    assert reel["headline"]["compiled"]["v"] == 284
-    assert reel["headline"]["silent_wrong"]["v"] == 65
+    assert highlight["probe_id"]["t"] == "semantic-37"
+    assert highlight["frame"]["v"] == 60
+    assert highlight["name"]["t"] == "server-fin-ack"
+    assert reel["headline"]["compiled"]["v"] == 971
+    assert reel["headline"]["silent_wrong"]["v"] == 165
     check_sources(_ROOT, {"reel.json": reel})

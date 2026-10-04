@@ -25,19 +25,27 @@ other path, and any path with a dot segment, is refused.
 
 Shown runs come from committed files, never from a hand list: the runs of
 the lexicographically last bake-off ranking (the anchor, then the small, mid
-and frontier slots, rank by rank) and, once every run that
-docs/decisions/evidence/test-runs.json registers is scored or listed as not
-run, the registered test runs. That file is read as
-``{"ruling": path, "runs": [{"role", "run_id"}], "not_run": [run_id]}``,
-with roles pass_a, pass_b, small, mid and frontier. ``ruling`` names the
-bake-off ruling (schema bakeoff-ruling/1.0), whose
+and frontier slots, rank by rank) and, in the test phase, the published
+test runs. docs/decisions/evidence/test-runs.json, schema test-runs/1.0,
+registers the test runs. Of it the exporter reads ``note``, ``ruling`` and,
+per row of ``runs``, role, run_id, status, trigger, conditional_on and
+reason. Roles are aa_pass_a, aa_pass_b, and winner_<slot> and
+fallback_<slot> for the small, mid and frontier slots; an outage re-run
+keeps its run's role, so a role may repeat, but at most one published row
+fills a slot. The test phase is on once every row is final: none is
+registered, every published row's run has scored/summary.json, and every
+other row is not_run or an unused conditional row that gives a reason or
+whose named run is not not_run (docs/decisions/disproof-reel.md). A
+published run with no summary yet keeps the phase off and is no error. Test
+runs are shown in role order with their roles verbatim. ``ruling`` names
+the bake-off ruling (schema bakeoff-ruling/1.0), whose
 ``slots.<slot>.winner.run_id`` is each slot winner's counted dev pass; its
-top-level ``winners`` holds model ids and is not read. The registered runs
+top-level ``winners`` holds model ids and is not read. The registry's rows
 must be, numbered from 1 and in order, the rows of the Runs table in
-docs/decisions/test-runs.md, the note that registers them; a run id named
-only in that note's prose registers nothing. The site never divides: dev
-runs get counts only, and rates, intervals and comparisons are pointers
-into a test run's summary.json.
+docs/decisions/test-runs.md, the note that registers them and that
+``note`` names; a run id named only in that note's prose registers
+nothing. The site never divides: dev runs get counts only, and rates,
+intervals and comparisons are pointers into a test run's summary.json.
 
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
@@ -46,11 +54,13 @@ receipts/<run_slug>/<condition>/<item_id>.json, where the run slug is the
 run id with each dot replaced by an underscore.
 
 reel.json projects the home page's Disproof Reel by the pre-registered
-rule reel-v1 (docs/decisions/disproof-reel.md once registered). Pool: in
-the test phase pass A then the small, mid and frontier winners' test runs,
-skipping runs not run; else the dev anchor then the winners' dev passes
-(from the ruling test-runs.json names, else, with no test-runs.json, the
-ranking's provisional winners); pass B never.
+rule reel-v1 (docs/decisions/disproof-reel.md). Pool: in the test phase
+the published aa_pass_a run, then per slot the published winner_<slot> run,
+else the published fallback_<slot> run, an outage re-run included and a
+slot with neither skipped, so the pool may be empty and have no pick; else
+the dev anchor then the winners' dev passes (from the ruling test-runs.json
+names, else, with no test-runs.json, the ranking's provisional winners);
+pass B never.
 Candidates: pool items in C4 with ready gold and outcome silent_wrong,
 else C3, then C2, then C1. Pick: the fewest frames in candidate_only plus
 reference_only over the scored probes, ties to the earlier pool run, then
@@ -94,6 +104,9 @@ MEAN_TOLERANCE = 5e-7
 RESULTS = "docs/results"
 RANKING_DIR = "docs/decisions/evidence/bakeoff"
 TEST_RUNS = "docs/decisions/evidence/test-runs.json"
+# The registry's schema, as scripts/test_passes.py and the frozen-prompt
+# guard read it.
+REGISTRY_SCHEMA = "test-runs/1.0"
 # The schema of the bake-off ruling that test-runs.json names; the ruling
 # holds each slot winner's counted dev pass.
 RULING_SCHEMA = "bakeoff-ruling/1.0"
@@ -123,7 +136,31 @@ _SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _COMMIT = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}")
 _INDEX = re.compile(r"0|[1-9][0-9]*")
 _SLOTS = ("small", "mid", "frontier")
-_TEST_ROLES = ("pass_a", "pass_b", *_SLOTS)
+# The registry's roles in pool and display order: the A/A pair, then each
+# slot's winner and its fallback.
+_TEST_ROLES = (
+    "aa_pass_a",
+    "aa_pass_b",
+    "winner_small",
+    "fallback_small",
+    "winner_mid",
+    "fallback_mid",
+    "winner_frontier",
+    "fallback_frontier",
+)
+# The rows sent whatever happens, in registry order (scripts/test_passes.py
+# PLANNED_ROLES); every other row is conditional on the run it names.
+_PLANNED_ROLES = (
+    "aa_pass_a",
+    "aa_pass_b",
+    "winner_small",
+    "winner_mid",
+    "winner_frontier",
+)
+_REGISTRY_STATUSES = ("registered", "unused", "published", "not_run")
+# What sends a conditional row: a gate stop sends a winner's fallback, an
+# outage the run's -r2 re-run.
+_TRIGGERS = ("gate_stop", "outage")
 _EXECUTED = ("strong_exact", "shortcut", "silent_wrong")
 # Outcomes of an answer that parsed with status ready.
 _READY_ANSWERS = ("false_ready", "invalid", *_EXECUTED)
@@ -253,6 +290,10 @@ def _text(value: object, where: str) -> str:
     if not isinstance(value, str):
         raise ExportError("schema_invalid", f"{where} is not a string")
     return value
+
+
+def _optional_text(value: object, where: str) -> str | None:
+    return None if value is None else _text(value, where)
 
 
 def _int(value: object, where: str) -> int:
@@ -962,6 +1003,7 @@ class Selection:
     ranking: str
     rows: list[Shown]
     tests: list[Shown]
+    # Each not_run registry row as (role, row index), in role order.
     not_run: list[tuple[str, int]]
     pool: list[Shown]
     test_phase: bool
@@ -980,14 +1022,34 @@ class Selection:
 
 
 @dataclass(frozen=True)
+class RegisteredRun:
+    """One row of test-runs.json: its position and the fields read."""
+
+    index: int
+    role: str
+    run_id: str
+    status: str
+    trigger: str | None
+    conditional_on: str | None
+    reason: str | None
+
+    @property
+    def slot(self) -> str:
+        """The pool slot the row fills; a winner and its fallback share one.
+
+        The A/A pair's roles are slots of their own.
+        """
+        return self.role.removeprefix("winner_").removeprefix("fallback_")
+
+
+@dataclass(frozen=True)
 class Registration:
-    """What test-runs.json registers: runs by role, not-run ids, the ruling.
+    """What test-runs.json registers: its rows, the ruling and its winners.
 
     ``winners`` maps each slot to its winner's dev pass in the ruling.
     """
 
-    runs: list[tuple[str, str]]
-    not_run: list[str]
+    rows: list[RegisteredRun]
     ruling: str
     winners: dict[str, str]
 
@@ -1100,49 +1162,122 @@ def read_ruling(repo: Repo, path: str, selected: set[str]) -> dict[str, str]:
     return winners
 
 
-def read_registration(repo: Repo, selected: set[str]) -> Registration:
-    """Reads test-runs.json and checks it against the ranking and the note.
+def _registered_runs(document: Mapping[str, object]) -> list[RegisteredRun]:
+    """Reads the registry's rows one by one, refusing a row off the contract.
 
-    Args:
-        repo: The repository.
-        selected: The dev run ids the ranking shows.
-
-    Returns:
-        The registered runs by role, the not-run ids, the ruling's path and
-        the slot winners' dev passes it names.
-
-    Raises:
-        ExportError: For a ruling ``read_ruling`` cannot read.
-        ContractError: For an unknown or repeated role, a missing A/A pass,
-            a not-run id that is not registered, a Runs table in
-            test-runs.md that does not list the registry's rows, numbered
-            from 1, in the registry's order, or a ruling winner that is no
-            dev run or that the ranking does not show.
+    Each row is refused, in this order, for a role outside the eight
+    (``role_invalid``), a run id that is malformed (``run_id_invalid``), no
+    test run (``split_mismatch``) or a repeat (``run_repeated``), a status
+    outside the four (``status_invalid``), or a not_run status with no
+    reason (``not_run_invalid``). A role may repeat: an outage re-run keeps
+    its run's role.
     """
-    document = _obj(repo.json(TEST_RUNS), TEST_RUNS)
-    ruling = check_path(_text(document.get("ruling"), f"{TEST_RUNS} ruling"))
-    runs: list[tuple[str, str]] = []
-    for item in _arr(document.get("runs"), f"{TEST_RUNS} runs"):
-        entry = _obj(item, f"{TEST_RUNS} run")
-        role = _text(entry.get("role"), f"{TEST_RUNS} role")
-        run_id = check_run_id(_text(entry.get("run_id"), f"{role} run_id"))
-        if role not in _TEST_ROLES or role in dict(runs):
-            raise ContractError("role_invalid", f"{TEST_RUNS} {role!r}")
+    rows: list[RegisteredRun] = []
+    seen: set[str] = set()
+    runs = _arr(document.get("runs"), f"{TEST_RUNS} runs")
+    for index, item in enumerate(runs):
+        where = f"{TEST_RUNS} row {index + 1}"
+        entry = _obj(item, where)
+        role = _text(entry.get("role"), f"{where} role")
+        if role not in _TEST_ROLES:
+            raise ContractError("role_invalid", f"{where} role {role!r}")
+        run_id = check_run_id(_text(entry.get("run_id"), f"{where} run_id"))
         if not run_id.startswith("test-"):
-            raise ContractError("split_mismatch", f"{TEST_RUNS} {run_id}")
-        runs.append((role, run_id))
-    if not {"pass_a", "pass_b"} <= set(dict(runs)):
-        raise ContractError("role_missing", f"{TEST_RUNS} lacks the A/A pair")
-    listed = {run_id for _, run_id in runs}
-    not_run = [
-        _text(item, f"{TEST_RUNS} not_run")
-        for item in _arr(document.get("not_run", []), f"{TEST_RUNS} not_run")
-    ]
-    if not set(not_run) <= listed or len(set(not_run)) != len(not_run):
-        raise ContractError("not_run_invalid", f"{TEST_RUNS} not_run")
+            raise ContractError("split_mismatch", f"{where} {run_id}")
+        if run_id in seen:
+            raise ContractError("run_repeated", f"{where} repeats {run_id}")
+        seen.add(run_id)
+        status = _text(entry.get("status"), f"{where} status")
+        if status not in _REGISTRY_STATUSES:
+            raise ContractError("status_invalid", f"{where} status {status!r}")
+        reason = _optional_text(entry.get("reason"), f"{where} reason")
+        if status == "not_run" and not reason:
+            raise ContractError(
+                "not_run_invalid", f"{where} {run_id} is not_run with no reason"
+            )
+        rows.append(
+            RegisteredRun(
+                index=index,
+                role=role,
+                run_id=run_id,
+                status=status,
+                trigger=_optional_text(
+                    entry.get("trigger"), f"{where} trigger"
+                ),
+                conditional_on=_optional_text(
+                    entry.get("conditional_on"), f"{where} conditional_on"
+                ),
+                reason=reason,
+            )
+        )
+    return rows
+
+
+def _condition_problem(
+    entry: RegisteredRun, by_id: Mapping[str, RegisteredRun]
+) -> str | None:
+    """Says what breaks a row's condition, as the frozen-prompt guard reads it.
+
+    A planned row has neither a trigger nor a named run and is never unused.
+    A conditional row has both, its trigger is gate_stop or outage, it names
+    another row, and it leaves unused only once the run it names is not_run.
+    """
+    if entry.trigger is None and entry.conditional_on is None:
+        return (
+            "is a planned row marked unused"
+            if entry.status == "unused"
+            else None
+        )
+    if entry.trigger is None or entry.conditional_on is None:
+        return "has a trigger or a named run without the other"
+    if entry.trigger not in _TRIGGERS:
+        return f"has the trigger {entry.trigger!r}"
+    named = by_id.get(entry.conditional_on)
+    if named is None or named is entry:
+        return f"names {entry.conditional_on}, which is no other row"
+    if entry.status != "unused" and named.status != "not_run":
+        return f"is {entry.status} while {named.run_id} is {named.status}"
+    return None
+
+
+def _check_results(repo: Repo, rows: Sequence[RegisteredRun]) -> None:
+    """Refuses a run the results tree holds against its row's status.
+
+    A row that is not published has neither a run manifest nor a scored
+    summary in docs/results/<run id>/ (``not_run_scored``); pass A's prompt
+    directory and a seeded prepare.json are allowed. Two published rows
+    may not fill one pool slot (``role_invalid``), as the repair round
+    allows one repaired run per slot (docs/decisions/repair-round.md): the
+    guard lets a winner's re-run and its fallback both run once the winner
+    is not_run, and the Reel would have to pick one of them.
+    """
+    for entry in rows:
+        for name in ("run_manifest.json", "scored/summary.json"):
+            if entry.status != "published" and repo.exists(
+                f"{RESULTS}/{entry.run_id}/{name}"
+            ):
+                raise ContractError(
+                    "not_run_scored",
+                    f"{RESULTS}/{entry.run_id} holds {name}, but its row in "
+                    f"{TEST_RUNS} is {entry.status}",
+                )
+    filled: dict[str, str] = {}
+    for entry in rows:
+        if entry.status != "published":
+            continue
+        if entry.slot in filled:
+            raise ContractError(
+                "role_invalid",
+                f"{TEST_RUNS} publishes {filled[entry.slot]} and "
+                f"{entry.run_id} for the {entry.slot} slot",
+            )
+        filled[entry.slot] = entry.run_id
+
+
+def _check_note(repo: Repo, rows: Sequence[RegisteredRun]) -> None:
+    """Refuses a Runs table in test-runs.md that differs from the registry."""
     registered = [
-        (str(number), role, run_id)
-        for number, (role, run_id) in enumerate(runs, start=1)
+        (str(entry.index + 1), entry.role, entry.run_id) for entry in rows
     ]
     noted = _note_rows(repo.text(REGISTRY_NOTE, note=True))
     if noted != registered:
@@ -1157,9 +1292,68 @@ def read_registration(repo: Repo, selected: set[str]) -> Registration:
             f"{_row_text(noted, index)}; {TEST_RUNS} has "
             f"{_row_text(registered, index)}",
         )
-    return Registration(
-        runs, not_run, ruling, read_ruling(repo, ruling, selected)
-    )
+
+
+def read_registration(repo: Repo, selected: set[str]) -> Registration:
+    """Reads test-runs.json and checks it against the results and the note.
+
+    The checks mirror what scripts/test_passes.py and the frozen-prompt
+    guard require of the registry, as far as the site depends on them. The
+    trigger's role rules (a gate stop sends the named winner's fallback, an
+    outage re-run keeps the named run's role) are left to CI.
+
+    Args:
+        repo: The repository.
+        selected: The dev run ids the ranking shows.
+
+    Returns:
+        The registry's rows in order, the ruling's path and the slot
+        winners' dev passes the ruling names.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for a schema other than
+            test-runs/1.0 or a field of the wrong type, ``path_refused`` for
+            a ruling outside the allowed roots, or as ``read_ruling``
+            raises for a ruling it cannot read.
+        ContractError: Checked in this order: a ``note`` other than
+            test-runs.md (``note_mismatch``); a row that ``_registered_runs``
+            refuses; a broken condition (``condition_invalid``); planned
+            rows other than the A/A pair and the three winners in order
+            (``role_missing``); a row that ``_check_results`` refuses; a
+            Runs table in test-runs.md that does not list the registry's
+            rows, numbered from 1, in order (``run_unregistered``); or a
+            ruling winner that is no dev run or that the ranking does not
+            show.
+    """
+    document = _obj(repo.json(TEST_RUNS), TEST_RUNS)
+    if document.get("schema") != REGISTRY_SCHEMA:
+        raise ExportError(
+            "schema_invalid", f"{TEST_RUNS} is not {REGISTRY_SCHEMA}"
+        )
+    if document.get("note") != REGISTRY_NOTE:
+        raise ContractError(
+            "note_mismatch", f"{TEST_RUNS} note is not {REGISTRY_NOTE}"
+        )
+    rows = _registered_runs(document)
+    by_id = {entry.run_id: entry for entry in rows}
+    for entry in rows:
+        problem = _condition_problem(entry, by_id)
+        if problem is not None:
+            raise ContractError(
+                "condition_invalid",
+                f"{TEST_RUNS} row {entry.index + 1} {entry.run_id} {problem}",
+            )
+    planned = tuple(entry.role for entry in rows if entry.trigger is None)
+    if planned != _PLANNED_ROLES:
+        raise ContractError(
+            "role_missing",
+            f"{TEST_RUNS} plans {', '.join(planned) or 'no run'}, not "
+            f"{', '.join(_PLANNED_ROLES)}",
+        )
+    _check_results(repo, rows)
+    _check_note(repo, rows)
+    ruling = check_path(_text(document.get("ruling"), f"{TEST_RUNS} ruling"))
+    return Registration(rows, ruling, read_ruling(repo, ruling, selected))
 
 
 def _claim(seen: dict[str, str], run: Run) -> Run:
@@ -1192,30 +1386,52 @@ def _summary_exists(repo: Repo, run_id: str) -> bool:
     return repo.exists(f"{RESULTS}/{check_run_id(run_id)}/scored/summary.json")
 
 
+def _final(
+    repo: Repo, entry: RegisteredRun, statuses: Mapping[str, str]
+) -> bool:
+    """Says whether a row is final, as disproof-reel.md reads reel-v1.
+
+    A published row is final once its run has scored/summary.json; before
+    that it waits for scoring, which is no error. A not_run row is final.
+    An unused row is final when it gives a reason or when the run it names
+    is not not_run, so its condition never occurred. A registered row may
+    still send requests.
+    """
+    if entry.status == "published":
+        return _summary_exists(repo, entry.run_id)
+    if entry.status == "unused":
+        # The condition check leaves no unused row without a named run.
+        named = statuses[cast(str, entry.conditional_on)]
+        return bool(entry.reason) or named != "not_run"
+    return entry.status == "not_run"
+
+
 def _test_rows(
     repo: Repo, registration: Registration, seen: dict[str, str]
 ) -> tuple[list[Shown], list[tuple[str, int]]] | None:
-    """Returns the test rows once every registered run is settled."""
-    for run_id in registration.not_run:
-        if _summary_exists(repo, run_id):
-            raise ContractError(
-                "not_run_scored", f"{run_id} is scored but listed as not run"
-            )
-    if not all(
-        run_id in registration.not_run or _summary_exists(repo, run_id)
-        for _, run_id in registration.runs
-    ):
+    """Returns the test rows once every registry row is final, else None.
+
+    The rows are the published runs in role order, then registry order,
+    each with its role verbatim, and the not_run rows as (role, row index)
+    in the same order.
+    """
+    statuses = {entry.run_id: entry.status for entry in registration.rows}
+    if not all(_final(repo, entry, statuses) for entry in registration.rows):
         return None
-    tests: list[Shown] = []
-    not_run: list[tuple[str, int]] = []
-    for role in _TEST_ROLES:
-        for run_id in (
-            each for name, each in registration.runs if name == role
-        ):
-            if run_id in registration.not_run:
-                not_run.append((role, registration.not_run.index(run_id)))
-            else:
-                tests.append(Shown(_claim(seen, Run(repo, run_id)), role))
+    ordered = sorted(
+        registration.rows,
+        key=lambda entry: (_TEST_ROLES.index(entry.role), entry.index),
+    )
+    tests = [
+        Shown(_claim(seen, Run(repo, entry.run_id)), entry.role)
+        for entry in ordered
+        if entry.status == "published"
+    ]
+    not_run = [
+        (entry.role, entry.index)
+        for entry in ordered
+        if entry.status == "not_run"
+    ]
     return tests, not_run
 
 
@@ -1226,11 +1442,13 @@ def select(repo: Repo) -> Selection:
         repo: The repository.
 
     Returns:
-        The selection rows in ranking order, the test rows once the test
-        phase is on, and the Reel pool: pass A and the slot winners' test
-        runs in the test phase, else the dev anchor and the winners' dev
-        passes, from the ruling test-runs.json names when that file exists
-        and from the ranking's provisional winners when it does not.
+        The selection rows in ranking order, the published test runs in
+        role order and the not_run rows once every registry row is final,
+        and the Reel pool: in the test phase pass A and each slot's
+        published winner, else its published fallback; else the dev anchor
+        and the winners' dev passes, from the ruling test-runs.json names
+        when that file exists and from the ranking's provisional winners
+        when it does not.
 
     Raises:
         ContractError: When the ranking, registration or ruling breaks the
@@ -1275,7 +1493,13 @@ def _pool(
 ) -> list[Shown]:
     """Pass A and the winners' test runs, else the anchor and winners."""
     if test_phase:
-        return [item for item in tests if item.role != "pass_b"]
+        # disproof-reel.md:84-88: the published aa_pass_a run, then per slot
+        # the published winner_<slot> run, else the published
+        # fallback_<slot> run, an outage re-run included. The tests are in
+        # role order and fill each slot at most once, so all but pass B is
+        # exactly that. A role with no published row is missing, and the
+        # pool may be empty: no first row is assumed here.
+        return [item for item in tests if item.role != "aa_pass_b"]
     shown = {item.run.run_id: item for item in rows}
     pool = [rows[0]]
     for slot in _SLOTS:
@@ -1420,10 +1644,14 @@ def build_board(repo: Repo, selection: Selection) -> Document:
     if selection.test_phase:
         test = {
             "rows": [_test_row(repo, shown) for shown in selection.tests],
+            # Every not_run row with its reason; an unused row is left out,
+            # because its condition never occurred.
             "not_run": [
                 {
                     "role": role,
-                    "run_id": repo.t(ptr(TEST_RUNS, "not_run", index)),
+                    **repo.texts(
+                        TEST_RUNS, ("run_id", "reason"), "runs", index
+                    ),
                 }
                 for role, index in selection.not_run
             ],
