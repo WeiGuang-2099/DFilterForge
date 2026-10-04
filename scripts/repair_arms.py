@@ -38,7 +38,10 @@ docs/results/<pass> --plan docs/results/<pass>/repair/plan.json --arm
 temporary directory: no socket, no key, no gold, the plan read as data.
 Follow-up builds only under an arm's registered ids, so a moved run's set
 is built under its arm's registered first id, which its ``prepare.json``
-keeps, and put in place under its own run id.
+keeps, and put in place under its own run id. The follow-up command the
+batch prints for a moved run builds in
+``artifacts/repair-arms/build/<arm run id>``, since the registered id's
+directory under ``artifacts/repair`` keeps the run the move replaced.
 - dev: a missing prompt set is that build; an existing one must equal it,
   its creation time and source revision aside, or the batch refuses.
 - test: the committed seed ``docs/results/<arm run id>/prepare.json`` and
@@ -201,6 +204,12 @@ NOTE = "docs/decisions/repair-round.md"
 RESULTS = "docs/results"
 PREPARE_ROOT = "artifacts/repair"
 OUT_DIR = "artifacts/repair-arms"
+# Where a moved run's printed follow-up command builds its prompt set when
+# run by hand, one directory per moved run. Follow-up builds only under the
+# arm's registered ids and refuses an existing output, and in the checkout
+# that sent the replaced run, PREPARE_ROOT/<registered id> holds that run.
+# No step of the batch reads it.
+HAND_BUILD_ROOT = f"{OUT_DIR}/build"
 # Where a row that left a run directory but is not run keeps that run's
 # manifest and attempt logs, as the bake-off and the test passes keep
 # theirs.
@@ -974,15 +983,19 @@ def build_name(row: Row, run_id: str) -> str:
 def follow_up_line(row: Row, run_id: str, ctx: Context) -> str:
     """Spells the follow-up command that builds a run's prompt set.
 
-    A moved run's command builds under the arm's registered first id and
-    says where the set is installed.
+    A moved run's command builds under the arm's registered first id in
+    ``HAND_BUILD_ROOT/<run id>``, never in ``PREPARE_ROOT/<registered
+    id>``, where the run the move replaced is kept, and says where the
+    batch installs the set.
     """
     name = build_name(row, run_id)
+    output = (
+        f"{PREPARE_ROOT}/{name}"
+        if name == run_id
+        else f"{HAND_BUILD_ROOT}/{run_id}/{name}"
+    )
     argv = follow_up_argv(
-        f"{RESULTS}/{row.base_run}",
-        row.arm,
-        f"{PREPARE_ROOT}/{name}",
-        ctx.source_revision,
+        f"{RESULTS}/{row.base_run}", row.arm, output, ctx.source_revision
     )
     line = " ".join(["python", db.MODEL_RUN, *argv])
     if name != run_id:

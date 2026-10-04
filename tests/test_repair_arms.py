@@ -1964,8 +1964,9 @@ def test_a_moved_dev_pass_sends_new_runs_with_the_move_config(
     for run_id, name in zip(moved, registered):
         assert f"  artifacts/repair/{run_id}: would build" in text
         assert (
-            f" --output-dir artifacts/repair/{name} --source-revision"
-            f" test-rev, installed as artifacts/repair/{run_id}"
+            f" --output-dir artifacts/repair-arms/build/{run_id}/{name}"
+            f" --source-revision test-rev, installed as"
+            f" artifacts/repair/{run_id}"
         ) in text
     assert f"10 | {moved[0]} | {_FALLBACK_CONFIGS['frontier']} | 2 |" in text
     assert "installed as" not in "\n".join(
@@ -2041,6 +2042,50 @@ def test_a_moved_dev_pass_sends_new_runs_with_the_move_config(
         )
         assert row["counted_run_id"] == run_id
         assert row["maintainer"]["commit_to"] == f"docs/results/{run_id}/"
+
+
+def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
+    bench: Bench,
+) -> None:
+    """Each moved run's printed follow-up command can be run as printed.
+
+    In the owner's checkout the arm's registered first id, the only name
+    follow-up builds under, names the run directory of the DeepInfra run
+    the move replaced, and follow-up refuses an existing output. The
+    printed command builds elsewhere, a set equal to the one the batch
+    installs under the moved id.
+    """
+    bench.send_moves()
+    registered = [ra.registered_run_ids(_DEV[3], arm)[0] for arm in ra.ARMS]
+    moved = [_nb(run_id) for run_id in registered]
+    for name in registered:
+        (bench.root / ra.PREPARE_ROOT / name / "runs" / name).mkdir(
+            parents=True
+        )
+    assert bench.run([], ["--dry-run"]) == 0
+    lines = [
+        line.strip() for line in bench.printed if ", installed as " in line
+    ]
+    assert len(lines) == len(moved)
+    by_hand: list[Path] = []
+    for line, run_id, name in zip(lines, moved, registered):
+        command, installed = line.split(", installed as ")
+        assert installed == f"{ra.PREPARE_ROOT}/{run_id}"
+        python, script, *argv = command.split(" ")
+        assert (python, script) == ("python", "scripts/model_run.py")
+        # Run as printed from the root of the bench's tree.
+        rooted = list(argv)
+        for index, flag in enumerate(argv[:-1]):
+            if flag in ("--from-run", "--plan", "--output-dir"):
+                rooted[index + 1] = (bench.root / argv[index + 1]).as_posix()
+        report, code = bench.follow_up(rooted)
+        assert (report is not None, code) == (True, None), line
+        output = Path(_flag(rooted, "--output-dir"))
+        assert output.name == name
+        by_hand.append(output)
+    assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
+    for built, run_id in zip(by_hand, moved):
+        assert not ra.differences(built, bench.root / ra.PREPARE_ROOT / run_id)
 
 
 def test_a_moved_runs_outage_is_re_run_once_as_its_nb_r2(
