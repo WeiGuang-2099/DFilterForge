@@ -1921,9 +1921,19 @@ sent, no command set the key variable, nothing was pushed, and none of the
     reads. Served each file's previous text in turn, and the ruling's also
     with only its schema raised to 1.1, it failed in 7 of 7 cases, each on
     that file's assertion; with the committed texts it passed.
-  - The sections above dated 2026-10-04 keep what was true when they were
-    written: OD6 to OD8 waited for the owner's paid dev command. That wait
-    is over.
+  - On OD6 to OD8, 39166f2 updated two sections above dated 2026-10-04:
+    the "Next" bullet of "Dev repair rounds published" and the OD6 bullet
+    of "Dev repair round verified at 918bed9" now say the owner confirmed
+    them on 2026-10-05. The other sections dated 2026-10-04 keep what was
+    true when they were written: the OD6 bullet of "Frontier arms moved to
+    NextBit" and the adb2f8d bullet of "Frontier move review fixes" still
+    say the owner's paid dev command confirms OD6. Only OD6 was ever tied
+    to that command. OD7 and OD8 were defaults awaiting the owner's
+    confirmation, as every default is until the owner confirms it. The
+    owner confirmed all three on 2026-10-05, before any paid dev command.
+    (Corrected on 2026-10-05: this bullet first said that every section
+    dated 2026-10-04 kept its text and that OD6 to OD8 all waited for the
+    paid dev command; both were false.)
 - **The progress facts (dabaf6c).** The Current slice no longer credits the
   frontier 429s to DeepInfra: recounted from the six runs' committed
   attempts, all 198 have HTTP status 429 and provider null, so they show
