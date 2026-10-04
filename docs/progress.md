@@ -1910,7 +1910,11 @@ the key variable, and nothing was pushed.
       `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26` with
       `deepseek-v4-pro-0813_nextbit_enabled-false` at the 0.20 cap (OD6). An
       outage is re-run once as `-nb-r2` (OD7). The nine done arm runs and the
-      six DeepInfra runs are not sent again.
+      six DeepInfra runs are not sent again. The dry run prints a follow-up
+      line ending "installed as" for each `-nb` set only until the dev
+      command has built the sets, which it does before its keyless
+      preflight; a dry run after that prints "equal to what follow-up builds
+      now" for each, which is expected (the repair note's Commands).
    2. **Maintainer: the frontier dev round, then the dev pool.** Publish and
       score each `done` `-nb` run, then write the frontier pass's round
       summary with `dfilterforge repair` and check it with `repair --check`,

@@ -591,6 +591,25 @@ checks, builds each owed prompt set in a temporary directory only, and prints
 each row's state and the follow-up and call steps it would take; it sends and
 writes nothing.
 
+What the dev dry run prints for the frontier re-run on NextBit (OD6), in the
+blocks below, where the dry run is step 1 and the dev command with the key is
+step 2:
+- Rows 1 to 9 read `done (complete)`. Rows 10 to 12 are owed as the three
+  `-nb` runs, with `deepseek-v4-pro-0813_nextbit_enabled-false`, 11 items
+  each and the cap 0.20.
+- Before step 2 has built the `-nb` prompt sets, each reads `would build`
+  under "prompt sets", and a follow-up line follows for each, ending
+  `, installed as artifacts/repair/<-nb run id>`. That line builds under the
+  arm's registered first id in `artifacts/repair-arms/build/<-nb run id>/`,
+  because `artifacts/repair/<registered first id>` keeps the DeepInfra run
+  the move replaced. The batch builds and installs the sets itself, so the
+  line is there to read; a set built by hand there is never read.
+- Step 2 builds the `-nb` sets before its keyless preflight, so even a step 2
+  that ends at exit 3 for a missing key leaves them in place. From then on a
+  repeated step 1 reads `equal to what follow-up builds now` for each `-nb`
+  set, with no "installed as" line. That is the expected output, not a
+  failure. A row already `done` lists no prompt set.
+
 The step log `steps.jsonl`, the summaries `summary-<split>-<date>.json` and
 `.txt`, and the lock go to `artifacts/repair-arms/` (ignored). For each row,
 the summary gives:
