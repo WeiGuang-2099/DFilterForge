@@ -2107,6 +2107,84 @@ printed nothing).
     The only code files changed are `scripts/repair_arms.py` and
     `tests/test_repair_arms.py`.
 
+## Branch verified at fb4110a: 2026-10-05, branch dev-repair-round
+
+The branch was checked at fb4110a with no tracked edit. The times below are
+UTC, 2026-10-04 17:11:51Z to 17:16:36Z (03:41 to 03:46 on 2026-10-05,
+ACDT). OD5 stays the owner's ruling of 2026-10-04; OD6 to OD8 are
+maintainer defaults confirmed by the owner on 2026-10-05. No model request
+was sent, no command set the key variable, and nothing was pushed.
+
+- **The branch.** fb4110a is 27 commits ahead of bff373c, its merge base
+  with `origin/main`. `origin/main` is now df90b9b (PR #19, `web-data`), 53
+  commits past that base. `git merge-tree` merges fb4110a and df90b9b with
+  no conflict; `docs/progress.md` is the only file both sides changed.
+  - None of the 12 prepare-hashed files is in `git diff --name-only`
+    against `origin/main`, two-dot (336 files) or three-dot (291 files).
+  - The log of `origin/main..HEAD` has no Co-Authored-By line and no
+    non-ASCII character. The tree is clean, and the branch has no upstream.
+- **CI's python job checks,** from 17:11:51Z to 17:16:36Z, in
+  `dfilterforge-test:0.1.0`
+  (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`).
+  Its `/workspace/uv.lock` equals the worktree's (SHA-256 prefix
+  `2fac5eded2dc`). `src`, `tests`, `scripts`, `pyproject.toml`, `README.md`
+  and `pcap_lab` were mounted read-only, with no network, a 128 MB `/tmp`
+  and the compose test service's limits. The package resolved to
+  `/workspace/src`.
+  - pyink (96 files unchanged), isort, pylint on CI's list of `src` and
+    nine scripts (10.00/10, exit 0), pyright (0 errors) and `lint-imports
+    --no-cache` (5 contracts kept, 0 broken) pass.
+  - pytest with coverage off over `tests/test_repair_arms.py`,
+    `tests/test_repair.py`, `tests/test_hosted_test_runs.py`,
+    `tests/test_test_passes.py` and `tests/test_model_run.py`: 429 passed
+    and 17 skipped, each skip for the missing `docs/` tree.
+  - CI's three docs-mounted steps, as `ci.yml` writes them, with `docs/`
+    mounted read-only too: registration 299 passed, pair report 2, second
+    turn 2, none skipped.
+- **CI's repair loop,** from 17:12:30Z to 17:13:21Z. The lab image was
+  built from the worktree as `dfilterforge-lab:verify-fb4110a`
+  (`sha256:cffa2162f57b25caffd6294f835c9b4ad632edef469e81aa8e709e3fb192d43b`)
+  in the compose project `dfilterforge-verifyfb4110a`, with the full HEAD
+  revision as `--code-revision`.
+  - All 8 `repair --check` runs exited 0 with no difference. The three
+    published dev rounds checked at the summary stage; the frontier dev
+    plan and the four test plans at the plan stage.
+  - No repair pool is committed, and `git status` stayed clean.
+- **The owner's commands, keyless,** from the worktree root in Git Bash,
+  against fresh copies of the main checkout's `artifacts/repair` (15 run
+  directories) and `artifacts/repair-arms`.
+  - `--split dev --dry-run` exited 0. Rows 1 to 9 are `done (complete)`.
+    Rows 10 to 12 are owed as `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26`
+    with `deepseek-v4-pro-0813_nextbit_enabled-false`, 11 items each and
+    cap 0.20. Worst request: 0.012053, 0.012645 and 0.013197 USD; full-arm
+    worst: 0.1299, 0.1368 and 0.1413. Each of the three sets reads `would
+    build`, with a `uv run --frozen python scripts/model_run.py follow-up`
+    line and a `# installed as` comment.
+  - `--split dev` exited 3. It built the three `-nb` sets, and each keyless
+    preflight stopped at `api_key_missing`: 3 in the output, 3 new entries
+    in the step log. It printed "ABORTED: the keyless preflight passed and
+    nothing was sent". The total charged upper bound stayed 0.0459 USD
+    (0.045822 exact).
+  - The six printed lines, run as printed in Git Bash, each exited 0 and
+    built under `artifacts/repair-arms/build/<-nb run id>/<registered first
+    id>`. `differences` found nothing between each hand-built set, the
+    `-nb` set the keyless run installed and the replaced DeepInfra run's
+    set. The `prepared/C4.json` SHA-256 prefixes are `43b396f05b3e`,
+    `b4fb01c575b7` and `2fb03e788c2d`.
+  - A repeated dev dry run exited 0, with 3 "equal to what follow-up builds
+    now" lines and no "would build" or "installed as" line.
+  - `--split test --dry-run` and `--split test` each exited 2, refused:
+    "the test round needs its seed and admission commits first", naming the
+    12 test arm run directories. No prompt set was added.
+  - The copies (3.6 MB and 396 KB) are deleted; only `artifacts/.gitkeep`
+    remains. The main checkout is on `main` at bff373c with a clean tree.
+    Its `artifacts/repair` and `artifacts/repair-arms` listings (names,
+    sizes and modification times) did not change.
+- **Not run.** The full suite with coverage, the benchmark and adequacy
+  gates, prepare, recall, the `score --check` loop, and CI's web and
+  container jobs. No paid request was sent, so NextBit has served no repair
+  arm. Planned next is unchanged.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered and amended on
