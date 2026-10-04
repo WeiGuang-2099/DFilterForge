@@ -229,6 +229,34 @@ test("a registered row shows no test run and pools the ruling's dev winners", ()
   expect(resolver.reelPool()).toEqual([ANCHOR, SMALL_RULED, DEV_MID, DEV_FRONTIER]);
 });
 
+test('a published run without a scored summary keeps the test phase off', () => {
+  // Published but not scored yet, as test-runs.md allows: the phase waits,
+  // and nothing is wrong.
+  commit(registry());
+  rmSync(path.join(root, 'docs', 'results', MID, 'scored'), {recursive: true});
+  const resolver = new Resolver(root);
+
+  expect(resolver.shownRuns()).toEqual(DEV_RUNS);
+  expect(resolver.reelPool()).toEqual([ANCHOR, SMALL_RULED, DEV_MID, DEV_FRONTIER]);
+});
+
+test('a test pool with every pooled run stopped is empty and has no pick', () => {
+  const runs = registry();
+  for (const runId of [PASS_A, SMALL, MID, FRONTIER]) {
+    stop(runs, runId, 'outage');
+  }
+  commit(runs);
+  // Only pass B is published, and its answer is silent-wrong, as are the
+  // dev anchor's: neither may be pooled.
+  answers(PASS_B, [['C4', 'mei-1001', 'ready', 'silent_wrong', 1]]);
+  answers(ANCHOR, [['C4', 'mei-0001', 'ready', 'silent_wrong', 1]]);
+  const resolver = new Resolver(root);
+
+  expect(resolver.shownRuns()).toEqual([...DEV_RUNS, PASS_B]);
+  expect(resolver.reelPool()).toEqual([]);
+  expect(resolver.reelPick()).toBeNull();
+});
+
 test('a not_run winner waits for reasons on its fallback and its re-run', () => {
   const runs = registry();
   Object.assign(at(runs, FRONTIER), {status: 'not_run', reason: 'outage'});
