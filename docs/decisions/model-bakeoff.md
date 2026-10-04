@@ -258,3 +258,22 @@ candidate gets a test pass, and these counts are no effect (see Not an effect).
 this ruling; `tests/test_dev_bakeoff.py` checks it against the ranking, the
 runner summary, the verdicts and the copied evidence, and checks that each
 winner stays the same however a smoke not measured would have ended.
+
+## Repair arms' provider: 2026-10-04
+
+Added after the test baselines; rules 1 to 7 and the sections above are
+unchanged. The protocol's Decoding and provenance section lets a new run
+change its provider only as this note lists, so this section lists the one
+move the protocol's Repair section rules on.
+
+deepseek/deepseek-v4-pro-0813's repair arm runs, on dev and on test, send its
+listed fallback `deepseek-v4-pro-0813_nextbit_enabled-false` (nextbit, fp8,
+`enabled_false`, 1.056 / 3.168 USD per million), although no gate stop
+occurred. Its three dev arm runs and their `-r2` re-runs got no answer from
+DeepInfra: all 198 attempts were HTTP 429, and nothing was charged. Only the
+arm runs move. Its passes do not: the counted dev pass and the counted test
+pass stay the DeepInfra ones, with the answers DeepInfra served, and rule 7
+still governs every test pass. No other candidate's route changes.
+
+The ruling is OD5 in the [repair note](repair-round.md), which also gives the
+new dev run ids. `evidence/repair-arms/ruling-2026-10-04.json` holds it.

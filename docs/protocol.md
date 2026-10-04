@@ -212,6 +212,35 @@ outcome changed; the triggered set stays the plan's. The [repair
 note](decisions/repair-round.md) holds the run ids, commands, schemas and the
 measured before and after.
 
+Amended 2026-10-04, as the correction this section requires for a defect the
+dev round shows, before any test repair prompt is prepared (owner ruling OD5
+in the [repair note](decisions/repair-round.md)). The dev round showed that
+deepseek/deepseek-v4-pro-0813's arm runs get no answer from DeepInfra. All
+198 attempts of its three dev arm runs and their `-r2` re-runs were HTTP 429
+from the provider's shared pool (`engine_overloaded`,
+`upstream_provider_shared_pool`), nothing was charged, and the test baseline
+had already met 754 HTTP 429 there. That model's arm runs, on dev and on
+test, therefore send the bake-off note's listed frontier fallback config,
+`deepseek-v4-pro-0813_nextbit_enabled-false` (NextBit, fp8). It differs from
+the pass's DeepInfra config only in provider order and prices. For those arm
+runs alone this overrides:
+
+- in this section, "with its pass's model, provider, settings", and "an
+  outage is re-run once" and "never moved to another provider" (the dev
+  frontier arms are sent again as new runs);
+- under Decoding and provenance, that a new run changes the provider only as
+  the bake-off note lists (that note now lists this move);
+- under Models, that a test run's provider is written before the first test
+  request (the test frontier arms' provider is written now, after it and
+  before any test repair request).
+
+The counted first turns stay the answers DeepInfra served. Every other
+setting, call option and cap, and every other model's arm runs, are
+unchanged. On NextBit every gate, outage, refusal and budget rule of this
+section applies. The six DeepInfra runs are reported not run and kept as
+evidence. The repair note gives the new run ids and the maintainer defaults
+behind them (OD6 to OD8).
+
 ## Decoding and provenance
 
 Temperature 0, one greedy pass, fixed max output tokens, thinking disabled where
@@ -239,6 +268,8 @@ After the freeze, a test gold or scorer correction also re-scores in place, as
 CI requires, and keeps each run's original outcomes and summary beside it in
 `scored-original/`. A waiver changes no outcome, so it triggers no re-score.
 
+Amended 2026-10-04: the frontier repair arm runs' provider change is listed in the bake-off note and ruled under Repair.
+
 ## Models
 
 Hosted open-weight models via OpenRouter: an 8B-class (7B to 12B dense), an
@@ -254,6 +285,8 @@ registry](decisions/test-runs.md), also part of this protocol, before the
 first test request; the registry holds the A/A pair's and the slot winners'
 runs. Local: Qwen3-1.7B base, QLoRA-SFT, SFT plus verifier-labelled DPO and a
 continued-SFT control matched on optimizer steps and tokens, three seeds each.
+
+Amended 2026-10-04: the test frontier arm runs' provider, NextBit, was written after the first test request and before any test repair request; see Repair.
 
 ## Training rules
 

@@ -2125,3 +2125,178 @@ def test_the_note_gives_the_owner_command_for_each_split_in_both_shells() -> (
             "git switch main",
             "git pull --ff-only",
         ]
+
+
+# The owner's ruling of 2026-10-04 (OD5) that moves the frontier slot's
+# arm runs from DeepInfra to NextBit, and the run ids the move takes.
+_MOVE_RULING = "docs/decisions/evidence/repair-arms/ruling-2026-10-04.json"
+_CONFIG_DIR = "docs/decisions/evidence/bakeoff/configs"
+# Every tag a run id already carries: arms, re-run, fallback and pass B.
+_TAKEN_TAGS = frozenset({"res", "bare", "cx", "fb", "r2", "passb"})
+_SMOKE_TAG = re.compile(r"rs[0-9]*")
+_NOTE_MOVE_ROW = re.compile(
+    r"^\| (resample|bare|counterexample) \| `(dev-[^`]+)` \| `([^`]+)` \|$",
+    re.MULTILINE,
+)
+
+
+def _read(path: str) -> str:
+    return (_ROOT / path).read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
+def test_the_frontier_move_ruling_matches_its_evidence() -> None:
+    """The move to NextBit holds to its config, its evidence and its ids.
+
+    Its figures are recounted from the committed evidence of the six
+    DeepInfra runs it replaces, so a ruling that misstates them fails.
+    Each moved id is the registered one with the move's tag after the arm
+    tag. A replaced run never reaches docs/results, which guards the
+    resample arm that no second-turn check covers.
+    """
+    ruling = json.loads(_read(_MOVE_RULING))
+    old_bytes = (_ROOT / ruling["from_config"]).read_bytes()
+    new_bytes = (_ROOT / ruling["to_config"]).read_bytes()
+    old, new = json.loads(old_bytes), json.loads(new_bytes)
+    frontier = _DEV[3]
+    assert ruling["schema"] == "repair-arms-ruling/1.0"
+    assert ruling["note"] == ra.NOTE
+    assert ruling["registered_in"] == "docs/protocol.md"
+    assert ruling["from_config"] == (
+        f"{_CONFIG_DIR}/{_DEV_CONFIGS[frontier]}.json"
+    )
+    assert ruling["to_config"] == (
+        f"{_CONFIG_DIR}/{_FALLBACK_CONFIGS['frontier']}.json"
+    )
+    assert ruling["to_config_sha256"] == _sha256(new_bytes)
+    assert ruling["model_id"] == new["settings"]["model_id"]
+    assert old["settings"]["openrouter"]["provider_order"] == ["deepinfra"]
+    assert new["settings"]["openrouter"]["provider_order"] == ["nextbit"]
+    assert old["prices"] != new["prices"]
+    for config in (old, new):
+        del config["settings"]["openrouter"]["provider_order"]
+        del config["prices"]
+    assert old == new
+    caps = ra.load_caps(_read(ra.NOTE))
+    assert ruling["caps_usd"] == {
+        "dev": caps["frontier"].dev,
+        "test": caps["frontier fallback"].test,
+    }
+    assert ruling["caps_usd"] == {"dev": _DEV_CAPS[3], "test": _TEST_CAPS[3]}
+
+    decided = {item["id"]: item["by"] for item in ruling["decisions"]}
+    assert list(decided) == ["OD5", "OD6", "OD7", "OD8"]
+    assert decided["OD5"] == "owner"
+    assert {decided[od] for od in ("OD6", "OD7", "OD8")} <= {
+        "owner",
+        "default_taken",
+    }
+    assert all(item["text"] for item in ruling["decisions"])
+    dev_move, test_move = ruling["moves"]
+    for move in ruling["moves"]:
+        assert move["decided_by"] and set(move["decided_by"]) <= set(decided)
+
+    # The evidence, recounted from the committed DeepInfra arm runs.
+    registered = [
+        run for first in _arms(frontier) for run in (first, _r2(first))
+    ]
+    kept = [
+        run for run in registered if (_ROOT / ra.EVIDENCE_DIR / run).is_dir()
+    ]
+    attempts: list[Any] = []
+    bound = 0.0
+    revisions: set[str] = set()
+    for run_id in kept:
+        run = _ROOT / ra.EVIDENCE_DIR / run_id
+        manifest = json.loads(
+            (run / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["run_id"] == run_id
+        assert manifest["charged_usd_upper_bound"] == 0.0
+        assert manifest["settings"]["openrouter"]["provider_order"] == [
+            "deepinfra"
+        ]
+        bound += manifest["charged_usd_upper_bound"]
+        revisions |= {
+            item["source_revision"] for item in manifest["invocations"]
+        }
+        for condition in manifest["conditions"]:
+            lines = (run / condition["attempts_path"]).read_text(
+                encoding="utf-8"
+            )
+            attempts += [json.loads(line) for line in lines.splitlines()]
+    completions = [attempt["completion"] for attempt in attempts]
+    sent = sorted(attempt["sent_at"] for attempt in attempts)
+    (revision,) = revisions
+    assert (len(kept), len(attempts)) == (6, 198)
+    assert {completion["http_status"] for completion in completions} == {429}
+    assert {completion["status"] for completion in completions} == {"failed"}
+    assert sum(attempt["charged_micro_usd"] for attempt in attempts) == 0
+    evidence = ruling["evidence"]
+    assert evidence == {
+        "runs": kept,
+        "attempts": len(attempts),
+        "http_429": sum(c["http_status"] == 429 for c in completions),
+        "answers": sum(c["status"] == "completed" for c in completions),
+        "charged_usd_upper_bound": bound,
+        "first_attempt_at": sent[0],
+        "last_attempt_at": sent[-1],
+        "source_revision": revision,
+        "diagnostics": (
+            f"{ra.EVIDENCE_DIR}/frontier-provider-diagnostics-2026-10-04.md"
+        ),
+        "runner_summary": f"{ra.EVIDENCE_DIR}/summary-dev-2026-10-04.json",
+        "test_baseline_http_429": 754,
+    }
+    assert (_ROOT / evidence["diagnostics"]).is_file()
+    assert (_ROOT / evidence["runner_summary"]).is_file()
+    assert kept == dev_move["replaced_runs"]
+    assert test_move["replaced_runs"] == []
+
+    # The moved ids: the registered ones, the tag after the arm tag.
+    assert (dev_move["base_run"], dev_move["tag"]) == (frontier, "nb")
+    assert (test_move["base_run"], test_move["tag"]) == (_TEST_PASSES[3], None)
+    tag = dev_move["tag"]
+    assert tag not in _TAKEN_TAGS and _SMOKE_TAG.fullmatch(tag) is None
+    result_dir: re.Pattern[str] = getattr(model_run, "_RESULT_DIR")
+    moved: list[str] = []
+    for move in ruling["moves"]:
+        assert sorted(move["arm_runs"]) == sorted(ra.ARMS)
+        for arm, first in zip(ra.ARMS, _arms(move["base_run"])):
+            arm_tag = f"-{ra.ARM_TAGS[arm]}-"
+            runs = [first, _r2(first)]
+            assert all(run.count(arm_tag) == 1 for run in runs)
+            if move["tag"] is not None:
+                runs = [
+                    run.replace(arm_tag, f"{arm_tag}{move['tag']}-")
+                    for run in runs
+                ]
+            assert move["arm_runs"][arm] == runs
+            moved += runs
+    assert len(moved) == len(set(moved)) == 12
+    assert all(result_dir.fullmatch(run) is not None for run in moved)
+    registry = json.loads(_read(tp.REGISTRY))
+    named = [row["run_id"] for row in registry["runs"]] + list(ra.DEV_PASSES)
+    assert not [name for name in named if f"-{tag}-" in name]
+    assert not [
+        run
+        for run in dev_move["replaced_runs"]
+        if (_ROOT / ra.RESULTS / run).exists()
+    ]
+    assert _NOTE_MOVE_ROW.findall(_read(ra.NOTE)) == [
+        (arm, *dev_move["arm_runs"][arm]) for arm in ra.ARMS
+    ]
+
+    # The amended texts that register the move.
+    protocol = " ".join(_read("docs/protocol.md").split())
+    assert "Amended 2026-10-04" in protocol
+    assert (
+        "before any test repair prompt is prepared (owner ruling OD5"
+        in protocol
+    )
+    bakeoff = _read("docs/decisions/model-bakeoff.md")
+    _, section = bakeoff.split("## Repair arms' provider: 2026-10-04", 1)
+    assert f"`{_FALLBACK_CONFIGS['frontier']}`" in section
+    assert registry["repair_arms"]["amended"][0]["ruling"] == _MOVE_RULING
+    locked = " ".join(_read(f"{ra.RESULTS}/locked-test-v1.md").split())
+    assert "754 HTTP 429" in locked
