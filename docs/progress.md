@@ -1688,7 +1688,10 @@ no command set the key variable, and nothing was pushed.
     shared-pool body from the owner's later request.
   - Not changed: the progress lines. They already said only "HTTP 429 from
     the DeepInfra-pinned route". 725bb5e's commit message keeps the old
-    claim, since history is not rewritten.
+    claim, since history is not rewritten. (Corrected on 2026-10-05: this
+    was false when written. The Current slice said "The frontier arms got
+    only HTTP 429 from DeepInfra", which credits the 429s to the provider;
+    dabaf6c changed it to the DeepInfra-pinned route.)
 - **The test baseline's 429 count (3b83b27).** The amendment set "754 HTTP
   429" beside the dev round's 198, which counts every attempt.
   - Recounted from
@@ -1924,8 +1927,8 @@ sent, no command set the key variable, nothing was pushed, and none of the
   - On OD6 to OD8, 39166f2 updated two sections above dated 2026-10-04:
     the "Next" bullet of "Dev repair rounds published" and the OD6 bullet
     of "Dev repair round verified at 918bed9" now say the owner confirmed
-    them on 2026-10-05. The other sections dated 2026-10-04 keep what was
-    true when they were written: the OD6 bullet of "Frontier arms moved to
+    them on 2026-10-05. The other sections dated 2026-10-04 keep their OD6
+    to OD8 text as written: the OD6 bullet of "Frontier arms moved to
     NextBit" and the adb2f8d bullet of "Frontier move review fixes" still
     say the owner's paid dev command confirms OD6. Only OD6 was ever tied
     to that command. OD7 and OD8 were defaults awaiting the owner's
@@ -1937,7 +1940,9 @@ sent, no command set the key variable, nothing was pushed, and none of the
 - **The progress facts (dabaf6c).** The Current slice no longer credits the
   frontier 429s to DeepInfra: recounted from the six runs' committed
   attempts, all 198 have HTTP status 429 and provider null, so they show
-  429 on the DeepInfra-pinned route only. The Blocked line that said
+  429 on the DeepInfra-pinned route only. This disproves the 2026-10-04
+  bullet "Not changed: the progress lines" under "What the 429 records
+  show", which now carries a dated correction. The Blocked line that said
   `repair-arms` was not pushed now says PR #18 merged it as bff373c, and that
   no CI result for that PR is recorded here.
 - **The moved runs' follow-up line (3c3ad82).** For each moved dev run the
