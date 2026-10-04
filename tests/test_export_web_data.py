@@ -1446,6 +1446,31 @@ def test_a_published_outage_rerun_keeps_its_role(fixture: Fixture) -> None:
     check_sources(root, {"board.json": documents["board.json"]})
 
 
+def test_not_run_rows_are_listed_in_role_order(fixture: Fixture) -> None:
+    fallback = _tag(_TEST_SMALL, "fb")
+    registration = _registration()
+    _stop(registration, _TEST_SMALL, "gate stop")
+    _stop(registration, fallback, "outage")
+    _stop(registration, _TEST_MID, "outage")
+    _register(fixture, registration, _PASS_A, _PASS_B, _TEST_FRONT)
+    root = fixture.build()
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    # In registry order the small fallback, row 6, would follow winner_mid,
+    # row 4; role order keeps it beside its winner.
+    assert documents["site.json"]["phase"]["test"] is True
+    assert [
+        (item["role"], item["run_id"]["t"])
+        for item in documents["board.json"]["test"]["not_run"]
+    ] == [
+        ("winner_small", _TEST_SMALL),
+        ("fallback_small", fallback),
+        ("winner_mid", _TEST_MID),
+    ]
+    check_sources(root, {"board.json": documents["board.json"]})
+
+
 def test_a_registry_of_another_schema_exits_two(
     fixture: Fixture, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
