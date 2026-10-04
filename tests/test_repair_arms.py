@@ -138,6 +138,11 @@ def _nb(arm_run: str) -> str:
     return arm_run.removesuffix(f"-{_DATE}") + f"-nb-{_DATE}"
 
 
+def _refused_by_stub(code: str) -> str:
+    """The message the scripted follow-up step refuses with, by code."""
+    return f"The scripted follow-up step refused with {code}"
+
+
 def _origin(run_id: str) -> tuple[str, str]:
     """Returns the pass and arm an arm run id, or its re-run id, names."""
     for base in _DEV + _TEST_PASSES:
@@ -549,7 +554,7 @@ class Bench:
 
     def follow_up(
         self, argv: Sequence[str]
-    ) -> tuple[Fields | None, str | None]:
+    ) -> tuple[Fields | None, str | None, str]:
         """Plays the follow-up step: writes the arm's synthetic prompt set."""
         args = dict(zip(argv[1::2], argv[2::2]))
         assert argv[0] == "follow-up" and len(argv) == 11
@@ -559,15 +564,15 @@ class Bench:
         assert args["--plan"] == f"{args['--from-run']}/{ra.PLAN_PATH}"
         code = self.refusals.get((base, arm)) or self.refusals.get(base)
         if code is not None:
-            return None, code
+            return None, code, _refused_by_stub(code)
         output = Path(args["--output-dir"])
         # As the real step, it builds only under the arm's registered run
         # id or its one re-run id.
         registered = dict(zip(ra.ARMS, _arms(base)))[arm]
         if output.name not in (registered, _r2(registered)):
-            return None, "arm_id_mismatch"
+            return None, "arm_id_mismatch", _refused_by_stub("arm_id_mismatch")
         if output.exists():
-            return None, "output_exists"
+            return None, "output_exists", _refused_by_stub("output_exists")
         items = [f"mei-{index:04d}" for index in range(1, _ITEMS + 1)]
         _write_prompts(
             output,
@@ -577,12 +582,12 @@ class Bench:
             self.tick(),
             args["--source-revision"],
         )
-        return {"prepare_id": output.name, "items": items, "arm": arm}, None
+        return {"prepare_id": output.name, "items": items, "arm": arm}, None, ""
 
     def seed(self, run_id: str, admit: bool = True) -> str:
         """Commits a test arm's seed as the seeding step writes it."""
         base, arm = _origin(run_id)
-        report, _ = self.follow_up(
+        report, *_ = self.follow_up(
             ra.follow_up_argv(
                 (self.root / ra.RESULTS / base).as_posix(),
                 arm,
@@ -1592,9 +1597,10 @@ def test_any_other_follow_up_refusal_is_refused_before_a_request(
     assert bench.run([]) == 2
     assert not bench.calls
     refusal = next(line for line in bench.printed if line.startswith("REFUSED"))
-    assert refusal.startswith(
-        f"REFUSED: {DEV_ARMS[8]}: follow-up refused (plan_mismatch): run"
-        " python scripts/model_run.py follow-up --from-run"
+    assert refusal == (
+        f"REFUSED: {DEV_ARMS[8]}: follow-up refused (plan_mismatch) to build"
+        f" its prompt set from docs/results/{_DEV[2]} and its plan:"
+        f" {_refused_by_stub('plan_mismatch')}"
     )
 
 
@@ -2078,7 +2084,7 @@ def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
         for index, flag in enumerate(argv[:-1]):
             if flag in ("--from-run", "--plan", "--output-dir"):
                 rooted[index + 1] = (bench.root / argv[index + 1]).as_posix()
-        report, code = bench.follow_up(rooted)
+        report, code, _ = bench.follow_up(rooted)
         assert (report is not None, code) == (True, None), line
         output = Path(_flag(rooted, "--output-dir"))
         assert output.name == name
@@ -2086,6 +2092,63 @@ def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
     assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
     for built, run_id in zip(by_hand, moved):
         assert not ra.differences(built, bench.root / ra.PREPARE_ROOT / run_id)
+
+
+@pytest.mark.parametrize("moved", [True, False])
+def test_a_follow_up_refusal_gives_its_reason_with_built_sets_in_place(
+    bench: Bench, capsys: pytest.CaptureFixture[str], moved: bool
+) -> None:
+    """A refusal carries follow-up's own message, so nothing is re-run.
+
+    A command printed to read the reason would build where a set may
+    already be: a moved run's printed line where the owner ran it by
+    hand, an unmoved run's where the batch installed its set. Follow-up
+    refuses an existing output before anything else, so that command
+    could only say ``output_exists``.
+    """
+    bench.send_moves()
+    if moved:
+        base, arm = _DEV[3], "resample"
+        name = ra.registered_run_ids(base, arm)[0]
+        run_id = _nb(name)
+        # The replaced DeepInfra run is kept, and the owner built the
+        # moved set by hand where the dry run's line builds it.
+        (bench.root / ra.PREPARE_ROOT / name / "runs" / name).mkdir(
+            parents=True
+        )
+        kept = bench.root / ra.HAND_BUILD_ROOT / run_id / name
+        report, *_ = bench.follow_up(
+            ra.follow_up_argv(
+                (bench.root / ra.RESULTS / base).as_posix(),
+                arm,
+                kept.as_posix(),
+                "test-rev",
+            )
+        )
+        assert report is not None
+    else:
+        base, arm, run_id = _DEV[2], "counterexample", DEV_ARMS[8]
+        kept = bench.root / ra.PREPARE_ROOT / run_id
+    # Step 2 without the key installs every owed set, then stops.
+    assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
+    assert (kept / "prepare.json").is_file()
+    assert (bench.root / ra.PREPARE_ROOT / run_id / "prepare.json").is_file()
+
+    bench.refusals[(base, arm)] = "plan_invalid"
+    capsys.readouterr()
+    assert bench.run([], ["--dry-run"]) == ra.EXIT_REFUSED
+    dry = capsys.readouterr().err.strip()
+    assert bench.run([]) == ra.EXIT_REFUSED
+    assert not bench.calls
+    owner = next(line for line in bench.printed if line.startswith("REFUSED"))
+    expected = (
+        f"{run_id}: follow-up refused (plan_invalid) to build its prompt set"
+        f" from docs/results/{base} and its plan:"
+        f" {_refused_by_stub('plan_invalid')}"
+    )
+    assert dry == f"refused: {expected}"
+    assert owner == f"REFUSED: {expected}"
+    assert (kept / "prepare.json").is_file()
 
 
 def test_a_moved_runs_outage_is_re_run_once_as_its_nb_r2(
@@ -2301,11 +2364,11 @@ def test_the_real_invoker_withholds_the_key_from_a_keyless_call(
     assert "not-a-credential" not in "\n".join(printed)
 
 
-def test_the_real_follow_up_reports_a_refusal_code(
+def test_the_real_follow_up_reports_a_refusal_code_and_message(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     missing = tmp_path / "dev-none-2026-09-26"
-    report, code = ra.run_follow_up(
+    report, code, message = ra.run_follow_up(
         ra.follow_up_argv(
             missing.as_posix(),
             "bare",
@@ -2313,7 +2376,11 @@ def test_the_real_follow_up_reports_a_refusal_code(
             "test",
         )
     )
-    assert (report, code) == (None, "plan_invalid")
+    assert (report, code, message) == (
+        None,
+        "plan_invalid",
+        "A required file is missing",
+    )
     assert capsys.readouterr() == ("", "")
 
 

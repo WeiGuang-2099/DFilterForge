@@ -315,7 +315,10 @@ FINAL_STATES = frozenset({"done", "not_run", "unused"})
 GATE_KINDS = frozenset({"gate_stop", "reasoned"})
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
 
-FollowUp = Callable[[Sequence[str]], tuple[dict[str, Any] | None, str | None]]
+# The follow-up step's report, or None with its refusal code and message.
+FollowUp = Callable[
+    [Sequence[str]], tuple[dict[str, Any] | None, str | None, str]
+]
 Invoker = Callable[[Sequence[str], bool], Any]
 
 
@@ -928,25 +931,49 @@ def calls_due(ctx: Context) -> list[tuple[Row, str, Any]]:
 
 def run_follow_up(
     argv: Sequence[str],
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[dict[str, Any] | None, str | None, str]:
     """Runs ``scripts/model_run.py follow-up`` in process, offline.
 
     Returns:
-        The report it printed, or None and the code it refused with.
+        The report it printed, None and an empty message; or None, the
+        code it refused with and its message.
     """
     stdout, stderr = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
         code = int(model_run.main(list(argv)))
     if code != 0:
-        return None, db.parse_output("", stderr.getvalue())[1] or "refused"
+        refused, message = _refusal(stderr.getvalue())
+        return None, refused, message
     lines = stdout.getvalue().strip().splitlines()
     try:
         report: object = json.loads(lines[-1]) if lines else None
     except ValueError:
         report = None
     if not isinstance(report, dict):
-        return None, "report_unreadable"
-    return cast(dict[str, Any], report), None
+        return None, "report_unreadable", "its report is not a JSON object"
+    return cast(dict[str, Any], report), None, ""
+
+
+def _refusal(stderr: str) -> tuple[str, str]:
+    """Reads a step's last error envelope as its code and its message.
+
+    The message is kept on one line, so that a refusal that quotes it is
+    one line too.
+    """
+    for line in reversed(stderr.strip().splitlines()):
+        try:
+            value: object = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        error: object = cast(dict[str, Any], value).get("error")
+        if isinstance(error, dict):
+            fields = cast(dict[str, Any], error)
+            return str(fields.get("code")), " ".join(
+                str(fields.get("message", "")).split()
+            )
+    return "refused", ""
 
 
 def follow_up_argv(
@@ -1140,10 +1167,13 @@ def build_now(
         the protocol reports; that run's final state is then recorded.
 
     Raises:
-        PlanError: If follow-up refuses for any other reason.
+        PlanError: If follow-up refuses for any other reason. Its message
+            says why, since a command to read it with would build where a
+            set may already be, and follow-up refuses an existing output
+            before any other check.
     """
     built = scratch / build_name(row, run_id)
-    report, code = ctx.follow_up(
+    report, code, message = ctx.follow_up(
         follow_up_argv(
             (ctx.root / RESULTS / row.base_run).as_posix(),
             row.arm,
@@ -1155,9 +1185,10 @@ def build_now(
         return built
     blocked = _blocked(code, row, run_id)
     if blocked is None:
+        why = f": {message}" if message else ""
         raise PlanError(
-            f"{run_id}: follow-up refused ({code}): run"
-            f" {follow_up_line(row, run_id, ctx)} to read why"
+            f"{run_id}: follow-up refused ({code}) to build its prompt set"
+            f" from {RESULTS}/{row.base_run} and its plan{why}"
         )
     ctx.prompts.blocked[run_id] = blocked
     return None
