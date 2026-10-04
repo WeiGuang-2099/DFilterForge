@@ -39,6 +39,7 @@ const PLANNED: readonly (readonly [string, string])[] = [
 const BAKEOFF = 'docs/decisions/evidence/bakeoff';
 const RULING = `${BAKEOFF}/ruling-2026-10-01.json`;
 const TEST_RUNS = 'docs/decisions/evidence/test-runs.json';
+const NOTE = 'docs/decisions/test-runs.md';
 
 /** One registry row, with the fields the resolver reads. */
 interface Row {
@@ -51,9 +52,9 @@ interface Row {
 }
 
 interface Registry {
-  readonly schema: string;
-  readonly note: string;
-  readonly ruling: string;
+  schema: string;
+  note: string;
+  ruling: string;
   readonly runs: Row[];
 }
 
@@ -135,9 +136,38 @@ function put(file: string, value: unknown): void {
   write(file, `${JSON.stringify(value)}\n`);
 }
 
-/** Commits the registry and a scored summary for each published run. */
+/**
+ * Renders test-runs.md: prose, the Runs table of the given rows numbered
+ * from start, in the committed note's column order, then a table that is
+ * not the Runs table.
+ */
+function note(rows: readonly Row[], start = 1, prose = ''): string {
+  return [
+    '# Hosted test runs',
+    '',
+    prose,
+    '',
+    '| # | Role | Run id | Model id | Runs |',
+    '| --- | --- | --- | --- | --- |',
+    ...rows.map(
+      (entry, index) =>
+        `| ${index + start} | \`${entry.role}\` | \`${entry.run_id}\` | \`m/m\` | always |`,
+    ),
+    '',
+    '| Exit | Meaning |',
+    '| --- | --- |',
+    '| 0 | Every row has a final state: `done`. |',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Commits the registry, its note's Runs table and a scored summary for
+ * each published run.
+ */
 function commit(runs: Registry): void {
   put(TEST_RUNS, runs);
+  write(NOTE, note(runs.runs));
   for (const entry of runs.runs.filter((each) => each.status === 'published')) {
     put(`docs/results/${entry.run_id}/scored/summary.json`, {run: entry.run_id});
   }
@@ -346,16 +376,59 @@ interface Broken {
 
 const MID_FALLBACK = tag(MID, 'fb');
 
-// The cases of test_a_broken_registration_fails in
+// The cases of test_a_broken_registration_fails and
+// test_a_registry_of_another_schema_exits_two in
 // tests/test_export_web_data.py for each refusal the resolver makes beyond
 // the three tests above, so deleting any one of them fails a test.
 const BROKEN: readonly Broken[] = [
+  {
+    name: 'another schema',
+    edit: (runs) => {
+      runs.schema = 'test-runs/0.9';
+    },
+    message: `${TEST_RUNS} is not test-runs/1.0`,
+  },
+  {
+    name: 'another note',
+    edit: (runs) => {
+      runs.note = 'docs/decisions/model-bakeoff.md';
+    },
+    message: `${TEST_RUNS} note is not ${NOTE}`,
+  },
   {
     name: 'an unknown role',
     edit: (runs) => {
       at(runs, MID).role = 'winner_huge';
     },
     message: 'row 4 has the role "winner_huge"',
+  },
+  {
+    name: 'a malformed run id',
+    edit: (runs) => {
+      at(runs, PASS_A).run_id = `test-Bad_X-${DATE}`;
+    },
+    message: `row 1 run_id "test-Bad_X-${DATE}" is not a run id`,
+  },
+  {
+    name: 'a run id that leaves its directory',
+    edit: (runs) => {
+      at(runs, tag(MID, 'r2')).run_id = `test-x/../${MID}`;
+    },
+    message: `run_id "test-x/../${MID}" is not a run id`,
+  },
+  {
+    name: 'a dev run id',
+    edit: (runs) => {
+      at(runs, PASS_A).run_id = ANCHOR;
+    },
+    message: `row 1 ${ANCHOR} is no test run`,
+  },
+  {
+    name: 'a repeated run id',
+    edit: (runs) => {
+      at(runs, FRONTIER).run_id = MID;
+    },
+    message: `row 5 repeats ${MID}`,
   },
   {
     name: 'an unknown status',
@@ -466,6 +539,56 @@ for (const broken of BROKEN) {
     }
 
     expect(() => new Resolver(root).shownRuns()).toThrow(broken.message);
+  });
+}
+
+/** A Runs table that differs from the registry, and the first row that does. */
+interface Noted {
+  readonly name: string;
+  readonly note: (rows: readonly Row[]) => string;
+  readonly row: number;
+}
+
+/** The rows with the third and fourth exchanged. */
+function swapped(rows: readonly Row[]): Row[] {
+  return rows.map((entry, index) => {
+    if (index === 2 || index === 3) {
+      return rows[5 - index] ?? entry;
+    }
+    return entry;
+  });
+}
+
+// The cases of test_a_note_that_differs_from_the_registry_fails.
+const NOTED: readonly Noted[] = [
+  {name: 'without a row', note: (rows) => note([...rows.slice(0, 3), ...rows.slice(4)]), row: 4},
+  {name: 'with two rows swapped', note: (rows) => note(swapped(rows)), row: 3},
+  {
+    name: 'with another role',
+    note: (rows) =>
+      note(rows.map((entry, index) => (index === 3 ? {...entry, role: 'small'} : entry))),
+    row: 4,
+  },
+  {
+    name: "with pass A's run id only in prose",
+    note: (rows) => note(rows.slice(1), 1, `Pass A's run id is \`${PASS_A}\`.`),
+    row: 1,
+  },
+  {name: 'numbered from 0', note: (rows) => note(rows, 0), row: 1},
+  {
+    name: 'with an extra row',
+    note: (rows) => note([...rows, row('fallback_frontier', `test-extra-${DATE}`, 'unused')]),
+    row: 17,
+  },
+];
+
+for (const noted of NOTED) {
+  test(`a registry note ${noted.name} is refused`, () => {
+    const runs = registry();
+    commit(runs);
+    write(NOTE, noted.note(runs.runs));
+
+    expect(() => new Resolver(root).shownRuns()).toThrow(`${NOTE} Runs row ${noted.row} is`);
   });
 }
 

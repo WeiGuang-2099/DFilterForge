@@ -59,3 +59,16 @@ test('a path outside the allowed roots is refused before any read', () => {
     /not a clean path/,
   );
 });
+
+test('a refused path is an error to exists, not an absent file', () => {
+  // As the exporter's exists, so a check that asks whether a run holds a
+  // file cannot skip a path the rules refuse.
+  const resolver = new Resolver(root);
+
+  expect(resolver.exists('docs/results/dev-y-2026-09-26/ok.json')).toBe(true);
+  expect(resolver.exists('docs/results/dev-y-2026-09-26/absent.json')).toBe(false);
+  expect(() => resolver.exists('docs/results/x/../dev-y-2026-09-26/ok.json')).toThrow(
+    /not a clean path/,
+  );
+  expect(() => resolver.exists('private/secret.json')).toThrow(/outside the allowed roots/);
+});

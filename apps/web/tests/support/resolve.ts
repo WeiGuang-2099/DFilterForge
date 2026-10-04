@@ -35,6 +35,17 @@ const ROOTS = ['docs/results/', 'docs/decisions/evidence/', 'docs/ablations/evid
 const FREEZE = 'src/dfilterforge/held_out_freeze.json';
 const RANKINGS = 'docs/decisions/evidence/bakeoff';
 const TEST_RUNS = 'docs/decisions/evidence/test-runs.json';
+// The registry's schema, as scripts/test_passes.py and the exporter read it.
+const REGISTRY_SCHEMA = 'test-runs/1.0';
+// The note that registers the test runs (test-runs.md, Runs). It is read
+// only to check its Runs table against the registry; no source op may name
+// it, so it stays outside the allowed roots.
+const REGISTRY_NOTE = 'docs/decisions/test-runs.md';
+// A row of the note's Runs table: number, role, run id. No other table in
+// the note starts with a number and then two backticked cells.
+const NOTE_ROW = /^\| ([0-9]+) \| `([a-z_]+)` \| `([^`]+)` \|/;
+// scripts/model_run.py's result-name pattern, with ASCII digits only.
+const RUN_ID = /^(?:dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 const MAX_BYTES = 32 * 1024 * 1024;
 const INPUT_PREFIX = 'INPUT_JSON\n';
 const INDEX = /^(?:0|[1-9][0-9]*)$/;
@@ -260,10 +271,15 @@ export class Resolver {
     return path.join(this.root, ...checkPath(file).split('/'));
   }
 
-  /** Whether a regular file exists at an allowed path. */
+  /**
+   * Whether a regular file exists at an allowed path. A path the rules
+   * refuse throws, as the exporter's exists does, rather than reading as
+   * absent.
+   */
   exists(file: string): boolean {
+    const location = this.locate(file);
     try {
-      return lstatSync(this.locate(file)).isFile();
+      return lstatSync(location).isFile();
     } catch {
       return false;
     }
@@ -276,11 +292,24 @@ export class Resolver {
    * oversized file.
    */
   data(file: string): Buffer {
+    return this.read(file, this.locate(file));
+  }
+
+  /**
+   * Reads the registry note, the one file outside the allowed roots the
+   * resolver reads, under the same link and size rules. No source op can
+   * reach it: resolve() reads through data(), which refuses its path.
+   */
+  private registryNote(): string {
+    const bytes = this.read(REGISTRY_NOTE, path.join(this.root, ...REGISTRY_NOTE.split('/')));
+    return new TextDecoder('utf-8', {fatal: true, ignoreBOM: true}).decode(bytes);
+  }
+
+  private read(file: string, location: string): Buffer {
     const cached = this.bytes.get(file);
     if (cached !== undefined) {
       return cached;
     }
-    const location = this.locate(file);
     const status = lstatSync(location);
     if (!status.isFile()) {
       return refuse(`${file} is not a regular file`);
@@ -438,19 +467,29 @@ export class Resolver {
   }
 
   /**
-   * Reads the rows of test-runs.json (test-runs/1.0), or null when no
-   * registry is committed. Refuses, as the exporter does, a role outside the
-   * eight or a status outside the four, a not_run row with no reason, a
-   * broken condition, planned rows other than runs 1 to 5 of test-runs.md in
-   * order, a row that is not published whose run directory holds
-   * run_manifest.json or scored/summary.json, and two published rows that
-   * fill one pool slot.
+   * Reads the rows of test-runs.json, or null when no registry is
+   * committed. Refuses, as the exporter does, a schema other than
+   * test-runs/1.0 or a note other than test-runs.md; a role outside the
+   * eight; a run id that is malformed, no test run or repeated; a status
+   * outside the four; a not_run row with no reason; a broken condition;
+   * planned rows other than runs 1 to 5 of test-runs.md in order; a row
+   * that is not published whose run directory holds run_manifest.json or
+   * scored/summary.json; two published rows that fill one pool slot; and a
+   * Runs table in the note that does not list the registry's rows, numbered
+   * from 1, in order.
    */
   private testRuns(): readonly TestRun[] | null {
     if (!this.exists(TEST_RUNS)) {
       return null;
     }
     const registry = record(this.json(TEST_RUNS), TEST_RUNS);
+    if (registry['schema'] !== REGISTRY_SCHEMA) {
+      return refuse(`${TEST_RUNS} is not ${REGISTRY_SCHEMA}`);
+    }
+    if (registry['note'] !== REGISTRY_NOTE) {
+      return refuse(`${TEST_RUNS} note is not ${REGISTRY_NOTE}`);
+    }
+    const seen = new Set<string>();
     const rows = list(registry['runs'], `${TEST_RUNS} runs`).map((item, index): TestRun => {
       const where = `${TEST_RUNS} row ${index + 1}`;
       const entry = record(item, where);
@@ -461,6 +500,16 @@ export class Resolver {
       if (!TEST_ROLES.includes(role)) {
         return refuse(`${where} has the role ${JSON.stringify(role)}`);
       }
+      if (!RUN_ID.test(runId)) {
+        return refuse(`${where} run_id ${JSON.stringify(runId)} is not a run id`);
+      }
+      if (!runId.startsWith('test-')) {
+        return refuse(`${where} ${runId} is no test run`);
+      }
+      if (seen.has(runId)) {
+        return refuse(`${where} repeats ${runId}`);
+      }
+      seen.add(runId);
       if (!STATUSES.includes(status)) {
         return refuse(`${where} has the status ${JSON.stringify(status)}`);
       }
@@ -506,7 +555,32 @@ export class Resolver {
       }
       filled.set(slot, entry.runId);
     }
+    this.checkNote(rows);
     return rows;
+  }
+
+  /**
+   * Refuses a Runs table in the registry note that is not the registry's
+   * rows as (number, role, run id), numbered from 1, in order. A run id
+   * named only in the note's prose registers nothing.
+   */
+  private checkNote(rows: readonly TestRun[]): void {
+    const noted = this.registryNote()
+      .split('\n')
+      .flatMap((line) => {
+        const found = NOTE_ROW.exec(line);
+        return found === null ? [] : [[found[1], found[2], found[3]].join(' ')];
+      });
+    const registered = rows.map((entry) => [String(entry.number), entry.role, entry.runId].join(' '));
+    const length = Math.max(noted.length, registered.length);
+    for (let index = 0; index < length; index += 1) {
+      if (noted[index] !== registered[index]) {
+        refuse(
+          `${REGISTRY_NOTE} Runs row ${index + 1} is ${noted[index] ?? 'no row'}; ` +
+            `${TEST_RUNS} has ${registered[index] ?? 'no row'}`,
+        );
+      }
+    }
   }
 
   /**
