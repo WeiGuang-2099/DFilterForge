@@ -415,6 +415,7 @@ test('the committed registry shows and pools the published test runs', () => {
   expect(resolver.repairStatusSummary()).toBe(
     'docs/results/test-qwen3-32b-2026-09-26/scored/summary.json',
   );
+  expect(resolver.repairStatusSplit()).toBe('test');
 });
 
 test('the methodology page shows the repair status of the run the phase names', () => {
@@ -430,6 +431,35 @@ test('the methodology page shows the repair status of the run the phase names', 
   const summary = resolver.repairStatusSummary();
 
   expect([...new Set(files)]).toEqual(summary === null ? [] : [summary]);
+});
+
+test('the methodology page names the round its repair line describes', async ({page}) => {
+  // Once rounds of both splits are committed, a line that names no split
+  // reads as if no repair round had been measured. Its label must start
+  // with the cited summary's own split, shown through fmt's split kind, so
+  // a split taken from another run fails here although its value and text
+  // pass the value checks.
+  const summary = resolver.repairStatusSummary();
+  const split = resolver.repairStatusSplit();
+  // Today a summary's only not_measured key is repair_at_1.
+  const keys =
+    summary === null
+      ? []
+      : Object.keys(resolver.resolve(['ptr', summary, '/not_measured']) as object);
+
+  await page.goto('methodology/');
+  const labels = page.locator('h2:text-is("Not measured yet") + dl > dt');
+  const sources = await labels
+    .locator('[data-fmt="split"]')
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-src')));
+
+  expect(keys).toEqual(summary === null ? [] : ['repair_at_1']);
+  expect(await labels.allTextContents()).toEqual(
+    keys.map(() => `${fmt(split, 'split')} repair round`),
+  );
+  expect(sources.map((source): unknown => JSON.parse(source ?? 'null'))).toEqual(
+    keys.map(() => ['ptr', summary, '/split']),
+  );
 });
 
 test('model text is cut only at the contract size and only where the exporter cuts it', () => {

@@ -99,6 +99,20 @@ export function Unmeasured({node}: StrProps): ReactNode {
   );
 }
 
+/**
+ * Renders the split a scored summary records as the word that names its
+ * round, such as "Test" in "Test repair round" (fmt's split kind). The node
+ * stays in data-src and data-v, so the consistency test re-derives the
+ * split from the summary, and a split fmt does not know fails the build.
+ */
+export function Split({node}: StrProps): ReactNode {
+  return (
+    <span data-fmt="split" data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
+      {fmt(node.t, 'split')}
+    </span>
+  );
+}
+
 interface TermProps {
   readonly name: TermName;
 }

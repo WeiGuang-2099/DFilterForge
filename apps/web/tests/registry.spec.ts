@@ -164,13 +164,13 @@ function note(rows: readonly Row[], start = 1, prose = ''): string {
 
 /**
  * Commits the registry, its note's Runs table and a scored summary for
- * each published run.
+ * each published run, with the split it records.
  */
 function commit(runs: Registry): void {
   put(TEST_RUNS, runs);
   write(NOTE, note(runs.runs));
   for (const entry of runs.runs.filter((each) => each.status === 'published')) {
-    put(`docs/results/${entry.run_id}/scored/summary.json`, {run: entry.run_id});
+    put(`docs/results/${entry.run_id}/scored/summary.json`, {run: entry.run_id, split: 'test'});
   }
 }
 
@@ -755,6 +755,7 @@ for (const {name, stopped, cited} of CITED) {
     expect(new Resolver(root).repairStatusSummary()).toBe(
       cited === null ? null : `docs/results/${cited}/scored/summary.json`,
     );
+    expect(new Resolver(root).repairStatusSplit()).toBe(cited === null ? null : 'test');
   });
 }
 
@@ -781,6 +782,34 @@ for (const {phase, cited} of [
 
     expect(() => new Resolver(root).repairStatusSummary()).toThrow(
       `${file} holds a scored repair round`,
+    );
+  });
+}
+
+// The line's label names the split the cited summary records, "Test
+// repair round" or "Dev repair round", so once rounds of both splits are
+// committed the line still says which one it describes.
+for (const {phase, cited, other} of [
+  {phase: 'test', cited: PASS_A, other: 'dev'},
+  {phase: 'dev', cited: ANCHOR, other: 'test'},
+]) {
+  test(`the ${phase}-phase methodology labels its repair line with the cited summary's split`, () => {
+    const runs = registry();
+    if (phase === 'dev') {
+      at(runs, FRONTIER).status = 'registered';
+    }
+    commit(runs);
+    put(`docs/results/${ANCHOR}/scored/summary.json`, {run: ANCHOR, split: 'dev'});
+
+    expect(new Resolver(root).repairStatusSplit()).toBe(phase);
+
+    // A summary that records another split than its run id names, which
+    // the exporter refuses (split_mismatch), would label the wrong round.
+    const summary = `docs/results/${cited}/scored/summary.json`;
+    put(summary, {run: cited, split: other});
+
+    expect(() => new Resolver(root).repairStatusSplit()).toThrow(
+      `${summary} records the split ${JSON.stringify(other)}`,
     );
   });
 }

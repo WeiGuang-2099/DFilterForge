@@ -232,7 +232,7 @@ const METHODOLOGY = object({
     answer_candidates: numNode,
     answers_flagged: numNode,
   }),
-  not_measured: array(object({key: text, value: strNode})),
+  not_measured: array(object({key: text, split: strNode, value: strNode})),
   admitted_prepares: array(strNode),
 });
 

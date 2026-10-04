@@ -2885,16 +2885,17 @@ def test_scored_repair_results_stop_the_export_until_step_5_is_built(
 
 def _statuses(run_id: str) -> list[Document]:
     """The methodology's not_measured list as a run's summary gives it."""
+    summary = f"docs/results/{run_id}/scored/summary.json"
     return [
         {
             "key": "repair_at_1",
+            "split": {
+                "t": run_id.split("-", 1)[0],
+                "src": ["ptr", summary, "/split"],
+            },
             "value": {
                 "t": "not_run",
-                "src": [
-                    "ptr",
-                    f"docs/results/{run_id}/scored/summary.json",
-                    "/not_measured/repair_at_1",
-                ],
+                "src": ["ptr", summary, "/not_measured/repair_at_1"],
             },
         }
     ]
@@ -2974,6 +2975,29 @@ def test_a_scored_round_of_the_cited_run_stops_the_methodology(
         _methodology(root)
     assert caught.value.code == "repair_unread"
     assert path in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("phase", "cited"), [("test", _PASS_A), ("dev", _ANCHOR)]
+)
+def test_the_repair_line_names_the_split_of_the_run_it_cites(
+    fixture: Fixture, phase: str, cited: str
+) -> None:
+    # Once rounds of both splits are committed, a line that names no split
+    # reads as if no repair round had been measured. The page labels it
+    # "Test repair round" or "Dev repair round" from this node, so it must
+    # be the cited summary's own split, never the phase or another run's.
+    if phase == "test":
+        _settled(fixture)
+    root = fixture.build()
+    summary = f"docs/results/{cited}/scored/summary.json"
+
+    methodology = _methodology(root)
+
+    assert [entry["split"] for entry in methodology["not_measured"]] == [
+        {"t": phase, "src": ["ptr", summary, "/split"]}
+    ]
+    check_sources(root, {"methodology.json": methodology})
 
 
 def test_repair_results_outside_the_pool_leave_the_export_alone(

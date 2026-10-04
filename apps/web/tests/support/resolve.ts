@@ -7,9 +7,10 @@
  * from their definitions, over the same allowed roots, so a defect in either
  * implementation shows up as a mismatch instead of agreeing with itself. The
  * shown runs, the Disproof Reel's pool and pick, and the run whose summary
- * the methodology page's repair line cites are written again the same way,
- * from rule reel-v1 in docs/decisions/disproof-reel.md and the test-run
- * registry described in docs/decisions/test-runs.md.
+ * the methodology page's repair line cites, with the split that labels the
+ * line, are written again the same way, from rule reel-v1 in
+ * docs/decisions/disproof-reel.md and the test-run registry described in
+ * docs/decisions/test-runs.md.
  *
  * Ops (paths are relative to the repository root):
  * - ['ptr', path, pointer]: an RFC 6901 pointer into a JSON file.
@@ -796,6 +797,34 @@ export class Resolver {
    * would call a measured round not measured yet.
    */
   repairStatusSummary(): string | null {
+    const runId = this.repairStatusRun();
+    return runId === null ? null : `docs/results/${runId}/scored/summary.json`;
+  }
+
+  /**
+   * Names the split that labels the methodology page's repair line, "test"
+   * for "Test repair round" or "dev" for "Dev repair round": the split the
+   * summary repairStatusSummary() names records, and null with no summary.
+   * Once rounds of both splits are committed, a line without it would read
+   * as if no round had been measured. Throws, as the exporter stops
+   * (split_mismatch), when the summary records another split than its run
+   * id names.
+   */
+  repairStatusSplit(): string | null {
+    const runId = this.repairStatusRun();
+    if (runId === null) {
+      return null;
+    }
+    const summary = `docs/results/${runId}/scored/summary.json`;
+    const split = string(record(this.json(summary), summary)['split'], `${summary} split`);
+    if (runId.split('-')[0] !== split) {
+      refuse(`${summary} records the split ${JSON.stringify(split)}, not the one ${runId} names`);
+    }
+    return split;
+  }
+
+  /** The run repairStatusSummary() cites; throws once its round is scored. */
+  private repairStatusRun(): string | null {
     const settled = this.settled();
     const runId =
       settled === null
@@ -808,7 +837,7 @@ export class Resolver {
     if (this.exists(repair)) {
       refuse(`${repair} holds a scored repair round, which the methodology would call unmeasured`);
     }
-    return `docs/results/${runId}/scored/summary.json`;
+    return runId;
   }
 
   /**

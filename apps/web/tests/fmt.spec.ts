@@ -68,6 +68,16 @@ test('unmeasured shows not measured yet for not_run, never the key', () => {
   }
 });
 
+test('split shows a run split as the word that names its round', () => {
+  // The methodology page labels its repair line "Test repair round" or
+  // "Dev repair round" with it; any other value fails the build.
+  expect(fmt('test', 'split')).toBe('Test');
+  expect(fmt('dev', 'split')).toBe('Dev');
+  for (const value of ['train', 'Test', 'TEST', '', 'toString', 3, null]) {
+    expect(() => fmt(value, 'split'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -134,7 +144,7 @@ test('visible shows C1 controls and lone surrogates by code point', () => {
 });
 
 test('every kind is named', () => {
-  expect([...FMT_KINDS]).toEqual(['int', 'num', 'bool', 'ints', 'text', 'unmeasured']);
+  expect([...FMT_KINDS]).toEqual(['int', 'num', 'bool', 'ints', 'text', 'unmeasured', 'split']);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);
   }

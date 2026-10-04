@@ -4,7 +4,7 @@ import type {ReactNode} from 'react';
 
 import {loadMethodology} from '@/lib/data';
 import type {Methodology, NumNode, StrNode} from '@/lib/data';
-import {Num, repositoryFile, Str, Term, Unmeasured} from '@/lib/sourced';
+import {Num, repositoryFile, Split, Str, Term, Unmeasured} from '@/lib/sourced';
 
 export const metadata: Metadata = {
   title: 'Methodology',
@@ -12,10 +12,12 @@ export const metadata: Metadata = {
 
 const SHORTCUT_ABLATION = 'docs/ablations/006-shortcut-policy.md';
 
-// Names for the scored summary's not_measured keys. A key the page does not
-// know fails the build, so a new gap is never shown under the wrong name.
+// Names for the scored summary's not_measured keys. Each follows the split
+// that summary records, "Test repair round" or "Dev repair round", so the
+// line says which round it describes. A key the page does not know fails
+// the build, so a new gap is never shown under the wrong name.
 const NOT_MEASURED: Readonly<Record<string, string>> = {
-  repair_at_1: 'Repair round',
+  repair_at_1: 'repair round',
 };
 
 function notMeasuredName(key: string): string {
@@ -279,7 +281,14 @@ export default function MethodologyPage() {
       <h2>Not measured yet</h2>
       <dl>
         {data.not_measured.map((entry) => (
-          <Fact key={entry.key} label={notMeasuredName(entry.key)}>
+          <Fact
+            key={entry.key}
+            label={
+              <>
+                <Split node={entry.split} /> {notMeasuredName(entry.key)}
+              </>
+            }
+          >
             <Unmeasured node={entry.value} />
           </Fact>
         ))}
