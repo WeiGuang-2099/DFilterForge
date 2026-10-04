@@ -1878,3 +1878,37 @@ the worktree's code mounted read-only and no network.
     Docker `--target data` and the Compose `web` service.
 - Still open: the items of the section above, with the Reel step 5 item as
   corrected there.
+
+## Web data: methodology source wording, 2026-10-04, branch web-data
+
+- Why: a review of d3ff716 and 70a8c9c found two false sentences, each
+  confirmed against the code at 70a8c9c.
+  - Four places said `methodology.json` takes everything from the dev
+    anchor but its `not_measured` statuses: the exporter's module
+    docstring, `build_methodology`'s docstring, web-site.md's Outputs list
+    and this file's d3ff716 entry. `build_methodology` takes only the
+    prompt conditions, `top_k`, the bootstrap block and the scoring
+    environment from the anchor run. Six of its eleven keys come from no
+    run: probes and witnesses from `captures.json`, mutant counts and
+    categories from the test-freeze gate receipt, the shortcut audit from
+    ablation 006's evidence and the admitted prepares from
+    `held_out_freeze.json`. 49f458b names each source in all four places.
+  - web-site.md's What-fails item said `resolve.ts` refuses "exactly that
+    one file" right after a sentence naming the dev anchor's
+    `repair/summary.json`, which `repairStatusSummary()` does not refuse in
+    the test phase. 6f1290e names the cited run's file and the phase rule.
+- Neither commit changes code or the export. Checks at 49f458b, on the
+  host: pyink and isort pass on the exporter, pylint on the two web scripts
+  rates 10.00/10 and exits 0, and `tests/test_export_web_data.py` gives 152
+  passed and 2 skipped in 83.37 s. The web gates, Playwright and the Docker
+  export were not rerun, since no TypeScript, page or exported byte
+  changed.
+- Not applied: labelling the methodology's repair line "Test repair round"
+  in the test phase. Once `dev-repair-round` merges, the page's plain
+  "Repair round: not measured yet" cites pass A's summary only through
+  `data-src`, beside three sections that say they come from the anchor
+  pass. The decided fix allows a wording change only where the page claims
+  the line comes from the anchor, and it does not; `docs/protocol.md`
+  never reports the dev round as an effect. The label is left to the
+  maintainer.
+- Still open: the items of the two sections above.
