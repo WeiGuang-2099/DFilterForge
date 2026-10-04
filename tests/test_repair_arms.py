@@ -104,6 +104,8 @@ _FALLBACK_CONFIGS = {
     "frontier": "deepseek-v4-pro-0813_nextbit_enabled-false",
 }
 _TEST_PASSES = [base.replace("dev-", "test-", 1) for base in _DEV]
+# The config the frontier arm runs move to (owner ruling OD5, 2026-10-04).
+_NEXTBIT = f"{db.CONFIG_DIR}/{_FALLBACK_CONFIGS['frontier']}.json"
 _PASS_B = f"test-qwen3-32b-passb-{_DATE}"
 _ITEMS = 2
 _CAPS_ROWS = (
@@ -129,6 +131,11 @@ def _arms(base: str) -> list[str]:
 
 def _r2(arm_run: str) -> str:
     return arm_run.removesuffix(f"-{_DATE}") + f"-r2-{_DATE}"
+
+
+def _nb(arm_run: str) -> str:
+    """Names a dev frontier arm run as the move to NextBit names it (OD6)."""
+    return arm_run.removesuffix(f"-{_DATE}") + f"-nb-{_DATE}"
 
 
 def _origin(run_id: str) -> tuple[str, str]:
@@ -495,6 +502,9 @@ class Bench:
     ``items`` gives each base pass's planned item count and ``refusals``
     the code follow-up refuses with, by base pass or by (base pass, arm).
     The waits before a resume or a re-run are recorded in ``slept``.
+    Every pass sends its own config, as a pass without a registered
+    provider move does; ``moves`` keeps the committed moves, which
+    :meth:`send_moves` puts back.
     """
 
     def __init__(self, root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -509,7 +519,13 @@ class Bench:
         self.script: list[Step] = []
         self.follow_ups: list[dict[str, str]] = []
         self.refusals: dict[Any, str] = {}
+        self.moves: dict[str, Any] = dict(getattr(ra, "PROVIDER_MOVES", {}))
         monkeypatch.setattr(ra, "pause", self.slept.append)
+        monkeypatch.setattr(ra, "PROVIDER_MOVES", {}, raising=False)
+
+    def send_moves(self) -> None:
+        """Sends the committed provider moves, as the batch does."""
+        self.monkeypatch.setattr(ra, "PROVIDER_MOVES", self.moves)
 
     def tick(self) -> datetime:
         """Moves the clock on by one second."""
@@ -545,6 +561,11 @@ class Bench:
         if code is not None:
             return None, code
         output = Path(args["--output-dir"])
+        # As the real step, it builds only under the arm's registered run
+        # id or its one re-run id.
+        registered = dict(zip(ra.ARMS, _arms(base)))[arm]
+        if output.name not in (registered, _r2(registered)):
+            return None, "arm_id_mismatch"
         if output.exists():
             return None, "output_exists"
         items = [f"mei-{index:04d}" for index in range(1, _ITEMS + 1)]
@@ -838,6 +859,9 @@ OUTAGE = play("budget", lambda s: first(2, TIMEOUT))
 REFUSED = play(None, lambda s: rest(s, http(404)))
 PENDING = play(None, lambda s: [(0, http(503)), (1, ok())])
 BUDGET = play("budget", lambda s: first(1, ok()))
+# Every prompt rate limited on each pass, as DeepInfra met the frontier
+# arm runs: resumed until no attempt is left, an outage with no answer.
+LIMITED = play(None, lambda s: rest(s, http(429)))
 
 
 # The rows, the order, the argument lists and the summary.
@@ -1909,10 +1933,260 @@ def test_the_arms_are_the_call_steps_and_the_rounds() -> None:
     assert ra.ARM_TAGS == dict(repair_round.ARM_TAGS)
     assert ra.ARM_TAGS == dict(getattr(model_run, "_ARM_TAGS"))
     assert ra.RERUN_TAG == repair_round.ARM_RERUN
-    for arm in ra.ARMS:
-        assert ra.arm_run_ids(_DEV[0], arm) == repair_round.arm_run_ids(
-            _DEV[0], arm
+    for base in _DEV + _TEST_PASSES:
+        for arm in ra.ARMS:
+            assert ra.arm_run_ids(base, arm) == repair_round.arm_run_ids(
+                base, arm
+            )
+            assert ra.registered_run_ids(
+                base, arm
+            ) == repair_round.registered_run_ids(base, arm)
+    # The batch sends the moves repair --check holds the arm runs to.
+    assert {base: move.tag for base, move in ra.PROVIDER_MOVES.items()} == {
+        base: move.tag for base, move in repair_round.PROVIDER_MOVES.items()
+    }
+
+
+# The frontier arm runs moved to NextBit (owner ruling OD5, 2026-10-04).
+
+
+def test_a_moved_dev_pass_sends_new_runs_with_the_move_config(
+    bench: Bench,
+) -> None:
+    bench.send_moves()
+    registered = [ra.registered_run_ids(_DEV[3], arm)[0] for arm in ra.ARMS]
+    moved = [_nb(run_id) for run_id in registered]
+    assert registered == DEV_ARMS[9:]
+    assert ra.MOVE_CONFIG == _NEXTBIT
+    # The dry run prints a follow-up command that builds each moved set.
+    assert bench.run([], ["--dry-run"]) == 0
+    text = "\n".join(bench.printed)
+    for run_id, name in zip(moved, registered):
+        assert f"  artifacts/repair/{run_id}: would build" in text
+        assert (
+            f" --output-dir artifacts/repair/{name} --source-revision"
+            f" test-rev, installed as artifacts/repair/{run_id}"
+        ) in text
+    assert f"10 | {moved[0]} | {_FALLBACK_CONFIGS['frontier']} | 2 |" in text
+    assert "installed as" not in "\n".join(
+        line for line in bench.printed if DEV_ARMS[0] in line
+    )
+
+    # Keyless: the moved rows send their new ids with the move's config at
+    # the frontier dev cap; follow-up builds each under its registered id.
+    assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
+    keyless = [argv for argv, key in bench.calls if not key]
+    assert [_flag(argv, "--run-id") for argv in keyless] == (
+        DEV_ARMS[:9] + moved
+    )
+    for argv in keyless[9:]:
+        assert (_flag(argv, "--config"), _flag(argv, "--max-usd")) == (
+            _NEXTBIT,
+            "0.200000",
         )
+    built = [Path(args["--output-dir"]).name for args in bench.follow_ups]
+    assert built == DEV_ARMS
+    for run_id, name in zip(moved, registered):
+        prepare = bench.root / ra.PREPARE_ROOT / run_id / "prepare.json"
+        assert (
+            PrepareManifestV1.model_validate_json(
+                prepare.read_bytes()
+            ).prepare_id
+            == name
+        )
+        assert not (bench.root / ra.PREPARE_ROOT / name).exists()
+
+    # Paid: rows 1 to 9 as before, rows 10 to 12 on NextBit.
+    assert bench.run(bench.keyless() + [COMPLETE] * 12) == ra.EXIT_OK
+    assert bench.paid() == DEV_ARMS[:9] + moved
+    paid = bench.paid_argv()
+    for argv, run_id in zip(paid[9:], moved):
+        assert argv == [
+            sys.executable,
+            "scripts/model_run.py",
+            "call",
+            "--prepare-dir",
+            f"artifacts/repair/{run_id}",
+            "--run-id",
+            run_id,
+            "--config",
+            _NEXTBIT,
+            "--max-usd",
+            "0.200000",
+            "--source-revision",
+            "test-rev",
+            "--min-interval-seconds",
+            "1.0",
+            "--max-attempts",
+            "3",
+            "--gate-first",
+        ]
+    configs = [f"{db.CONFIG_DIR}/{c}.json" for c in _DEV_CONFIGS.values()]
+    assert [_flag(argv, "--config") for argv in paid[:9]] == [
+        config for config in configs[:3] for _ in range(3)
+    ]
+    assert [_flag(argv, "--max-usd") for argv in paid[:9]] == [
+        f"{cap:.6f}" for cap in _DEV_CAPS[:3] for _ in range(3)
+    ]
+    rows = bench.rows()
+    assert list(rows) == DEV_ARMS[:9] + moved
+    for number, run_id in enumerate(DEV_ARMS[:9]):
+        assert rows[run_id]["config"] == configs[number // 3]
+    for run_id in moved:
+        row = rows[run_id]
+        assert (row["config"], row["cap_usd"], row["state"]) == (
+            _NEXTBIT,
+            0.20,
+            "done",
+        )
+        assert row["counted_run_id"] == run_id
+        assert row["maintainer"]["commit_to"] == f"docs/results/{run_id}/"
+
+
+def test_a_moved_runs_outage_is_re_run_once_as_its_nb_r2(
+    bench: Bench,
+) -> None:
+    bench.send_moves()
+    moved, rerun = ra.arm_run_ids(_DEV[3], "resample")
+    name = ra.registered_run_ids(_DEV[3], "resample")[0]
+    assert (moved, rerun) == (_nb(DEV_ARMS[9]), _r2(_nb(DEV_ARMS[9])))
+    script = (
+        bench.keyless()
+        + [COMPLETE] * 9
+        + [LIMITED] * 3
+        + [refuse("api_key_missing")]
+        + [LIMITED] * 3
+        + [COMPLETE] * 2
+    )
+    assert bench.run(script) == ra.EXIT_OK
+    later = [_nb(run_id) for run_id in DEV_ARMS[10:]]
+    assert bench.paid() == DEV_ARMS[:9] + [moved] * 3 + [rerun] * 3 + later
+    # Two resumes of each run and the wait before the re-run.
+    assert bench.slept == [db.RESUME_WAIT_SECONDS] * 5
+    # The re-run answers its own prompt set, which follow-up builds under
+    # the arm's registered first id, and sends the move's config at the
+    # frontier dev cap; no arm moves again.
+    keyless = [argv for argv, key in bench.calls if not key]
+    assert _flag(keyless[-1], "--run-id") == rerun
+    assert bench.follow_ups[-1]["--arm"] == "resample"
+    assert Path(bench.follow_ups[-1]["--output-dir"]).name == name
+    prepare = bench.root / ra.PREPARE_ROOT / rerun / "prepare.json"
+    assert (
+        PrepareManifestV1.model_validate_json(prepare.read_bytes()).prepare_id
+        == name
+    )
+    for argv in [*bench.paid_argv()[9:], keyless[-1]]:
+        assert (_flag(argv, "--config"), _flag(argv, "--max-usd")) == (
+            _NEXTBIT,
+            "0.200000",
+        )
+        run_id = _flag(argv, "--run-id")
+        assert _flag(argv, "--prepare-dir") == f"artifacts/repair/{run_id}"
+    row = bench.rows()[moved]
+    assert (row["state"], row["counted_run_id"]) == ("not_run", rerun)
+    assert row["reason"] == (
+        "outage (no_answer_only_transient_failures); its re-run"
+        f" {rerun} met an outage too"
+    )
+    assert row["maintainer"] == {
+        "commit_to": f"{ra.EVIDENCE_DIR}/{rerun}/",
+        "repair_not_run": None,
+        "first_run_evidence": f"{ra.EVIDENCE_DIR}/{moved}/",
+    }
+    assert row["config"] == _NEXTBIT
+    # The row is final: the same command sends nothing more.
+    assert bench.run([]) == ra.EXIT_OK
+    assert not bench.calls
+
+
+def test_a_move_config_beyond_provider_and_prices_is_refused(
+    bench: Bench,
+) -> None:
+    bench.send_moves()
+    path = bench.root / _NEXTBIT
+    text = path.read_text(encoding="utf-8")
+    # The bench's NextBit config differs from the pass's in route and
+    # prices alone, so the move is taken as it stands.
+    assert bench.context().plan.rows[9].config == _NEXTBIT
+
+    def edited(change: Callable[[Fields], None]) -> Fields:
+        document: Fields = json.loads(text)
+        change(document)
+        return document
+
+    def refused(document: Fields | str, why: str, config: str) -> None:
+        target = bench.root / config
+        if isinstance(document, str):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(document, encoding="utf-8")
+        else:
+            _write_json(target, document)
+        bench.monkeypatch.setattr(
+            ra, "PROVIDER_MOVES", {_DEV[3]: ra.Move(config, "nb")}
+        )
+        named = f"the move of {_DEV[3]}'s arm runs to {config}: {why}"
+        with pytest.raises(tp.PlanError, match=re.escape(named)):
+            bench.context()
+        path.write_text(text, encoding="utf-8")
+
+    own = f"{db.CONFIG_DIR}/{_DEV_CONFIGS[_DEV[3]]}.json"
+    differ = f"its settings differ from {own}'s beyond the provider order"
+    other = f"it names another endpoint host or model than {own}"
+    refused(edited(lambda d: d["settings"].update(seed=18)), differ, _NEXTBIT)
+    refused(
+        edited(lambda d: d["settings"].update(model_id="deepseek/other")),
+        other,
+        _NEXTBIT,
+    )
+    refused(
+        edited(lambda d: d.update(endpoint_url="https://example.com/v1")),
+        other,
+        _NEXTBIT,
+    )
+    outside = f"docs/decisions/evidence/repair-arms/{Path(_NEXTBIT).name}"
+    refused(text, "not a committed bake-off config", outside)
+    # A move that keeps the pass's route, or a config the call step cannot
+    # read, is no move either.
+    refused(
+        (bench.root / own).read_text(encoding="utf-8"),
+        f"it sends the provider order of {own}",
+        own,
+    )
+    refused("{", "not a bake-off config the call step reads", _NEXTBIT)
+
+
+def test_rows_take_the_move_config_ids_and_the_slot_cap() -> None:
+    caps = ra.load_caps(_note())
+    assert sorted(ra.PROVIDER_MOVES) == [_DEV[3], _TEST_PASSES[3]]
+    for split, bases, arms, slot_caps in (
+        ("dev", _DEV, DEV_ARMS, _DEV_CAPS),
+        ("test", _TEST_PASSES, TEST_ARMS, _TEST_CAPS),
+    ):
+        passes = [
+            ra.RepairedPass(base, slot, f"{db.CONFIG_DIR}/{config}.json")
+            for base, slot, config in zip(
+                bases, ra.SLOT_ORDER, _DEV_CONFIGS.values()
+            )
+        ]
+        rows = ra.rows_for(passes, caps, split)
+        frontier = list(arms[9:])
+        if split == "dev":
+            frontier = [_nb(run_id) for run_id in frontier]
+        assert [row.run_id for row in rows] == list(arms[:9]) + frontier
+        assert [row.rerun_id for row in rows] == [
+            _r2(run_id) for run_id in list(arms[:9]) + frontier
+        ]
+        assert [row.config for row in rows] == [
+            config
+            for repaired in passes[:3]
+            for config in [repaired.config] * 3
+        ] + [_NEXTBIT] * 3
+        assert [row.cap_usd for row in rows] == [
+            cap for cap in slot_caps for _ in range(3)
+        ]
+        assert [row.base_run for row in rows] == [
+            base for base in bases for _ in range(3)
+        ]
 
 
 # Interrupts and errors after a paid call may have been sent.
@@ -2011,7 +2285,10 @@ def test_the_committed_passes_give_the_notes_arm_run_ids_and_caps() -> None:
 
     The note's caps table holds the registered caps, which a raise never
     edits, so a budget stop resumed under a raised cap leaves this test
-    as it was.
+    as it was. Its arm run id table holds the registered ids; the dev
+    frontier rows take the ids of the owner's move to NextBit instead
+    (OD5, OD6), from the note's table of them, and the frontier rows of
+    both splits send the move's config.
     """
     note = (_ROOT / ra.NOTE).read_text(encoding="utf-8")
     protocol = (_ROOT / "docs" / "protocol.md").read_text(encoding="utf-8")
@@ -2036,9 +2313,23 @@ def test_the_committed_passes_give_the_notes_arm_run_ids_and_caps() -> None:
         table = [row for row in listed if row[0].startswith(f"{split}-")]
         bases = dict.fromkeys(row.base_run for row in rows)
         assert [
-            (base, *(row.run_id for row in rows if row.base_run == base))
+            (
+                base,
+                *(ra.registered_run_ids(base, arm)[0] for arm in ra.ARMS),
+            )
             for base in bases
         ] == table
+        moved = [
+            (row.arm, row.run_id, row.rerun_id)
+            for row in rows
+            if row.run_id != ra.registered_run_ids(row.base_run, row.arm)[0]
+        ]
+        assert moved == (_NOTE_MOVE_ROW.findall(note) if split == "dev" else [])
+        assert len(moved) == {"dev": 3, "test": 0}[split]
+        assert {Path(row.config).stem for row in rows[9:]} == {
+            "deepseek-v4-pro-0813_nextbit_enabled-false"
+        }
+        assert {row.slot for row in rows[9:]} == {"frontier"}
         assert [row.cap_usd for row in rows] == [
             c for c in caps for _ in range(3)
         ]
@@ -2173,6 +2464,20 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     assert old["settings"]["openrouter"]["provider_order"] == ["deepinfra"]
     assert new["settings"]["openrouter"]["provider_order"] == ["nextbit"]
     assert old["prices"] != new["prices"]
+    # The batch sends the ruled moves, and repair --check holds the arm
+    # runs to the moved config's provider order and its whole prices.
+    assert {
+        move["base_run"]: (ruling["to_config"], move["tag"])
+        for move in ruling["moves"]
+    } == {
+        base: (move.config, move.tag)
+        for base, move in ra.PROVIDER_MOVES.items()
+    }
+    for move in repair_round.PROVIDER_MOVES.values():
+        assert move.provider_order == tuple(
+            new["settings"]["openrouter"]["provider_order"]
+        )
+        assert move.prices.model_dump(mode="json") == new["prices"]
     for config in (old, new):
         del config["settings"]["openrouter"]["provider_order"]
         del config["prices"]
