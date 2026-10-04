@@ -1518,6 +1518,17 @@ def _trigger_without_a_named_run(value: Document, _: Path) -> None:
     _at(value, _tag(_TEST_MID, "fb"))["conditional_on"] = None
 
 
+def _unknown_trigger(value: Document, _: Path) -> None:
+    _at(value, _tag(_TEST_MID, "fb"))["trigger"] = "owner_wish"
+
+
+def _self_named_row(value: Document, _: Path) -> None:
+    # A row that names itself would count as final once unused, since the
+    # run it names is then not not_run.
+    fallback = _tag(_TEST_MID, "fb")
+    _at(value, fallback)["conditional_on"] = fallback
+
+
 def _planned_row_unused(value: Document, _: Path) -> None:
     _at(value, _TEST_MID)["status"] = "unused"
 
@@ -1580,6 +1591,12 @@ def _another_note(value: Document, _: Path) -> None:
             _trigger_without_a_named_run,
             "condition_invalid",
             _tag(_TEST_MID, "fb"),
+        ),
+        (_unknown_trigger, "condition_invalid", "the trigger 'owner_wish'"),
+        (
+            _self_named_row,
+            "condition_invalid",
+            f"names {_tag(_TEST_MID, 'fb')}, which is no other row",
         ),
         (_planned_row_unused, "condition_invalid", _TEST_MID),
         (
