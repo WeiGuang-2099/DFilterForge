@@ -326,7 +326,23 @@ test('the Reel picks the fewest frames, then the earlier pool run and lower item
   const resolver = new Resolver(root);
 
   expect(resolver.reelPool()).toEqual([ANCHOR, SMALL_PROVISIONAL, DEV_MID, DEV_FRONTIER]);
+  // The anchor's two answers tie with the small run's on frames: the earlier
+  // pool run wins over the lower item, then the lower item over the higher.
   expect(resolver.reelPick()).toEqual({run: ANCHOR, cond: 'C4', item: 'mei-0002', candidates: 4});
+
+  // With one frame fewer the later pool run's answer wins: frames decide
+  // before pool position.
+  answers(SMALL_PROVISIONAL, [
+    ['C4', 'mei-0001', 'ready', 'silent_wrong', 1],
+    ['C4', 'mei-0004', 'ready', 'strong_exact', 0],
+  ]);
+
+  expect(new Resolver(root).reelPick()).toEqual({
+    run: SMALL_PROVISIONAL,
+    cond: 'C4',
+    item: 'mei-0001',
+    candidates: 4,
+  });
 
   // No C4 or C3 answer is silent-wrong: the pick comes from C2.
   for (const runId of [ANCHOR, SMALL_PROVISIONAL, DEV_MID]) {
