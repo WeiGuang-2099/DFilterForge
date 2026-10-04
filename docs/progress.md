@@ -1499,8 +1499,9 @@ bff373c.
   Against the DeepInfra config it differs only in
   `settings.openrouter.provider_order` and in `prices.source`,
   `prices.usd_per_million_input` and `prices.usd_per_million_output`. The
-  ruling record carries the test baseline's 754 HTTP 429 and the caps, 0.20
-  USD on dev and 0.50 on test.
+  ruling record carries the test baseline's HTTP 429, 776 in all and 754
+  before an item's last attempt, and the caps, 0.20 USD on dev and 0.50 on
+  test.
 - **The ids.** Each fits the call step's result-name pattern,
   `(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-YYYY-MM-DD`, whose middle is at most 32
   characters.

@@ -71,8 +71,9 @@ committed evidence.
       from DeepInfra's shared pool (`is_byok` false). The NextBit request,
       with seed 17, JSON mode and `require_parameters` true, returned HTTP
       200 with 0 reasoning tokens, billed at the committed prices.
-    - The test baseline's 754 HTTP 429
-      ([locked test result](../results/locked-test-v1.md)).
+    - The test baseline's 776 HTTP 429 in all, 754 of them before an
+      item's last attempt, the figure the
+      [locked test result](../results/locked-test-v1.md) states.
   - The config, each fact cited from its own table:
     - It was committed in de05cad on 2026-09-26; its SHA-256 prefix is
       `2942954e0c68`.

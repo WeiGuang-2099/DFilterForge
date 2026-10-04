@@ -2435,12 +2435,40 @@ def _read(path: str) -> str:
     return (_ROOT / path).read_text(encoding="utf-8")
 
 
+def _http_429_counts(run_dir: str) -> tuple[int, int]:
+    """Counts a run's HTTP 429 attempts: all, and before an item's last.
+
+    The first is the basis of the dev figure beside it; the second is the
+    one the locked test page states.
+    """
+    run = _ROOT / run_dir
+    manifest = json.loads(
+        (run / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    every = before_last = 0
+    for condition in manifest["conditions"]:
+        lines = (run / condition["attempts_path"]).read_text(encoding="utf-8")
+        attempts = [json.loads(line) for line in lines.splitlines()]
+        last: dict[str, int] = {}
+        for attempt in attempts:
+            item = attempt["completion"]["item_id"]
+            last[item] = max(last.get(item, 0), attempt["attempt"])
+        for attempt in attempts:
+            if attempt["completion"]["http_status"] != 429:
+                continue
+            every += 1
+            item = attempt["completion"]["item_id"]
+            before_last += attempt["attempt"] < last[item]
+    return every, before_last
+
+
 @pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
 def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     """The move to NextBit holds to its config, its evidence and its ids.
 
     Its figures are recounted from the committed evidence of the six
-    DeepInfra runs it replaces, so a ruling that misstates them fails.
+    DeepInfra runs it replaces, and the test baseline's HTTP 429 from that
+    pass's committed attempts, so a ruling that misstates them fails.
     Each moved id is the registered one with the move's tag after the arm
     tag. A replaced run never reaches docs/results, which guards the
     resample arm that no second-turn check covers.
@@ -2538,6 +2566,8 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     assert {completion["status"] for completion in completions} == {"failed"}
     assert sum(attempt["charged_micro_usd"] for attempt in attempts) == 0
     evidence = ruling["evidence"]
+    baseline = f"{ra.RESULTS}/{_TEST_PASSES[3]}"
+    baseline_429, baseline_429_before_last = _http_429_counts(baseline)
     assert evidence == {
         "runs": kept,
         "attempts": len(attempts),
@@ -2551,7 +2581,9 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
             f"{ra.EVIDENCE_DIR}/frontier-provider-diagnostics-2026-10-04.md"
         ),
         "runner_summary": f"{ra.EVIDENCE_DIR}/summary-dev-2026-10-04.json",
-        "test_baseline_http_429": 754,
+        "test_baseline_run": baseline,
+        "test_baseline_http_429": baseline_429,
+        "test_baseline_http_429_before_last_attempt": baseline_429_before_last,
     }
     assert (_ROOT / evidence["diagnostics"]).is_file()
     assert (_ROOT / evidence["runner_summary"]).is_file()
@@ -2604,4 +2636,7 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     assert f"`{_FALLBACK_CONFIGS['frontier']}`" in section
     assert registry["repair_arms"]["amended"][0]["ruling"] == _MOVE_RULING
     locked = " ".join(_read(f"{ra.RESULTS}/locked-test-v1.md").split())
-    assert "754 HTTP 429" in locked
+    assert (
+        f"it met {baseline_429_before_last} HTTP 429 responses before an"
+        " item's last attempt" in locked
+    )
