@@ -50,9 +50,10 @@ committed evidence.
 
 - **OD5, by the owner: the frontier arms move to NextBit.** The frontier
   slot's repair arms move from DeepInfra to NextBit, using the committed
-  config `deepseek-v4-pro-0813_nextbit_enabled-false`, for the dev re-run and
-  the test round. All other slots are unchanged, and the counted first turns
-  stay the answers DeepInfra served.
+  config `deepseek-v4-pro-0813_nextbit_enabled-false`, for every frontier arm
+  run still to be sent: the test round's, and the dev round's if it is
+  re-run, which is OD6. All other slots are unchanged, and the counted first
+  turns stay the answers DeepInfra served.
   - Evidence:
     - The six DeepInfra runs, sent from bff373c. Each made 33 attempts (3
       invocations of 11 requests), 198 in all. Every attempt was HTTP 429:
@@ -708,11 +709,15 @@ MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab repair-pool --res
   re-run, a refusal), or a round with no arm run, has no record in the repair
   tooling yet: the owner rules on it before that round's summary is written.
 
-  Amended 2026-10-04 (OD5). As registered, such an arm waits for the owner's
-  ruling. The owner ruled on the dev frontier round, whose three arms were
-  each an outage on its re-run: OD5 under Owner decisions, 2026-10-04,
-  reports the six DeepInfra runs not run, keeps them as evidence and replaces
-  them with the NextBit runs.
+  Amended 2026-10-04 (OD5, OD6). As registered, such an arm waits for the
+  owner's ruling. The dev frontier round's three arms were each an outage on
+  its re-run, so its six DeepInfra runs are not run, as the outage rule under
+  Owner command says of a second outage, and are kept as evidence. Under
+  Owner decisions, 2026-10-04, the owner's OD5 moves the frontier arms to
+  NextBit. Re-running the dev round there, so that the NextBit runs replace
+  the six, is OD6, a default the maintainer took and the owner has not yet
+  confirmed. The owner's paid dev command is that confirmation, and it comes
+  before that round's summary is written.
 - **CI re-checks.** CI then re-checks every `repair/plan.json` and every
   `repair-pool/*.json` with `--check`, beside its existing re-score loop.
 

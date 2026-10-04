@@ -1478,9 +1478,9 @@ bff373c.
 - **The ruling.** The [repair note](decisions/repair-round.md) keeps the
   owner's decision apart from the maintainer's defaults, under "Owner
   decisions, 2026-10-04". A default stays one until the owner confirms it.
-  - OD5, by the owner: deepseek/deepseek-v4-pro-0813's repair arms, on dev
-    and on test, send the committed config
-    `deepseek-v4-pro-0813_nextbit_enabled-false`. Every other slot is
+  - OD5, by the owner: deepseek/deepseek-v4-pro-0813's repair arm runs still
+    to be sent, on test and on dev if dev is re-run (OD6), send the committed
+    config `deepseek-v4-pro-0813_nextbit_enabled-false`. Every other slot is
     unchanged, and the counted first turns stay the answers DeepInfra served.
   - OD6, default taken: the dev frontier round is re-run on NextBit before the
     test round, as new runs with the tag `nb` after the arm tag. The owner's
@@ -1732,9 +1732,11 @@ bff373c.
   (`repair --not-run`, at most two arms). An arm not run after an outage on
   its re-run or a refusal, or a round with no arm run, still has no record in
   the tooling; the owner rules on it before that round's summary.
-  - The dev frontier outage is ruled by OD5 (725bb5e). The six DeepInfra
-    runs are reported not run, kept as evidence and replaced by the `-nb`
-    runs.
+  - The dev frontier outage: the six DeepInfra runs are reported not run
+    and kept as evidence. The owner's OD5 (725bb5e) moves the frontier arms
+    to NextBit. Replacing the six with the `-nb` runs rests on OD6, a default
+    the owner has not yet confirmed; the owner's paid dev command confirms
+    it, before that round's summary is written.
   - The general gap remains. A second outage on NextBit, which OD7 leaves
     not run, would again have no record in the tooling.
 - The Web remains recorded-only; Linux CI teardown and the production

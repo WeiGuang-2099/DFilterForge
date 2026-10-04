@@ -8,7 +8,7 @@
     {
       "by": "owner",
       "id": "OD5",
-      "text": "The frontier slot's repair arms move from DeepInfra to NextBit, with the committed config deepseek-v4-pro-0813_nextbit_enabled-false, for the dev re-run and the test round. Every other slot is unchanged, and the counted first turns stay the answers DeepInfra served."
+      "text": "The frontier slot's repair arms move from DeepInfra to NextBit, with the committed config deepseek-v4-pro-0813_nextbit_enabled-false, for every frontier arm run still to be sent: the test round's, and the dev round's if it is re-run, which is OD6. Every other slot is unchanged, and the counted first turns stay the answers DeepInfra served."
     },
     {
       "by": "default_taken",
