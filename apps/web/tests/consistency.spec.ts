@@ -345,6 +345,46 @@ test('dynamic routes are exactly the committed rows the site shows', () => {
   );
 });
 
+test('the committed registry shows and pools the published test runs', () => {
+  // The five planned test runs are published and scored and the eleven
+  // conditional rows are unused, so the test phase is on. These are the
+  // figures tests/test_export_web_data.py pins on the exporter's output,
+  // derived here from the committed files alone; a results change updates
+  // both pins in one commit.
+  expect(resolver.shownRuns()).toEqual([
+    'dev-qwen3-32b-2026-09-26',
+    'dev-qwen3.5-9b-2026-09-26',
+    'dev-ministral-8b-2512-2026-09-26',
+    'dev-granite-4.2-8b-2026-09-26',
+    'dev-qwen3.5-122b-a10b-2026-09-26',
+    'dev-mistral-medium-3-5-2026-09-26',
+    'dev-nemotron-3-super-120b-a12b-2026-09-26',
+    'dev-deepseek-v4-pro-0813-2026-09-26',
+    'dev-glm-5.2-2026-09-26',
+    'dev-kimi-k2.6-2026-09-26',
+    'test-qwen3-32b-2026-09-26',
+    'test-qwen3-32b-passb-2026-09-26',
+    'test-qwen3.5-9b-2026-09-26',
+    'test-qwen3.5-122b-a10b-2026-09-26',
+    'test-deepseek-v4-pro-0813-2026-09-26',
+  ]);
+  // Pass A, then the three slot winners; pass B is never pooled.
+  expect(resolver.reelPool()).toEqual([
+    'test-qwen3-32b-2026-09-26',
+    'test-qwen3.5-9b-2026-09-26',
+    'test-qwen3.5-122b-a10b-2026-09-26',
+    'test-deepseek-v4-pro-0813-2026-09-26',
+  ]);
+  expect(resolver.reelPick()).toEqual({
+    run: 'test-qwen3-32b-2026-09-26',
+    cond: 'C4',
+    item: 'mei-1038',
+    candidates: 54,
+  });
+  expect(resolver.executedRoutes()).toHaveLength(1854);
+  expect(resolver.caseIds()).toHaveLength(76);
+});
+
 test('model text is cut only at the contract size and only where the exporter cuts it', () => {
   // A page that hides most of an answer, or cuts a string that is not model
   // output, must fail even when its data-cap agrees with what it shows.
