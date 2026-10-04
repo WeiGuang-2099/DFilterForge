@@ -1,10 +1,11 @@
 """The web data exporter: sourced values, selection, asserts and exit status.
 
 A fixture repository in tmp_path holds a bake-off ranking with five dev runs
-(one with a dotted id), the frame tables and the global evidence, each file
-in the shape the committed ones take. A test resolver written apart from the
-exporter re-derives every sourced value from those raw files. The test of
-the committed tree skips where the test image carries no docs/ tree.
+(one with a dotted id), a bake-off ruling, the frame tables and the global
+evidence, each file in the shape the committed ones take. A test resolver
+written apart from the exporter re-derives every sourced value from those
+raw files. The test of the committed tree skips where the test image
+carries no docs/ tree.
 """
 
 from __future__ import annotations
@@ -55,6 +56,9 @@ _PASS_B = f"test-anchor-rerun-{_DATE}"
 _TEST_SMALL = f"test-small-{_DATE}"
 _TEST_MID = f"test-mid-{_DATE}"
 _TEST_FRONT = f"test-front-{_DATE}"
+# Beside the ranking, as the committed ruling is; the exporter reads it only
+# through test-runs.json's "ruling" field.
+_RULING = f"docs/decisions/evidence/bakeoff/ruling-{_DATE}.json"
 _ALLOWED = (
     "docs/results/",
     "docs/decisions/evidence/",
@@ -96,6 +100,28 @@ def _load() -> ModuleType:
 exporter = _load()
 
 
+def _ruling() -> Document:
+    """A bakeoff-ruling/1.0 document in the committed ruling's shape.
+
+    Its small winner is the dotted run, while the ranking's provisional
+    small winner is the other one, so a dev pool that holds the dotted run
+    took its winners from the ruling. The top-level ``winners`` holds model
+    ids, as the committed ruling's does.
+    """
+    winners = {"small": _DOTTED, "mid": _MID, "frontier": _FRONT}
+    return {
+        "anchor": {"run_id": _ANCHOR},
+        "date": _DATE,
+        "ranking": f"docs/decisions/evidence/bakeoff/ranking-{_DATE}.json",
+        "schema": "bakeoff-ruling/1.0",
+        "slots": {
+            slot: {"winner": {"model_id": f"m/{slot}", "run_id": run_id}}
+            for slot, run_id in winners.items()
+        },
+        "winners": {slot: f"m/{slot}" for slot in winners},
+    }
+
+
 @dataclass(frozen=True)
 class Answer:
     """One stored answer and how it scored.
@@ -122,6 +148,7 @@ class Fixture:
     test_runs: tuple[str, ...] = ()
     registration: Document | None = None
     note: str = ""
+    ruling: Document = field(default_factory=_ruling)
 
     def answer(self, run_id: str, label: str, item_id: str) -> Answer:
         """Returns a stored answer, by default exact or a clean abstention."""
@@ -138,6 +165,7 @@ class Fixture:
         for run_id in self.test_runs:
             self._run(run_id, "test")
         self._ranking()
+        _write(self.root / _RULING, self.ruling)
         self._captures()
         _write(
             self.root / "docs/decisions/evidence/test-freeze-gate.json",
@@ -1033,11 +1061,11 @@ def _registration(
     ]
     if slots:
         runs += [
-            {"dev_run_id": _DOTTED, "role": "small", "run_id": _TEST_SMALL},
-            {"dev_run_id": _MID, "role": "mid", "run_id": _TEST_MID},
-            {"dev_run_id": _FRONT, "role": "frontier", "run_id": _TEST_FRONT},
+            {"role": "small", "run_id": _TEST_SMALL},
+            {"role": "mid", "run_id": _TEST_MID},
+            {"role": "frontier", "run_id": _TEST_FRONT},
         ]
-    return {"not_run": list(not_run), "runs": runs}
+    return {"not_run": list(not_run), "ruling": _RULING, "runs": runs}
 
 
 def _note(runs: list[Document] | None = None, prose: str = "") -> str:
@@ -1086,7 +1114,8 @@ def test_test_rows_appear_only_when_every_registered_run_is_settled(
         item["run"].startswith("test-")
         for item in partial["routes.json"]["receipts"]
     )
-    # The registration names the winners even before the test phase.
+    # The ruling the registration names gives the winners even before the
+    # test phase: its small winner, not the ranking's provisional one.
     assert [
         run["run_id"] for run in partial["site.json"]["runs"] if run["pool"]
     ] == [_ANCHOR, _DOTTED, _MID, _FRONT]
@@ -1133,10 +1162,6 @@ def _unknown_not_run(doc: Document) -> None:
     doc["not_run"].append(f"test-x-{_DATE}")
 
 
-def _unshown_winner(doc: Document) -> None:
-    doc["runs"][2]["dev_run_id"] = f"dev-x-{_DATE}"
-
-
 def _dev_pass_a(doc: Document) -> None:
     doc["runs"][0]["run_id"] = _ANCHOR
 
@@ -1151,7 +1176,6 @@ def _scored_not_run(doc: Document) -> None:
         (_second_pass_a, "role_invalid"),
         (_no_pass_b, "role_missing"),
         (_unknown_not_run, "not_run_invalid"),
-        (_unshown_winner, "pool_unshown"),
         (_dev_pass_a, "split_mismatch"),
         (_scored_not_run, "not_run_scored"),
     ],
@@ -1169,6 +1193,56 @@ def test_a_broken_registration_fails(
     with pytest.raises(exporter.ContractError) as caught:
         exporter.export(root, "abc1234")
     assert caught.value.code == code
+
+
+def _ruling_schema(_: Document, ruling: Document) -> None:
+    ruling["schema"] = "bakeoff-ruling/0.9"
+
+
+def _slot_without_winner(_: Document, ruling: Document) -> None:
+    del ruling["slots"]["mid"]["winner"]
+
+
+def _test_winner(_: Document, ruling: Document) -> None:
+    ruling["slots"]["small"]["winner"]["run_id"] = _TEST_SMALL
+
+
+def _unshown_winner(_: Document, ruling: Document) -> None:
+    ruling["slots"]["small"]["winner"]["run_id"] = f"dev-x-{_DATE}"
+
+
+def _ruling_outside_the_roots(registration: Document, _: Document) -> None:
+    registration["ruling"] = "docs/decisions/model-bakeoff.md"
+
+
+@pytest.mark.parametrize(
+    ("edit", "code", "status"),
+    [
+        (_ruling_schema, "schema_invalid", 2),
+        (_slot_without_winner, "schema_invalid", 2),
+        (_test_winner, "split_mismatch", 1),
+        (_unshown_winner, "pool_unshown", 1),
+        (_ruling_outside_the_roots, "path_refused", 2),
+    ],
+)
+def test_a_broken_ruling_fails(
+    fixture: Fixture,
+    edit: Callable[[Document, Document], None],
+    code: str,
+    status: int,
+) -> None:
+    registration = _registration()
+    edit(registration, fixture.ruling)
+    fixture.registration = registration
+    fixture.note = _note()
+    root = fixture.build()
+
+    with pytest.raises(exporter.ExportError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == code
+    assert caught.value.exit_status == status
+    # The refusal names the ruling the registry names.
+    assert registration["ruling"] in str(caught.value)
 
 
 def test_a_run_missing_from_the_registry_note_fails(fixture: Fixture) -> None:
@@ -2229,7 +2303,8 @@ def test_the_test_phase_pools_pass_a_and_the_winners_never_pass_b(
     unsettled = _reel(root)
 
     assert unsettled["phase"] == "dev"
-    # Before the test phase the registration still names the winners.
+    # Before the test phase the ruling the registration names still gives
+    # the winners.
     assert [item["run_id"]["t"] for item in unsettled["pool"]] == [
         _ANCHOR,
         _DOTTED,
@@ -2254,6 +2329,24 @@ def test_a_not_run_test_pass_leaves_the_pool(fixture: Fixture) -> None:
         "frontier",
     ]
     assert _picked(reel) == (_TEST_SMALL, "C4", "i-1001")
+
+
+@pytest.mark.parametrize("phase", ["dev", "test"])
+def test_the_reel_hashes_the_ruling(fixture: Fixture, phase: str) -> None:
+    _settled(fixture)
+    if phase == "dev":
+        # No test run exists, so the phase stays dev and the pool holds the
+        # ruling's dev winners.
+        fixture.test_runs = ()
+    root = fixture.build()
+    before = _reel(root)
+
+    _edit(root / _RULING, lambda value: value.update(date="2026-01-02"))
+    after = _reel(root)
+
+    assert before["phase"] == after["phase"] == phase
+    assert _choice(after) == _choice(before)
+    assert after["inputs_sha256"] != before["inputs_sha256"]
 
 
 def test_a_silent_wrong_receipt_must_disagree_somewhere(

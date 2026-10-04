@@ -28,14 +28,16 @@ the lexicographically last bake-off ranking (the anchor, then the small, mid
 and frontier slots, rank by rank) and, once every run that
 docs/decisions/evidence/test-runs.json registers is scored or listed as not
 run, the registered test runs. That file is read as
-``{"runs": [{"role", "run_id", "dev_run_id"}], "not_run": [run_id]}``, with
-roles pass_a, pass_b, small, mid and frontier; a slot role names its
-winner's counted dev pass in ``dev_run_id``. Its runs must be, numbered from
-1 and in order, the rows of the Runs table in docs/decisions/test-runs.md,
-the note that registers them; a run id named only in that note's prose
-registers nothing. The site never divides: dev runs get counts only, and
-rates, intervals and comparisons are pointers into a test run's
-summary.json.
+``{"ruling": path, "runs": [{"role", "run_id"}], "not_run": [run_id]}``,
+with roles pass_a, pass_b, small, mid and frontier. ``ruling`` names the
+bake-off ruling (schema bakeoff-ruling/1.0), whose
+``slots.<slot>.winner.run_id`` is each slot winner's counted dev pass; its
+top-level ``winners`` holds model ids and is not read. The registered runs
+must be, numbered from 1 and in order, the rows of the Runs table in
+docs/decisions/test-runs.md, the note that registers them; a run id named
+only in that note's prose registers nothing. The site never divides: dev
+runs get counts only, and rates, intervals and comparisons are pointers
+into a test run's summary.json.
 
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
@@ -47,7 +49,8 @@ reel.json projects the home page's Disproof Reel by the pre-registered
 rule reel-v1 (docs/decisions/disproof-reel.md once registered). Pool: in
 the test phase pass A then the small, mid and frontier winners' test runs,
 skipping runs not run; else the dev anchor then the winners' dev passes
-(test-runs.json's, else the ranking's provisional winners); pass B never.
+(from the ruling test-runs.json names, else, with no test-runs.json, the
+ranking's provisional winners); pass B never.
 Candidates: pool items in C4 with ready gold and outcome silent_wrong,
 else C3, then C2, then C1. Pick: the fewest frames in candidate_only plus
 reference_only over the scored probes, ties to the earlier pool run, then
@@ -91,6 +94,9 @@ MEAN_TOLERANCE = 5e-7
 RESULTS = "docs/results"
 RANKING_DIR = "docs/decisions/evidence/bakeoff"
 TEST_RUNS = "docs/decisions/evidence/test-runs.json"
+# The schema of the bake-off ruling that test-runs.json names; the ruling
+# holds each slot winner's counted dev pass.
+RULING_SCHEMA = "bakeoff-ruling/1.0"
 CAPTURES = "docs/decisions/evidence/web/captures.json"
 TRACES = "docs/decisions/evidence/web/traces"
 GATE = "docs/decisions/evidence/test-freeze-gate.json"
@@ -959,7 +965,13 @@ class Selection:
     not_run: list[tuple[str, int]]
     pool: list[Shown]
     test_phase: bool
-    registered: bool
+    # The bake-off ruling test-runs.json names; None with no test-runs.json.
+    ruling: str | None
+
+    @property
+    def registered(self) -> bool:
+        """Whether test-runs.json exists; its ruling is then always read."""
+        return self.ruling is not None
 
     @property
     def shown(self) -> list[Shown]:
@@ -969,10 +981,14 @@ class Selection:
 
 @dataclass(frozen=True)
 class Registration:
-    """What test-runs.json registers: runs by role, not-run ids, winners."""
+    """What test-runs.json registers: runs by role, not-run ids, the ruling.
+
+    ``winners`` maps each slot to its winner's dev pass in the ruling.
+    """
 
     runs: list[tuple[str, str]]
     not_run: list[str]
+    ruling: str
     winners: dict[str, str]
 
 
@@ -1040,6 +1056,50 @@ def _row_text(rows: Sequence[tuple[str, str, str]], index: int) -> str:
     return " ".join(rows[index]) if index < len(rows) else "no row"
 
 
+def read_ruling(repo: Repo, path: str, selected: set[str]) -> dict[str, str]:
+    """Reads each slot winner's dev pass from the bake-off ruling.
+
+    disproof-reel.md takes the winners' dev passes from the ruling that
+    test-runs.json names: ``slots.<slot>.winner.run_id``. The top-level
+    ``winners`` holds model ids and is not read.
+
+    Args:
+        repo: The repository.
+        path: The ruling's path, as test-runs.json names it.
+        selected: The dev run ids the ranking shows.
+
+    Returns:
+        The winner's dev run id for each of the small, mid and frontier
+        slots.
+
+    Raises:
+        ExportError: With code ``path_refused`` for a path outside the
+            allowed roots, or ``schema_invalid`` for a schema other than
+            bakeoff-ruling/1.0 or a slot with no winner run id.
+        ContractError: For a winner that is no dev run (``split_mismatch``)
+            or that the ranking does not show (``pool_unshown``).
+    """
+    document = _obj(repo.json(path), path)
+    if document.get("schema") != RULING_SCHEMA:
+        raise ExportError("schema_invalid", f"{path} is not {RULING_SCHEMA}")
+    slots = _obj(document.get("slots"), f"{path} slots")
+    winners: dict[str, str] = {}
+    for slot in _SLOTS:
+        block = _obj(slots.get(slot), f"{path} {slot}")
+        winner = _obj(block.get("winner"), f"{path} {slot} winner")
+        run_id = check_run_id(
+            _text(winner.get("run_id"), f"{path} {slot} winner run_id")
+        )
+        if not run_id.startswith("dev-"):
+            raise ContractError("split_mismatch", f"{path} {run_id}")
+        if run_id not in selected:
+            raise ContractError(
+                "pool_unshown", f"{path} {slot} winner {run_id} is not shown"
+            )
+        winners[slot] = run_id
+    return winners
+
+
 def read_registration(repo: Repo, selected: set[str]) -> Registration:
     """Reads test-runs.json and checks it against the ranking and the note.
 
@@ -1048,17 +1108,20 @@ def read_registration(repo: Repo, selected: set[str]) -> Registration:
         selected: The dev run ids the ranking shows.
 
     Returns:
-        The registered runs by role, the not-run ids and the slot winners.
+        The registered runs by role, the not-run ids, the ruling's path and
+        the slot winners' dev passes it names.
 
     Raises:
+        ExportError: For a ruling ``read_ruling`` cannot read.
         ContractError: For an unknown or repeated role, a missing A/A pass,
-            a winner the ranking does not show, a not-run id that is not
-            registered, or a Runs table in test-runs.md that does not list
-            the registry's rows, numbered from 1, in the registry's order.
+            a not-run id that is not registered, a Runs table in
+            test-runs.md that does not list the registry's rows, numbered
+            from 1, in the registry's order, or a ruling winner that is no
+            dev run or that the ranking does not show.
     """
     document = _obj(repo.json(TEST_RUNS), TEST_RUNS)
+    ruling = check_path(_text(document.get("ruling"), f"{TEST_RUNS} ruling"))
     runs: list[tuple[str, str]] = []
-    winners: dict[str, str] = {}
     for item in _arr(document.get("runs"), f"{TEST_RUNS} runs"):
         entry = _obj(item, f"{TEST_RUNS} run")
         role = _text(entry.get("role"), f"{TEST_RUNS} role")
@@ -1067,13 +1130,6 @@ def read_registration(repo: Repo, selected: set[str]) -> Registration:
             raise ContractError("role_invalid", f"{TEST_RUNS} {role!r}")
         if not run_id.startswith("test-"):
             raise ContractError("split_mismatch", f"{TEST_RUNS} {run_id}")
-        if role in _SLOTS:
-            dev_run = check_run_id(
-                _text(entry.get("dev_run_id"), f"{role} dev_run_id")
-            )
-            if dev_run not in selected:
-                raise ContractError("pool_unshown", f"{dev_run} is not shown")
-            winners[role] = dev_run
         runs.append((role, run_id))
     if not {"pass_a", "pass_b"} <= set(dict(runs)):
         raise ContractError("role_missing", f"{TEST_RUNS} lacks the A/A pair")
@@ -1101,7 +1157,9 @@ def read_registration(repo: Repo, selected: set[str]) -> Registration:
             f"{_row_text(noted, index)}; {TEST_RUNS} has "
             f"{_row_text(registered, index)}",
         )
-    return Registration(runs, not_run, winners)
+    return Registration(
+        runs, not_run, ruling, read_ruling(repo, ruling, selected)
+    )
 
 
 def _claim(seen: dict[str, str], run: Run) -> Run:
@@ -1170,10 +1228,13 @@ def select(repo: Repo) -> Selection:
     Returns:
         The selection rows in ranking order, the test rows once the test
         phase is on, and the Reel pool: pass A and the slot winners' test
-        runs in the test phase, else the dev anchor and the winners' passes.
+        runs in the test phase, else the dev anchor and the winners' dev
+        passes, from the ruling test-runs.json names when that file exists
+        and from the ranking's provisional winners when it does not.
 
     Raises:
-        ContractError: When the ranking or registration breaks the contract.
+        ContractError: When the ranking, registration or ruling breaks the
+            contract.
     """
     ranking = latest_ranking(repo)
     entries, winners = _ranking_entries(repo, ranking)
@@ -1184,12 +1245,13 @@ def select(repo: Repo) -> Selection:
             raise ContractError("split_mismatch", f"{ranking} {run_id}")
         rows.append(Shown(_claim(seen, Run(repo, run_id)), role, entry))
         _check_ranking_count(repo, ranking, rows[-1])
-    registered = repo.exists(TEST_RUNS)
     settled = None
-    if registered:
+    ruling = None
+    if repo.exists(TEST_RUNS):
         registration = read_registration(
             repo, {item.run.run_id for item in rows}
         )
+        ruling = registration.ruling
         winners = registration.winners
         settled = _test_rows(repo, registration, seen)
     tests, not_run = settled if settled is not None else ([], [])
@@ -1200,7 +1262,7 @@ def select(repo: Repo) -> Selection:
         not_run=not_run,
         pool=_pool(rows, tests, winners, test_phase=settled is not None),
         test_phase=settled is not None,
-        registered=registered,
+        ruling=ruling,
     )
 
 
@@ -1993,8 +2055,11 @@ def build_reel(
     """
     with repo.scope() as used:
         repo.json(selection.ranking)
-        if selection.registered:
+        # The 2026-10-01 check read test-runs.json and the ruling it names
+        # (disproof-reel.md), in either phase.
+        if selection.ruling is not None:
             repo.json(TEST_RUNS)
+            repo.json(selection.ruling)
         pool = selection.pool
         label, candidates = reel_candidates(repo, pool)
         where: dict[str, list[str]] = {
