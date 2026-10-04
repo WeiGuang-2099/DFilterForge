@@ -1,0 +1,740 @@
+{
+  "written_at": "2026-10-04T02:41:51Z",
+  "split": "dev",
+  "source_revision": "bff373c",
+  "note": "docs/decisions/repair-round.md",
+  "final": true,
+  "charged_usd_upper_bound_total": 0.045822,
+  "rounds": [
+    {
+      "base_run": "dev-qwen3-32b-2026-09-26",
+      "final": true,
+      "next": "publish and score dev-qwen3-32b-res-2026-09-26, dev-qwen3-32b-bare-2026-09-26, dev-qwen3-32b-cx-2026-09-26, then repair --run-dir /workspace/results/dev-qwen3-32b-2026-09-26 --code-revision REV",
+      "repair": [
+        "repair",
+        "--run-dir",
+        "/workspace/results/dev-qwen3-32b-2026-09-26",
+        "--code-revision",
+        "REV"
+      ]
+    },
+    {
+      "base_run": "dev-qwen3.5-9b-2026-09-26",
+      "final": true,
+      "next": "publish and score dev-qwen3.5-9b-res-2026-09-26, dev-qwen3.5-9b-bare-2026-09-26, dev-qwen3.5-9b-cx-2026-09-26, then repair --run-dir /workspace/results/dev-qwen3.5-9b-2026-09-26 --code-revision REV",
+      "repair": [
+        "repair",
+        "--run-dir",
+        "/workspace/results/dev-qwen3.5-9b-2026-09-26",
+        "--code-revision",
+        "REV"
+      ]
+    },
+    {
+      "base_run": "dev-qwen3.5-122b-a10b-2026-09-26",
+      "final": true,
+      "next": "publish and score dev-qwen3.5-122b-a10b-res-2026-09-26, dev-qwen3.5-122b-a10b-bare-2026-09-26, dev-qwen3.5-122b-a10b-cx-2026-09-26, then repair --run-dir /workspace/results/dev-qwen3.5-122b-a10b-2026-09-26 --code-revision REV",
+      "repair": [
+        "repair",
+        "--run-dir",
+        "/workspace/results/dev-qwen3.5-122b-a10b-2026-09-26",
+        "--code-revision",
+        "REV"
+      ]
+    },
+    {
+      "base_run": "dev-deepseek-v4-pro-0813-2026-09-26",
+      "final": true,
+      "next": "no arm run to publish (outage (no_answer_only_transient_failures); its re-run dev-deepseek-v4-pro-0813-bare-r2-2026-09-26 met an outage too; outage (no_answer_only_transient_failures); its re-run dev-deepseek-v4-pro-0813-cx-r2-2026-09-26 met an outage too; outage (no_answer_only_transient_failures); its re-run dev-deepseek-v4-pro-0813-res-r2-2026-09-26 met an outage too)"
+    }
+  ],
+  "rows": [
+    {
+      "number": 1,
+      "slot": "anchor",
+      "base_run": "dev-qwen3-32b-2026-09-26",
+      "arm": "resample",
+      "run_id": "dev-qwen3-32b-res-2026-09-26",
+      "counted_run_id": "dev-qwen3-32b-res-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3-32b_deepinfra_enabled-false.json",
+      "cap_usd": 0.05,
+      "registered_cap_usd": 0.05,
+      "items": 10,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3-32b-res-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3-32b-res-2026-09-26/runs/dev-qwen3-32b-res-2026-09-26 --output docs/results/dev-qwen3-32b-res-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3-32b-res-2026-09-26",
+        "config": "qwen3-32b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3-32b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 10,
+        "failed": 0,
+        "pending": 0,
+        "requests": 10,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 10,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "DeepInfra": 10
+        },
+        "finish_reasons": {
+          "stop": 10
+        },
+        "http_statuses": {
+          "200": 10
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.001543,
+        "provider_reported_usd": 0.0015378,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 2,
+      "slot": "anchor",
+      "base_run": "dev-qwen3-32b-2026-09-26",
+      "arm": "bare",
+      "run_id": "dev-qwen3-32b-bare-2026-09-26",
+      "counted_run_id": "dev-qwen3-32b-bare-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3-32b_deepinfra_enabled-false.json",
+      "cap_usd": 0.05,
+      "registered_cap_usd": 0.05,
+      "items": 10,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3-32b-bare-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3-32b-bare-2026-09-26/runs/dev-qwen3-32b-bare-2026-09-26 --output docs/results/dev-qwen3-32b-bare-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3-32b-bare-2026-09-26",
+        "config": "qwen3-32b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3-32b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 10,
+        "failed": 0,
+        "pending": 0,
+        "requests": 10,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 10,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "DeepInfra": 10
+        },
+        "finish_reasons": {
+          "stop": 10
+        },
+        "http_statuses": {
+          "200": 10
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.001779,
+        "provider_reported_usd": 0.00177516,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 3,
+      "slot": "anchor",
+      "base_run": "dev-qwen3-32b-2026-09-26",
+      "arm": "counterexample",
+      "run_id": "dev-qwen3-32b-cx-2026-09-26",
+      "counted_run_id": "dev-qwen3-32b-cx-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3-32b_deepinfra_enabled-false.json",
+      "cap_usd": 0.05,
+      "registered_cap_usd": 0.05,
+      "items": 10,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3-32b-cx-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3-32b-cx-2026-09-26/runs/dev-qwen3-32b-cx-2026-09-26 --output docs/results/dev-qwen3-32b-cx-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3-32b-cx-2026-09-26",
+        "config": "qwen3-32b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3-32b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 10,
+        "failed": 0,
+        "pending": 0,
+        "requests": 10,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 10,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "DeepInfra": 10
+        },
+        "finish_reasons": {
+          "stop": 10
+        },
+        "http_statuses": {
+          "200": 10
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.001937,
+        "provider_reported_usd": 0.00193332,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 4,
+      "slot": "8B",
+      "base_run": "dev-qwen3.5-9b-2026-09-26",
+      "arm": "resample",
+      "run_id": "dev-qwen3.5-9b-res-2026-09-26",
+      "counted_run_id": "dev-qwen3.5-9b-res-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3.5-9b_deepinfra_enabled-false.json",
+      "cap_usd": 0.05,
+      "registered_cap_usd": 0.05,
+      "items": 7,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3.5-9b-res-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3.5-9b-res-2026-09-26/runs/dev-qwen3.5-9b-res-2026-09-26 --output docs/results/dev-qwen3.5-9b-res-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3.5-9b-res-2026-09-26",
+        "config": "qwen3.5-9b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3.5-9b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 7,
+        "failed": 0,
+        "pending": 0,
+        "requests": 11,
+        "invocations": 3,
+        "stop_reasons": [
+          null,
+          null,
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 7,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "DeepInfra": 7
+        },
+        "finish_reasons": {
+          "stop": 7
+        },
+        "http_statuses": {
+          "200": 7,
+          "429": 4
+        },
+        "error_codes": {
+          "http_error": 4
+        },
+        "provider_error_codes": {
+          "429": 4
+        },
+        "charged_usd_upper_bound": 0.001224,
+        "provider_reported_usd": 0.0012218,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 5,
+      "slot": "8B",
+      "base_run": "dev-qwen3.5-9b-2026-09-26",
+      "arm": "bare",
+      "run_id": "dev-qwen3.5-9b-bare-2026-09-26",
+      "counted_run_id": "dev-qwen3.5-9b-bare-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3.5-9b_deepinfra_enabled-false.json",
+      "cap_usd": 0.05,
+      "registered_cap_usd": 0.05,
+      "items": 7,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3.5-9b-bare-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3.5-9b-bare-2026-09-26/runs/dev-qwen3.5-9b-bare-2026-09-26 --output docs/results/dev-qwen3.5-9b-bare-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3.5-9b-bare-2026-09-26",
+        "config": "qwen3.5-9b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3.5-9b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 7,
+        "failed": 0,
+        "pending": 0,
+        "requests": 7,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 7,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "DeepInfra": 7
+        },
+        "finish_reasons": {
+          "stop": 6,
+          "length": 1
+        },
+        "http_statuses": {
+          "200": 7
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.001761,
+        "provider_reported_usd": 0.00175865,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 6,
+      "slot": "8B",
+      "base_run": "dev-qwen3.5-9b-2026-09-26",
+      "arm": "counterexample",
+      "run_id": "dev-qwen3.5-9b-cx-2026-09-26",
+      "counted_run_id": "dev-qwen3.5-9b-cx-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3.5-9b_deepinfra_enabled-false.json",
+      "cap_usd": 0.05,
+      "registered_cap_usd": 0.05,
+      "items": 7,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3.5-9b-cx-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3.5-9b-cx-2026-09-26/runs/dev-qwen3.5-9b-cx-2026-09-26 --output docs/results/dev-qwen3.5-9b-cx-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3.5-9b-cx-2026-09-26",
+        "config": "qwen3.5-9b_deepinfra_enabled-false",
+        "model_id": "qwen/qwen3.5-9b",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 7,
+        "failed": 0,
+        "pending": 0,
+        "requests": 7,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 7,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "DeepInfra": 7
+        },
+        "finish_reasons": {
+          "stop": 6,
+          "length": 1
+        },
+        "http_statuses": {
+          "200": 7
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.001883,
+        "provider_reported_usd": 0.00187945,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 7,
+      "slot": "120B",
+      "base_run": "dev-qwen3.5-122b-a10b-2026-09-26",
+      "arm": "resample",
+      "run_id": "dev-qwen3.5-122b-a10b-res-2026-09-26",
+      "counted_run_id": "dev-qwen3.5-122b-a10b-res-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3.5-122b-a10b_novita_enabled-false.json",
+      "cap_usd": 0.1,
+      "registered_cap_usd": 0.1,
+      "items": 8,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3.5-122b-a10b-res-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3.5-122b-a10b-res-2026-09-26/runs/dev-qwen3.5-122b-a10b-res-2026-09-26 --output docs/results/dev-qwen3.5-122b-a10b-res-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3.5-122b-a10b-res-2026-09-26",
+        "config": "qwen3.5-122b-a10b_novita_enabled-false",
+        "model_id": "qwen/qwen3.5-122b-a10b",
+        "slug": "novita",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 8,
+        "failed": 0,
+        "pending": 0,
+        "requests": 8,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 8,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "Novita": 8
+        },
+        "finish_reasons": {
+          "stop": 8
+        },
+        "http_statuses": {
+          "200": 8
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.011174,
+        "provider_reported_usd": 0.0111716,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 8,
+      "slot": "120B",
+      "base_run": "dev-qwen3.5-122b-a10b-2026-09-26",
+      "arm": "bare",
+      "run_id": "dev-qwen3.5-122b-a10b-bare-2026-09-26",
+      "counted_run_id": "dev-qwen3.5-122b-a10b-bare-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3.5-122b-a10b_novita_enabled-false.json",
+      "cap_usd": 0.1,
+      "registered_cap_usd": 0.1,
+      "items": 8,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3.5-122b-a10b-bare-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3.5-122b-a10b-bare-2026-09-26/runs/dev-qwen3.5-122b-a10b-bare-2026-09-26 --output docs/results/dev-qwen3.5-122b-a10b-bare-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3.5-122b-a10b-bare-2026-09-26",
+        "config": "qwen3.5-122b-a10b_novita_enabled-false",
+        "model_id": "qwen/qwen3.5-122b-a10b",
+        "slug": "novita",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 8,
+        "failed": 0,
+        "pending": 0,
+        "requests": 8,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 8,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "Novita": 8
+        },
+        "finish_reasons": {
+          "stop": 8
+        },
+        "http_statuses": {
+          "200": 8
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.012068,
+        "provider_reported_usd": 0.0120644,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 9,
+      "slot": "120B",
+      "base_run": "dev-qwen3.5-122b-a10b-2026-09-26",
+      "arm": "counterexample",
+      "run_id": "dev-qwen3.5-122b-a10b-cx-2026-09-26",
+      "counted_run_id": "dev-qwen3.5-122b-a10b-cx-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/qwen3.5-122b-a10b_novita_enabled-false.json",
+      "cap_usd": 0.1,
+      "registered_cap_usd": 0.1,
+      "items": 8,
+      "state": "done",
+      "reason": "complete",
+      "kind": "done",
+      "maintainer": {
+        "commit_to": "docs/results/dev-qwen3.5-122b-a10b-cx-2026-09-26/",
+        "publish": "python scripts/model_run.py publish --run-dir artifacts/repair/dev-qwen3.5-122b-a10b-cx-2026-09-26/runs/dev-qwen3.5-122b-a10b-cx-2026-09-26 --output docs/results/dev-qwen3.5-122b-a10b-cx-2026-09-26"
+      },
+      "run": {
+        "run_id": "dev-qwen3.5-122b-a10b-cx-2026-09-26",
+        "config": "qwen3.5-122b-a10b_novita_enabled-false",
+        "model_id": "qwen/qwen3.5-122b-a10b",
+        "slug": "novita",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 8,
+        "failed": 0,
+        "pending": 0,
+        "requests": 8,
+        "invocations": 1,
+        "stop_reasons": [
+          null
+        ],
+        "reasoning_state": "honoured",
+        "reasoning_evidence": 8,
+        "reasoning_tokens_total": 0,
+        "served_by": {
+          "Novita": 8
+        },
+        "finish_reasons": {
+          "stop": 8
+        },
+        "http_statuses": {
+          "200": 8
+        },
+        "error_codes": {},
+        "provider_error_codes": {},
+        "charged_usd_upper_bound": 0.012453,
+        "provider_reported_usd": 0.0124492,
+        "action": "done",
+        "action_reason": "complete"
+      },
+      "first_run": null
+    },
+    {
+      "number": 10,
+      "slot": "frontier",
+      "base_run": "dev-deepseek-v4-pro-0813-2026-09-26",
+      "arm": "resample",
+      "run_id": "dev-deepseek-v4-pro-0813-res-2026-09-26",
+      "counted_run_id": "dev-deepseek-v4-pro-0813-res-r2-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/deepseek-v4-pro-0813_deepinfra_enabled-false.json",
+      "cap_usd": 0.2,
+      "registered_cap_usd": 0.2,
+      "items": 11,
+      "state": "not_run",
+      "reason": "outage (no_answer_only_transient_failures); its re-run dev-deepseek-v4-pro-0813-res-r2-2026-09-26 met an outage too",
+      "kind": "outage",
+      "maintainer": {
+        "commit_to": "docs/decisions/evidence/repair-arms/dev-deepseek-v4-pro-0813-res-r2-2026-09-26/",
+        "repair_not_run": null,
+        "first_run_evidence": "docs/decisions/evidence/repair-arms/dev-deepseek-v4-pro-0813-res-2026-09-26/"
+      },
+      "run": {
+        "run_id": "dev-deepseek-v4-pro-0813-res-r2-2026-09-26",
+        "config": "deepseek-v4-pro-0813_deepinfra_enabled-false",
+        "model_id": "deepseek/deepseek-v4-pro-0813",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 0,
+        "failed": 11,
+        "pending": 0,
+        "requests": 33,
+        "invocations": 3,
+        "stop_reasons": [
+          null,
+          null,
+          null
+        ],
+        "reasoning_state": "uncontrolled",
+        "reasoning_evidence": 0,
+        "reasoning_tokens_total": 0,
+        "served_by": {},
+        "finish_reasons": {},
+        "http_statuses": {
+          "429": 33
+        },
+        "error_codes": {
+          "http_error": 33
+        },
+        "provider_error_codes": {
+          "429": 33
+        },
+        "charged_usd_upper_bound": 0.0,
+        "provider_reported_usd": null,
+        "action": "outage",
+        "action_reason": "no_answer_only_transient_failures"
+      },
+      "first_run": {
+        "run_id": "dev-deepseek-v4-pro-0813-res-2026-09-26",
+        "charged_usd_upper_bound": 0.0
+      }
+    },
+    {
+      "number": 11,
+      "slot": "frontier",
+      "base_run": "dev-deepseek-v4-pro-0813-2026-09-26",
+      "arm": "bare",
+      "run_id": "dev-deepseek-v4-pro-0813-bare-2026-09-26",
+      "counted_run_id": "dev-deepseek-v4-pro-0813-bare-r2-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/deepseek-v4-pro-0813_deepinfra_enabled-false.json",
+      "cap_usd": 0.2,
+      "registered_cap_usd": 0.2,
+      "items": 11,
+      "state": "not_run",
+      "reason": "outage (no_answer_only_transient_failures); its re-run dev-deepseek-v4-pro-0813-bare-r2-2026-09-26 met an outage too",
+      "kind": "outage",
+      "maintainer": {
+        "commit_to": "docs/decisions/evidence/repair-arms/dev-deepseek-v4-pro-0813-bare-r2-2026-09-26/",
+        "repair_not_run": null,
+        "first_run_evidence": "docs/decisions/evidence/repair-arms/dev-deepseek-v4-pro-0813-bare-2026-09-26/"
+      },
+      "run": {
+        "run_id": "dev-deepseek-v4-pro-0813-bare-r2-2026-09-26",
+        "config": "deepseek-v4-pro-0813_deepinfra_enabled-false",
+        "model_id": "deepseek/deepseek-v4-pro-0813",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 0,
+        "failed": 11,
+        "pending": 0,
+        "requests": 33,
+        "invocations": 3,
+        "stop_reasons": [
+          null,
+          null,
+          null
+        ],
+        "reasoning_state": "uncontrolled",
+        "reasoning_evidence": 0,
+        "reasoning_tokens_total": 0,
+        "served_by": {},
+        "finish_reasons": {},
+        "http_statuses": {
+          "429": 33
+        },
+        "error_codes": {
+          "http_error": 33
+        },
+        "provider_error_codes": {
+          "429": 33
+        },
+        "charged_usd_upper_bound": 0.0,
+        "provider_reported_usd": null,
+        "action": "outage",
+        "action_reason": "no_answer_only_transient_failures"
+      },
+      "first_run": {
+        "run_id": "dev-deepseek-v4-pro-0813-bare-2026-09-26",
+        "charged_usd_upper_bound": 0.0
+      }
+    },
+    {
+      "number": 12,
+      "slot": "frontier",
+      "base_run": "dev-deepseek-v4-pro-0813-2026-09-26",
+      "arm": "counterexample",
+      "run_id": "dev-deepseek-v4-pro-0813-cx-2026-09-26",
+      "counted_run_id": "dev-deepseek-v4-pro-0813-cx-r2-2026-09-26",
+      "config": "docs/decisions/evidence/bakeoff/configs/deepseek-v4-pro-0813_deepinfra_enabled-false.json",
+      "cap_usd": 0.2,
+      "registered_cap_usd": 0.2,
+      "items": 11,
+      "state": "not_run",
+      "reason": "outage (no_answer_only_transient_failures); its re-run dev-deepseek-v4-pro-0813-cx-r2-2026-09-26 met an outage too",
+      "kind": "outage",
+      "maintainer": {
+        "commit_to": "docs/decisions/evidence/repair-arms/dev-deepseek-v4-pro-0813-cx-r2-2026-09-26/",
+        "repair_not_run": null,
+        "first_run_evidence": "docs/decisions/evidence/repair-arms/dev-deepseek-v4-pro-0813-cx-2026-09-26/"
+      },
+      "run": {
+        "run_id": "dev-deepseek-v4-pro-0813-cx-r2-2026-09-26",
+        "config": "deepseek-v4-pro-0813_deepinfra_enabled-false",
+        "model_id": "deepseek/deepseek-v4-pro-0813",
+        "slug": "deepinfra",
+        "reasoning_switch": "enabled_false",
+        "exists": true,
+        "status": "complete",
+        "completed": 0,
+        "failed": 11,
+        "pending": 0,
+        "requests": 33,
+        "invocations": 3,
+        "stop_reasons": [
+          null,
+          null,
+          null
+        ],
+        "reasoning_state": "uncontrolled",
+        "reasoning_evidence": 0,
+        "reasoning_tokens_total": 0,
+        "served_by": {},
+        "finish_reasons": {},
+        "http_statuses": {
+          "429": 33
+        },
+        "error_codes": {
+          "http_error": 33
+        },
+        "provider_error_codes": {
+          "429": 33
+        },
+        "charged_usd_upper_bound": 0.0,
+        "provider_reported_usd": null,
+        "action": "outage",
+        "action_reason": "no_answer_only_transient_failures"
+      },
+      "first_run": {
+        "run_id": "dev-deepseek-v4-pro-0813-cx-2026-09-26",
+        "charged_usd_upper_bound": 0.0
+      }
+    }
+  ]
+}
