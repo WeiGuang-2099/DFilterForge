@@ -1661,13 +1661,96 @@ bff373c.
   at the keyless preflight, so NextBit has served no repair arm yet. CI's
   web and container jobs did not run, and nothing was pushed.
 
+## Frontier move review fixes: 2026-10-04, branch dev-repair-round
+
+A review of the move's registration (725bb5e to 30eb879) confirmed five
+findings; five commits fix them, two with a test. No model request was sent,
+no command set the key variable, and nothing was pushed.
+
+- **What the 429 records show (169d2fb).** The protocol amendment and the
+  ruling said all 198 dev frontier attempts were HTTP 429 "from the
+  provider's shared pool (`engine_overloaded`,
+  `upstream_provider_shared_pool`)". The records do not show that.
+  - Recounted from the six committed evidence runs: 198 attempts, every one
+    HTTP 429 with `provider` null and `provider_error_code` "429". No file
+    under the six evidence directories contains `engine_overloaded` or
+    `shared_pool`.
+  - The client keeps only `error.code` from an error body
+    (`_error_body_code` in `src/dfilterforge/model_client.py`). The
+    shared-pool body comes from one request the owner sent after the round
+    (diagnostics, section 2).
+  - The protocol, the ruling's `why` and its rejected "waiting on DeepInfra"
+    entry, and the note's shorthand of that entry now say this: no answer
+    between 02:23 and 02:41 UTC on the DeepInfra-pinned route, and the
+    shared-pool body from the owner's later request.
+  - Not changed: the progress lines. They already said only "HTTP 429 from
+    the DeepInfra-pinned route". 725bb5e's commit message keeps the old
+    claim, since history is not rewritten.
+- **The test baseline's 429 count (3b83b27).** The amendment set "754 HTTP
+  429" beside the dev round's 198, which counts every attempt.
+  - Recounted from
+    `docs/results/test-deepseek-v4-pro-0813-2026-09-26/attempts/`: 1,202
+    attempts, 776 HTTP 429 and 426 HTTP 200. Of the 429s, 754 came before an
+    item's last attempt (C1 195, C2 199, C3 193, C4 167) and 22 on it (C1
+    21, C4 1). All 776 have `provider` null.
+  - The ruling now holds `test_baseline_http_429` 776,
+    `test_baseline_http_429_before_last_attempt` 754 and
+    `test_baseline_run`. The protocol, the repair note, the ruling's `why`
+    and the progress line above give both figures.
+  - `test_the_frontier_move_ruling_matches_its_evidence` recounts both from
+    the baseline's committed attempts and ties the second to the locked
+    page's sentence. Before the ruling changed it failed on
+    `{'test_baseline_http_429': 754} != {'test_baseline_http_429': 776}`;
+    after, it passed.
+- **OD6, not OD5, replaces the six runs (adb2f8d).** The "Not run beyond the
+  gate" amendment said OD5 replaced the six DeepInfra runs with the NextBit
+  runs. The committed diagnostics say the owner did not answer whether dev
+  re-runs; that is the default OD6.
+  - The amendment now says the six are not run under the outage rule and
+    are kept as evidence, and that OD5 is the provider move. It says their
+    replacement is OD6, which the owner's paid dev command confirms before
+    the round's summary.
+  - OD5's text in the note and the ruling now covers the dev round only if
+    it is re-run. So do the two progress lines that repeated the
+    attribution: the OD5 bullet above and the bullet under Blocked or
+    unverified.
+- **The Order step (7586346).** The amended Order step put the NextBit
+  re-run and the pool "before any correction". It now says "any further
+  correction", and names OD5's move (725bb5e, c57142a, 1d07612) as the
+  correction for the DeepInfra outage, as the protocol and Planned next
+  already did.
+- **The registry names the -r2 re-runs (2915a74).** The registry's
+  amendment, in `test-runs.md` and in `test-runs.json`, named only the three
+  first test frontier arm runs. Both now also name
+  `test-deepseek-v4-pro-0813-{res,bare,cx}-r2-2026-09-26`, which the ruling,
+  OD7 and the batch move too.
+  - The ruling test now requires both texts to name exactly the ruling's
+    six test move arm runs. Before the text changed it failed: the ruling
+    had 3 more items, the first
+    `test-deepseek-v4-pro-0813-cx-r2-2026-09-26`. After, it passed.
+- **Checks.** They ran in `dfilterforge-test:dev-repair-round`, rebuilt from
+  the worktree at 2915a74:
+  `sha256:a7ca6d35053540567dcb97975bd0ce76053eaefd34aea42c438871caee3058e0`.
+  The compose project was `dfilterforge-devrepair`, with the override above.
+  - pyink (96 files) and isort are clean, and pyright reports 0 errors.
+  - CI's three docs-mounted steps passed: registration 295, with no skip;
+    pair report 2; second turn 2.
+  - On the host, `tests/test_repair_arms.py`, `tests/test_hosted_test_runs.py`
+    and `tests/test_test_passes.py` gave 155 passed.
+  - Not run: the full suite, the gates and pylint. No `src/` or `scripts/`
+    file changed, and the only code change is inside a docs-gated test.
+  - The prepare-hashed guard printed nothing.
+    `git diff --name-only 30eb879..HEAD` lists only `docs/protocol.md`, the
+    repair and test-run notes, the ruling, `test-runs.json`,
+    `tests/test_repair_arms.py` and this file.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered and amended
    on 2026-10-04 (OD5), in this order; its "Commands" section gives each
    command. `repair-arms` merged in bff373c (PR #18). The owner's dev batch
    ran there on 2026-10-04: three rounds are published on `dev-repair-round`,
-   and the frontier arms moved to NextBit (the two sections above).
+   and the frontier arms moved to NextBit (the sections above).
    `dev-repair-round` merges before the next owner command, so that it runs
    from the main checkout on `main`.
    1. **Owner: the dev frontier arms on NextBit.** The unchanged dev
