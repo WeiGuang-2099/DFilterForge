@@ -31,8 +31,8 @@ COPY scripts/export_web_data.py ./scripts/export_web_data.py
 COPY src/dfilterforge/held_out_freeze.json ./src/dfilterforge/held_out_freeze.json
 COPY docs/ablations/evidence ./docs/ablations/evidence
 COPY docs/decisions/evidence ./docs/decisions/evidence
-# Read only to check that every registered test run is named in the note.
-COPY docs/decisions/model-bakeoff.md ./docs/decisions/model-bakeoff.md
+# Read only to check that the note's Runs table lists the registered runs.
+COPY docs/decisions/test-runs.md ./docs/decisions/test-runs.md
 COPY docs/results ./docs/results
 
 RUN install --directory --owner=nobody --group=nogroup /data

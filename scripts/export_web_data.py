@@ -30,9 +30,12 @@ docs/decisions/evidence/test-runs.json registers is scored or listed as not
 run, the registered test runs. That file is read as
 ``{"runs": [{"role", "run_id", "dev_run_id"}], "not_run": [run_id]}``, with
 roles pass_a, pass_b, small, mid and frontier; a slot role names its
-winner's counted dev pass in ``dev_run_id``. The site never divides: dev runs
-get counts only, and rates, intervals and comparisons are pointers into a
-test run's summary.json.
+winner's counted dev pass in ``dev_run_id``. Its runs must be, numbered from
+1 and in order, the rows of the Runs table in docs/decisions/test-runs.md,
+the note that registers them; a run id named only in that note's prose
+registers nothing. The site never divides: dev runs get counts only, and
+rates, intervals and comparisons are pointers into a test run's
+summary.json.
 
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
@@ -93,9 +96,10 @@ TRACES = "docs/decisions/evidence/web/traces"
 GATE = "docs/decisions/evidence/test-freeze-gate.json"
 SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
-# Read only to check that every registered test run is named in the
-# binding prose; no sourced value ever points into it.
-BAKEOFF_NOTE = "docs/decisions/model-bakeoff.md"
+# The note that registers the test runs (protocol.md requires them in
+# writing before the first test request). Read only to check its Runs table
+# against test-runs.json; no sourced value ever points into it.
+REGISTRY_NOTE = "docs/decisions/test-runs.md"
 _ROOTS = (
     "docs/results/",
     "docs/decisions/evidence/",
@@ -105,6 +109,9 @@ _ROOTS = (
 _RUN_ID = re.compile(
     r"(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}"
 )
+# A row of the registry note's Runs table: number, role, run id. No other
+# table in the note starts with a number and then two backticked cells.
+_NOTE_ROW = re.compile(r"^\| ([0-9]+) \| `([a-z_]+)` \| `([^`]+)` \|")
 # A route segment: Next drops the trailing slash of a dotted last segment.
 _SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _COMMIT = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}")
@@ -454,7 +461,7 @@ class Repo:
 
     def data(self, path: str, *, note: bool = False) -> bytes:
         """Reads one file's bytes within the input ceiling and records it."""
-        if not (note and path == BAKEOFF_NOTE):
+        if not (note and path == REGISTRY_NOTE):
             check_path(path)
         for paths in self._scopes:
             paths.add(path)
@@ -1014,10 +1021,23 @@ def _ranking_entries(
     return entries, winners
 
 
-def _note_names(note: str, run_id: str) -> bool:
-    edge = re.escape(run_id)
-    found = re.search(rf"(?<![A-Za-z0-9._-]){edge}(?![A-Za-z0-9_-])", note)
-    return found is not None
+def _note_rows(note: str) -> list[tuple[str, str, str]]:
+    """Lists the note's Runs table rows as (number, role, run id).
+
+    Only a line that starts with a row number and two backticked cells
+    counts, so a run id named in prose or a row of another table registers
+    nothing. The number stays as written: row 1 is "1", never "01".
+    """
+    rows: list[tuple[str, str, str]] = []
+    for line in note.split("\n"):
+        found = _NOTE_ROW.match(line)
+        if found is not None:
+            rows.append((found[1], found[2], found[3]))
+    return rows
+
+
+def _row_text(rows: Sequence[tuple[str, str, str]], index: int) -> str:
+    return " ".join(rows[index]) if index < len(rows) else "no row"
 
 
 def read_registration(repo: Repo, selected: set[str]) -> Registration:
@@ -1033,7 +1053,8 @@ def read_registration(repo: Repo, selected: set[str]) -> Registration:
     Raises:
         ContractError: For an unknown or repeated role, a missing A/A pass,
             a winner the ranking does not show, a not-run id that is not
-            registered, or a run id the bake-off note does not name.
+            registered, or a Runs table in test-runs.md that does not list
+            the registry's rows, numbered from 1, in the registry's order.
     """
     document = _obj(repo.json(TEST_RUNS), TEST_RUNS)
     runs: list[tuple[str, str]] = []
@@ -1063,12 +1084,23 @@ def read_registration(repo: Repo, selected: set[str]) -> Registration:
     ]
     if not set(not_run) <= listed or len(set(not_run)) != len(not_run):
         raise ContractError("not_run_invalid", f"{TEST_RUNS} not_run")
-    note = repo.text(BAKEOFF_NOTE, note=True)
-    for run_id in sorted(listed):
-        if not _note_names(note, run_id):
-            raise ContractError(
-                "run_unregistered", f"{run_id} is not in {BAKEOFF_NOTE}"
-            )
+    registered = [
+        (str(number), role, run_id)
+        for number, (role, run_id) in enumerate(runs, start=1)
+    ]
+    noted = _note_rows(repo.text(REGISTRY_NOTE, note=True))
+    if noted != registered:
+        # The first position where they differ; the lists are unequal, so
+        # the two slices differ at some index before both run out.
+        index = 0
+        while noted[index : index + 1] == registered[index : index + 1]:
+            index += 1
+        raise ContractError(
+            "run_unregistered",
+            f"{REGISTRY_NOTE} Runs row {index + 1} is "
+            f"{_row_text(noted, index)}; {TEST_RUNS} has "
+            f"{_row_text(registered, index)}",
+        )
     return Registration(runs, not_run, winners)
 
 

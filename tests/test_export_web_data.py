@@ -168,7 +168,7 @@ class Fixture:
                 self.root / "docs/decisions/evidence/test-runs.json",
                 self.registration,
             )
-            note = self.root / "docs/decisions/model-bakeoff.md"
+            note = self.root / "docs/decisions/test-runs.md"
             note.write_text(self.note, encoding="utf-8")
         return self.root
 
@@ -1040,10 +1040,32 @@ def _registration(
     return {"not_run": list(not_run), "runs": runs}
 
 
-def _note() -> str:
-    return " ".join(
-        f"`{run_id}`."
-        for run_id in (_PASS_A, _PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT)
+def _note(runs: list[Document] | None = None, prose: str = "") -> str:
+    """Renders test-runs.md: prose, the Runs table, then a numbered table.
+
+    The Runs table lists the given registry rows, by default those of
+    ``_registration()``, in the committed note's column order.
+    """
+    listed = _registration()["runs"] if runs is None else runs
+    return "\n".join(
+        [
+            "# Hosted test runs",
+            "",
+            prose,
+            "",
+            "| # | Role | Run id | Model id | Runs |",
+            "| --- | --- | --- | --- | --- |",
+            *(
+                f"| {number} | `{run['role']}` | `{run['run_id']}` | `m/m` |"
+                " always |"
+                for number, run in enumerate(listed, start=1)
+            ),
+            "",
+            "| Exit | Meaning |",
+            "| --- | --- |",
+            "| 0 | Every row has a final state: `done`. |",
+            "",
+        ]
     )
 
 
@@ -1149,7 +1171,7 @@ def test_a_broken_registration_fails(
     assert caught.value.code == code
 
 
-def test_a_run_missing_from_the_bakeoff_note_fails(fixture: Fixture) -> None:
+def test_a_run_missing_from_the_registry_note_fails(fixture: Fixture) -> None:
     fixture.registration = _registration()
     fixture.note = _note().replace(_TEST_MID, f"{_TEST_MID}x")
     root = fixture.build()
@@ -1157,6 +1179,45 @@ def test_a_run_missing_from_the_bakeoff_note_fails(fixture: Fixture) -> None:
     with pytest.raises(exporter.ContractError) as caught:
         exporter.export(root, "abc1234")
     assert caught.value.code == "run_unregistered"
+
+
+def _without_a_row(runs: list[Document]) -> str:
+    return _note([*runs[:3], *runs[4:]])
+
+
+def _with_two_rows_swapped(runs: list[Document]) -> str:
+    return _note([*runs[:2], runs[3], runs[2], *runs[4:]])
+
+
+def _with_another_role(runs: list[Document]) -> str:
+    return _note([*runs[:3], runs[3] | {"role": "small"}, *runs[4:]])
+
+
+def _with_pass_a_only_in_prose(runs: list[Document]) -> str:
+    return _note(runs[1:], prose=f"Pass A's run id is `{_PASS_A}`.")
+
+
+@pytest.mark.parametrize(
+    ("note", "row"),
+    [
+        (_without_a_row, 4),
+        (_with_two_rows_swapped, 3),
+        (_with_another_role, 4),
+        (_with_pass_a_only_in_prose, 1),
+    ],
+)
+def test_a_note_that_differs_from_the_registry_fails(
+    fixture: Fixture, note: Callable[[list[Document]], str], row: int
+) -> None:
+    registration = _registration()
+    fixture.registration = registration
+    fixture.note = note(registration["runs"])
+    root = fixture.build()
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "run_unregistered"
+    assert f"Runs row {row} " in str(caught.value)
 
 
 def _drop_receipt(root: Path) -> None:
@@ -1724,6 +1785,7 @@ def test_a_trace_is_linked_only_to_its_receipt_bytes(fixture: Fixture) -> None:
         "docs\\results\\a.json",
         "C:/docs/results/a.json",
         "docs/decisions/model-bakeoff.md",
+        "docs/decisions/test-runs.md",
         "src/dfilterforge/model_split.py",
         "docs/resultsx/a.json",
     ],
