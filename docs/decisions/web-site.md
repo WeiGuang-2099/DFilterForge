@@ -184,7 +184,9 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   categories from the test-freeze gate receipt, the shortcut audit from
   ablation 006's evidence and the admitted prepares from
   `held_out_freeze.json`, none of them a run; and the `not_measured`
-  statuses from the run its repair line cites (What fails).
+  statuses from the run its repair line cites (What fails), each with a
+  `split` node that points at that run's summary `/split` and labels the
+  line.
 - `reel.json`: the Disproof Reel projected by rule `reel-v1`.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
@@ -294,7 +296,9 @@ sets and source ops before a page renders.
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. `<Str>` renders a string the same way, without the link.
   `<Term>` renders a reviewed name that holds a digit; the list in
-  `lib/terms.ts` is `IPv4` and `SHA-256`.
+  `lib/terms.ts` is `IPv4` and `SHA-256`. `<Split>` renders a run's split
+  as the word that names its round, with `data-fmt="split"`: `test` reads
+  "Test" and `dev` reads "Dev", and any other split fails the build.
 - **Not measured yet.** A scored summary's `not_measured` status, such as
   `repair_at_1`, is never shown as written. The scorer writes `not_run` for
   a measurement no round has made, and `docs/protocol.md` keeps "not run"
@@ -304,7 +308,11 @@ sets and source ops before a page renders.
   The consistency test fails a `not_measured` value shown with any other
   kind, and the unmeasured kind on any other value. The methodology page
   uses it now; a page in the next pull requests that shows the Reel's
-  `receipt_panel.repair` must use it too.
+  `receipt_panel.repair` must use it too. The methodology page labels each
+  status with `<Split>` over the cited summary's `/split`, "Test repair
+  round" or "Dev repair round", so that once the dev round is merged
+  beside the test round the line still says which round it describes. With
+  an empty test pool it lists no status and no label.
 - **The digit lint.** ESLint fails on a digit in JSX text, as a literal JSX
   child or in a text-bearing attribute, and in a page title or description.
   A digit here is any Unicode number character (`\p{N}`): ASCII, fullwidth
@@ -338,7 +346,14 @@ sets and source ops before a page renders.
   or another pick than the ones it pins for the committed tree, and when
   the built methodology page takes its `not_measured` statuses from another
   summary than the one `repairStatusSummary()` names. The value checks
-  alone cannot tell: every summary still says `not_run` after a round.
+  alone cannot tell: every summary still says `not_run` after a round. It
+  also fails when a "Not measured yet" label is not the split's word and
+  "repair round", or when its `<Split>` does not point at that summary's
+  `/split`: a split from another run's summary or from a probe capture,
+  or a typed label, passes the value checks. `repairStatusSplit()` reads
+  that split and refuses one that differs from the cited run id's, as the
+  exporter does (`split_mismatch`); the test pins `test` for the committed
+  tree.
 - **The Python side.** `tests/test_export_web_data.py` holds a second
   independent resolver and an AST allowlist that keeps the exporter on the
   standard library. Its committed-tree tests export the committed files and
@@ -379,20 +394,30 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged) |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged) |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured
 
 Two exports are measured. The dev data was exported at 07d91ca, before this
 branch had a test-run registry. The test phase is exported at 69d237e, the
-code these figures describe. Of the commits after it, only d3ff716 changes
-code: `methodology.json` takes its `not_measured` status from pass A's
-summary instead of the dev anchor's, which adds 1 byte. At d3ff716 the
-export has the same 1,935 files in 27,410,977 bytes, `methodology.json` is
-16,213 bytes, and two host exports are byte-identical. The Docker static
-export has 29 files in 923,064 bytes, `methodology/index.html` 107,899 of
-them. The other figures below were not measured again.
+code these figures describe. Of the commits after it, two change the
+export or the site:
+- At d3ff716 `methodology.json` takes its `not_measured` status from pass
+  A's summary instead of the dev anchor's, which adds 1 byte. The export
+  has the same 1,935 files in 27,410,977 bytes, `methodology.json` is
+  16,213 bytes, and two host exports are byte-identical. The Docker static
+  export has 29 files in 923,064 bytes, `methodology/index.html` 107,899 of
+  them.
+- At dfeaf11 each status also carries its run's `split` node, which adds
+  105 bytes. The export has 1,935 files in 27,411,082 bytes,
+  `methodology.json` is 16,318 bytes, two host exports are byte-identical,
+  and only `methodology.json` differs from f66b1e4's export. The Docker
+  static export has 29 files in 924,010 bytes, `methodology/index.html`
+  108,305 of them, and the page renders 139 sourced values: the 138 listed
+  below and the split.
+
+The other figures below were not measured again.
 
 | Export | Files | Bytes | Receipts | Cases | Sourced values |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -569,8 +594,10 @@ pnpm --filter @dfilterforge/web test:e2e
   come from bootstrap resamples "as the anchor pass's summary records
   them", so it stays true. Which pass it cites once the board renders test
   intervals is left to the board pull request. Only the page's
-  `not_measured` statuses follow the phase (What fails); its "Not measured
-  yet" section names no source run.
+  `not_measured` statuses follow the phase (What fails). Its "Not measured
+  yet" section names no source run, but each line's label names the split
+  of the run it cites: "Test repair round" in the test phase, "Dev repair
+  round" in the dev phase.
 - Step 5 of `reel-v1` is not built. No test `-cx` arm run is scored and no
   `repair-pool` file exists, so no repair row exists yet, and `reel.json`
   keeps `repair` null. The export stops with `repair_unread` once one

@@ -1912,3 +1912,83 @@ the worktree's code mounted read-only and no network.
   never reports the dev round as an effect. The label is left to the
   maintainer.
 - Still open: the items of the two sections above.
+
+## Web data: the methodology's repair line names its round, 2026-10-04, branch web-data
+
+- Why: the maintainer decided review finding B1, which the section above
+  left open. The methodology page's repair line must say which round it
+  describes, so that once `dev-repair-round` merges the page cannot read as
+  if no repair round had been measured. The label follows the split of the
+  run the line cites: "Test repair round" for a test run (test phase),
+  "Dev repair round" for the dev anchor (dev phase). With an empty test
+  pool the page lists no status and no label, as before.
+- dfeaf11 makes the change in one commit:
+  - Exporter: each `not_measured` entry of `methodology.json` gains
+    `split`, a sourced string `["ptr", <cited summary>, "/split"]`. `Run`
+    already refuses a summary whose split is not its run id's
+    (`split_mismatch`).
+  - Page: `lib/fmt.ts` gains the kind `split`, which shows `dev` as "Dev"
+    and `test` as "Test" and throws on anything else. `lib/sourced.tsx`
+    gains `<Split>`, `lib/data.ts` requires `split` on every entry, and the
+    page's label is `<Split>` followed by "repair round". No digit or
+    typed split is in the markup.
+  - Resolver: `repairStatusSplit()` reads the cited summary's split and
+    refuses one that differs from the cited run id's.
+  - Tests: the Python `_statuses` helper and a new test, run in both
+    phases; two new `registry.spec.ts` cases and a split check in the
+    three citing cases; a `fmt.spec.ts` case and the kinds list; a new
+    `consistency.spec.ts` test that checks each "Not measured yet" label's
+    text and that its `<Split>` points at the summary
+    `repairStatusSummary()` names, and a `test` pin for the committed tree.
+- Proof, on scratch copies only:
+  - Exporter, 9 selected methodology cases: f66b1e4's exporter fails 6
+    (the two citing cases with a run, both stop cases and both new cases).
+    A split from the dev anchor in both phases fails 4, the test-phase
+    ones; a split from the first probe capture fails 6. The committed-tree
+    export test fails with f66b1e4's exporter and passes with dfeaf11's,
+    on a copy of the tracked files.
+  - Resolver, 7 methodology cases: f66b1e4's resolver fails 5
+    (`repairStatusSplit is not a function`); reading the anchor's summary
+    in both phases fails 3; taking the split from the run id without
+    reading the summary fails 2; dropping the split check fails 2.
+  - Site: six Docker `--target out` builds of scratch copies, each checked
+    with the copy's `consistency.spec.ts`. The unmutated copy passes all 13.
+    f66b1e4's exporter, page, `data.ts` and `sourced.tsx` (with the new
+    `fmt.ts`, since `next build` typechecks the specs) shows "Repair round"
+    and fails only the new label test. So do four mutants: the exporter
+    taking the dev anchor's split ("Dev repair round"), the page taking the
+    first probe capture's split ("Dev repair round"), the page showing the
+    split through `<Str>` ("test repair round"), and the page typing "Test
+    repair round". The `/methodology/` route's value checks pass on all
+    five, which is why the label test is needed.
+  - The new consistency spec on the `out/` built at d3ff716 also fails
+    only the label test.
+- On `dev-repair-round` at 30eb879 (a `git archive` of its `docs/` inputs
+  and `held_out_freeze.json`, plus web-data's `evidence/web/`), dfeaf11's
+  exporter exits 0 with 1,935 files. The label's split is `test`, from
+  pass A's summary, and the bootstrap block is still the dev anchor's.
+- Checks at dfeaf11:
+  - Host `tests/test_export_web_data.py`: 154 passed and 2 skipped (the
+    symbolic-link tests) in 87.51 s.
+  - pyink and isort pass on `src`, `tests` and `scripts`. pylint on the two
+    web scripts rates 10.00/10 and exits 0. pyright with
+    `--pythonplatform Linux` reports 0 errors.
+  - `pnpm web:typecheck` and `pnpm web:lint` exit 0.
+  - Two host exports are byte-identical: 1,935 files and 27,411,082 bytes.
+    `methodology.json` is 16,318 bytes, 105 more than at f66b1e4, and is
+    the only file that differs from f66b1e4's export.
+  - Docker `--target out` (14 s) gives 29 files and 924,010 bytes;
+    `methodology/index.html` is 108,305 bytes with 139 sourced values.
+    Playwright on it: 152 passed in 13.5 s on two workers (63 registry, 41
+    lint-rule, 15 formatter, 13 smoke, 13 consistency, 4 resolver, 3
+    base-path).
+  - The CI python job's four web steps, run in `dfilterforge-test:0.1.0`
+    (created 2026-09-26, not rebuilt) with the worktree's code mounted
+    read-only, under Compose project `dfilterforge-webcheck`: pylint
+    10.00/10 (5 s); the evidence check exits 0 with 480 frames and 8
+    probes (3 s); the exporter and evidence tests give 180 passed (80 s);
+    two exports compare equal with `diff -r` (36 s). Docker was down for
+    the f66b1e4 verification, so these steps had not run since 69d237e.
+  - Not run: the Compose `web` service, Docker `--target data` and the
+    rest of the CI python job.
+- Still open: the items of the sections above. B1 is now applied.
