@@ -19,6 +19,12 @@ is never derived again:
   attempt limit and pacing, a complete run and a scored tree that scores
   every item on the case the base pass scored it on.
 
+A base pass with a provider move registered in :data:`PROVIDER_MOVES` has
+its arm runs held to the move's provider order and prices instead of its
+own, every other setting unchanged, and, when the move carries a tag,
+named with that tag after the arm tag and prepared under the arm's
+registered first run id.
+
 An arm run the gate stopped is reported as not run: ``repair --not-run
 ARM`` records it in ``repair/not_run.json``, after which that arm may stay
 an unpublished prompt set or be absent and is never published, and the
@@ -57,6 +63,7 @@ from dfilterforge.canonical import canonical_json
 from dfilterforge.completions import RepairItemV1
 from dfilterforge.completions import RepairPlanV1
 from dfilterforge.completions import RunManifestV1
+from dfilterforge.completions import TokenPricesV1
 from dfilterforge.generation import follow_up_prompt
 from dfilterforge.generation import GenerationError
 from dfilterforge.generation import PreparedBatchV1
@@ -122,6 +129,49 @@ _CALL_CONFIG = (
 )
 
 
+class ProviderMove(NamedTuple):
+    """A registered move of a base pass's arm runs to another provider.
+
+    Attributes:
+        tag: The tag the moved arm run ids carry after the arm tag, or None
+            when they keep the registered ids.
+        provider_order: The provider order the moved arm runs send.
+        prices: The prices the moved arm runs record.
+    """
+
+    tag: str | None
+    provider_order: tuple[str, ...]
+    prices: TokenPricesV1
+
+
+# The prices object of the committed config, its source string verbatim:
+# docs/decisions/evidence/bakeoff/configs/
+# deepseek-v4-pro-0813_nextbit_enabled-false.json.
+_NEXTBIT_PRICES = TokenPricesV1(
+    usd_per_million_input=1.056,
+    usd_per_million_output=3.168,
+    source=(
+        "OpenRouter endpoints API for deepseek/deepseek-v4-pro-0813, slug"
+        " nextbit matches nextbit/fp8 (NextBit, fp8), fetched"
+        " 2026-09-26T10:05:28Z"
+    ),
+)
+# Owner ruling OD5, 2026-10-04, in the repair note: the frontier slot's arm
+# runs move from DeepInfra to NextBit, under new ids on dev (OD6) and the
+# registered ids on test (OD8). scripts/repair_arms.py holds the same
+# moves, and tests tie both to the committed config.
+PROVIDER_MOVES: Mapping[str, ProviderMove] = MappingProxyType(
+    {
+        "dev-deepseek-v4-pro-0813-2026-09-26": ProviderMove(
+            "nb", ("nextbit",), _NEXTBIT_PRICES
+        ),
+        "test-deepseek-v4-pro-0813-2026-09-26": ProviderMove(
+            None, ("nextbit",), _NEXTBIT_PRICES
+        ),
+    }
+)
+
+
 class PoolReportV1(FrozenModel):
     """What one pool pass wrote, or how the committed pool compares."""
 
@@ -143,8 +193,10 @@ class _ArmRun(NamedTuple):
     manifest: RunManifestV1 | None
 
 
-def arm_run_ids(base_run: str, arm: ArmName) -> tuple[str, str]:
-    """Names one arm's run and its one re-run after the base run.
+def registered_run_ids(base_run: str, arm: ArmName) -> tuple[str, str]:
+    """Names one arm's run and its one re-run as the protocol registers them.
+
+    They are the only names follow-up builds an arm's prompt set under.
 
     Args:
         base_run: The base pass's run id, ending in its date.
@@ -155,6 +207,27 @@ def arm_run_ids(base_run: str, arm: ArmName) -> tuple[str, str]:
     """
     stem, date = base_run[: -_DATE_LENGTH - 1], base_run[-_DATE_LENGTH:]
     tagged = f"{stem}-{ARM_TAGS[arm]}"
+    return f"{tagged}-{date}", f"{tagged}-{ARM_RERUN}-{date}"
+
+
+def arm_run_ids(base_run: str, arm: ArmName) -> tuple[str, str]:
+    """Names one arm's run and its one re-run after the base run.
+
+    They are the registered names, unless the base has a provider move
+    with a tag, whose runs carry that tag after the arm tag.
+
+    Args:
+        base_run: The base pass's run id, ending in its date.
+        arm: The arm.
+
+    Returns:
+        The arm's run id and the run id of its re-run.
+    """
+    move = PROVIDER_MOVES.get(base_run)
+    if move is None or move.tag is None:
+        return registered_run_ids(base_run, arm)
+    stem, date = base_run[: -_DATE_LENGTH - 1], base_run[-_DATE_LENGTH:]
+    tagged = f"{stem}-{ARM_TAGS[arm]}-{move.tag}"
     return f"{tagged}-{date}", f"{tagged}-{ARM_RERUN}-{date}"
 
 
@@ -348,7 +421,8 @@ def _check_arm(
     Raises:
         RoundError: With ``repair_arm_mismatch`` when the run is not a C4
             run of the base's split and prepared inputs named after itself,
-            and as :func:`_check_prompts` says.
+            a moved run prepared under its arm's registered first run id
+            aside, and as :func:`_check_prompts` says.
         ScoringError: For any layout or prepare manifest failure.
     """
     name = path.name
@@ -366,13 +440,20 @@ def _check_arm(
         check_prepare(loaded.prepare, loaded.prepared)
     split = check_splits(loaded.prepared, manifest, loaded.prepare)
     source = base.manifest.prepare
-    names = {prepare.prepare_id, name}
+    # Follow-up builds only under the registered names, so a run a move
+    # named otherwise is prepared under its arm's registered first id.
+    registered = registered_run_ids(plan.base_run, arm)
+    prepared_as = {name}
+    if name in arm_run_ids(plan.base_run, arm) and name not in registered:
+        prepared_as.add(registered[0])
+    run_ids = {name}
     if manifest is not None:
-        names.add(manifest.run_id)
+        run_ids.add(manifest.run_id)
     if (
         set(loaded.prepared) != {REPAIR_CONDITION}
         or split != plan.split
-        or names != {name}
+        or run_ids != {name}
+        or prepare.prepare_id not in prepared_as
         or (prepare.model_inputs_sha256, prepare.catalog, prepare.top_k)
         != (source.model_inputs_sha256, source.catalog, source.top_k)
     ):
@@ -385,27 +466,60 @@ def _check_arm(
     return run
 
 
+def _sent_as(
+    base: RunManifestV1, move: ProviderMove | None
+) -> dict[str, object]:
+    """What an arm run of a base pass must record about how it was sent.
+
+    It is the base's call config, except that a registered move replaces
+    the provider order in its settings and its prices. A base sent without
+    OpenRouter options has no provider order to replace, so no settings
+    an arm run records match it.
+    """
+    sent = {setting: getattr(base, setting) for setting in _CALL_CONFIG}
+    if move is not None:
+        routes = base.settings.openrouter
+        sent["settings"] = (
+            None
+            if routes is None
+            else base.settings.model_copy(
+                update={
+                    "openrouter": routes.model_copy(
+                        update={"provider_order": move.provider_order}
+                    )
+                }
+            )
+        )
+        sent["prices"] = move.prices
+    return sent
+
+
 def _read_arm(run: _ArmRun, plan: RepairPlanV1, base: BasePass) -> ArmResult:
     """Reads one published arm run's scored outcomes and stored answers.
 
     Raises:
         RoundError: With ``repair_settings_mismatch`` when the run was not
-            sent as the base pass was, ``repair_arms_incomplete`` when it
-            is not complete, ``repair_arm_unscored`` when its scored tree
-            does not score its prompts, and ``repair_items_mismatch`` when
-            an item was scored on another case than in the base pass.
+            sent as the base pass was or, for a base with a registered
+            provider move, with the move's provider order and prices and
+            the base's other settings, host, attempt limit and pacing;
+            ``repair_arms_incomplete`` when it is not complete,
+            ``repair_arm_unscored`` when its scored tree does not score its
+            prompts, and ``repair_items_mismatch`` when an item was scored
+            on another case than in the base pass.
         ScoringError: For any layout, manifest or split failure.
     """
     name = run.run_dir.name
     manifest = run.manifest
     assert manifest is not None
+    move = PROVIDER_MOVES.get(plan.base_run)
     if any(
-        getattr(manifest, setting) != getattr(base.manifest, setting)
-        for setting in _CALL_CONFIG
+        getattr(manifest, setting) != sent
+        for setting, sent in _sent_as(base.manifest, move).items()
     ):
         raise RoundError(
             "repair_settings_mismatch",
-            f"{name} was not sent with {plan.base_run}'s settings",
+            f"{name} was not sent with {plan.base_run}'s settings"
+            + ("" if move is None else " as its registered move sends them"),
         )
     if manifest.status != "complete":
         raise RoundError("repair_arms_incomplete", f"{name} is not complete")
