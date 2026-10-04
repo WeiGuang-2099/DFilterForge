@@ -481,7 +481,11 @@ were not re-run, and they are lower bounds with no retries:
       dev command, then the maintainer's publish, score, `repair` and pool.
       The dev round now ends with the NextBit re-run of the frontier arms
       (OD6), its publish, score and `repair`, and then the pool, all before
-      any correction or test seed.
+      any further correction or test seed. The correction for the defect
+      the owner's first dev batch showed, the frontier arms' outage on
+      DeepInfra, is OD5's move, committed before that re-run in 725bb5e,
+      c57142a and 1d07612. A defect the NextBit re-run shows needs a
+      correction of its own.
    5. Seed the 12 test arm prompt sets in `docs/results/<arm run id>/`.
    6. Admit their digests in a commit of their own. That makes 13 of the
       record's 32 admitted prepares.
