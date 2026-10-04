@@ -3,7 +3,14 @@
 Preparation and publication open no socket and read no evaluator gold: the
 split is regenerated inside a temporary directory, only the model-visible
 items of the requested split are kept, and the gold contract is deleted
-with that directory before the first prompt file is written.
+with that directory before the first prompt file is written. ``follow-up``
+prepares second-turn C4 prompts from a complete dev run's own answers,
+with no socket, no gold and no catalog. Given a repair plan, it prepares
+one arm of a dev or test pass's repair round instead. That plan is the
+only gold-derived input any step here reads: a closed ``repair-plan/1.0``
+record of the triggered item ids, their base outcomes and their cards,
+which the counterexample leak test confines and this script reads as
+data, never deriving one.
 
 The call step is the only one that opens a connection. It reads the
 credential from the environment, sends each prepared prompt at most once
@@ -12,7 +19,7 @@ file it produces. A test prompt set is answered only when the committed
 freeze record admits its prepare.json.
 """
 
-# The three subcommands still share one file, which is over the size this
+# The four subcommands still share one file, which is over the size this
 # project prefers. Splitting them is not a change to this file alone: the
 # new modules have to join the type-checked and linted sets, the path
 # loader the tests use has to reach them, and the prompt-building half
@@ -61,6 +68,7 @@ from dfilterforge.completions import InvocationV1
 from dfilterforge.completions import MAX_RECORDED_USD
 from dfilterforge.completions import PreparedConditionV1
 from dfilterforge.completions import PrepareManifestV1
+from dfilterforge.completions import RepairPlanV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import thinking_state
@@ -71,14 +79,18 @@ from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.field_retrieval import retrieve_fields
 from dfilterforge.generation import condition_label
 from dfilterforge.generation import ConditionLabel
+from dfilterforge.generation import follow_up_prompt
+from dfilterforge.generation import GenerationError
 from dfilterforge.generation import GenerationInputV1
 from dfilterforge.generation import OutputContractV1
+from dfilterforge.generation import parse_response
 from dfilterforge.generation import prepare_batch
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.held_out import admit_prepare
 from dfilterforge.intent_ir import FrozenModel
+from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.model_client import API_KEY_ENV
 from dfilterforge.model_client import ModelClientError
 from dfilterforge.model_client import OpenAiCompatibleBackend
@@ -642,7 +654,7 @@ def _sleep(seconds: float) -> None:
 
 
 def _prompt_bytes(prompt: PreparedPromptV1) -> int:
-    """Returns the UTF-8 size of both messages of one prepared prompt."""
+    """Returns the UTF-8 size of every message of one prepared prompt."""
     return sum(
         len(message.content.encode("utf-8")) for message in prompt.messages
     )
@@ -653,7 +665,7 @@ def _prompt_token_bound(prompt: PreparedPromptV1) -> int:
 
     One token never spans fewer than one UTF-8 byte, so the byte count is
     an upper bound on the tokenized prompt; the slack covers the chat
-    template bytes the provider adds around the two messages.
+    template bytes the provider adds around the messages, two or four.
     """
     return _prompt_bytes(prompt) + _TOKEN_BOUND_SLACK
 
@@ -1824,6 +1836,378 @@ def _publish(arguments: argparse.Namespace) -> int:
     return 0
 
 
+# The one condition a second turn continues: repair is a C4 round, and the
+# two-turn smoke of docs/decisions/model-bakeoff.md sends two such items.
+_FOLLOW_UP_LABEL: ConditionLabel = "C4"
+_FOLLOW_UP_ITEMS = 2
+# The three arms of a repair round and the tag each arm's run id carries
+# before its base pass's date, as the round's registration names them. An
+# outage is re-run once from scratch with _ARM_RERUN after the tag.
+_ArmName = Literal["resample", "bare", "counterexample"]
+_ARM_TAGS: Mapping[_ArmName, str] = {
+    "resample": "res",
+    "bare": "bare",
+    "counterexample": "cx",
+}
+_ARM_RERUN = "r2"
+# A result name ends in its date, YYYY-MM-DD.
+_DATE_LENGTH = 10
+
+
+class _RepairArm(NamedTuple):
+    """One arm of a repair round and the plan it is prepared from."""
+
+    name: _ArmName
+    plan: RepairPlanV1
+    plan_sha256: str
+
+
+def _follow_up_source(
+    run_dir: Path, *, any_split: bool = False
+) -> tuple[RunManifestV1, str, PreparedBatchV1, CompletionBatchV1]:
+    """Reads a complete run's C4 prompts and answers, checked by digest.
+
+    The run is read exactly as ``publish`` reads one, so a raw run
+    directory and the published tree it became are equally usable, and a
+    byte that differs from its recorded digest is refused before any
+    prompt is built.
+
+    Args:
+        run_dir: The run directory, raw or published.
+        any_split: Whether a test run may be continued. Only a repair
+            arm, prepared from a plan, continues one; a smoke continues a
+            dev run alone.
+
+    Returns:
+        The run manifest, the SHA-256 of its bytes, and the C4 prompts and
+        answers.
+
+    Raises:
+        RunError: If the run is incomplete or records no prices, is a test
+            run where only dev is allowed, did not prepare C4, or holds a
+            file that differs from its digest or no longer parses.
+    """
+    manifest, manifest_bytes = _publish_manifest(run_dir)
+    if manifest.prepare.split != "dev" and not any_split:
+        raise RunError("split_refused", "Only a dev run can be continued")
+    labels = {condition.label for condition in manifest.prepare.conditions}
+    if _FOLLOW_UP_LABEL not in labels:
+        raise RunError(
+            "condition_mismatch", "The run did not prepare the C4 condition"
+        )
+    sources = _published_sources(run_dir, manifest, manifest_bytes)
+    _check_published_contracts(manifest, sources)
+    return (
+        manifest,
+        hashlib.sha256(manifest_bytes).hexdigest(),
+        PreparedBatchV1.model_validate_json(
+            sources[f"prepared/{_FOLLOW_UP_LABEL}.json"]
+        ),
+        CompletionBatchV1.model_validate_json(
+            sources[f"completions/{_FOLLOW_UP_LABEL}.json"]
+        ),
+    )
+
+
+def ready_answer(
+    completion: CompletionV1, output_contract: OutputContractV1
+) -> bool:
+    """Reports whether one counted answer may open a second turn.
+
+    It must have completed with finish_reason ``stop`` and parse under its
+    contract, by the scorer's own parser, with status ready: the shape of
+    every answer a repair round continues. Correctness is not read.
+    """
+    if completion.status is not CompletionStatusV1.COMPLETED:
+        return False
+    if completion.finish_reason != "stop":
+        return False
+    try:
+        parsed = parse_response(output_contract, completion.response_text or "")
+    except GenerationError:
+        return False
+    return parsed.status is GenerationStatus.READY
+
+
+def _follow_up_prompts(
+    batch: PreparedBatchV1, answers: CompletionBatchV1
+) -> tuple[PreparedPromptV1, ...]:
+    """Continues the first two items, in prepare order, with a ready answer.
+
+    The rule is fixed before any second turn is sent and reads only how
+    each counted answer ended and whether it parses, never what it says.
+
+    Raises:
+        RunError: With ``ready_answers_missing`` if fewer than two items
+            qualify, which fails the smoke without a request.
+    """
+    counted = {answer.item_id: answer for answer in answers.completions}
+    chosen: list[PreparedPromptV1] = []
+    for prompt in batch.prompts:
+        answer = counted[prompt.item_id]
+        if not ready_answer(answer, batch.output_contract):
+            continue
+        chosen.append(follow_up_prompt(prompt, answer.response_text or ""))
+        if len(chosen) == _FOLLOW_UP_ITEMS:
+            return tuple(chosen)
+    raise RunError(
+        "ready_answers_missing",
+        "Fewer than two C4 answers completed, stopped and parse as ready",
+    )
+
+
+def _repair_arm(arguments: argparse.Namespace) -> _RepairArm | None:
+    """Reads the repair plan and arm, or returns None for a smoke.
+
+    The plan must be the canonical encoding ``dfilterforge repair``
+    writes and checks, so a plan edited by hand is refused before the
+    base run is opened. Nothing in it is interpreted beyond its schema.
+
+    Raises:
+        RunError: With ``arm_invalid`` if only one of a plan and an arm is
+            given, and with ``plan_too_large`` or ``plan_invalid`` if the
+            plan is oversized, missing, unusable or not canonical.
+    """
+    path = cast("Path | None", arguments.plan)
+    name = cast("_ArmName | None", arguments.arm)
+    if path is None and name is None:
+        return None
+    if path is None or name is None:
+        raise RunError(
+            "arm_invalid", "A repair plan and an arm are given together"
+        )
+    data = _read_bounded(
+        path, _MAX_PREPARE_BYTES, "plan_too_large", "plan_invalid"
+    )
+    try:
+        plan = RepairPlanV1.model_validate_json(data)
+    except ValidationError:
+        raise RunError(
+            "plan_invalid", "The repair plan is not usable"
+        ) from None
+    if data != (canonical_json(plan) + "\n").encode("utf-8"):
+        raise RunError(
+            "plan_invalid", "The repair plan is not in its canonical encoding"
+        )
+    return _RepairArm(name, plan, hashlib.sha256(data).hexdigest())
+
+
+def _check_plan(
+    arm: _RepairArm,
+    manifest: RunManifestV1,
+    manifest_sha256: str,
+    prepare_id: str,
+) -> None:
+    """Ties the plan to the pass being continued and names the arm's run.
+
+    The arm's run id is the base run's with the arm's tag before its
+    date, and with ``r2`` after the tag for the one re-run an outage
+    allows; the prepare directory is named after it, as the call and
+    publish steps expect.
+
+    Raises:
+        RunError: With ``plan_mismatch`` if the plan names another split,
+            base run or manifest digest; ``plan_empty`` if it triggers no
+            item; ``arm_id_mismatch`` if the output is not named after
+            the arm's run; and ``run_id_invalid`` if that run id is too
+            long to be a result name.
+    """
+    plan = arm.plan
+    if (plan.split, plan.base_run, plan.base_run_manifest_sha256) != (
+        manifest.prepare.split,
+        manifest.run_id,
+        manifest_sha256,
+    ):
+        raise RunError(
+            "plan_mismatch", "The plan was derived from another pass"
+        )
+    if not plan.items:
+        raise RunError(
+            "plan_empty", "The plan triggers no item, so no arm is run"
+        )
+    stem = plan.base_run[: -_DATE_LENGTH - 1]
+    date = plan.base_run[-_DATE_LENGTH:]
+    tagged = f"{stem}-{_ARM_TAGS[arm.name]}"
+    if prepare_id not in (f"{tagged}-{date}", f"{tagged}-{_ARM_RERUN}-{date}"):
+        raise RunError(
+            "arm_id_mismatch",
+            "The output is not named after the base run and its arm",
+        )
+    if _RESULT_DIR.fullmatch(prepare_id) is None:
+        raise RunError(
+            "run_id_invalid", "The arm's run id is not a usable result name"
+        )
+
+
+def _arm_prompts(
+    arm: _RepairArm, batch: PreparedBatchV1, answers: CompletionBatchV1
+) -> tuple[PreparedPromptV1, ...]:
+    """Builds one arm's prompts for the plan's items, in plan order.
+
+    The resample is the pass's first turn byte for byte; bare continues
+    it with the counted answer verbatim and the follow-up text, and
+    counterexample appends the item's card, or is the bare turn when the
+    item has none. No readiness rule applies: the plan is the trigger.
+    Every item's three prompts are built whichever arm is asked for, so
+    a round whose second turn cannot be built, from an empty answer or
+    over the prompt budget, is refused at every arm, the resample
+    included, and no arm of it is ever sent.
+
+    Raises:
+        RunError: With ``plan_mismatch`` if the plan's items are not C4
+            items of the pass in its prepare order.
+        GenerationError: With ``follow_up_invalid`` or
+            ``prompt_too_large`` if a second turn cannot be built.
+    """
+    planned = [item.item_id for item in arm.plan.items]
+    wanted = set(planned)
+    first = {prompt.item_id: prompt for prompt in batch.prompts}
+    if [item_id for item_id in first if item_id in wanted] != planned:
+        raise RunError(
+            "plan_mismatch",
+            "The plan's items are not the pass's C4 items in prepare order",
+        )
+    counted = {answer.item_id: answer for answer in answers.completions}
+    chosen: list[PreparedPromptV1] = []
+    for item in arm.plan.items:
+        prompt = first[item.item_id]
+        answer = counted[item.item_id].response_text or ""
+        turns: dict[_ArmName, PreparedPromptV1] = {
+            "resample": prompt,
+            "bare": follow_up_prompt(prompt, answer),
+            "counterexample": follow_up_prompt(prompt, answer, item.card),
+        }
+        chosen.append(turns[arm.name])
+    return tuple(chosen)
+
+
+def _follow_up_manifest(
+    arguments: argparse.Namespace,
+    source: PrepareManifestV1,
+    batch: PreparedBatchV1,
+    digest: str,
+) -> PrepareManifestV1:
+    """Describes one follow-up prompt file written with ``digest``.
+
+    The source prepare's split, input digest, catalog and retrieval depth
+    are kept, because every first turn is that prepare's prompt byte for
+    byte; the model-side files are this tree's, which the call checks.
+
+    Raises:
+        RunError: If the prompts carry more than one system prompt.
+    """
+    systems = {prompt.messages[0].content for prompt in batch.prompts}
+    if len(systems) != 1:
+        raise RunError(
+            "system_prompt_unstable",
+            "One condition produced more than one system prompt",
+        )
+    chosen = {prompt.item_id for prompt in batch.prompts}
+    return PrepareManifestV1(
+        prepare_id=cast(Path, arguments.output_dir).name,
+        created_at=datetime.now(timezone.utc),
+        source_revision=cast(str, arguments.source_revision),
+        source_files=_source_manifest(),
+        split=source.split,
+        item_ids=tuple(prompt.item_id for prompt in batch.prompts),
+        model_inputs_sha256=source.model_inputs_sha256,
+        catalog=source.catalog,
+        top_k=source.top_k,
+        empty_context_item_ids=tuple(
+            item for item in source.empty_context_item_ids if item in chosen
+        ),
+        conditions=(
+            PreparedConditionV1(
+                label=_FOLLOW_UP_LABEL,
+                output_contract=batch.output_contract,
+                retrieval=batch.retrieval,
+                path=f"prepared/{_FOLLOW_UP_LABEL}.json",
+                sha256=digest,
+                system_prompt_sha256=_hash_text(systems.pop()),
+                prompt_count=len(batch.prompts),
+            ),
+        ),
+    )
+
+
+def _follow_up(arguments: argparse.Namespace) -> int:
+    """Writes a C4 prompt set that continues a run's own answers.
+
+    Without a plan it is the two-turn smoke's set, from a dev run; with a
+    plan and an arm it is that arm of the run's repair round. Nothing
+    here opens a socket, reads gold or opens the catalog; a plan is read
+    as data.
+
+    Returns:
+        The process exit code.
+
+    Raises:
+        RunError: If the output name is unusable or exists, the plan does
+            not fit the source run, or the source run or its answers are
+            refused.
+    """
+    output_dir = cast(Path, arguments.output_dir)
+    prepare_id = output_dir.name
+    if _IDENTIFIER.fullmatch(prepare_id) is None:
+        raise RunError(
+            "prepare_id_invalid",
+            "The output directory name is not a valid prepare id",
+        )
+    if output_dir.exists():
+        raise RunError("output_exists", "The prepare directory already exists")
+    arm = _repair_arm(arguments)
+    manifest, manifest_sha256, first, answers = _follow_up_source(
+        cast(Path, arguments.from_run), any_split=arm is not None
+    )
+    if arm is not None:
+        _check_plan(arm, manifest, manifest_sha256, prepare_id)
+    batch = PreparedBatchV1(
+        output_contract=first.output_contract,
+        retrieval=first.retrieval,
+        prompts=(
+            _follow_up_prompts(first, answers)
+            if arm is None
+            else _arm_prompts(arm, first, answers)
+        ),
+    )
+    staging = output_dir.parent / f".{prepare_id}.partial"
+    shutil.rmtree(staging, ignore_errors=True)
+    (staging / "prepared").mkdir(parents=True)
+    try:
+        digest = _write_json(
+            staging / "prepared" / f"{_FOLLOW_UP_LABEL}.json", batch
+        )
+        prepare = _follow_up_manifest(
+            arguments, manifest.prepare, batch, digest
+        )
+        _write_json(staging / "prepare.json", prepare)
+        try:
+            staging.rename(output_dir)
+        except OSError:
+            raise RunError(
+                "output_exists", "The prepare directory already exists"
+            ) from None
+    except BaseException:
+        # A half-written prepare directory must never be callable.
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    report: dict[str, object] = {
+        "prepare_id": prepare_id,
+        "output_dir": output_dir.as_posix(),
+        "source_run_id": manifest.run_id,
+        "source_run_manifest_sha256": manifest_sha256,
+        "items": list(prepare.item_ids),
+        "prompt_bytes": {
+            prompt.item_id: _prompt_bytes(prompt) for prompt in batch.prompts
+        },
+        "conditions": {_FOLLOW_UP_LABEL: digest},
+    }
+    if arm is not None:
+        report |= {"arm": arm.name, "plan_sha256": arm.plan_sha256}
+    print(canonical_json(report))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Builds the model-run command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1863,6 +2247,21 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--run-dir", type=Path, required=True)
     publish.add_argument("--output", type=Path, required=True)
     publish.set_defaults(handler=_publish)
+    follow_up = commands.add_parser(
+        "follow-up",
+        help=(
+            "Prepare second-turn C4 prompts from a complete dev run, or "
+            "one repair arm of a dev or test pass from its plan"
+        ),
+    )
+    follow_up.add_argument("--from-run", type=Path, required=True)
+    follow_up.add_argument("--output-dir", type=Path, required=True)
+    follow_up.add_argument(
+        "--source-revision", type=_source_revision, required=True
+    )
+    follow_up.add_argument("--plan", type=Path)
+    follow_up.add_argument("--arm", choices=tuple(_ARM_TAGS))
+    follow_up.set_defaults(handler=_follow_up)
     return parser
 
 

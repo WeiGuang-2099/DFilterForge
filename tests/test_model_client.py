@@ -23,6 +23,8 @@ from dfilterforge.completions import OpenRouterOptionsV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.errors import DFilterForgeError
 from dfilterforge.generation import DirectFilterResultV1
+from dfilterforge.generation import follow_up_prompt
+from dfilterforge.generation import FOLLOW_UP_TEXT
 from dfilterforge.generation import GenerationInputV1
 from dfilterforge.generation import MAX_RESPONSE_BYTES
 from dfilterforge.generation import OutputContractV1
@@ -346,6 +348,29 @@ def test_successful_completion_is_bounded_and_carries_the_bearer_key() -> None:
         "seed": 17,
         "response_format": {"type": "json_object"},
     }
+
+
+def test_a_second_turn_is_sent_as_four_ordered_messages() -> None:
+    """The client sends a continued prompt's turns in order, verbatim."""
+    first = _prepared().prompts[0]
+    continued = follow_up_prompt(first, _CONTENT)
+    batch = PreparedBatchV1(
+        output_contract=first.output_contract,
+        retrieval=first.retrieval,
+        prompts=(continued,),
+    )
+
+    with _provider(_ok) as provider:
+        result = _backend(provider.url).complete(batch)
+
+    (request,) = provider.received
+    assert json.loads(request.body)["messages"] == [
+        {"role": "system", "content": first.messages[0].content},
+        {"role": "user", "content": first.messages[1].content},
+        {"role": "assistant", "content": _CONTENT},
+        {"role": "user", "content": FOLLOW_UP_TEXT},
+    ]
+    assert result.completions[0].status is CompletionStatusV1.COMPLETED
 
 
 @pytest.mark.parametrize(

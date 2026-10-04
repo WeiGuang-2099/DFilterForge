@@ -48,6 +48,23 @@ _MAX_RETRIEVED_FIELDS = 64
 _MAX_FIELD_TEXT_BYTES = 1024
 _MAX_ENUM_VALUES = 64
 _INPUT_PREFIX = "INPUT_JSON\n"
+# The two message shapes a prepared prompt may take: a first turn, and that
+# turn continued by the model's own answer and one more user turn.
+_FIRST_TURN = ("system", "user")
+_SECOND_TURN = ("system", "user", "assistant", "user")
+# The second user turn the bake-off note registers for the two-turn smoke
+# (docs/decisions/model-bakeoff.md). A test pins its digest, so a wording
+# change is a deliberate edit rather than a drift.
+FOLLOW_UP_TEXT = (
+    "Your filter was incorrect. Reply with a corrected answer in the same "
+    "JSON format."
+)
+# The line that introduces a repair round's counterexample card inside that
+# turn, as INPUT_JSON introduces the first turn's input. A test pins its
+# digest too.
+COUNTEREXAMPLE_PREFIX = "\nCOUNTEREXAMPLE_JSON\n"
+# A card is one canonical JSON object of at most this many UTF-8 bytes.
+MAX_CARD_BYTES = 1024
 
 
 class GenerationError(DFilterForgeError):
@@ -186,9 +203,13 @@ class GenerationInputV1(FrozenModel):
 
 
 class ChatMessageV1(FrozenModel):
-    """A bounded chat-completions message."""
+    """A bounded chat-completions message.
 
-    role: Literal["system", "user"]
+    ``assistant`` carries a model's own earlier answer, and only inside a
+    second turn; :class:`PreparedPromptV1` fixes where each role may stand.
+    """
+
+    role: Literal["system", "user", "assistant"]
     content: str
 
     @field_validator("content")
@@ -204,9 +225,12 @@ class ChatMessageV1(FrozenModel):
 class PreparedPromptV1(FrozenModel):
     """One deterministic model request, keyed outside prompt content.
 
-    The recorded ``retrieved_fields`` must equal the field context visible
-    inside the user message, so a report can never claim context the model
-    did not see.
+    A prompt is a first turn (system, user) or that turn continued by the
+    model's own answer and one more user turn (system, user, assistant,
+    user). The recorded ``retrieved_fields`` must equal the field context
+    visible inside the first user message, so a report can never claim
+    context the model did not see. Every message counts toward the one
+    byte budget.
     """
 
     item_id: str
@@ -216,7 +240,9 @@ class PreparedPromptV1(FrozenModel):
     retrieved_fields: tuple[RetrievedFieldV1, ...] = Field(
         default=(), max_length=_MAX_RETRIEVED_FIELDS
     )
-    messages: tuple[ChatMessageV1, ChatMessageV1]
+    messages: tuple[ChatMessageV1, ...] = Field(
+        min_length=len(_FIRST_TURN), max_length=len(_SECOND_TURN)
+    )
 
     @field_validator("item_id")
     @classmethod
@@ -227,12 +253,11 @@ class PreparedPromptV1(FrozenModel):
     @model_validator(mode="after")
     def validate_prompt(self) -> "PreparedPromptV1":
         """Pins the message shape, the byte budget, and honest field context."""
-        if tuple(message.role for message in self.messages) != (
-            "system",
-            "user",
-        ):
+        roles = tuple(message.role for message in self.messages)
+        if roles not in (_FIRST_TURN, _SECOND_TURN):
             raise ValueError(
-                "messages must contain one system and one user role"
+                "messages must be system and user, optionally followed by "
+                "assistant and user"
             )
         size = sum(
             utf8_size(message.content, "message content")
@@ -526,6 +551,88 @@ def prepare_batch(
         prompts=tuple(
             _prepare_prompt(item, output_contract, retrieval, version)
             for item in items
+        ),
+    )
+
+
+def _is_card(card: str) -> bool:
+    """Tells whether a card is one canonical JSON object within its limit."""
+    try:
+        if utf8_size(card, "card") > MAX_CARD_BYTES:
+            return False
+        payload = json.loads(card)
+        if not isinstance(payload, dict):
+            return False
+        return canonical_json(cast(dict[str, object], payload)) == card
+    except (ValueError, RecursionError):
+        return False
+
+
+def follow_up_prompt(
+    prompt: PreparedPromptV1, answer: str, card: str | None = None
+) -> PreparedPromptV1:
+    """Continues a first-turn prompt with its own answer and the follow-up.
+
+    The answer becomes the assistant turn verbatim, whatever it parses as,
+    so the second request shows the model exactly what it said, and
+    :data:`FOLLOW_UP_TEXT` becomes the last user turn. A card, when given,
+    is appended to that turn after :data:`COUNTEREXAMPLE_PREFIX`, verbatim.
+    Cards are built elsewhere, from the feedback probe; this function only
+    checks a card's encoding and size, so ``card=None`` gives exactly the
+    bytes it gave before cards existed. No IO.
+
+    Args:
+        prompt: A first-turn prompt exactly as a prepared batch holds it.
+        answer: That prompt's recorded response text, unchanged.
+        card: ``None`` for the bare follow-up, or a counterexample card:
+            one JSON object in canonical encoding, at most
+            :data:`MAX_CARD_BYTES` bytes.
+
+    Returns:
+        The same item and condition with four messages.
+
+    Raises:
+        GenerationError: With ``follow_up_invalid`` if the prompt is already
+            a second turn, the answer is empty or not valid UTF-8, or the
+            card is not one canonical JSON object within its limit, and
+            with ``prompt_too_large`` if the four messages exceed the
+            prompt byte budget.
+    """
+    if len(prompt.messages) != len(_FIRST_TURN):
+        raise GenerationError(
+            "follow_up_invalid", "Only a first-turn prompt can be continued"
+        )
+    if not answer:
+        raise GenerationError("follow_up_invalid", "The answer is empty")
+    texts = (*(message.content for message in prompt.messages), answer)
+    try:
+        size = sum(utf8_size(text, "message content") for text in texts)
+    except ValueError:
+        raise GenerationError(
+            "follow_up_invalid", "The answer is not valid UTF-8"
+        ) from None
+    last = FOLLOW_UP_TEXT
+    if card is not None:
+        if not _is_card(card):
+            raise GenerationError(
+                "follow_up_invalid",
+                "The card is not one canonical JSON object within its limit",
+            )
+        last = FOLLOW_UP_TEXT + COUNTEREXAMPLE_PREFIX + card
+    if size + utf8_size(last, "follow-up") > MAX_PROMPT_BYTES:
+        raise GenerationError(
+            "prompt_too_large", "Prompt exceeds the byte limit"
+        )
+    return PreparedPromptV1(
+        item_id=prompt.item_id,
+        split=prompt.split,
+        output_contract=prompt.output_contract,
+        retrieval=prompt.retrieval,
+        retrieved_fields=prompt.retrieved_fields,
+        messages=(
+            *prompt.messages,
+            ChatMessageV1(role="assistant", content=answer),
+            ChatMessageV1(role="user", content=last),
         ),
     )
 

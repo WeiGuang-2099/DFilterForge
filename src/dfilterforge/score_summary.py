@@ -10,6 +10,11 @@ every interval of that case's universe. ``bootstrap.cases`` records the
 ready count and ``bootstrap.non_ready_cases``, present only when non-ready
 gold was scored, the other.
 
+The paired case statistics, :func:`draw_indices`, :func:`case_means`,
+:func:`ratio_rate` and :func:`discordance`, are public, so a report over
+two passes, such as a repair round's, computes its numbers with the same
+estimator and the same vectors as the summary rather than restating them.
+
 How the result is printed lives in :mod:`dfilterforge.score_report`, which
 reads this module and is never read by it.
 """
@@ -365,7 +370,7 @@ _DEFAULT_NOT_MEASURED: dict[str, str] = {
 }
 
 
-def _draw_indices(n: int) -> tuple[tuple[int, ...], ...]:
+def draw_indices(n: int) -> tuple[tuple[int, ...], ...]:
     """Draws the resample index vectors for one case universe.
 
     The vectors depend only on ``n``, so the same seed reproduces the same
@@ -406,8 +411,15 @@ def _bounds(statistics: list[float]) -> tuple[float | None, float | None, int]:
     )
 
 
-def _case_means(pairs: Sequence[tuple[str, float]]) -> dict[str, float]:
-    """Averages per-item values inside each case."""
+def case_means(pairs: Sequence[tuple[str, float]]) -> dict[str, float]:
+    """Averages per-item values inside each case.
+
+    Args:
+        pairs: One (case id, value) pair per item, in any order.
+
+    Returns:
+        Each case id that appears to the mean of its items' values.
+    """
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
     for case_id, value in pairs:
@@ -424,7 +436,7 @@ def _case_values(
     Every item of a case is in that case's denominator, including provider
     failures, malformed replies and abstentions.
     """
-    return _case_means(
+    return case_means(
         [
             (item.case_id, 1.0 if item.outcome in wanted else 0.0)
             for item in items
@@ -467,13 +479,32 @@ def _rate(
     )
 
 
-def _ratio_rate(
+def ratio_rate(
     numerators: Mapping[str, float],
     denominators: Mapping[str, float],
     vectors: tuple[tuple[int, ...], ...],
     case_ids: tuple[str, ...],
 ) -> RateV1:
-    """Divides summed case means, skipping resamples with no denominator."""
+    """Divides summed case means, skipping resamples with no denominator.
+
+    This is the estimator of silent-wrong over compile-valid items, and of
+    any share whose denominator is itself a per-case share. Passing the
+    differences of two numerators over one denominator gives the paired
+    difference of the two shares, on the same vectors.
+
+    Args:
+        numerators: Case id to the case mean of the counted items; a case
+            ``denominators`` lacks must not appear.
+        denominators: Case id to the case mean of the items it is a share
+            of.
+        vectors: The universe's vectors from :func:`draw_indices`.
+        case_ids: The universe's sorted case ids the vectors index.
+
+    Returns:
+        The summed numerators over the summed denominators, None when the
+        denominators sum to zero, with the 2.5 and 97.5 percentiles of the
+        resamples whose denominator is positive.
+    """
     statistics: list[float] = []
     for vector in vectors:
         numerator = 0.0
@@ -493,6 +524,39 @@ def _ratio_rate(
         else round(sum(numerators.values()) / total, _RATE_DIGITS)
     )
     return RateV1(value=value, low=low, high=high, resamples_used=used)
+
+
+class Discordance(NamedTuple):
+    """How many cases of a paired comparison favour each side."""
+
+    first_better: int
+    second_better: int
+
+    @property
+    def discordant(self) -> int:
+        """The cases on which the two sides differ at all."""
+        return self.first_better + self.second_better
+
+    @property
+    def inconclusive(self) -> bool:
+        """Whether fewer than ``MIN_DISCORDANT_CASES`` cases differ."""
+        return self.discordant < MIN_DISCORDANT_CASES
+
+
+def discordance(differences: Mapping[str, float]) -> Discordance:
+    """Counts the cases each side of a paired case-level comparison wins.
+
+    Args:
+        differences: Case id to the first side's case mean minus the
+            second's, over the cases both sides cover.
+
+    Returns:
+        The cases with a positive and with a negative difference.
+    """
+    return Discordance(
+        first_better=sum(1 for value in differences.values() if value > 0),
+        second_better=sum(1 for value in differences.values() if value < 0),
+    )
 
 
 def _outcome_counts(items: Sequence[ItemOutcomeV1]) -> dict[str, int]:
@@ -571,8 +635,8 @@ def _recall(items: Sequence[ItemOutcomeV1]) -> RecallV1 | None:
         )
     if not recall_pairs:
         return None
-    recalls = _case_means(recall_pairs)
-    covered = _case_means(cover_pairs)
+    recalls = case_means(recall_pairs)
+    covered = case_means(cover_pairs)
     widths = [item.retrieved_field_count for item in items]
     return RecallV1(
         k_min=min(widths),
@@ -678,7 +742,7 @@ class _Universe:
     def of(cls, items: Sequence[ItemOutcomeV1]) -> _Universe:
         """Draws the vectors for the distinct cases of ``items``."""
         case_ids = tuple(sorted({item.case_id for item in items}))
-        return cls(case_ids, _draw_indices(len(case_ids)))
+        return cls(case_ids, draw_indices(len(case_ids)))
 
 
 class _NonReadyRates(NamedTuple):
@@ -717,7 +781,7 @@ def _non_ready_rates(
     if not slotted:
         return _NonReadyRates(false_ready, by_status, None)
     slot_match = _rate(
-        _case_means(
+        case_means(
             [
                 (item.case_id, 1.0 if item.slot_match else 0.0)
                 for item in slotted
@@ -758,7 +822,7 @@ def _condition_summary(
         compile_valid=_rate(executable, vectors, case_ids),
         strong_exact=_rate(strong, vectors, case_ids),
         silent_wrong_all=_rate(silent, vectors, case_ids),
-        silent_wrong_of_executable=_ratio_rate(
+        silent_wrong_of_executable=ratio_rate(
             silent, executable, vectors, case_ids
         ),
         over_abstention=_rate(abstained, vectors, case_ids),
@@ -785,17 +849,15 @@ def _compare(
         case_id: first_values[case_id] - second_values[case_id]
         for case_id in shared
     }
-    first_better = sum(1 for value in differences.values() if value > 0)
-    second_better = sum(1 for value in differences.values() if value < 0)
-    discordant = first_better + second_better
+    counts = discordance(differences)
     return ComparisonV1(
         first=first,
         second=second,
         difference=_rate(differences, vectors, case_ids),
-        first_better_cases=first_better,
-        second_better_cases=second_better,
-        discordant_cases=discordant,
-        inconclusive=discordant < MIN_DISCORDANT_CASES,
+        first_better_cases=counts.first_better,
+        second_better_cases=counts.second_better,
+        discordant_cases=counts.discordant,
+        inconclusive=counts.inconclusive,
     )
 
 

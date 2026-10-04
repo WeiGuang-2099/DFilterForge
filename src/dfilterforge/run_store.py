@@ -38,6 +38,7 @@ from dfilterforge.completions import CompletionBatchV1
 from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import PrepareManifestV1
+from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import thinking_state
 from dfilterforge.errors import DFilterForgeError
@@ -435,6 +436,12 @@ def check_prompts(
     newest first, and must all match under one of them, so a run prepared
     before a prompt change still re-scores while a batch mixing versions,
     or a prompt no version reproduces, is refused.
+
+    A second turn is checked by the first turn it continues, its system
+    and user messages, and is refused the same way when no version
+    reproduces them. Its assistant and last user messages are not rebuilt
+    here: they hold another run's counted answer and the follow-up turn,
+    and an item's own inputs cannot reproduce either.
     """
     for label, (batch, _) in prepared.items():
         output_contract, retrieval = _CONDITIONS[label]
@@ -443,12 +450,22 @@ def check_prompts(
             [
                 prompt.item_id
                 for prompt in batch.prompts
-                if _rebuilt(prompt, items_by_id, retrieval, version) != prompt
+                if _rebuilt(prompt, items_by_id, retrieval, version)
+                != _first_turn(prompt)
             ]
             for version in versions
         ]
         if all(mismatches):
             raise ScoringError("prompt_mismatch", f"{label} {mismatches[0][0]}")
+
+
+def _first_turn(prompt: PreparedPromptV1) -> PreparedPromptV1:
+    """Cuts a committed prompt to its system and user messages.
+
+    A first-turn prompt comes back equal to itself, so a run of first
+    turns is checked exactly as before second turns existed.
+    """
+    return prompt.model_copy(update={"messages": prompt.messages[:2]})
 
 
 def _rebuilt(
@@ -479,7 +496,7 @@ def _rebuilt(
     ).prompts[0]
 
 
-class _Served(NamedTuple):
+class Served(NamedTuple):
     """The provider-chosen values of one run, truncated and counted."""
 
     models: tuple[str, ...]
@@ -517,7 +534,7 @@ def _provider_key(name: str) -> str:
 
 def _served(
     answered: Sequence[CompletionV1], requested: str, pinned: Sequence[str]
-) -> _Served:
+) -> Served:
     """Collects what the provider served and whether it is what was asked.
 
     A changed flag answers the question its name asks: whether the run
@@ -536,7 +553,7 @@ def _served(
     fingerprints, fingerprints_count = _distinct(
         record.system_fingerprint for record in answered
     )
-    return _Served(
+    return Served(
         models=models,
         models_distinct=models_count,
         model_changed=bool(models) and set(models) != {requested},
@@ -554,6 +571,35 @@ def _served(
         fingerprints=fingerprints,
         fingerprints_distinct=fingerprints_count,
     )
+
+
+def served_values(
+    records: Iterable[CompletionV1], settings: RequestSettingsV1
+) -> Served:
+    """Reads what the provider served some records against a request.
+
+    This is the rule :func:`effective_settings` publishes for a scored
+    run, for a caller that holds completion records instead of a run's
+    batches, such as the two-turn smoke's judge: only completed records
+    count, the requested model is ``settings.model_id`` and the pinned
+    routes are its OpenRouter provider order.
+
+    Args:
+        records: Completion records in any order; a record that did not
+            complete is ignored.
+        settings: The request settings the records answered.
+
+    Returns:
+        The served values and whether each differs from the request.
+    """
+    options = settings.openrouter
+    pinned = () if options is None else options.provider_order
+    answered = [
+        record
+        for record in records
+        if record.status is CompletionStatusV1.COMPLETED
+    ]
+    return _served(answered, settings.model_id, pinned)
 
 
 def effective_settings(

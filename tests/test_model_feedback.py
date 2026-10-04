@@ -253,6 +253,16 @@ def test_the_labels_digest_covers_one_split_and_only_its_expectations(
         FEEDBACK_PROBE_IDS["dev"] = "semantic-11"  # type: ignore[index]
 
 
+# The feedback probe, the cards drawn from it, the plans that carry them
+# and the rounds that read them.
+_FEEDBACK_MODULES = (
+    "dfilterforge.counterexample",
+    "dfilterforge.model_feedback",
+    "dfilterforge.repair",
+    "dfilterforge.repair_report",
+    "dfilterforge.repair_round",
+    "dfilterforge.repair_summary",
+)
 _CLOSURE_CHECK = """
 import importlib.util
 import sys
@@ -261,11 +271,11 @@ spec = importlib.util.spec_from_file_location("model_run", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 sys.modules["model_run"] = module
 spec.loader.exec_module(module)
-print("dfilterforge.model_feedback" in sys.modules)
+print(",".join(name for name in sys.argv[2:] if name in sys.modules))
 """
 
 
-def test_scoring_and_the_call_path_never_load_the_feedback_module() -> None:
+def test_scoring_and_the_call_path_never_load_feedback_cards_or_plans() -> None:
     """Covers scripts/model_run.py, which import-linter does not see."""
     loaded = subprocess.run(
         [
@@ -273,6 +283,11 @@ def test_scoring_and_the_call_path_never_load_the_feedback_module() -> None:
             "-c",
             _CLOSURE_CHECK,
             str(_ROOT / "scripts" / "model_run.py"),
+            # Loaded by the check itself, so a broken lookup cannot pass.
+            "dfilterforge.scoring",
+            # Where the repair plan schema lives, loaded without either one.
+            "dfilterforge.completions",
+            *_FEEDBACK_MODULES,
         ],
         capture_output=True,
         check=True,
@@ -280,7 +295,9 @@ def test_scoring_and_the_call_path_never_load_the_feedback_module() -> None:
         timeout=120,
     )
 
-    assert loaded.stdout.strip() == "False"
+    assert loaded.stdout.strip() == (
+        "dfilterforge.scoring,dfilterforge.completions"
+    )
 
 
 @_POSIX_ONLY

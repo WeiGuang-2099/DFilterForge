@@ -33,6 +33,7 @@ from dfilterforge.completions import PrepareManifestV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import TokenPricesV1
+from dfilterforge.errors import DFilterForgeError
 from dfilterforge.evaluation import aggregate_metrics
 from dfilterforge.evaluation import evaluate_probe
 from dfilterforge.evaluation import EvaluationReceiptV1
@@ -63,6 +64,7 @@ from dfilterforge.model_split import GoldCase
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.model_split import ModelGoldCaseV1
 from dfilterforge.model_split import ModelSplit
+from dfilterforge.run_store import served_values
 from dfilterforge.runner import RunnerError
 from dfilterforge.runner import TsharkRunner
 from dfilterforge.score_summary import ItemOutcomeV1
@@ -547,6 +549,52 @@ def test_unattributable_errors_stop_scoring(
     assert error.value.code == "item_aborted"
     assert str(error.value) == f"C1 mei-0001: {code}"
     assert _REFERENCE not in str(error.value)
+
+
+def test_the_codes_that_make_an_answer_invalid_are_named_once() -> None:
+    """The repair round's error card reads the set the scorer charges."""
+    resource = {"timeout", "output_limit", "frame_limit"}
+
+    assert scoring_module.CANDIDATE_RESOURCE_CODES == resource
+    assert scoring_module.CANDIDATE_ERROR_CODES == (
+        {code for _, code in _ATTRIBUTABLE} | resource
+    )
+    assert not scoring_module.CANDIDATE_ERROR_CODES & {
+        code for _, code in _UNATTRIBUTABLE
+    }
+
+
+@pytest.mark.parametrize(
+    "error_type,code",
+    [
+        *_ATTRIBUTABLE,
+        *(
+            (RunnerError, code)
+            for code in ("timeout", "output_limit", "frame_limit")
+        ),
+    ],
+)
+def test_a_candidate_code_counts_only_from_the_boundary_that_owns_it(
+    error_type: type[Exception], code: str
+) -> None:
+    owned = error_type(code, "bounded message")
+
+    assert isinstance(owned, DFilterForgeError)
+    assert scoring_module.candidate_error_code(owned) == code
+    assert (
+        scoring_module.candidate_error_code(LiveError(code, "bounded message"))
+        is None
+    )
+
+
+@pytest.mark.parametrize("error_type,code", _UNATTRIBUTABLE)
+def test_a_harness_code_is_never_the_candidates(
+    error_type: type[Exception], code: str
+) -> None:
+    error = error_type(code, "bounded message")
+
+    assert isinstance(error, DFilterForgeError)
+    assert scoring_module.candidate_error_code(error) is None
 
 
 def test_receipt_probes_decide_strong_exact_or_silent_wrong(
@@ -2099,6 +2147,52 @@ def test_effective_settings_matches_a_pinned_slug_to_its_display_name(
     assert settings.providers == (served,)
     assert settings.providers_distinct == 1
     assert settings.provider_changed is changed
+
+
+def test_served_reads_bare_records_by_the_scored_rule() -> None:
+    """The public helper flags what effective_settings flags, from records."""
+    pinned = RequestSettingsV1(
+        model_id=_MODEL_ID,
+        openrouter=OpenRouterOptionsV1(provider_order=("deepinfra/fp8",)),
+    )
+    answered = CompletionV1(
+        item_id="mei-0001",
+        status=CompletionStatusV1.COMPLETED,
+        response_text="{}",
+        latency_ms=1.0,
+        provider="DeepInfra",
+        response_model=_MODEL_ID,
+    )
+    unanswered = CompletionV1(
+        item_id="mei-0002",
+        status=CompletionStatusV1.FAILED,
+        error_code="http_error",
+        http_status=503,
+        latency_ms=1.0,
+        provider="Novita",
+        response_model="vendor/other",
+    )
+    elsewhere = answered.model_copy(
+        update={
+            "item_id": "mei-0003",
+            "provider": "Novita",
+            "response_model": "vendor/other",
+        }
+    )
+
+    pinned_only = served_values([answered, unanswered], pinned)
+    moved = served_values([answered, elsewhere], pinned)
+
+    assert (pinned_only.providers, pinned_only.models) == (
+        ("DeepInfra",),
+        (_MODEL_ID,),
+    )
+    assert not pinned_only.provider_changed
+    assert not pinned_only.model_changed
+    assert moved.providers == ("DeepInfra", "Novita")
+    assert moved.models == (_MODEL_ID, "vendor/other")
+    assert moved.provider_changed
+    assert moved.model_changed
 
 
 def test_effective_settings_counts_the_values_it_could_not_print(
