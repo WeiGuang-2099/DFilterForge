@@ -598,17 +598,21 @@ step 2:
   `-nb` runs, with `deepseek-v4-pro-0813_nextbit_enabled-false`, 11 items
   each and the cap 0.20.
 - Before step 2 has built the `-nb` prompt sets, each reads `would build`
-  under "prompt sets", and a follow-up line follows for each, ending
-  `, installed as artifacts/repair/<-nb run id>`. That line builds under the
-  arm's registered first id in `artifacts/repair-arms/build/<-nb run id>/`,
-  because `artifacts/repair/<registered first id>` keeps the DeepInfra run
-  the move replaced. The batch builds and installs the sets itself, so the
-  line is there to read; a set built by hand there is never read.
+  under "prompt sets", and two lines follow for each: a follow-up command
+  that starts `uv run --frozen python scripts/model_run.py follow-up`, as
+  the Commands below do, and a comment line
+  `# installed as artifacts/repair/<-nb run id>`. The two run as printed
+  from the repository root in Windows PowerShell 5.1 or Git Bash, where the
+  comment is ignored. The command builds under the arm's registered first id
+  in `artifacts/repair-arms/build/<-nb run id>/`, because
+  `artifacts/repair/<registered first id>` keeps the DeepInfra run the move
+  replaced. The batch builds and installs the sets itself, so the command
+  is there to read; a set built by hand there is never read.
 - Step 2 builds the `-nb` sets before its keyless preflight, so even a step 2
   that ends at exit 3 for a missing key leaves them in place. From then on a
   repeated step 1 reads `equal to what follow-up builds now` for each `-nb`
-  set, with no "installed as" line. That is the expected output, not a
-  failure. A row already `done` lists no prompt set.
+  set, with no follow-up command and no "installed as" line. That is the
+  expected output, not a failure. A row already `done` lists no prompt set.
 
 The step log `steps.jsonl`, the summaries `summary-<split>-<date>.json` and
 `.txt`, and the lock go to `artifacts/repair-arms/` (ignored). For each row,

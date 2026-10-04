@@ -1953,8 +1953,15 @@ sent, no command set the key variable, nothing was pushed, and none of the
   - After: the line reads `--output-dir
     artifacts/repair-arms/build/<-nb run id>/<registered first id>`, still
     ending ", installed as artifacts/repair/<-nb run id>". Run as printed,
-    each exited 0. `differences` found nothing between each built set and
-    the `-nb` set the keyless batch installed at 918bed9. Their
+    each exited 0. (Corrected on 2026-10-05: "as printed" was false here and
+    in the Before bullet. Each line was run without its ", installed as"
+    tail and with a `python` that holds the project. As printed, `python`
+    on this machine is the system Python, which has no `dfilterforge`
+    (ModuleNotFoundError, exit 1), and the tail makes the revision end in a
+    comma (exit 2). The line now starts `uv run --frozen python` and puts
+    "installed as" on a comment line of its own.) `differences` found
+    nothing between each built set and the `-nb` set the keyless batch
+    installed at 918bed9. Their
     `prepared/C4.json` SHA-256 prefixes, `43b396f05b3e`, `b4fb01c575b7` and
     `2fb03e788c2d`, equal the replaced DeepInfra runs' sets'. A second dry
     run after those builds printed the same output.
@@ -2018,10 +2025,11 @@ sent, no command set the key variable, nothing was pushed, and none of the
       `deepseek-v4-pro-0813_nextbit_enabled-false` at the 0.20 cap (OD6). An
       outage is re-run once as `-nb-r2` (OD7). The nine done arm runs and the
       six DeepInfra runs are not sent again. The dry run prints a follow-up
-      line ending "installed as" for each `-nb` set only until the dev
-      command has built the sets, which it does before its keyless
-      preflight; a dry run after that prints "equal to what follow-up builds
-      now" for each, which is expected (the repair note's Commands).
+      command and a comment line "# installed as" for each `-nb` set only
+      until the dev command has built the sets, which it does before its
+      keyless preflight; a dry run after that prints "equal to what
+      follow-up builds now" for each, which is expected (the repair note's
+      Commands).
    2. **Maintainer: the frontier dev round, then the dev pool.** Publish and
       score each `done` `-nb` run, then write the frontier pass's round
       summary with `dfilterforge repair` and check it with `repair --check`,

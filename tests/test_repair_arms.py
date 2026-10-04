@@ -1971,13 +1971,16 @@ def test_a_moved_dev_pass_sends_new_runs_with_the_move_config(
         assert f"  artifacts/repair/{run_id}: would build" in text
         assert (
             f" --output-dir artifacts/repair-arms/build/{run_id}/{name}"
-            f" --source-revision test-rev, installed as"
-            f" artifacts/repair/{run_id}"
+            " --source-revision test-rev\n"
+            f"    # installed as artifacts/repair/{run_id}\n"
         ) in text
     assert f"10 | {moved[0]} | {_FALLBACK_CONFIGS['frontier']} | 2 |" in text
-    assert "installed as" not in "\n".join(
-        line for line in bench.printed if DEV_ARMS[0] in line
-    )
+    # An unmoved run's command builds where the batch installs its set.
+    assert (
+        f" --output-dir artifacts/repair/{DEV_ARMS[0]}"
+        " --source-revision test-rev\n"
+        "    uv run --frozen python scripts/model_run.py follow-up"
+    ) in text
 
     # Keyless: the moved rows send their new ids with the move's config at
     # the frontier dev cap; follow-up builds each under its registered id.
@@ -2059,7 +2062,10 @@ def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
     follow-up builds under, names the run directory of the DeepInfra run
     the move replaced, and follow-up refuses an existing output. The
     printed command builds elsewhere, a set equal to the one the batch
-    installs under the moved id.
+    installs under the moved id. It starts the step in the project's
+    locked environment, as the note's commands do, and the real step's
+    parser takes every word after the script as printed; where the batch
+    installs the set is a comment line of its own.
     """
     bench.send_moves()
     registered = [ra.registered_run_ids(_DEV[3], arm)[0] for arm in ra.ARMS]
@@ -2069,16 +2075,22 @@ def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
             parents=True
         )
     assert bench.run([], ["--dry-run"]) == 0
-    lines = [
-        line.strip() for line in bench.printed if ", installed as " in line
+    printed = [line.strip() for line in bench.printed]
+    comments = [
+        at
+        for at, line in enumerate(printed)
+        if line.startswith("# installed as ")
     ]
-    assert len(lines) == len(moved)
+    assert len(comments) == len(moved)
     by_hand: list[Path] = []
-    for line, run_id, name in zip(lines, moved, registered):
-        command, installed = line.split(", installed as ")
-        assert installed == f"{ra.PREPARE_ROOT}/{run_id}"
-        python, script, *argv = command.split(" ")
-        assert (python, script) == ("python", "scripts/model_run.py")
+    for at, run_id, name, arm in zip(comments, moved, registered, ra.ARMS):
+        assert printed[at] == f"# installed as {ra.PREPARE_ROOT}/{run_id}"
+        line = printed[at - 1]
+        words = line.split(" ")
+        assert words[:5] == ["uv", "run", "--frozen", "python", db.MODEL_RUN]
+        argv = words[5:]
+        parsed = model_run.build_parser().parse_args(argv)
+        assert (parsed.source_revision, parsed.arm) == ("test-rev", arm)
         # Run as printed from the root of the bench's tree.
         rooted = list(argv)
         for index, flag in enumerate(argv[:-1]):
@@ -2092,6 +2104,14 @@ def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
     assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
     for built, run_id in zip(by_hand, moved):
         assert not ra.differences(built, bench.root / ra.PREPARE_ROOT / run_id)
+
+
+@pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
+def test_the_printed_follow_up_starts_as_the_notes_follow_up_command() -> None:
+    """The batch prints follow-up the way the note's Commands run it."""
+    note = (_ROOT / ra.NOTE).read_text(encoding="utf-8")
+    start = " ".join([*ra.HOST_PYTHON, db.MODEL_RUN, "follow-up --from-run"])
+    assert f"\n{start} docs/results/$PASS" in note
 
 
 @pytest.mark.parametrize("moved", [True, False])

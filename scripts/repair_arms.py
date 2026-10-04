@@ -39,7 +39,8 @@ temporary directory: no socket, no key, no gold, the plan read as data.
 Follow-up builds only under an arm's registered ids, so a moved run's set
 is built under its arm's registered first id, which its ``prepare.json``
 keeps, and put in place under its own run id. The follow-up command the
-batch prints for a moved run builds in
+batch prints runs as printed through ``uv run --frozen python``, as the
+note's commands do; for a moved run it builds in
 ``artifacts/repair-arms/build/<arm run id>``, since the registered id's
 directory under ``artifacts/repair`` keeps the run the move replaced.
 - dev: a missing prompt set is that build; an existing one must equal it,
@@ -210,6 +211,9 @@ OUT_DIR = "artifacts/repair-arms"
 # that sent the replaced run, PREPARE_ROOT/<registered id> holds that run.
 # No step of the batch reads it.
 HAND_BUILD_ROOT = f"{OUT_DIR}/build"
+# How the note's host commands start a script: the project's locked
+# environment, which the system Python does not hold.
+HOST_PYTHON = ("uv", "run", "--frozen", "python")
 # Where a row that left a run directory but is not run keeps that run's
 # manifest and attempt logs, as the bake-off and the test passes keep
 # theirs.
@@ -1007,13 +1011,19 @@ def build_name(row: Row, run_id: str) -> str:
     return run_id if run_id in registered else registered[0]
 
 
-def follow_up_line(row: Row, run_id: str, ctx: Context) -> str:
+def follow_up_lines(row: Row, run_id: str, ctx: Context) -> list[str]:
     """Spells the follow-up command that builds a run's prompt set.
 
-    A moved run's command builds under the arm's registered first id in
-    ``HAND_BUILD_ROOT/<run id>``, never in ``PREPARE_ROOT/<registered
-    id>``, where the run the move replaced is kept, and says where the
-    batch installs the set.
+    The command runs as printed from the repository root, in Windows
+    PowerShell 5.1 or Git Bash, through ``HOST_PYTHON`` as the note's
+    commands do. A moved run's command builds under the arm's registered
+    first id in ``HAND_BUILD_ROOT/<run id>``, never in
+    ``PREPARE_ROOT/<registered id>``, where the run the move replaced is
+    kept; a comment line after it, which both shells ignore, says where
+    the batch installs the set.
+
+    Returns:
+        The command, then for a moved run the comment.
     """
     name = build_name(row, run_id)
     output = (
@@ -1024,10 +1034,10 @@ def follow_up_line(row: Row, run_id: str, ctx: Context) -> str:
     argv = follow_up_argv(
         f"{RESULTS}/{row.base_run}", row.arm, output, ctx.source_revision
     )
-    line = " ".join(["python", db.MODEL_RUN, *argv])
+    lines = [" ".join([*HOST_PYTHON, db.MODEL_RUN, *argv])]
     if name != run_id:
-        line += f", installed as {PREPARE_ROOT}/{run_id}"
-    return line
+        lines.append(f"# installed as {PREPARE_ROOT}/{run_id}")
+    return lines
 
 
 def differences(built: Path, existing: Path) -> list[str]:
@@ -1989,7 +1999,8 @@ def dry_run(ctx: Context) -> None:
     for row in ctx.plan.rows:
         for run_id in (row.run_id, row.rerun_id):
             if ctx.prompts.notes.get(run_id) == "would build":
-                ctx.out(f"    {follow_up_line(row, run_id, ctx)}")
+                for line in follow_up_lines(row, run_id, ctx):
+                    ctx.out(f"    {line}")
     ctx.out("")
     ctx.out("preflight (key withheld; each must stop at api_key_missing):")
     due = calls_due(ctx)
