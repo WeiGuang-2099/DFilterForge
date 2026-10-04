@@ -46,6 +46,9 @@ const REGISTRY_NOTE = 'docs/decisions/test-runs.md';
 const NOTE_ROW = /^\| ([0-9]+) \| `([a-z_]+)` \| `([^`]+)` \|/;
 // scripts/model_run.py's result-name pattern, with ASCII digits only.
 const RUN_ID = /^(?:dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+// The schema of the bake-off ruling test-runs.json names, which holds each
+// slot winner's counted dev pass.
+const RULING_SCHEMA = 'bakeoff-ruling/1.0';
 const MAX_BYTES = 32 * 1024 * 1024;
 const INPUT_PREFIX = 'INPUT_JSON\n';
 const INDEX = /^(?:0|[1-9][0-9]*)$/;
@@ -105,6 +108,13 @@ export interface ReelPick {
   readonly cond: string;
   readonly item: string;
   readonly candidates: number;
+}
+
+/** What test-runs.json registers: its rows and the ruling's slot winners. */
+interface Registration {
+  readonly rows: readonly TestRun[];
+  /** The small, mid and frontier winners' dev passes, from the ruling. */
+  readonly winners: readonly string[];
 }
 
 /** One row of test-runs.json, with the fields the site depends on. */
@@ -447,12 +457,10 @@ export class Resolver {
   }
 
   /**
-   * Lists the runs the site shows, from the committed files alone: the
-   * latest bake-off ranking's anchor, then its small, mid and frontier
-   * candidates by rank, then, once the test phase is on, the published test
-   * runs in role order.
+   * The dev runs the latest bake-off ranking shows: its anchor, then its
+   * small, mid and frontier candidates by rank.
    */
-  shownRuns(): string[] {
+  private devRuns(): string[] {
     const ranking = this.ranking();
     const runs = [string(record(ranking['anchor'], 'anchor')['run_id'], 'anchor run')];
     const slots = record(ranking['slots'], 'slots');
@@ -462,23 +470,32 @@ export class Resolver {
         .sort((first, second) => Number(first['rank']) - Number(second['rank']));
       runs.push(...candidates.map((candidate) => string(candidate['run_id'], `${slot} run`)));
     }
-    runs.push(...this.settledTestRuns());
     return runs;
   }
 
   /**
-   * Reads the rows of test-runs.json, or null when no registry is
-   * committed. Refuses, as the exporter does, a schema other than
+   * Lists the runs the site shows, from the committed files alone: the
+   * ranking's dev runs, then, once the test phase is on, the published test
+   * runs in role order.
+   */
+  shownRuns(): string[] {
+    return [...this.devRuns(), ...this.settledTestRuns()];
+  }
+
+  /**
+   * Reads test-runs.json and the ruling it names, or null when no registry
+   * is committed. Refuses, as the exporter does, a schema other than
    * test-runs/1.0 or a note other than test-runs.md; a role outside the
    * eight; a run id that is malformed, no test run or repeated; a status
    * outside the four; a not_run row with no reason; a broken condition;
    * planned rows other than runs 1 to 5 of test-runs.md in order; a row
    * that is not published whose run directory holds run_manifest.json or
-   * scored/summary.json; two published rows that fill one pool slot; and a
+   * scored/summary.json; two published rows that fill one pool slot; a
    * Runs table in the note that does not list the registry's rows, numbered
-   * from 1, in order.
+   * from 1, in order; and a ruling that rulingWinners refuses, in either
+   * phase.
    */
-  private testRuns(): readonly TestRun[] | null {
+  private registration(): Registration | null {
     if (!this.exists(TEST_RUNS)) {
       return null;
     }
@@ -556,7 +573,42 @@ export class Resolver {
       filled.set(slot, entry.runId);
     }
     this.checkNote(rows);
-    return rows;
+    return {
+      rows,
+      winners: this.rulingWinners(string(registry['ruling'], `${TEST_RUNS} ruling`)),
+    };
+  }
+
+  /**
+   * Reads each slot winner's dev pass from the bake-off ruling the registry
+   * names: slots.<slot>.winner.run_id; the top-level winners holds model ids
+   * and is not read. Refuses, as the exporter does, a ruling outside the
+   * allowed roots, a schema other than bakeoff-ruling/1.0, a slot without a
+   * winner, and a winner that is not a run id, no dev run or not shown by
+   * the ranking.
+   */
+  private rulingWinners(ruling: string): string[] {
+    const document = record(this.json(ruling), ruling);
+    if (document['schema'] !== RULING_SCHEMA) {
+      return refuse(`${ruling} is not ${RULING_SCHEMA}`);
+    }
+    const slots = record(document['slots'], `${ruling} slots`);
+    const shown = new Set(this.devRuns());
+    return SLOTS.map((slot) => {
+      const where = `${ruling} ${slot} winner`;
+      const winner = record(record(slots[slot], `${ruling} ${slot}`)['winner'], where);
+      const runId = string(winner['run_id'], `${where} run_id`);
+      if (!RUN_ID.test(runId)) {
+        return refuse(`${where} ${JSON.stringify(runId)} is not a run id`);
+      }
+      if (!runId.startsWith('dev-')) {
+        return refuse(`${where} ${runId} is no dev run`);
+      }
+      if (!shown.has(runId)) {
+        return refuse(`${where} ${runId} is not shown`);
+      }
+      return runId;
+    });
   }
 
   /**
@@ -614,8 +666,8 @@ export class Resolver {
    * before that, or with no registry.
    */
   private settled(): readonly TestRun[] | null {
-    const rows = this.testRuns();
-    if (rows === null || !rows.every((entry) => this.isFinal(entry, rows))) {
+    const rows = this.registration()?.rows;
+    if (rows === undefined || !rows.every((entry) => this.isFinal(entry, rows))) {
       return null;
     }
     return TEST_ROLES.flatMap((role) =>
@@ -681,13 +733,9 @@ export class Resolver {
     }
     const ranking = this.ranking();
     const pool = [string(record(ranking['anchor'], 'anchor')['run_id'], 'anchor run')];
-    if (this.exists(TEST_RUNS)) {
-      const ruling = string(record(this.json(TEST_RUNS), TEST_RUNS)['ruling'], 'ruling');
-      const slots = record(record(this.json(ruling), ruling)['slots'], `${ruling} slots`);
-      for (const slot of SLOTS) {
-        pool.push(string(pointerGet(slots, `/${slot}/winner/run_id`), `${ruling} ${slot} winner`));
-      }
-      return pool;
+    const registration = this.registration();
+    if (registration !== null) {
+      return [...pool, ...registration.winners];
     }
     const slots = record(ranking['slots'], 'slots');
     for (const slot of SLOTS) {

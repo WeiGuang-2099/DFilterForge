@@ -206,6 +206,33 @@ function answers(runId: string, rows: readonly Answer[]): void {
   }
 }
 
+/** A bake-off ruling, with the fields the resolver reads and the model ids. */
+interface Ruling {
+  schema: string;
+  readonly anchor: {readonly run_id: string};
+  readonly slots: Record<string, {winner?: {run_id: string}}>;
+  readonly winners: Readonly<Record<string, string>>;
+}
+
+/**
+ * A bakeoff-ruling/1.0 document whose small winner is the ranking's
+ * second-ranked run, not its provisional winner, so a pool that holds it
+ * took its winners from the ruling.
+ */
+function ruling(): Ruling {
+  return {
+    schema: 'bakeoff-ruling/1.0',
+    anchor: {run_id: ANCHOR},
+    slots: {
+      small: {winner: {run_id: SMALL_RULED}},
+      mid: {winner: {run_id: DEV_MID}},
+      frontier: {winner: {run_id: DEV_FRONTIER}},
+    },
+    // Model ids, which the resolver never reads.
+    winners: {small: 'm/small-b', mid: 'm/mid', frontier: 'm/frontier'},
+  };
+}
+
 test.beforeEach(() => {
   root = mkdtempSync(path.join(tmpdir(), 'registry-'));
   put(`${BAKEOFF}/ranking-2026-09-26.json`, {
@@ -222,17 +249,7 @@ test.beforeEach(() => {
       frontier: {candidates: [{rank: 1, run_id: DEV_FRONTIER}], provisional_winner: DEV_FRONTIER},
     },
   });
-  put(RULING, {
-    schema: 'bakeoff-ruling/1.0',
-    anchor: {run_id: ANCHOR},
-    slots: {
-      small: {winner: {run_id: SMALL_RULED}},
-      mid: {winner: {run_id: DEV_MID}},
-      frontier: {winner: {run_id: DEV_FRONTIER}},
-    },
-    // Model ids, which the resolver never reads.
-    winners: {small: 'm/small-b', mid: 'm/mid', frontier: 'm/frontier'},
-  });
+  put(RULING, ruling());
 });
 
 test.afterEach(() => {
@@ -581,6 +598,80 @@ const NOTED: readonly Noted[] = [
     row: 17,
   },
 ];
+
+/** A ruling the exporter refuses, and the refusal the resolver gives. */
+interface BrokenRuling {
+  readonly name: string;
+  readonly edit: (value: Ruling, runs: Registry) => void;
+  readonly message: string;
+}
+
+// The cases of test_a_broken_ruling_fails, and a winner that is no run id.
+const BROKEN_RULINGS: readonly BrokenRuling[] = [
+  {
+    name: 'another schema',
+    edit: (value) => {
+      value.schema = 'bakeoff-ruling/0.9';
+    },
+    message: `${RULING} is not bakeoff-ruling/1.0`,
+  },
+  {
+    name: 'a slot without a winner',
+    edit: (value) => {
+      delete value.slots['mid']?.winner;
+    },
+    message: `${RULING} mid winner is not an object`,
+  },
+  {
+    name: 'a winner that is no run id',
+    edit: (value) => {
+      value.slots['small'] = {winner: {run_id: `dev-Bad_X-${DATE}`}};
+    },
+    message: `${RULING} small winner "dev-Bad_X-${DATE}" is not a run id`,
+  },
+  {
+    name: 'a test run as a winner',
+    edit: (value) => {
+      value.slots['small'] = {winner: {run_id: SMALL}};
+    },
+    message: `${RULING} small winner ${SMALL} is no dev run`,
+  },
+  {
+    name: 'a winner the ranking does not show',
+    edit: (value) => {
+      value.slots['small'] = {winner: {run_id: `dev-x-${DATE}`}};
+    },
+    message: `${RULING} small winner dev-x-${DATE} is not shown`,
+  },
+  {
+    name: 'a path outside the allowed roots',
+    edit: (_, runs) => {
+      runs.ruling = 'docs/decisions/model-bakeoff.md';
+    },
+    message: '"docs/decisions/model-bakeoff.md" is outside the allowed roots',
+  },
+];
+
+// The exporter reads the ruling whenever the registry exists, so a broken
+// one is refused in the test phase too, where the pool never uses it.
+for (const phase of ['dev', 'test']) {
+  for (const broken of BROKEN_RULINGS) {
+    test(`a ${phase}-phase registry naming a ruling with ${broken.name} is refused`, () => {
+      const runs = registry();
+      if (phase === 'dev') {
+        at(runs, FRONTIER).status = 'registered';
+      }
+      const value = ruling();
+      broken.edit(value, runs);
+      put(RULING, value);
+      commit(runs);
+      const resolver = new Resolver(root);
+
+      expect(() => resolver.shownRuns()).toThrow(broken.message);
+      expect(() => resolver.reelPool()).toThrow(broken.message);
+    });
+  }
+}
 
 for (const noted of NOTED) {
   test(`a registry note ${noted.name} is refused`, () => {
