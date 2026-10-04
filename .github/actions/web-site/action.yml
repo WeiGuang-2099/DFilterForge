@@ -1,0 +1,54 @@
+name: Build and check the web site
+description: >-
+  Builds the static site inside apps/web/Dockerfile, which exports the data
+  from committed files with no network and runs next build, then runs the web
+  gates on the runner against that build: typecheck, lint and the Playwright
+  suite served from apps/web/out. The CI web job and the Pages workflow use
+  this one path, so what is tested is what is deployed.
+
+inputs:
+  source-commit:
+    description: The commit the data is exported from; page permalinks name it.
+    required: false
+    default: ${{ github.sha }}
+  base-path:
+    description: >-
+      The URL prefix the site is built and served under; empty serves it at
+      the domain root.
+    required: false
+    default: /DFilterForge
+
+runs:
+  using: composite
+  steps:
+    - name: Build the site in Docker from committed files
+      shell: bash
+      env:
+        SOURCE_COMMIT: ${{ inputs.source-commit }}
+        PAGES_BASE_PATH: ${{ inputs.base-path }}
+      run: >-
+        docker build --file apps/web/Dockerfile --target out
+        --build-arg SOURCE_COMMIT="$SOURCE_COMMIT"
+        --build-arg PAGES_BASE_PATH="$PAGES_BASE_PATH"
+        --output type=local,dest=apps/web/out .
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20.20.2
+    - shell: bash
+      run: corepack enable
+    - shell: bash
+      run: corepack prepare pnpm@10.34.5 --activate
+    - shell: bash
+      run: pnpm install --frozen-lockfile
+    - shell: bash
+      run: pnpm web:typecheck
+    - shell: bash
+      run: pnpm web:lint
+    - shell: bash
+      run: pnpm --filter @dfilterforge/web exec playwright install --with-deps chromium
+    - name: Test the Docker-built site
+      shell: bash
+      env:
+        # The server and the tests must see the base path the build used.
+        PAGES_BASE_PATH: ${{ inputs.base-path }}
+      run: pnpm --filter @dfilterforge/web test:e2e

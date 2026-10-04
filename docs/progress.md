@@ -1399,3 +1399,662 @@ the worktree's code mounted read-only and no network.
 
 1. Locked-test run replayed offline from a clean checkout without an API key.
 2. Web numbers checked against the scored summary by a CI test.
+
+## Web data path: 2026-10-01, branch web-data
+
+- The branch starts at 86cd624, on bakeoff-results, and has not been pushed.
+  The [web site](decisions/web-site.md) note holds the data contract, a before
+  and after table, and the measurements.
+- `git diff --name-only 86cd624..HEAD` lists none of the 12 prepare-hashed
+  files, and none of `runner.py`, `live.py` or `replay.py`.
+- The commits:
+  - 52c9a37 deletes the hand-written evaluation mock: `app/_data/recorded.ts`,
+    `/evaluate`, its components and its test. It also removes the methodology
+    page's claim that no language model had been evaluated.
+  - 66297e0 makes the site a static export under `/DFilterForge`, served by
+    `scripts/serve.mjs` and tested with bundled Chromium. The base path is read
+    from `PAGES_BASE_PATH` in `apps/web/scripts/base_path.mjs` only; an empty
+    value serves the site at the domain root. Its default, `/DFilterForge`,
+    is also written in the Dockerfile's `ARG`, the composite action's
+    `base-path` input and the CI loopback probe, which cannot import the
+    module; `apps/web/tests/base-path.spec.ts` pins those three to it.
+  - 9126742 commits `docs/decisions/evidence/web/captures.json`.
+  - 3df8722 adds `scripts/export_web_data.py`.
+  - 0dcd8df projects the Reel by rule `reel-v1`.
+  - 7925340 builds the site inside Docker.
+  - e1272c2 adds the sourced components and the digit lint.
+  - fc0ee7e adds the consistency test.
+  - 979397a and 5c043bd clean up formatting.
+  - 07d91ca wires CI.
+- `captures.json` has 8 probes, 480 frames and 51,073 bytes.
+  `export_web_evidence.py check` regenerates it and passes. It matches every
+  capture hash to the test-freeze gate receipt, the scored specifications and
+  the held-out freeze digests.
+- The export of the committed dev data has 676 files and 9,546,808 bytes: 651
+  receipts and 20 cases.
+  - It holds 52,934 sourced values, and an independent Python resolver
+    re-derives every one from the raw files.
+  - Two exports in the test image are byte-identical.
+  - The Docker `data` stage's output equals the test-image export.
+- Rule `reel-v1` picks `dev-qwen3-32b-2026-09-26` C4 `mei-0015` from 27 C4
+  silent-wrong candidates. The headline counts are M = 284 and N = 65. These
+  are dev counts: model selection, not an effect.
+  - The rule is not registered yet. `docs/decisions/disproof-reel.md` and
+    `docs/decisions/evidence/test-runs.json` must land before the first test
+    request.
+- The Docker-built static export has 29 files, 923,060 bytes and 3 routes.
+  - The methodology page renders 138 sourced values: 40 linked numbers and 98
+    strings.
+  - The home page stays a digit-free placeholder until the Reel lands.
+  - 57 Playwright tests pass on that build: 13 smoke, 11 formatter, 27
+    lint-rule and 6 consistency.
+  - A number typed into markup, in any script (fullwidth digits, Roman
+    numerals) or as a list's `start`, fails the lint and the consistency
+    sweep. A value that differs from its committed file fails the
+    consistency test.
+- CI, in 07d91ca:
+  - The python job gains four steps after the re-score loop. The
+    frozen-prompt guard and the pylint line are unchanged; lines 1 to 103 are
+    byte-identical.
+  - The web job builds `out/` through `apps/web/Dockerfile` with the
+    composite action `.github/actions/web-site`. It then runs typecheck, lint
+    and Playwright on that build, and serves the Compose `site` stage on
+    loopback.
+  - Neither job has run on GitHub. actionlint 1.7.7 reports no error, and
+    every step ran locally under the Compose hardening.
+- The CI python job mirror at 07d91ca, in the test image with the branch
+  mounted, passed:
+  - 1,289 tests passed and 7 skipped (no `docs/` tree in the image), with
+    96.89 percent coverage;
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept);
+  - the benchmark and adequacy gates, prepare and recall;
+  - all 20 `score --check` outputs, with no difference.
+
+  Run separately: CI's exact pylint line (rc 0), the frozen-prompt guard with
+  `docs/` mounted (1 passed), and the four new steps. Their timings are pylint
+  4 s, evidence check 2 s, 124 tests in 17 s and two exports in 16 s.
+- Build and test timings:
+  - A Docker build of `out/` takes 21.0 s with no layer cache and 1.8 s cached.
+  - A host `pnpm web:build` takes 8.2 s.
+  - The 57 Playwright tests take 10.5 s on the Docker build and 9.8 s on the
+    host build.
+  - Typecheck, lint, build and Playwright all pass on the host.
+- Item 2 of "Next verification" now has a CI test for the methodology page.
+  The board, case and receipt pages come in the next pull request.
+- Still open:
+  - hosting (GitHub Pages after a repository flip, or Cloudflare Pages);
+  - the two registration commits;
+  - the board, case and receipt pages and the Reel;
+  - predicate traces for the Reel pool;
+  - pinning base images by digest;
+  - a first CI run on GitHub.
+
+## Web data path review fixes: 2026-10-01, branch web-data
+
+- A review of 07c0cbf confirmed eight minor findings. Each is fixed in its
+  own commit, still unpushed. Each commit's new test fails on the old code,
+  except the CI step, which was proven with a local server.
+- The commits:
+  - 113396f: the CI compose smoke probe now uses `--retry-all-errors` and
+    stops the service from an `EXIT` trap.
+    - On a Linux runner, docker-proxy accepts and drops connections until
+      node listens. curl then exits 52 or 56, and `--retry-connrefused`
+      never retries those.
+    - A local server that drops the first three connections fails the old
+      flags at once (exit 56) and passes the new ones.
+    - The step ran locally: a 200 in 4.8 s. With a wrong prefix it exits 22
+      after its retries, and the trap removes the container.
+  - 0e4c78a: `react/no-danger` now applies to every component
+    (`customComponentNames: ['*']`). A syntax rule also bans the prop's
+    name as an identifier, a string or a template key. Eight fixtures, each
+    linted as a page and as a test, cover:
+    - a DOM element;
+    - a wrapper component;
+    - a spread object;
+    - `createElement` props;
+    - a string key, a computed member, a template key and a member.
+  - 9d8929e: `visible()` now marks every format, default-ignorable and
+    private-use code point as `[U+XXXX]`. That covers tag characters,
+    invisible operators, variation selectors and Hangul fillers.
+    - Unassigned code points are left alone. A browser draws them as a box,
+      and their set changes with each Unicode version.
+    - Node 20.20.2 and 24.21.0 both carry Unicode 17.0, and both mark
+      141,674 code points.
+  - 9c30d68: the exporter, the TypeScript resolver and the Python test
+    resolver now refuse a symbolic link at any path component. That
+    includes a directory link that stays inside the repository.
+    - A pytest case plants such a link, and so does a resolver spec, which
+      uses a junction on Windows.
+  - 28efe20: the cut of model text comes from the contract, never from the
+    page's `data-cap`. It is exactly 4,096 bytes, it applies to a
+    completion's `response_text` only, and it is required there.
+    - This holds in the consistency test, `lib/data.ts` and the Python
+      source check.
+    - The new tests plant a 64-byte cut, a 1-byte cut, a missing cap and a
+      cap on a label. Each fails.
+  - 3d3342c: the lint and the sweep now match any Unicode number character
+    (`\p{N}`), and both treat `start` as a shown attribute.
+    - Seven new lint fixtures fail on the old rules, and so does a planted
+      page for the sweep.
+  - 5048d0e: each route is also checked in a browser context with
+    JavaScript disabled, with the same value, number and data-free checks.
+    - A planted page removes its typed number once scripts run. It passes
+      the hydrated sweep and fails the server-rendered one.
+  - a9f12d9: `base_path.mjs` exports `DEFAULT_BASE_PATH`.
+    `tests/base-path.spec.ts` pins the other three copies of the default to
+    it: the Dockerfile `ARG`, the action input and the CI probe URL. With
+    the default renamed, all three tests fail.
+- `git diff --name-only 86cd624..HEAD` still lists none of the 12
+  prepare-hashed files, and none of `runner.py`, `live.py` or `replay.py`.
+- Verification at a9f12d9:
+  - Host: `pnpm web:typecheck`, `pnpm web:lint` and `pnpm web:build` pass.
+    actionlint 1.7.7 reports no error.
+  - The Docker `--target out` build takes 12.2 s with a warm cache. It
+    gives the same 29 files and 923,060 bytes as before, with 4
+    `index.html` routes.
+  - 82 Playwright tests pass on that build in 10.9 s on two workers:
+    - 13 smoke and 13 formatter;
+    - 41 lint-rule and 9 consistency;
+    - 3 resolver and 3 base-path.
+  - In the test image with `docs/` mounted:
+    - The exporter and evidence tests pass: 126 tests.
+    - The frozen-prompt guard passes: 1 test.
+    - pylint on the two web scripts exits 0.
+    - `export_web_evidence.py check` passes.
+    - Two exports are identical under `diff -r`: 676 files, 651 receipts.
+  - The CI python job mirror passes in 33 min 56 s:
+    - pyink, isort, pylint, pyright (0 errors) and lint-imports (5
+      contracts kept);
+    - 1,291 tests passed and 7 skipped, with 96.89 percent coverage;
+    - the benchmark and adequacy gates, prepare and recall;
+    - all 20 `score --check` outputs, with no difference.
+- Still open:
+  - The `lib/data.ts` cap guard has no unit test. The module imports
+    `server-only`, so the Playwright runner cannot load it. The consistency
+    test and the Python check cover the same rule.
+  - The sweep does not see the markers that CSS numbers for a list without
+    a `start`.
+  - Neither CI job has run on GitHub.
+
+## Web data path final check: 2026-10-02, branch web-data
+
+- Every check was re-run at bef74e9, the head after the review fixes. The
+  counts equal those at a9f12d9; bef74e9 only rewrites test fixture
+  characters as escapes.
+- `git diff --name-only 86cd624..bef74e9` lists none of the 12
+  prepare-hashed files, and none of `runner.py`, `live.py` or `replay.py`.
+- The CI python job mirror passes in 35 min 17 s:
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept);
+  - 1,291 tests passed and 7 skipped, with 96.89 percent coverage;
+  - the benchmark and adequacy gates, prepare and recall;
+  - all 20 `score --check` outputs, with no difference.
+- The CI steps the mirror leaves out ran in the test image under the
+  Compose test-service hardening, with `docs/` mounted read-only:
+  - CI's exact pylint line and pylint on the two web scripts each rate
+    10.00/10;
+  - `export_web_evidence.py check` passes: 8 probes, 480 frames;
+  - the exporter and evidence tests pass: 126 tests;
+  - two exports are identical under `diff -r`: 676 files, 651 receipts;
+  - the frozen-prompt guard passes: 1 test.
+- On the host, `pnpm web:typecheck`, `pnpm web:lint` and `pnpm web:build`
+  pass. The host build has 29 files and 922,854 bytes, and 82 Playwright
+  tests pass on it.
+- The Docker `--target out` build has 29 files, 923,060 bytes and 4
+  `index.html` routes. 82 Playwright tests pass on it in 10.1 s. The
+  methodology page renders 138 sourced values (40 linked numbers and 98
+  strings) and 4 terms.
+- With `PAGES_BASE_PATH` empty, as a host at the domain root needs, the
+  host build links from `/`. 81 tests pass; the one that checks nothing is
+  served outside the base path skips, since there is no outside.
+- The `site` stage, run with the Compose hardening on a private loopback
+  port, answers 200 at `/DFilterForge/` and `/DFilterForge/methodology/`,
+  404 for an unknown page and for the bare root, and runs as uid 10001.
+  The image is 201 MB.
+- The design asked to rewrite two older Web lines in this file. They stay
+  as written, because this file only gains appended sections, which limits
+  the known merge conflict with `repair-multiturn`. The first is in the
+  2026-09-15 to 2026-09-21 section and was true at that date. The second,
+  under the limits, still holds: the site is recorded-only.
+- Still open: the same items as after the review fixes, plus hosting
+  (decision D1) and the two registration commits (decision D2).
+
+## Web data on the registered test runs: 2026-10-04, branch web-data
+
+- `web-data` now builds the site on main's registered, scored test runs.
+  The branch is still local: nothing is pushed and no pull request is open.
+  Every check below ran at 69d237e; the two commits after it, dffcc8c (the
+  [web site](decisions/web-site.md) note) and this entry, change only docs.
+- `git diff --name-only bff373c..69d237e` lists 46 files: none of the 12
+  prepare-hashed files, and none of `runner.py`, `live.py` or `replay.py`.
+- 10dae61 merges main (bff373c) into `web-data` (a79d548) with a merge
+  commit whose parents are a79d548, then bff373c.
+  - The only conflict was `.github/workflows/ci.yml`. The resolution keeps
+    main's text with its two repair checks first, then `web-data`'s four
+    web steps, and `web-data`'s web job. Its blob is
+    ea0100ba08271dd31015a20537d3b09ffd4be1c4, unchanged since.
+  - At the merge, the two committed-tree exporter tests failed with
+    `role_invalid` on main's registry roles, as expected, until def05f4.
+- The commits after the merge:
+  - b4bde9d checks the registry's rows against the Runs table of
+    `docs/decisions/test-runs.md`, numbered from 1 and in order. The
+    exporter no longer reads `model-bakeoff.md`.
+  - 0bbf3fd takes the winners' dev passes from the ruling the registry
+    names (`slots.<slot>.winner.run_id`) and hashes the ruling into the
+    Reel's inputs.
+  - def05f4 reads the registered roles and statuses, and the test-phase
+    rule of `disproof-reel.md`.
+  - 628e1ba makes pass B the board's `rerun`, never a board row.
+  - 61030fc repeats the registered dev Reel check on a copy of the
+    committed tree.
+  - 114171d mirrors the registry reading, the Reel pool and the pick in
+    the TypeScript resolver.
+  - Review fixes, one commit per finding, except the TypeScript refusals,
+    which took two (97bb621 and 56b8c96):
+    - e073ab1, d7b31d3 and d9d5a74 add exporter cases for an unknown
+      trigger, a row that names itself, a note numbered from 0, a note
+      with an extra row, an empty `not_run` reason and a run manifest
+      under a `registered` row. Each fails with DID NOT RAISE against the
+      mutant it targets.
+    - 93db036 pins `board.json`'s `not_run` list to role order.
+    - d586d65, 1b2cbf7 and c88c985 add TypeScript cases: fewest frames
+      before pool position, an unscored published row, an empty test pool,
+      and the registry refusals of the exporter's broken-registration test.
+    - 97bb621 and 56b8c96 make the TypeScript resolver refuse what the
+      exporter refuses: the registry's schema, note, Runs table and run
+      ids, and the ruling in both phases.
+    - 787fded stops the export with `repair_unread` once scored repair
+      results exist for the Reel's pool, until Reel step 5 is built. The
+      TypeScript resolver refuses the same files.
+    - 69d237e shows a summary's `not_measured` status `not_run` as "not
+      measured yet" through a new fmt kind, `unmeasured`, and the
+      `<Unmeasured>` component. The consistency test fails such a value
+      shown with any other kind. The dev anchor's own
+      `repair/summary.json` stops the export too, in either phase. d3ff716
+      keeps that stop for the dev phase only (next section).
+- The exporter's reading of `docs/decisions/evidence/test-runs.json`:
+  - Schema `test-runs/1.0`, else `schema_invalid`, exit 2. `note` must be
+    `docs/decisions/test-runs.md`, else `note_mismatch`.
+  - For each row: one of the eight roles (`role_invalid`); a run id that
+    fits the result-name pattern (`run_id_invalid`), starts with `test-`
+    (`split_mismatch`) and is unique (`run_repeated`); one of the four
+    statuses (`status_invalid`); a reason on each `not_run` row
+    (`not_run_invalid`).
+  - Then conditions as the frozen-prompt guard reads them
+    (`condition_invalid`), the five planned rows in order
+    (`role_missing`), no run manifest or scored summary under a row that
+    is not published (`not_run_scored`), and at most one published row
+    per slot (`role_invalid`).
+  - Then the Runs table (`run_unregistered`) and the ruling: schema
+    `bakeoff-ruling/1.0` with a winner run id per slot (`schema_invalid`,
+    exit 2), a `dev-` prefix (`split_mismatch`), and a winner the ranking
+    shows (`pool_unshown`).
+  - The test phase is on once no row is `registered`, every published
+    row's run is scored and every other row is final. A published but
+    unscored row keeps it off, with no error.
+  - The shown test runs are the published rows in role order. The Reel's
+    test pool is pass A, then each slot's published winner, else its
+    published fallback. Pass B is only the board's `rerun`. The board's
+    `not_run` lists the `not_run` rows with sourced reasons.
+- On the committed tree the test phase is on. Of the registry's 16 rows,
+  rows 1 to 5 are published, each with `scored/summary.json`, and the other
+  11 are unused. 15 runs are shown: the ten dev passes, then the five test
+  passes in role order.
+- The export at 69d237e:
+  - 1,935 files and 27,410,976 bytes, with 1,854 receipts and 76 cases.
+    The resolver in `tests/test_export_web_data.py` re-derives all 150,084
+    sourced values (100,433 strings and 49,651 numbers, booleans or integer
+    arrays) with no mismatch.
+  - On the host, with Python 3.12.10, two exports take 5.736 s and 5.544 s
+    and are byte-identical.
+  - In the test image, CI's export-twice step takes 68.629 s, and the two
+    exports are identical under `diff -r`.
+  - `/tmp`, a 128 MB tmpfs in the test service, ends the export-twice step
+    at 59,548 KB of 131,072 KB (46 percent). The exporter and evidence
+    tests peak at 20,460 KB in samples taken every 0.2 s, which can miss a
+    shorter spike.
+- Rule `reel-v1` on the test phase picks `test-qwen3-32b-2026-09-26` C4
+  `mei-1038`:
+  - The pool is pass A and the three slot winners' test runs, with 54 C4
+    silent-wrong candidates. Only the pick has 3 disagreeing frames; the
+    next fewest is 4.
+  - The answer `(tcp.srcport == 443 && tcp.completeness.fin == true)`
+    misses frames 59, 60 and 66 on semantic-31, -37 and -43. The highlight
+    is semantic-37, frame 60, `server-fin-ack`.
+  - Headline over the test pool: M is 971 and N is 165.
+- The 2026-10-01 dev check still holds. On a copy of the committed dev
+  inputs with rows 1 to 5 set back to `registered`, the exporter picks
+  `dev-qwen3-32b-2026-09-26` C4 `mei-0015` from 27 candidates, with M 284
+  and N 65. The `registered` edit is not what keeps that copy in the dev
+  phase: the copy holds no test run. With the five test runs copied in and
+  the edit dropped, the phase moves to test and the test fails.
+- Tests and checks at 69d237e:
+  - Host: `tests/test_export_web_data.py` has 148 passed and 2 skipped in
+    149.79 s; the skips are the symbolic-link tests, which need privileges
+    on Windows. `tests/test_export_web_evidence.py` fails only its 5 known
+    Windows path-separator cases.
+  - Host static checks: pyink, isort, pylint on the two web scripts
+    (10.00/10) and lint-imports (5 contracts kept) pass. pyright reports 0
+    errors with `--pythonplatform Linux` and in the test image.
+  - CI's four web steps, run as written in the test image under
+    `-p dfilterforge-webcheck` with read-only mounts, pass: pylint
+    10.00/10, the evidence check (8 probes, 480 frames), 174 exporter and
+    evidence tests in 125.93 s, and two identical exports.
+  - Playwright: 142 tests pass in 15.7 s on two workers against the
+    Docker-built `out/`: 56 registry, 41 lint-rule, 14 formatter, 13
+    smoke, 11 consistency, 4 resolver and 3 base-path.
+    `pnpm web:typecheck` and `pnpm web:lint` pass. Host Node is 24.21.0;
+    CI pins 20.20.2.
+- Docker builds at 69d237e:
+  - `--target out` gives 29 files and 923,059 bytes. It takes 19.515 s
+    with the export and build stages rebuilt (export 4.1 s, `next build`
+    8.1 s) and 3.416 s cached. The cached and rebuilt trees differ only in
+    the Next build id.
+  - `--target data` gives 1,935 files and 27,410,976 bytes. It takes
+    15.434 s with the export rebuilt and 6.672 s cached. `diff -r` against
+    the test-image export and against the host export is empty.
+  - The Compose `web` service, built and started under
+    `-p dfilterforge-webcheck`, answers 200 at
+    `http://127.0.0.1:3000/DFilterForge/`.
+- The CI python job mirror at 69d237e passes all 58 steps in 3,400 s. It
+  runs in the test image with the branch's code mounted read-only and a
+  128 MB `/tmp`:
+  - pyink, isort, pylint, pyright (0 errors) and lint-imports (5 contracts
+    kept);
+  - 1,955 tests passed and 28 skipped in 1,187.49 s, with 97.10 percent
+    coverage;
+  - with `docs/` mounted, 5 test nodes and 7 test files give 468 passes
+    and no skip, the frozen-prompt guard and 150 exporter tests included;
+  - the benchmark and adequacy gates, prepare and recall;
+  - `score --check` over 25 directories (17 scored, 4 control-reference and
+    4 control-mutation) with no difference, `repair --check` over 8 plans,
+    and `repair-pool --check` over 0 pools, since none is committed.
+
+  The mirror runs the score and repair checks in the test image, not CI's
+  lab image, and without the Compose hardening.
+- actionlint 1.7.7 reports no finding, and `ci.yml` holds exactly one
+  `127.0.0.1:3000` probe.
+- Closed: the "two registration commits" (decision D2) that both web
+  sections above list as open. `disproof-reel.md` landed in 6f2beb9, and
+  `test-runs.json` with `test-runs.md` in 6819a52. Both are ancestors of
+  7aaade8, the source revision pass A's first invocation recorded at
+  2026-10-01T18:45:12Z, so rule `reel-v1` and the registry predate every
+  test answer.
+- Still open:
+  - the A/A reading and the confound notes: `board.json` keeps `aa` null,
+    and the pages must show the pair report's reading, the comparisons
+    `results/locked-test-v1.md` marks confounded, and the HTTP 429 losses;
+  - Reel step 5: no test `-cx` arm run is scored and `reel.json` keeps
+    `repair` null. Once main holds a scored repair result for a Reel pool
+    run (its `repair/summary.json`, its scored `-cx` arm or that arm's
+    `-r2` re-run) or the pool split's `repair-pool` file, merging main
+    stops the export and CI's export steps with `repair_unread`. In the
+    test phase the pool is pass A and the slot winners' test runs, so the
+    dev repair round on branch `dev-repair-round` stops nothing (next
+    section). Building step 5 lifts the Reel's stop. The first pool run's
+    `repair/summary.json`, pass A's, also stops the methodology page,
+    which must first read the round's summary;
+  - the methodology page's bootstrap block, still taken from the dev
+    anchor's summary;
+  - the board, case, receipt and Reel pages, with the rules the web site
+    note now lists for them;
+  - predicate traces for the Reel pool, now the four test passes, and
+    pinning base images by digest;
+  - hosting (decision D1);
+  - a first CI run on GitHub;
+  - this file's header, Current slice and Planned next. They are main's
+    lines, so they are updated at the last merge before the push.
+
+## Web data: the methodology's repair status follows the phase, 2026-10-04, branch web-data
+
+- Why: at df04ade the methodology page took its `not_measured` status from
+  the dev anchor's summary in both phases, and the export stopped with
+  `repair_unread` whenever the anchor's `repair/summary.json` existed. The
+  local branch `dev-repair-round` (1d07612, read only) commits that file,
+  and those of `dev-qwen3.5-9b-2026-09-26` and
+  `dev-qwen3.5-122b-a10b-2026-09-26`, for the dev repair round. The df04ade
+  exporter on a `git archive` of that branch's `docs/` and
+  `held_out_freeze.json`, plus `web-data`'s `captures.json`, exits 1 with
+  `repair_unread` on the anchor's file. Merging that round would have
+  turned the export and CI red, although the test-phase site never shows
+  the dev round.
+- d3ff716 takes the page's `not_measured` statuses from the run whose
+  repair round the site reports. In the test phase that is the first test
+  pool run: pass A whenever it is published, else the published winner or
+  fallback of the first slot that has one, and no run, with no status
+  listed, when the pool is empty. In the dev phase it is the dev anchor.
+  Only that run's `repair/summary.json` stops the methodology
+  (`repair_unread`); the Reel's pool guard from 787fded is unchanged. The
+  page's other run values, the prompt conditions, `top_k`, the bootstrap
+  block and the scoring environment, stay with the dev anchor in both
+  phases; its probes, mutant counts, shortcut audit and admitted prepares
+  come from no run and were not touched. The page's wording names no
+  source run for its "Not measured yet" section, so it was not changed.
+- The TypeScript resolver mirrors the rule in the same commit:
+  `repairStatusSummary()` names the cited summary and refuses that one
+  file. `tests/registry.spec.ts` covers it in both phases, and
+  `tests/consistency.spec.ts` checks that the built methodology page takes
+  its statuses from that summary and pins pass A's for the committed tree.
+- Proof, on scratch copies only:
+  - Exporter: of the new cases, the three test-phase citing cases (pass A;
+    the small winner without pass A; no run with only pass B published,
+    each with the anchor's `repair/summary.json` present), the test-phase
+    stop on pass A's file, and the outside-the-pool case with the anchor's
+    file added fail on df04ade's exporter. The dev-phase stop on the
+    anchor's file passes there, as it should: that behaviour is kept.
+  - Exporter mutants, each failing its named cases: the anchor in both
+    phases (the three citing cases, the test-phase stop and the
+    outside-the-pool case); the methodology's own check removed (both
+    stop cases, with DID NOT RAISE); only a published `aa_pass_a` counted
+    (the small-winner case); an empty test pool falling back to the
+    anchor (the empty-pool case).
+  - Resolver: all 5 new `registry.spec.ts` cases fail on df04ade's
+    resolver, which has no such method. The same four mutants fail their
+    matching cases.
+  - The new consistency check fails on the `out/` left from the 69d237e
+    checks, whose methodology page cites the dev anchor's summary, and
+    passes after a Docker rebuild at d3ff716.
+  - On the `dev-repair-round` tree above, d3ff716's exporter exits 0 with
+    1,935 files; `methodology.json` cites
+    `test-qwen3-32b-2026-09-26`'s summary and its bootstrap still the dev
+    anchor's. The three committed-tree tests pass there with d3ff716's
+    exporter and tests; with df04ade's, two of them fail.
+- Checks at d3ff716, on the host:
+  - `tests/test_export_web_data.py`: 152 passed and 2 skipped (the
+    symbolic-link tests) in 66.43 s, committed-tree tests included.
+  - pyink and isort pass on the two web scripts and the test. pylint on
+    the two web scripts rates 10.00/10 and exits 0. pylint on the test
+    exits 24, as it does at df04ade, with the same message kinds and one
+    more missing function docstring, for the one test function added net.
+    pyright with `--pythonplatform Linux` reports 0 errors.
+  - `pnpm web:typecheck` and `pnpm web:lint` exit 0.
+  - Two host exports are byte-identical: 1,935 files and 27,410,977 bytes,
+    1 byte more than at 69d237e, from `methodology.json` (16,213 bytes).
+  - Docker `--target out` gives 29 files and 923,064 bytes. Playwright on
+    it: 148 passed in 11.4 s on two workers (61 registry, 41 lint-rule, 14
+    formatter, 13 smoke, 12 consistency, 4 resolver, 3 base-path).
+  - Not run at d3ff716: the CI python job mirror, the test-image steps,
+    Docker `--target data` and the Compose `web` service.
+- Still open: the items of the section above, with the Reel step 5 item as
+  corrected there.
+
+## Web data: methodology source wording, 2026-10-04, branch web-data
+
+- Why: a review of d3ff716 and 70a8c9c found two false sentences, each
+  confirmed against the code at 70a8c9c.
+  - Four places said `methodology.json` takes everything from the dev
+    anchor but its `not_measured` statuses: the exporter's module
+    docstring, `build_methodology`'s docstring, web-site.md's Outputs list
+    and this file's d3ff716 entry. `build_methodology` takes only the
+    prompt conditions, `top_k`, the bootstrap block and the scoring
+    environment from the anchor run. Six of its eleven keys come from no
+    run: probes and witnesses from `captures.json`, mutant counts and
+    categories from the test-freeze gate receipt, the shortcut audit from
+    ablation 006's evidence and the admitted prepares from
+    `held_out_freeze.json`. 49f458b names each source in all four places.
+  - web-site.md's What-fails item said `resolve.ts` refuses "exactly that
+    one file" right after a sentence naming the dev anchor's
+    `repair/summary.json`, which `repairStatusSummary()` does not refuse in
+    the test phase. 6f1290e names the cited run's file and the phase rule.
+- Neither commit changes code or the export. Checks at 49f458b, on the
+  host: pyink and isort pass on the exporter, pylint on the two web scripts
+  rates 10.00/10 and exits 0, and `tests/test_export_web_data.py` gives 152
+  passed and 2 skipped in 83.37 s. The web gates, Playwright and the Docker
+  export were not rerun, since no TypeScript, page or exported byte
+  changed.
+- Not applied: labelling the methodology's repair line "Test repair round"
+  in the test phase. Once `dev-repair-round` merges, the page's plain
+  "Repair round: not measured yet" cites pass A's summary only through
+  `data-src`, beside three sections that say they come from the anchor
+  pass. The decided fix allows a wording change only where the page claims
+  the line comes from the anchor, and it does not; `docs/protocol.md`
+  never reports the dev round as an effect. The label is left to the
+  maintainer.
+- Still open: the items of the two sections above.
+
+## Web data: the methodology's repair line names its round, 2026-10-04, branch web-data
+
+- Why: the maintainer decided review finding B1, which the section above
+  left open. The methodology page's repair line must say which round it
+  describes, so that once `dev-repair-round` merges the page cannot read as
+  if no repair round had been measured. The label follows the split of the
+  run the line cites: "Test repair round" for a test run (test phase),
+  "Dev repair round" for the dev anchor (dev phase). With an empty test
+  pool the page lists no status and no label, as before.
+- dfeaf11 makes the change in one commit:
+  - Exporter: each `not_measured` entry of `methodology.json` gains
+    `split`, a sourced string `["ptr", <cited summary>, "/split"]`. `Run`
+    already refuses a summary whose split is not its run id's
+    (`split_mismatch`).
+  - Page: `lib/fmt.ts` gains the kind `split`, which shows `dev` as "Dev"
+    and `test` as "Test" and throws on anything else. `lib/sourced.tsx`
+    gains `<Split>`, `lib/data.ts` requires `split` on every entry, and the
+    page's label is `<Split>` followed by "repair round". No digit or
+    typed split is in the markup.
+  - Resolver: `repairStatusSplit()` reads the cited summary's split and
+    refuses one that differs from the cited run id's.
+  - Tests: the Python `_statuses` helper and a new test, run in both
+    phases; two new `registry.spec.ts` cases and a split check in the
+    three citing cases; a `fmt.spec.ts` case and the kinds list; a new
+    `consistency.spec.ts` test that checks each "Not measured yet" label's
+    text and that its `<Split>` points at the summary
+    `repairStatusSummary()` names, and a `test` pin for the committed tree.
+- Proof, on scratch copies only:
+  - Exporter, 9 selected methodology cases: f66b1e4's exporter fails 6
+    (the two citing cases with a run, both stop cases and both new cases).
+    A split from the dev anchor in both phases fails 4, the test-phase
+    ones; a split from the first probe capture fails 6. The committed-tree
+    export test fails with f66b1e4's exporter and passes with dfeaf11's,
+    on a copy of the tracked files.
+  - Resolver, 7 methodology cases: f66b1e4's resolver fails 5
+    (`repairStatusSplit is not a function`); reading the anchor's summary
+    in both phases fails 3; taking the split from the run id without
+    reading the summary fails 2; dropping the split check fails 2.
+  - Site: six Docker `--target out` builds of scratch copies, each checked
+    with the copy's `consistency.spec.ts`. The unmutated copy passes all 13.
+    f66b1e4's exporter, page, `data.ts` and `sourced.tsx` (with the new
+    `fmt.ts`, since `next build` typechecks the specs) shows "Repair round"
+    and fails only the new label test. So do four mutants: the exporter
+    taking the dev anchor's split ("Dev repair round"), the page taking the
+    first probe capture's split ("Dev repair round"), the page showing the
+    split through `<Str>` ("test repair round"), and the page typing "Test
+    repair round". The `/methodology/` route's value checks pass on all
+    five, which is why the label test is needed.
+  - The new consistency spec on the `out/` built at d3ff716 also fails
+    only the label test.
+- On `dev-repair-round` at 30eb879 (a `git archive` of its `docs/` inputs
+  and `held_out_freeze.json`, plus web-data's `evidence/web/`), dfeaf11's
+  exporter exits 0 with 1,935 files. The label's split is `test`, from
+  pass A's summary, and the bootstrap block is still the dev anchor's.
+- Checks at dfeaf11:
+  - Host `tests/test_export_web_data.py`: 154 passed and 2 skipped (the
+    symbolic-link tests) in 87.51 s.
+  - pyink and isort pass on `src`, `tests` and `scripts`. pylint on the two
+    web scripts rates 10.00/10 and exits 0. pyright with
+    `--pythonplatform Linux` reports 0 errors.
+  - `pnpm web:typecheck` and `pnpm web:lint` exit 0.
+  - Two host exports are byte-identical: 1,935 files and 27,411,082 bytes.
+    `methodology.json` is 16,318 bytes, 105 more than at f66b1e4, and is
+    the only file that differs from f66b1e4's export.
+  - Docker `--target out` (14 s) gives 29 files and 924,010 bytes;
+    `methodology/index.html` is 108,305 bytes with 139 sourced values.
+    Playwright on it: 152 passed in 13.5 s on two workers (63 registry, 41
+    lint-rule, 15 formatter, 13 smoke, 13 consistency, 4 resolver, 3
+    base-path).
+  - The CI python job's four web steps, run in `dfilterforge-test:0.1.0`
+    (created 2026-09-26, not rebuilt) with the worktree's code mounted
+    read-only, under Compose project `dfilterforge-webcheck`: pylint
+    10.00/10 (5 s); the evidence check exits 0 with 480 frames and 8
+    probes (3 s); the exporter and evidence tests give 180 passed (80 s);
+    two exports compare equal with `diff -r` (36 s). Docker was down for
+    the f66b1e4 verification, so these steps had not run since 69d237e.
+  - Not run: the Compose `web` service, Docker `--target data` and the
+    rest of the CI python job.
+- Still open: the items of the sections above. B1 is now applied.
+
+## Web data: `<Num>` refuses the split kind, 2026-10-04, branch web-data
+
+- Why: a review of dfeaf11 found that it added the string-only kind
+  `split` to `FMT_KINDS` without adding it to the exclusion on `<Num>`'s
+  `kind` prop, which 69d237e had widened for `unmeasured`. `<Num>` takes a
+  `NumNode`, whose value is a number, a boolean or a list of integers, and
+  fmt's split kind throws on every one of those. So `<Num kind="split">`
+  passed `pnpm web:typecheck` and `pnpm web:lint` and would have failed
+  only in `next build`. No page used it: the only kind passed to `<Num>` on
+  a page is `int`. Three reviewers confirmed it with their own tsc probes.
+- 19dff88 makes the change in one commit:
+  - `lib/sourced.tsx`: the exclusion is now `text`, `unmeasured` and
+    `split`.
+  - `tests/fmt.spec.ts`: `NUM_KIND_SAMPLES` holds one `NumNode` value per
+    kind `<Num>` accepts, typed as a record over that kind type, which the
+    compiler checks both ways. A kind added to `FMT_KINDS` fails typecheck
+    there until it is listed or excluded on `<Num>`. A new test checks the
+    runtime half: each listed kind formats its sample, and fmt refuses
+    every sample under `text`, `unmeasured` and `split`.
+- Proof:
+  - The new spec before the fix: `pnpm web:typecheck` exits 2 with TS2741,
+    `split` missing from the record.
+  - The reviewers' probe after the fix: `<Num kind="split">` fails with
+    TS2322, not assignable to `"int" | "num" | "bool" | "ints"`. The
+    control, with `@ts-expect-error` on both `split` and `unmeasured`,
+    exits 0.
+  - Mutants, each applied to the worktree's files and restored byte for
+    byte, run with tsc and the formatter spec:
+    - The exclusion reverted: typecheck fails (TS2741). All 16 formatter
+      tests pass, since the runtime cannot see types, which is why the
+      record is typed.
+    - A numeric kind `count` added to fmt and left out of the record:
+      typecheck fails (TS2741). Two tests fail, the kinds list and the new
+      test.
+    - A string-only kind `role` added and not excluded: typecheck fails
+      (TS2741). The same two tests fail.
+    - `role` listed in the record with a number sample: typecheck passes,
+      and the same two tests fail.
+    - `num` excluded on `<Num>` and its sample removed: typecheck passes,
+      and the new test fails.
+    - `num` excluded with its sample kept: typecheck fails (TS2353, excess
+      property).
+- Checks at 19dff88:
+  - `pnpm web:typecheck` and `pnpm web:lint` exit 0.
+  - Docker `--target out`: 29 files and 924,010 bytes, the same sizes as
+    at dfeaf11. `methodology/index.html` is 108,305 bytes with 139 sourced
+    values. `next build`'s TypeScript step, which checks the specs, passes.
+  - Playwright on that build: 153 passed in 11.4 s on two workers (16
+    formatter, the rest unchanged).
+  - The CI python job's four web steps, run in `dfilterforge-test:0.1.0`
+    (created 2026-09-26, not rebuilt) with the worktree's code mounted
+    read-only, under Compose project `dfilterforge-webcheck`:
+    - pylint rates 10.00/10 (4 s).
+    - The evidence check exits 0 with 480 frames and 8 probes (3 s).
+    - The exporter and evidence tests give 180 passed (80 s).
+    - Two exports compare equal with `diff -r`: 1,935 files and
+      27,411,082 bytes (38 s).
+  - Not run: host pytest and the Python static checks (no Python changed),
+    the Compose `web` service and Docker `--target data`.
+- Docker's local exporter does not clear its destination. A first build
+  into the worktree's existing `apps/web/out` left three manifest files
+  from the dfeaf11 build's old build id, 32 files in all. The sizes above
+  come from a build into an emptied `apps/web/out`, as on a fresh CI
+  checkout.
+- Still open: the items of the sections above.

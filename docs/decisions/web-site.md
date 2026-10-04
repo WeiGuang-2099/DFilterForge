@@ -1,0 +1,646 @@
+# Web site: a static export from committed files
+
+The site shows recorded results only and never calls a model. This note
+records how a value gets from a committed file onto a page, what fails when
+that path is bypassed, and the sizes and timings measured on the committed
+data: first on the dev passes alone, now in the test phase. The
+web track only consumes the runner, catalog, oracle, trace and replay code, so
+under AGENTS.md it gets a decision note with a measured before and after, not
+a Full-versus-Simplified ablation.
+
+## Question
+
+How can a reader trace every number on a page to a committed receipt, and how
+can CI make a hand-typed or stale number fail?
+
+## Decision
+
+Data moves one way, through three layers:
+
+1. **Committed results.** The scored runs under `docs/results/`, the bake-off
+   ranking, the test-run registry
+   [`evidence/test-runs.json`](evidence/test-runs.json) and the bake-off
+   ruling it names, the test-freeze gate receipt, the shortcut-policy
+   evidence of ablation 006 and `src/dfilterforge/held_out_freeze.json`. The
+   registry's note, [`test-runs.md`](test-runs.md), is read only to check
+   that its Runs table lists the same rows.
+2. **New committed evidence**, regenerated and compared byte for byte in CI.
+   Today that is [`captures.json`](evidence/web/captures.json)
+   (`capture-frames/1.0`). It holds the frame tables of the eight curated
+   captures: dev semantic-11, -17 and -23 with feedback semantic-29, and
+   test semantic-31, -37 and -43 with feedback semantic-35. For each frame it
+   records the number, whether it is a recipe or a witness frame, and the
+   name. `scripts/export_web_evidence.py captures --write` regenerates the
+   captures in pure Python through the split and feedback generators. It
+   writes the file only when every capture hash matches three committed
+   anchors: the test-freeze gate receipt, the scored specifications and the
+   held-out freeze digests. The site therefore names frames without running
+   tshark or shipping packet bytes. Predicate traces for the Reel pool come
+   later, in the same directory.
+3. **`scripts/export_web_data.py`.** It uses the standard library only, starts
+   no process, opens no socket and reads no clock, environment variable or git
+   state. Its output in `apps/web/data/` is ignored by git and rebuilt for
+   every build.
+
+The site is a Next static export (`output: 'export'`, `trailingSlash`). Its
+URL prefix is resolved in one place, `apps/web/scripts/base_path.mjs`: it
+reads `PAGES_BASE_PATH` and defaults to `/DFilterForge`, the path of a GitHub
+project page. The build, `scripts/serve.mjs` and the Playwright config all
+import it. An empty value builds and serves the site at the domain root, as a
+host such as Cloudflare Pages needs, with no code change. Hosting is still
+undecided.
+
+The default itself is written in four places, because three files cannot
+import the module:
+- `DEFAULT_BASE_PATH` in `apps/web/scripts/base_path.mjs`;
+- `ARG PAGES_BASE_PATH` in `apps/web/Dockerfile`. A Docker build always sets
+  the variable from it, so the module's own default never applies there;
+- the `base-path` input default of `.github/actions/web-site/action.yml`,
+  which the build and the Playwright step both receive;
+- the loopback probe URL of the compose smoke in `.github/workflows/ci.yml`.
+
+`apps/web/tests/base-path.spec.ts` fails when any of the last three differs
+from the module's default, so a rename cannot leave CI green on the old
+prefix.
+
+The site is built in Docker. `apps/web/Dockerfile` has six stages: `export`,
+`data`, `deps`, `build`, `out` and `site`. The exporter and `next build` each
+run under `RUN --network=none`. CI's web job builds through the composite
+action `.github/actions/web-site`, which the Pages workflow is meant to reuse.
+The Compose `web` service serves the `site` stage on 127.0.0.1 only.
+
+### Inputs
+
+The exporter reads only these paths:
+- under `docs/results/`, `docs/decisions/evidence/` and
+  `docs/ablations/evidence/`;
+- exactly `src/dfilterforge/held_out_freeze.json`;
+- exactly `docs/decisions/test-runs.md`, the note the registry's `note`
+  field names. It is read only to check that the rows of its Runs table are
+  the registry's rows, numbered from 1, in order. A run id named only in the
+  note's prose registers nothing. No source op can point into the note:
+  the exporter and both test resolvers refuse its path as a source like any
+  other path outside the roots.
+
+Any other path is refused, and so is a path with a dot segment, a file that
+is not regular, or a symbolic link at any component, even a directory link
+that stays inside the repository: such a link would publish another
+folder's bytes under an allowed path. Both test resolvers apply the same
+roots and the same link rule to every source path. Every read uses UTF-8 and is capped at
+32 MiB, the run store's ceiling. NaN, Infinity and duplicate keys are refused.
+
+The shown runs come from files, never from a hand list:
+- **Dev.** The runs of the lexicographically last
+  `docs/decisions/evidence/bakeoff/ranking-*.json`, in this order: the anchor,
+  then the small, mid and frontier slots, then rank 1 to 3 within a slot.
+  Today that is ten passes.
+- **Test.** The `published` rows of
+  [`evidence/test-runs.json`](evidence/test-runs.json) (schema
+  `test-runs/1.0`), in role order: `aa_pass_a`, `aa_pass_b`, `winner_small`,
+  `fallback_small`, `winner_mid`, `fallback_mid`, `winner_frontier`,
+  `fallback_frontier`. These are the registry's eight roles, kept verbatim.
+  An outage re-run (`-r2`) keeps the role of the run it replaces, so a role
+  may repeat, but at most one published row fills a slot. The rows are shown
+  only once every row is final, which is how
+  [`disproof-reel.md`](disproof-reel.md) ("Reading the rule against the
+  registry") reads step 1 of rule `reel-v1`. All three conditions must hold:
+  - no row is `registered`;
+  - every `published` row's run has `scored/summary.json`;
+  - every other row is `not_run`, or an `unused` conditional row that gives
+    a reason or whose named run is not `not_run`.
+
+  A published run with no summary yet keeps the phase off; that is not an
+  error.
+- **The Reel pool.** In the test phase it is the published `aa_pass_a` run,
+  then for the small, mid and frontier slots the published `winner_<slot>`
+  run, else the published `fallback_<slot>` run, an outage re-run included.
+  A slot with neither is skipped, so the pool may be empty, and then there
+  is no pick. Pass B is never pooled. In the dev phase it is the ranking's
+  anchor, then each slot's `slots.<slot>.winner.run_id` from
+  [`ruling-2026-10-01.json`](evidence/bakeoff/ruling-2026-10-01.json), the
+  ruling the registry's `ruling` field names. The ruling's top-level
+  `winners` holds model ids and is not read. Only with no `test-runs.json`
+  does the dev pool fall back to the ranking's provisional winners.
+- **Today.** The test phase has been on since the five baselines were
+  published and scored ([`locked-test-v1.md`](../results/locked-test-v1.md)).
+  Of the registry's 16 rows, rows 1 to 5 are `published` and each run has
+  `scored/summary.json`; the other 11 are `unused`. So 15 runs are shown:
+  the ten dev passes, then the five test passes in role order.
+
+### Sourced values
+
+Every value a page renders arrives as `{"t": text, "src": op}` for a string,
+or `{"v": value, "src": op}` for a number, a boolean or an array of integers.
+`op` names committed bytes and the reading that yields the value:
+
+| Op | Value |
+| --- | --- |
+| `["ptr", path, pointer]` | an RFC 6901 pointer into a JSON file |
+| `["row", path, {key: text}, pointer]` | the one JSONL row whose keys equal the given strings, then a pointer into it |
+| `["count", path, pointer or null, {key: [text]}]` | the JSONL rows, or the array items at the pointer, whose every key holds one of the listed strings |
+| `["len", path, pointer]` | the length of the array at the pointer |
+| `["sum", [op]]` | the sum of integer operands |
+| `["sha256", path]` | the SHA-256 of the file's bytes |
+| `["input", path, item_id, pointer]` | the `INPUT_JSON` object of a prepared prompt's user message, then a pointer into it |
+
+The exporter gets each value by resolving its own `src`, so a value cannot
+drift from its source. The site never divides. Dev runs get counts only, per
+pass and summed over C1 to C4, with no interval and no comparison: the
+model bake-off note's "Not an effect" rule. Every other number has one
+allowed source:
+- a test rate, interval or comparison: a `ptr` pointer into the test run's
+  `scored/summary.json`;
+- the A/A reading: the pair report
+  [`evidence/aa-test-qwen3-32b-2026-09-26.json`](evidence/aa-test-qwen3-32b-2026-09-26.json);
+- a repair number: a pass's `repair/summary.json` or
+  `docs/results/repair-pool/test.json`, the two sources
+  [`disproof-reel.md`](disproof-reel.md) ("Repair trajectory") allows;
+- never an arm run's (`-res`, `-bare` or `-cx`) `scored/summary.json`. The
+  [repair note](repair-round.md) calls that file a scoring record, never a
+  reported number.
+
+### Outputs
+
+The output files use the schema family `web-*/1.0`. Each is written with
+sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
+- `site.json`: the source commit, every input with its SHA-256, the phase
+  flags and the run slugs.
+- `routes.json`: the parameters of every dynamic route.
+- `board.json`: the dev selection rows, `test_registered`, and a `test`
+  block. The block is null until the test phase, and it is set now:
+  - `rows` are the Reel's test pool, in pool order;
+  - `rerun` is pass B's row, null when pass B is not published. Pass B
+    serves only as pass A's rerun
+    ([`locked-test-v1.md`](../results/locked-test-v1.md)), so it is never a
+    row; it stays a shown run with receipts and cases;
+  - `not_run` lists every `not_run` row in role order, as its role with
+    sourced `run_id` and `reason` pointers into the registry's
+    `/runs/<i>`. An `unused` row is left out, because its condition never
+    occurred. Today the list is empty;
+  - `aa` and `repair` stay null (Limits).
+- `methodology.json`: the prompt conditions, `top_k`, the bootstrap block
+  and the scoring environment from the dev anchor, in both phases; the
+  probes and witnesses from `captures.json`, the mutant counts and
+  categories from the test-freeze gate receipt, the shortcut audit from
+  ablation 006's evidence and the admitted prepares from
+  `held_out_freeze.json`, none of them a run; and the `not_measured`
+  statuses from the run its repair line cites (What fails), each with a
+  `split` node that points at that run's summary `/split` and labels the
+  line.
+- `reel.json`: the Disproof Reel projected by rule `reel-v1`.
+- `cases/<case_id>.json`.
+- `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
+
+The run slug is the run id with each dot replaced by an underscore. Run ids
+cannot contain an underscore, so the mapping is injective, and no route
+segment ends in a dotted name that Next would treat as a file.
+
+Model output is untrusted. Raw text is capped at 4 KiB on a character
+boundary and rendered only as a React text node. The cap is the contract's,
+never the page's: `lib/data.ts`, the consistency test and the Python source
+check accept `cap` only as 4,096 and only on a completion's `response_text`,
+and require it there. `lib/fmt.ts` passes every
+string through `lib/visible.ts`, which shows C0 and C1 controls, bidi and
+zero-width characters, and every other format, default-ignorable or
+private-use code point (Unicode tag characters, invisible operators,
+variation selectors) as visible marks. Unassigned code points are left as
+they are: a browser draws them as a missing-glyph box. Node 20.20.2 and
+Node 24.21.0 both carry Unicode 17.0 and mark the same 141,674 code points.
+`react/no-danger` is an error on every
+component, not only DOM elements, and a `no-restricted-syntax` rule bans the
+prop's name wherever else it could reach React: a spread object,
+`createElement` props, a member or a string key. Both apply everywhere, tests
+included, and `tests/lint-rules.spec.ts` proves each form fails.
+
+### What fails
+
+The exporter exits 1 when the committed files break the contract. The cases
+are:
+- an executed outcome row without exactly one receipt, or a receipt without a
+  row;
+- a typed ready answer without an intent file, or the reverse;
+- a case without exactly two items;
+- ready segment counts that do not add up;
+- a strong-exact count that differs from the ranking's `strong_exact_ready`;
+- a ready count over the ready items that differs from the summary's case
+  mean by more than 5e-7;
+- a bad run id, or a slug collision;
+- receipt frame sets that disagree with their specification, or
+  specifications that differ between runs;
+- a test-run registry that breaks its contract, checked in this order:
+  - `note_mismatch`: a `note` other than `docs/decisions/test-runs.md`;
+  - for each row in turn: a role outside the eight (`role_invalid`), a
+    malformed run id (`run_id_invalid`), a run id without the `test-`
+    prefix (`split_mismatch`), a repeated run id (`run_repeated`), a status
+    other than `registered`, `unused`, `published` or `not_run`
+    (`status_invalid`), or a `not_run` row with no reason
+    (`not_run_invalid`);
+  - `condition_invalid`: a trigger without a named run or the reverse, a
+    trigger other than `gate_stop` or `outage`, a named run that is not
+    another row, a planned row marked `unused`, or a conditional row that
+    is not `unused` while the run it names is not `not_run`;
+  - `role_missing`: planned rows other than `aa_pass_a`, `aa_pass_b`,
+    `winner_small`, `winner_mid` and `winner_frontier`, in that order;
+  - `not_run_scored`: a row that is not `published` whose
+    `docs/results/<run id>/` holds `run_manifest.json` or
+    `scored/summary.json`;
+  - `role_invalid`: two `published` rows that fill one slot;
+  - `run_unregistered`: a Runs table in `test-runs.md` whose rows are not
+    the registry's rows, numbered from 1, in order;
+  - a ruling winner that is no dev run (`split_mismatch`) or that the
+    ranking does not show (`pool_unshown`).
+
+  The trigger's role rules (a gate stop sends the named winner's fallback,
+  an outage re-run keeps the named run's role) are left to CI's registry
+  tests. `tests/support/resolve.ts` refuses the same registry, note and
+  ruling shapes, and `tests/registry.spec.ts` checks those refusals against
+  it case by case;
+- scored repair results for the Reel's pool (`repair_unread`): a pool run's
+  `repair/summary.json`, the scored summary of its `-cx` arm run or that
+  arm's `-r2` re-run, or the pool split's `repair-pool/<split>.json`. Step 5
+  of `reel-v1` is not built, so the export stops rather than drop the
+  repair turn. `tests/support/resolve.ts` refuses exactly these files in
+  `reelPool()`, for the pool of the current phase;
+- a scored repair round of the run the methodology page cites
+  (`repair_unread`): that run's `repair/summary.json`. The page shows the
+  run's `not_measured` statuses as "not measured yet", and the scorer keeps
+  `repair_at_1: not_run` there after a round. The page's repair line
+  describes the repair round the site reports, so the run depends on the
+  phase:
+  - in the test phase, the first test pool run: pass A whenever pass A is
+    published, else the published winner or fallback of the first of the
+    small, mid and frontier slots that has one, and no run when the pool is
+    empty, in which case the page lists no status;
+  - in the dev phase, with no registry or before every registry row is
+    final, the dev anchor.
+
+  So in the test phase the dev anchor's `repair/summary.json`, the dev
+  repair round, stops nothing. `tests/support/resolve.ts` refuses exactly
+  one file in `repairStatusSummary()`, the cited run's
+  `repair/summary.json`: in the test phase the first test pool run's, pass
+  A's whenever pass A is published, and none with an empty pool; in the
+  dev phase the dev anchor's. It returns the cited summary, and the
+  consistency test checks that the built methodology page takes its
+  statuses from that summary. Building step 5 does not lift this stop: the
+  methodology page must first read the round's summary.
+
+It exits 2 when an input cannot be read, a flag is invalid or the output
+directory is not empty. That includes a registry whose schema tag is not
+`test-runs/1.0`, and a ruling whose schema tag is not `bakeoff-ruling/1.0`
+or that has a slot without a winner run id (`schema_invalid`), and a
+ruling path outside the allowed roots (`path_refused`).
+
+On the web side, `lib/data.ts` checks every document's schema id, closed key
+sets and source ops before a page renders.
+- **Sourced components.** `<Num>` renders a number as a link to the GitHub
+  blob of its source file at the source commit, with `data-src`, `data-v` and
+  `data-fmt`. It accepts only the kinds that format a number, a boolean or
+  a list of integers (`int`, `num`, `bool`, `ints`); the string-only kinds
+  `text`, `unmeasured` and `split` are excluded from its `kind` prop, and
+  `tests/fmt.spec.ts` fails typecheck when a kind added to `lib/fmt.ts` is
+  neither excluded there nor listed with a sample value in the spec.
+  `<Str>` renders a string the same way, without the link.
+  `<Term>` renders a reviewed name that holds a digit; the list in
+  `lib/terms.ts` is `IPv4` and `SHA-256`. `<Split>` renders a run's split
+  as the word that names its round, with `data-fmt="split"`: `test` reads
+  "Test" and `dev` reads "Dev", and any other split fails the build.
+- **Not measured yet.** A scored summary's `not_measured` status, such as
+  `repair_at_1`, is never shown as written. The scorer writes `not_run` for
+  a measurement no round has made, and `docs/protocol.md` keeps "not run"
+  for a run ruled not run. `<Unmeasured>` shows it as fixed words with
+  `data-fmt="unmeasured"`: `not_run` reads "not measured yet"
+  (`docs/results/locked-test-v1.md`), and any other status fails the build.
+  The consistency test fails a `not_measured` value shown with any other
+  kind, and the unmeasured kind on any other value. The methodology page
+  uses it now; a page in the next pull requests that shows the Reel's
+  `receipt_panel.repair` must use it too. The methodology page labels each
+  status with `<Split>` over the cited summary's `/split`, "Test repair
+  round" or "Dev repair round", so that once the dev round is merged
+  beside the test round the line still says which round it describes. With
+  an empty test pool it lists no status and no label.
+- **The digit lint.** ESLint fails on a digit in JSX text, as a literal JSX
+  child or in a text-bearing attribute, and in a page title or description.
+  A digit here is any Unicode number character (`\p{N}`): ASCII, fullwidth
+  or Arabic-Indic digits, superscripts and Roman numerals. A list's `start`
+  is a text-bearing attribute, since the list shows it as its first marker.
+  It also fails on `toFixed`, `toPrecision`, `toExponential`, the
+  `toLocale*` methods and `Intl` outside `lib/fmt.ts`.
+  `tests/lint-rules.spec.ts` proves each of these selectors fires.
+- **The consistency test.** `tests/consistency.spec.ts` visits every built
+  page. A TypeScript resolver written apart from the exporter re-derives every
+  `[data-src]` value from the raw committed files, never from
+  `apps/web/data`. The test fails on any of these:
+  - a value or its formatted text that differs;
+  - a `not_measured` status shown as anything but fixed words;
+  - a Unicode number character outside a sourced value, a script, a style
+    or a `<Term>`, in the text, a swept attribute (`start` included) or
+    `document.title`;
+  - a page without values that is not on the closed data-free list;
+  - a server-rendered HTML file whose `data-src` set differs from the
+    hydrated page's.
+
+  The first four checks run twice per route: on the hydrated page, and in
+  a browser context with JavaScript disabled, which sees the HTML as the
+  server rendered it. A number that only the server HTML shows, and that
+  hydration removes, reaches every visitor without JavaScript, every crawler
+  and every first paint; a planted page proves the second pass catches it.
+  Playwright 1.62.1 evaluates in a context with JavaScript disabled.
+  Separately, the test fails when the receipt and case routes differ from
+  the resolver's executed rows, and when the resolver's own reading of the
+  registry and of rule `reel-v1` gives other shown runs, another Reel pool
+  or another pick than the ones it pins for the committed tree, and when
+  the built methodology page takes its `not_measured` statuses from another
+  summary than the one `repairStatusSummary()` names. The value checks
+  alone cannot tell: every summary still says `not_run` after a round. It
+  also fails when a "Not measured yet" label is not the split's word and
+  "repair round", or when its `<Split>` does not point at that summary's
+  `/split`: a split from another run's summary or from a probe capture,
+  or a typed label, passes the value checks. `repairStatusSplit()` reads
+  that split and refuses one that differs from the cited run id's, as the
+  exporter does (`split_mismatch`); the test pins `test` for the committed
+  tree.
+- **The Python side.** `tests/test_export_web_data.py` holds a second
+  independent resolver and an AST allowlist that keeps the exporter on the
+  standard library. Its committed-tree tests export the committed files and
+  pin the test-phase Reel pick, and
+  `test_the_committed_dev_pool_picks_the_registered_dev_reel` repeats the
+  dev check that `disproof-reel.md` recorded (Measured).
+
+### CI
+
+The python job runs four steps after the re-score loop and the repair plan
+and pool checks, which leaves the frozen-prompt guard and the pylint line
+untouched:
+1. pylint on the two web scripts;
+2. `export_web_evidence.py check`, with `docs/` mounted read-only;
+3. the two scripts' tests, with `docs/` mounted, so the committed-tree cases
+   run instead of skipping;
+4. two exports of the committed tree, compared with `diff -r`.
+
+Each step that needs `docs/` starts with `test -d`, so a missing mount fails
+the step.
+
+The web job runs the composite action. It builds `out/` through the
+Dockerfile, then runs typecheck, lint and the Playwright suite on the runner
+against that build. Last, it starts the Compose `site` service and expects a
+200 on loopback.
+
+## Before and after
+
+Before is 86cd624, the base of this branch. After is 07d91ca, the commit
+that wired CI.
+
+| Case | Before | After |
+| --- | --- | --- |
+| Where page values come from | `app/_data/recorded.ts`, which says it is hand-written illustrative data | `apps/web/data`, exported from committed files, every value with its source op |
+| Methodology page | Typed prose: "36-specification" and "No language model has been evaluated", false since the ten dev passes | 138 sourced values (40 linked numbers, 98 strings) and a link to `docs/protocol.md` at the source commit |
+| A number typed into page markup, in any script or as a list's `start` | Builds and ships | Fails `pnpm web:lint`; the same number through a constant fails the consistency sweep |
+| A rendered value that differs from the committed file | Not checked | Fails the consistency test |
+| Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
+| Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
+| Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged) |
+| CI checks of web data | None | The four python steps above and the Docker-built site under test |
+
+## Measured
+
+Two exports are measured. The dev data was exported at 07d91ca, before this
+branch had a test-run registry. The test phase is exported at 69d237e, the
+code these figures describe. Of the commits after it, two change the
+export or the site:
+- At d3ff716 `methodology.json` takes its `not_measured` status from pass
+  A's summary instead of the dev anchor's, which adds 1 byte. The export
+  has the same 1,935 files in 27,410,977 bytes, `methodology.json` is
+  16,213 bytes, and two host exports are byte-identical. The Docker static
+  export has 29 files in 923,064 bytes, `methodology/index.html` 107,899 of
+  them.
+- At dfeaf11 each status also carries its run's `split` node, which adds
+  105 bytes. The export has 1,935 files in 27,411,082 bytes,
+  `methodology.json` is 16,318 bytes, two host exports are byte-identical,
+  and only `methodology.json` differs from f66b1e4's export. The Docker
+  static export has 29 files in 924,010 bytes, `methodology/index.html`
+  108,305 of them, and the page renders 139 sourced values: the 138 listed
+  below and the split.
+
+The other figures below were not measured again.
+
+| Export | Files | Bytes | Receipts | Cases | Sourced values |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Dev data at 07d91ca | 676 | 9,546,808 | 651 | 20 | 52,934: 35,570 strings and 17,364 numbers, booleans or integer arrays |
+| Test phase at 69d237e | 1,935 | 27,410,976 | 1,854 | 76 | 150,084: 100,433 strings and 49,651 numbers, booleans or integer arrays |
+
+The test resolver re-derives every sourced value of both exports on the
+committed tree. At 69d237e, two host exports are byte-identical, and so are
+two exports in the test image; the Docker `data` stage's output equals both.
+
+| Output | Design estimate | Dev data at 07d91ca | Test phase at 69d237e |
+| --- | --- | --- | --- |
+| `site.json` | about 200 KB | 208,972 bytes (1,280 inputs) | 563,950 bytes (3,435 inputs) |
+| `routes.json` | about 40 KB | 46,425 bytes | 134,211 bytes |
+| `board.json` | 20-40 KB | 26,979 bytes | 143,673 bytes |
+| `methodology.json` | 10-20 KB | 16,212 bytes | 16,212 bytes |
+| `reel.json` | under 25 KB | 18,263 bytes | 18,725 bytes |
+| `cases/` | 15-20 KB each | 20 files, 33,345 to 64,266 bytes, median 41,809; 940,095 in all | 76 files, 18,985 to 64,266 bytes, median 30,083; 2,524,372 in all |
+| `receipts/` | 3-5 KB each | 651 files, 9,582 to 74,320 bytes, median 10,738; 8,289,862 in all | 1,854 files, 9,582 to 79,301 bytes, median 11,015.5; 24,009,833 in all |
+
+`board.json` grows by its test block: the four pool rows and pass B's
+rerun, each with pointers into its run's summary.
+
+At 07d91ca, case and receipt files were about two to three times the
+estimate, mostly because each sourced node carries its whole source op, path
+included. Those ops, with their `"src":` keys, were 61.6 percent of the
+receipt bytes (5,106,294) and 63.9 percent of the case bytes (600,363).
+These shares were not measured again at 69d237e.
+
+`captures.json`: 8 probes, 480 frames, 51,073 bytes, the same at 69d237e.
+
+The static export at 69d237e, from the Docker (Linux) build:
+- 29 files, 923,059 bytes: 5 HTML, 11 JS, 12 TXT and 1 CSS. At 07d91ca it
+  had 29 files and 923,060 bytes.
+- 3 routes: `/`, `/methodology/` and `/_not-found`. The 5 HTML files are
+  `index.html`, `methodology/index.html` (107,897 bytes; 107,895 at
+  07d91ca), `404.html`, `404/index.html` and `_not-found/index.html`.
+- The methodology page renders 138 sourced values: 40 integers, 97 strings
+  and 1 status shown as "not measured yet" (`data-fmt` `int`, `text` and
+  `unmeasured`). At 07d91ca the same 138 were 40 linked numbers and 98
+  strings.
+- The 1,854 receipt and 76 case documents are exported but not rendered
+  yet; those pages come next.
+
+Timings are wall-clock on the Windows 11 host. At 07d91ca, Docker Desktop was
+29.7.2 and other sessions used Docker at the same time:
+
+| Step | Time |
+| --- | --- |
+| Docker `--target out`, no layer cache | 21.0 s: export 1.1 s, `pnpm install` 12.1 s, `next build` 4.8 s |
+| Docker `--target out`, cached | 1.8 s |
+| Host `pnpm web:build` | 8.2 s: compile 1.8 s, static generation 0.5 s |
+| Host `pnpm web:typecheck` / `pnpm web:lint` | 2.4 s / 5.0 s |
+| Playwright, 57 tests on two workers | 10.5 s on the Docker build, 9.8 s on the host build; about 0.7 to 0.9 s per route for the consistency test |
+| Playwright, 82 tests on two workers, at a9f12d9 | 10.9 s on the Docker build; each consistency route now loads twice, with and without JavaScript, in 0.9 to 1.6 s per route on the host build |
+| CI pylint step for the two scripts | 4.2 s |
+| CI evidence check | 2.2 s |
+| CI exporter and evidence tests, 124 with `docs/` | 18.3 s (pytest 17.3 s) |
+| CI export twice and `diff -r` | 16.0 s; peak `/tmp` 21 MB of the 128 MB tmpfs |
+| Full CI python mirror at 07d91ca | 32 min 46 s (pytest 822 s) |
+
+The `site` image is 201 MB.
+
+At 69d237e, on the same host with Python 3.12.10 and Node 24.21.0 (CI pins
+Node 20.20.2):
+
+| Step | Time |
+| --- | --- |
+| Host export, two runs | 5.736 s and 5.544 s |
+| Host exporter tests, 148 passed and 2 skipped | 149.79 s |
+| Docker `--target out`, export and build stages rebuilt, dependency layers cached | 19.515 s: export 4.1 s, `next build` 8.1 s |
+| Docker `--target out`, cached | 3.416 s |
+| Docker `--target data`, export rebuilt / cached | 15.434 s / 6.672 s |
+| Host `pnpm web:typecheck` / `pnpm web:lint` | 3.093 s / 9.355 s |
+| Playwright, 142 tests on two workers, on the Docker build | 15.7 s |
+| CI pylint step for the two scripts | 5.354 s |
+| CI evidence check | 2.754 s |
+| CI exporter and evidence tests, 174 with `docs/` | 127.154 s (pytest 125.93 s) |
+| CI export twice and `diff -r` | 68.629 s |
+| Full CI python mirror | 3,400 s (pytest 1,187.49 s) |
+
+The two host skips are the symbolic-link tests, which need privileges on
+Windows; in the test image all 150 exporter tests pass. Under the test
+service's 128 MB `/tmp` tmpfs, the export-twice step ends with 59,548 KB in
+`/tmp`, 46 percent of the 131,072 KB. The exporter tests peak at 20,460 KB
+in samples taken every 0.2 s, which can miss a shorter spike.
+
+### The Disproof Reel
+
+In the test phase, rule `reel-v1` picks
+[`test-qwen3-32b-2026-09-26` C4 `mei-1038`](../results/test-qwen3-32b-2026-09-26/scored/receipts/C4/mei-1038.json):
+- the pool is pass A, `test-qwen3-32b-2026-09-26`, then the slot winners'
+  test runs `test-qwen3.5-9b-2026-09-26`,
+  `test-qwen3.5-122b-a10b-2026-09-26` and
+  `test-deepseek-v4-pro-0813-2026-09-26`;
+- 54 C4 silent-wrong candidates in the pool; only the pick has 3
+  disagreeing frames, and the next fewest is 4;
+- the request is "I want every TCP segment with FIN set whose source port
+  is 443, whether or not ACK is also set. Judge by the port alone; a FIN
+  sent to destination port 443 from some other source port doesn't
+  belong.";
+- the answer `(tcp.srcport == 443 && tcp.completeness.fin == true)` misses
+  one frame that the reference `tcp.flags.fin == 1 && tcp.srcport == 443`
+  selects on each scored probe: frames 59, 60 and 66 are reference-only on
+  semantic-31, -37 and -43, each the `server-fin-ack` witness frame;
+- the highlight is semantic-37, frame 60, `server-fin-ack`;
+- the headline counts M = 971 and N = 165.
+
+The receipt panel's `repair` field holds pass A's
+`not_measured.repair_at_1`, which is `not_run`. `reel.json` keeps `repair`
+null, and its trace reason is `not_traced` (Limits).
+
+On the committed dev data, before the test phase, the rule picked
+[`dev-qwen3-32b-2026-09-26` C4 `mei-0015`](../results/dev-qwen3-32b-2026-09-26/scored/receipts/C4/mei-0015.json):
+- the request is "Show DNS AAAA questions or DNS NXDOMAIN messages.";
+- 27 C4 silent-wrong candidates in the pool; three tie at 3 disagreeing
+  frames, and pool order picks the anchor's;
+- frames 17, 3 and 9 are reference-only on semantic-11, -17 and -23;
+- the highlight is semantic-17, frame 3, `udp-aaaa`;
+- the headline counts M = 284 and N = 65.
+
+[`disproof-reel.md`](disproof-reel.md) recorded that pick on 2026-10-01,
+when five registry rows were `registered`.
+`test_the_committed_dev_pool_picks_the_registered_dev_reel` repeats the
+check on a copy of the committed dev inputs with rows 1 to 5 set back to
+`registered`. Its pool is the anchor, then the three winners' dev passes
+from the ruling. The copy holds no test-run directory, so the published
+rows have no summary and the phase stays dev even without that edit; with
+the five test runs copied in and the edit dropped, the phase moves to test
+and the test fails. `test_the_committed_tree_picks_the_registered_reel`
+pins the test-phase pick, and `tests/consistency.spec.ts` derives it again
+in TypeScript. `disproof-reel.md` still says that the rule has no code.
+That was true when the note was registered, and this branch leaves the
+registered note as it is.
+
+## Commands
+
+From the repository root in Git Bash. `MSYS_NO_PATHCONV=1` keeps Docker's
+paths as written. Set it per command: exported, it broke the `pnpm` shim on
+the development host.
+
+```text
+export SOURCE_COMMIT=$(git rev-parse HEAD)
+MSYS_NO_PATHCONV=1 docker build -f apps/web/Dockerfile --target out --build-arg SOURCE_COMMIT=$SOURCE_COMMIT --output type=local,dest=apps/web/out .
+MSYS_NO_PATHCONV=1 docker build -f apps/web/Dockerfile --target data --build-arg SOURCE_COMMIT=$SOURCE_COMMIT --output type=local,dest=apps/web/data .
+docker compose --profile web-local up --build
+pnpm --filter @dfilterforge/web test:e2e
+```
+
+- The first command builds the site. The second exports the data only, which
+  `next dev` and a host `pnpm web:build` need.
+- Compose serves the site at `http://127.0.0.1:3000/DFilterForge/`.
+- The Playwright suite runs against `apps/web/out`.
+- `--build-arg PAGES_BASE_PATH=` with an empty value builds for the domain
+  root. In Git Bash, exempt the variable from path conversion
+  (`MSYS2_ENV_CONV_EXCL=PAGES_BASE_PATH`) before the host tests read it.
+
+## Limits
+
+- Only the methodology page renders values today. The board, case and receipt
+  pages and the Reel are the next two pull requests, and the home page is a
+  digit-free placeholder until the Reel lands.
+- Rule `reel-v1` and the registry were committed before the first test
+  request, so the test-phase pick predates the test data:
+  `disproof-reel.md` in 6f2beb9, and `test-runs.json` with `test-runs.md`
+  in 6819a52. Both are ancestors of 7aaade8, as
+  `git merge-base --is-ancestor` confirms; 7aaade8 is the source revision
+  that pass A's first invocation recorded, at 2026-10-01T18:45:12Z.
+- No predicate trace is committed yet. The Reel says "not traced" until the
+  Reel pool's C4 silent-wrong answers are traced offline; that pool is now
+  the four test passes.
+- `methodology.json` still takes its bootstrap block from the dev anchor's
+  summary, in the test phase too. The methodology page says its intervals
+  come from bootstrap resamples "as the anchor pass's summary records
+  them", so it stays true. Which pass it cites once the board renders test
+  intervals is left to the board pull request. Only the page's
+  `not_measured` statuses follow the phase (What fails). Its "Not measured
+  yet" section names no source run, but each line's label names the split
+  of the run it cites: "Test repair round" in the test phase, "Dev repair
+  round" in the dev phase.
+- Step 5 of `reel-v1` is not built. No test `-cx` arm run is scored and no
+  `repair-pool` file exists, so no repair row exists yet, and `reel.json`
+  keeps `repair` null. The export stops with `repair_unread` once one
+  exists (What fails), so a repair turn cannot go missing unseen.
+- The A/A pair is not wired in: `board.json` keeps `aa` null.
+- Base images are pinned by tag, not by digest.
+- `RUN --network=none` was verified only on Docker Desktop 29.7.2: the step
+  saw only `lo`, and a connect failed with `ENETUNREACH`. The CI workflow and
+  the composite action have not run on GitHub yet; they pass actionlint
+  1.7.7, and each step was run locally.
+- The consistency test does not sweep CSS `content:`, `<head>` meta, or the
+  markers CSS numbers for a list without a `start`.
+- Next 16.3.4 on Windows writes nested segment-prefetch files into
+  subdirectories, where a Linux build writes flat names. The smoke test
+  exempts exactly that case, so CI and Pages use the Linux build.
+
+## What the next pages must do
+
+The board, case, receipt and Reel pages come in the next pull requests.
+These rules bind them. Only the first is enforced by a test today:
+- **Not measured yet.** `reel.json`'s `receipt_panel.repair` holds the
+  summary's status key, `not_run`. A page shows it through `<Unmeasured>`
+  as "not measured yet", the words of
+  [`locked-test-v1.md`](../results/locked-test-v1.md), and never renders
+  the raw node: the protocol keeps "not run" for a run that ended without a
+  result. The consistency test fails a `not_measured` value shown with any
+  other kind.
+- **The A/A reading and the confounds.** A page that shows a test
+  comparison also shows its A/A reading from the pair report, and the
+  notes `locked-test-v1.md` attaches to it: the comparisons it marks
+  confounded by rate limiting, and the items each pass lost to HTTP 429.
+- **Rounding.** `lib/fmt.ts` never rounds today. A rounded kind added for
+  rates or differences rounds a value exactly halfway away from zero, as
+  `locked-test-v1.md` does, so a shown rate matches its count.
+- **No ranking.** Test rows keep pool order. No page orders the models by a
+  rate or presents the rows as a ranking: `locked-test-v1.md` reports the
+  rates as descriptive, and no comparison between models was
+  pre-registered.
+- **Role labels.** `reel.json`'s pool, `site.json`'s runs and the board rows
+  carry the registry's roles verbatim, with no slot field. Pages map a role
+  to its label in one table in `lib/`.

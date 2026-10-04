@@ -20,10 +20,11 @@ is written down, including a typed-IR prompt gap that the
 passed as strong exact because no probe packet separated them from the gold;
 the model split probes now end in witness packets, a mutation-adequacy gate
 checks every single-site mutant of the gold from a fixed operator set on them
-in CI, and the run was re-scored against the corrected gold. The Web
-Evaluation Lab still shows a hand-written illustrative example. See
-`docs/progress.md` for verified results and `docs/protocol.md` for the model
-evaluation protocol. Every committed run and its gold-derived reference and
+in CI, and the run was re-scored against the corrected gold. The web site in
+`apps/web` is a static export built in Docker from committed results only; it
+never calls a model, and CI re-derives every value it shows from the committed
+files ([web site](docs/decisions/web-site.md)). See `docs/progress.md` for
+verified results and `docs/protocol.md` for the model evaluation protocol. Every committed run and its gold-derived reference and
 mutation controls re-score offline in the no-network container.
 
 ## Development
@@ -34,8 +35,11 @@ The reproducible entry point is Docker Compose:
 docker compose --profile pilot run --rm lab doctor
 docker compose --profile dev build test
 docker compose --profile dev run --rm test
-docker compose --profile web-local up --build
+SOURCE_COMMIT=$(git rev-parse HEAD) docker compose --profile web-local up --build
 ```
+
+The last command serves the site at `http://127.0.0.1:3000/DFilterForge/`;
+page links name `SOURCE_COMMIT`, so the build refuses to run without it.
 
 The Docker daemon must be running in Linux container mode. tshark execution,
 the catalog freeze and scoring all run in containers. Split generation, field
@@ -136,8 +140,7 @@ An interrupted stability run can resume from a matching local checkpoint. Use
 CI runs the semantic oracle and mutation checks. The longer complete stability
 matrix is an explicit release measurement. Passing these synthetic gates does
 not measure model compile validity, silent-wrong rate, or the complete Pilot
-Go/No-Go decision. The Web stays illustrative until a measured run replaces
-its data.
+Go/No-Go decision.
 
 ## Hosted model run
 

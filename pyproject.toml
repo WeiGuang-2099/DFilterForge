@@ -47,6 +47,8 @@ include = [
   "tests",
   "scripts/dev_bakeoff.py",
   "scripts/dev_bakeoff_configs.py",
+  "scripts/export_web_data.py",
+  "scripts/export_web_evidence.py",
   "scripts/model_run.py",
   "scripts/probe_adequacy.py",
   "scripts/provider_reply_replay.py",

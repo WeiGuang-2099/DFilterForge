@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type {ReactNode} from 'react';
 
 const navigation = [
-  {href: '/evaluate', label: 'Evaluate'},
+  {href: '/', label: 'Home'},
   {href: '/methodology', label: 'Methodology'},
 ] as const;
 
@@ -14,13 +14,12 @@ export function Shell({children}: ShellProps) {
   return (
     <div className="app-shell">
       <header className="mobile-header">
-        <Link className="brand" href="/evaluate">
+        <Link className="brand" href="/">
           DFilterForge
         </Link>
-        <span className="mode-label">Illustrative mock</span>
       </header>
       <aside className="sidebar">
-        <Link className="brand" href="/evaluate">
+        <Link className="brand" href="/">
           DFilterForge
         </Link>
         <p className="brand-subtitle">Evidence before claims.</p>
@@ -32,7 +31,7 @@ export function Shell({children}: ShellProps) {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span>Illustrative mock. No model has been evaluated yet.</span>
+          <span>Recorded results only. This site never calls a model.</span>
         </div>
       </aside>
       <main className="main-content">{children}</main>
