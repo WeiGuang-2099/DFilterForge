@@ -335,6 +335,140 @@ test('a conditional row not_run while its named run is published is refused', ()
   );
 });
 
+/** One registry the exporter refuses, and the refusal the resolver gives. */
+interface Broken {
+  readonly name: string;
+  readonly edit: (runs: Registry) => void;
+  /** Files committed beside the registry, as a run directory holds them. */
+  readonly files?: readonly string[];
+  readonly message: string;
+}
+
+const MID_FALLBACK = tag(MID, 'fb');
+
+// The cases of test_a_broken_registration_fails in
+// tests/test_export_web_data.py for each refusal the resolver makes beyond
+// the three tests above, so deleting any one of them fails a test.
+const BROKEN: readonly Broken[] = [
+  {
+    name: 'an unknown role',
+    edit: (runs) => {
+      at(runs, MID).role = 'winner_huge';
+    },
+    message: 'row 4 has the role "winner_huge"',
+  },
+  {
+    name: 'an unknown status',
+    edit: (runs) => {
+      at(runs, MID).status = 'done';
+    },
+    message: 'row 4 has the status "done"',
+  },
+  {
+    name: 'a not_run row without a reason',
+    edit: (runs) => {
+      at(runs, MID).status = 'not_run';
+    },
+    message: `${MID} is not_run with no reason`,
+  },
+  {
+    name: 'a not_run row with an empty reason',
+    edit: (runs) => {
+      Object.assign(at(runs, MID), {status: 'not_run', reason: ''});
+    },
+    message: `${MID} is not_run with no reason`,
+  },
+  {
+    name: 'no mid winner',
+    edit: (runs) => {
+      // Drops winner_mid and every row its condition chain reaches, so only
+      // the planned roles are wrong.
+      const dropped = new Set([MID]);
+      for (const entry of runs.runs) {
+        if (entry.conditional_on !== null && dropped.has(entry.conditional_on)) {
+          dropped.add(entry.run_id);
+        }
+      }
+      const kept = runs.runs.filter((each) => !dropped.has(each.run_id));
+      runs.runs.splice(0, runs.runs.length, ...kept);
+    },
+    message: 'plans aa_pass_a, aa_pass_b, winner_small, winner_frontier, not',
+  },
+  {
+    name: 'planned rows out of order',
+    edit: (runs) => {
+      const [small, mid] = runs.runs.slice(2, 4);
+      if (small === undefined || mid === undefined) {
+        throw new Error('the registry has no planned small and mid rows');
+      }
+      runs.runs.splice(2, 2, mid, small);
+    },
+    message: 'plans aa_pass_a, aa_pass_b, winner_mid, winner_small, winner_frontier, not',
+  },
+  {
+    name: 'a planned row marked unused',
+    edit: (runs) => {
+      at(runs, MID).status = 'unused';
+    },
+    message: `${MID} is a planned row marked unused`,
+  },
+  {
+    name: 'an unknown trigger',
+    edit: (runs) => {
+      at(runs, MID_FALLBACK).trigger = 'owner_wish';
+    },
+    message: `${MID_FALLBACK} has the trigger "owner_wish"`,
+  },
+  {
+    name: 'a row that names itself',
+    edit: (runs) => {
+      at(runs, MID_FALLBACK).conditional_on = MID_FALLBACK;
+    },
+    message: `names ${MID_FALLBACK}, which is no other row`,
+  },
+  {
+    name: 'a dangling named run',
+    edit: (runs) => {
+      at(runs, MID_FALLBACK).conditional_on = `test-x-${DATE}`;
+    },
+    message: `names test-x-${DATE}, which is no other row`,
+  },
+  {
+    name: 'a trigger without a named run',
+    edit: (runs) => {
+      at(runs, MID_FALLBACK).conditional_on = null;
+    },
+    message: `${MID_FALLBACK} has a trigger or a named run without the other`,
+  },
+  {
+    name: 'an unused row whose run holds a manifest',
+    edit: () => undefined,
+    files: [`docs/results/${MID_FALLBACK}/run_manifest.json`],
+    message: `docs/results/${MID_FALLBACK} holds run_manifest.json, but its row is unused`,
+  },
+  {
+    name: 'a registered row whose run holds a manifest',
+    edit: (runs) => {
+      at(runs, MID).status = 'registered';
+    },
+    files: [`docs/results/${MID}/run_manifest.json`],
+    message: `docs/results/${MID} holds run_manifest.json, but its row is registered`,
+  },
+];
+
+for (const broken of BROKEN) {
+  test(`a registry with ${broken.name} is refused`, () => {
+    const runs = registry();
+    broken.edit(runs);
+    commit(runs);
+    for (const file of broken.files ?? []) {
+      put(file, {run_id: file.split('/')[2]});
+    }
+
+    expect(() => new Resolver(root).shownRuns()).toThrow(broken.message);
+  });
+}
+
 test('the Reel picks the fewest frames, then the earlier pool run and lower item, C4 first', () => {
   // With no registry the pool is the anchor and the ranking's provisional
   // winners, so the ruled small winner's 0-frame answer is never a candidate.
