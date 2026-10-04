@@ -274,8 +274,11 @@ are:
 
   So in the test phase the dev anchor's `repair/summary.json`, the dev
   repair round, stops nothing. `tests/support/resolve.ts` refuses exactly
-  that one file in `repairStatusSummary()`, which names the cited summary,
-  and the consistency test checks that the built methodology page takes its
+  one file in `repairStatusSummary()`, the cited run's
+  `repair/summary.json`: in the test phase the first test pool run's, pass
+  A's whenever pass A is published, and none with an empty pool; in the
+  dev phase the dev anchor's. It returns the cited summary, and the
+  consistency test checks that the built methodology page takes its
   statuses from that summary. Building step 5 does not lift this stop: the
   methodology page must first read the round's summary.
 
