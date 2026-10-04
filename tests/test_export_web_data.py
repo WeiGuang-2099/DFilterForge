@@ -1153,11 +1153,14 @@ def _publish(registration: Document, run_id: str) -> None:
     _at(registration, run_id).update(status="published", reason=None)
 
 
-def _note(runs: list[Document] | None = None, prose: str = "") -> str:
+def _note(
+    runs: list[Document] | None = None, prose: str = "", start: int = 1
+) -> str:
     """Renders test-runs.md: prose, the Runs table, then a numbered table.
 
     The Runs table lists the given registry rows, by default all 16 of
-    ``_registration()``, in the committed note's column order.
+    ``_registration()``, in the committed note's column order, numbered
+    from ``start``.
     """
     listed = _registration()["runs"] if runs is None else runs
     return "\n".join(
@@ -1171,7 +1174,7 @@ def _note(runs: list[Document] | None = None, prose: str = "") -> str:
             *(
                 f"| {number} | `{run['role']}` | `{run['run_id']}` | `m/m` |"
                 " always |"
-                for number, run in enumerate(listed, start=1)
+                for number, run in enumerate(listed, start=start)
             ),
             "",
             "| Exit | Meaning |",
@@ -1713,6 +1716,16 @@ def _with_pass_a_only_in_prose(runs: list[Document]) -> str:
     return _note(runs[1:], prose=f"Pass A's run id is `{_PASS_A}`.")
 
 
+def _numbered_from_zero(runs: list[Document]) -> str:
+    # The right rows in the right order, under numbers the registry lacks.
+    return _note(runs, start=0)
+
+
+def _with_an_extra_row(runs: list[Document]) -> str:
+    # A 17th row would register a run test-runs.json does not hold.
+    return _note([*runs, runs[-1] | {"run_id": f"test-extra-{_DATE}"}])
+
+
 @pytest.mark.parametrize(
     ("note", "row"),
     [
@@ -1720,6 +1733,8 @@ def _with_pass_a_only_in_prose(runs: list[Document]) -> str:
         (_with_two_rows_swapped, 3),
         (_with_another_role, 4),
         (_with_pass_a_only_in_prose, 1),
+        (_numbered_from_zero, 1),
+        (_with_an_extra_row, 17),
     ],
 )
 def test_a_note_that_differs_from_the_registry_fails(
