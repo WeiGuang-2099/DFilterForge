@@ -167,7 +167,10 @@ are:
   `repair/summary.json`, the scored summary of its `-cx` arm run or that
   arm's `-r2` re-run, or the pool split's `repair-pool/<split>.json`. Step 5
   of `reel-v1` is not built, so the export stops rather than drop the
-  repair turn; `tests/support/resolve.ts` refuses the same files.
+  repair turn; `tests/support/resolve.ts` refuses the same files. The dev
+  anchor's own `repair/summary.json` stops it too, in either phase: the
+  methodology page says its repair round is not measured yet, and the
+  scorer keeps `repair_at_1: not_run` in the anchor's summary after a round.
 
 It exits 2 when an input cannot be read, a flag is invalid or the output
 directory is not empty.
@@ -179,6 +182,16 @@ sets and source ops before a page renders.
   `data-fmt`. `<Str>` renders a string the same way, without the link.
   `<Term>` renders a reviewed name that holds a digit; the list in
   `lib/terms.ts` is `IPv4` and `SHA-256`.
+- **Not measured yet.** A scored summary's `not_measured` status, such as
+  `repair_at_1`, is never shown as written. The scorer writes `not_run` for
+  a measurement no round has made, and `docs/protocol.md` keeps "not run"
+  for a run ruled not run. `<Unmeasured>` shows it as fixed words with
+  `data-fmt="unmeasured"`: `not_run` reads "not measured yet"
+  (`docs/results/locked-test-v1.md`), and any other status fails the build.
+  The consistency test fails a `not_measured` value shown with any other
+  kind, and the unmeasured kind on any other value. The methodology page
+  uses it now; a page in the next pull requests that shows the Reel's
+  `receipt_panel.repair` must use it too.
 - **The digit lint.** ESLint fails on a digit in JSX text, as a literal JSX
   child or in a text-bearing attribute, and in a page title or description.
   A digit here is any Unicode number character (`\p{N}`): ASCII, fullwidth
@@ -192,6 +205,7 @@ sets and source ops before a page renders.
   `[data-src]` value from the raw committed files, never from
   `apps/web/data`. The test fails on any of these:
   - a value or its formatted text that differs;
+  - a `not_measured` status shown as anything but fixed words;
   - a Unicode number character outside a sourced value, a script, a style
     or a `<Term>`, in the text, a swept attribute (`start` included) or
     `document.title`;
@@ -199,7 +213,7 @@ sets and source ops before a page renders.
   - a server-rendered HTML file whose `data-src` set differs from the
     hydrated page's.
 
-  The first three checks run twice per route: on the hydrated page, and in
+  The first four checks run twice per route: on the hydrated page, and in
   a browser context with JavaScript disabled, which sees the HTML as the
   server rendered it. A number that only the server HTML shows, and that
   hydration removes, reaches every visitor without JavaScript, every crawler

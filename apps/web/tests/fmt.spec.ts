@@ -58,6 +58,16 @@ test('text shows a string with its controls made visible', () => {
   }
 });
 
+test('unmeasured shows not measured yet for not_run, never the key', () => {
+  // The scorer writes not_run for a measurement no round has made; the
+  // protocol keeps "not run" for a run ruled not run, so the key is never
+  // shown as written.
+  expect(fmt('not_run', 'unmeasured')).toBe('not measured yet');
+  for (const value of ['scored', 'not run', 'not measured yet', '', 'toString', 3, null]) {
+    expect(() => fmt(value, 'unmeasured'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -124,7 +134,7 @@ test('visible shows C1 controls and lone surrogates by code point', () => {
 });
 
 test('every kind is named', () => {
-  expect([...FMT_KINDS]).toEqual(['int', 'num', 'bool', 'ints', 'text']);
+  expect([...FMT_KINDS]).toEqual(['int', 'num', 'bool', 'ints', 'text', 'unmeasured']);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);
   }

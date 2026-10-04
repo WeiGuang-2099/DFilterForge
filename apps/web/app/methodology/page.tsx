@@ -4,7 +4,7 @@ import type {ReactNode} from 'react';
 
 import {loadMethodology} from '@/lib/data';
 import type {Methodology, NumNode, StrNode} from '@/lib/data';
-import {Num, repositoryFile, Str, Term} from '@/lib/sourced';
+import {Num, repositoryFile, Str, Term, Unmeasured} from '@/lib/sourced';
 
 export const metadata: Metadata = {
   title: 'Methodology',
@@ -280,7 +280,7 @@ export default function MethodologyPage() {
       <dl>
         {data.not_measured.map((entry) => (
           <Fact key={entry.key} label={notMeasuredName(entry.key)}>
-            <Str node={entry.value} />
+            <Unmeasured node={entry.value} />
           </Fact>
         ))}
       </dl>

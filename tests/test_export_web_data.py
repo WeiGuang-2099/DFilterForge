@@ -2883,6 +2883,39 @@ def test_scored_repair_results_stop_the_export_until_step_5_is_built(
     assert path in str(caught.value)
 
 
+def test_a_scored_anchor_round_stops_the_export_in_the_test_phase(
+    fixture: Fixture,
+) -> None:
+    # The dev anchor is no test pool run, but the methodology page shows its
+    # not_measured repair_at_1, which the scorer leaves at not_run, as "not
+    # measured yet"; a scored round beside it would make that false.
+    _settled(fixture)
+    root = fixture.build()
+    documents = _documents(exporter.export(root, "abc1234"))
+    assert documents["reel.json"]["phase"] == "test"
+    assert documents["methodology.json"]["not_measured"] == [
+        {
+            "key": "repair_at_1",
+            "value": {
+                "t": "not_run",
+                "src": [
+                    "ptr",
+                    f"docs/results/{_ANCHOR}/scored/summary.json",
+                    "/not_measured/repair_at_1",
+                ],
+            },
+        }
+    ]
+
+    path = f"docs/results/{_ANCHOR}/repair/summary.json"
+    _write(root / path, {"schema": "repair-summary/1.0"})
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "repair_unread"
+    assert path in str(caught.value)
+
+
 def test_repair_results_outside_the_pool_leave_the_export_alone(
     fixture: Fixture,
 ) -> None:

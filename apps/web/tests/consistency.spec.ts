@@ -141,9 +141,29 @@ function sameValue(first: unknown, second: unknown): boolean {
 }
 
 /**
+ * Whether a source names a scored summary's not_measured status. A page
+ * shows one only as fixed words (fmt's unmeasured kind), never as the
+ * status key: the scorer writes not_run there, which the protocol reserves
+ * for a run ruled not run.
+ */
+function isNotMeasured(source: unknown): boolean {
+  if (!Array.isArray(source) || source[0] !== 'ptr' || source.length !== 3) {
+    return false;
+  }
+  const [, file, pointer] = source as readonly unknown[];
+  return (
+    typeof file === 'string' &&
+    file.endsWith('/scored/summary.json') &&
+    typeof pointer === 'string' &&
+    /^\/not_measured\/[^/]+$/.test(pointer)
+  );
+}
+
+/**
  * Re-derives one sourced value and lists what does not match. The cut of
  * model text comes from the source, never from the page's data-cap, which
- * must agree with it.
+ * must agree with it. A not_measured status must be shown with the
+ * unmeasured kind, and only it may be.
  */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
@@ -155,12 +175,20 @@ function mismatches(value: Sourced): string[] {
   }
   let expected: unknown;
   let cap: number | null;
+  let notMeasured: boolean;
   try {
     const source: unknown = JSON.parse(where);
     expected = resolver.resolve(source);
     cap = capFor(source);
+    notMeasured = isNotMeasured(source);
   } catch (error) {
     return [`${where}: ${error instanceof Error ? error.message : String(error)}`];
+  }
+  if (notMeasured !== (value.kind === 'unmeasured')) {
+    return [
+      `${where}: data-fmt is ${JSON.stringify(value.kind)}; ` +
+        'a not_measured status, and only one, is shown as unmeasured',
+    ];
   }
   if (value.cap !== (cap === null ? null : String(cap))) {
     return [
@@ -412,6 +440,29 @@ test('model text is cut only at the contract size and only where the exporter cu
   expect(mismatches(shown(answer, null))).toHaveLength(1);
   expect(mismatches(shown(label, 1))).toHaveLength(1);
   expect(mismatches(shown(label, RAW_TEXT_CAP))).toHaveLength(1);
+});
+
+test('a not_measured status is shown as fixed words and never as its key', () => {
+  // The scorer's not_run means no round has measured it yet; shown as
+  // written it would read as the protocol's "not run". Fixed words for any
+  // other source would hide its value.
+  const run = resolver.shownRuns()[0] ?? '';
+  const status = ['ptr', `docs/results/${run}/scored/summary.json`, '/not_measured/repair_at_1'];
+  const label = ['ptr', `docs/results/${run}/prepare.json`, '/conditions/0/label'];
+  const shown = (source: readonly string[], kind: string, text: string): Sourced => ({
+    src: JSON.stringify(source),
+    v: JSON.stringify(resolver.resolve(source)),
+    kind,
+    cap: null,
+    text,
+  });
+  const key = String(resolver.resolve(status));
+
+  expect(key).toBe('not_run');
+  expect(mismatches(shown(status, 'unmeasured', 'not measured yet'))).toEqual([]);
+  expect(mismatches(shown(status, 'text', key))).toHaveLength(1);
+  expect(mismatches(shown(status, 'unmeasured', key))).toHaveLength(1);
+  expect(mismatches(shown(label, 'unmeasured', 'not measured yet'))).toHaveLength(1);
 });
 
 test('the sweep finds a number in any script, in a list start and outside the terms', async ({

@@ -12,7 +12,16 @@
 import {visible} from './visible';
 
 /** The kinds fmt() knows, as data-fmt records them. */
-export const FMT_KINDS = ['int', 'num', 'bool', 'ints', 'text'] as const;
+export const FMT_KINDS = ['int', 'num', 'bool', 'ints', 'text', 'unmeasured'] as const;
+
+// What a scored summary's not_measured status keys say on a page. A key is
+// never shown as written: the scorer writes not_run for a measurement no
+// round has made yet, while docs/protocol.md reserves "not run" for a run
+// ruled not run, so the words are the ones docs/results/locked-test-v1.md
+// uses. A status not listed here fails the build.
+const UNMEASURED: Readonly<Record<string, string>> = {
+  not_run: 'not measured yet',
+};
 
 /** One formatting kind. */
 export type FmtKind = (typeof FMT_KINDS)[number];
@@ -37,7 +46,8 @@ function integer(value: unknown): string {
  * @param kind How to show it: int, a safe integer in plain digits; num, a
  *     finite number in its shortest round-trip form; bool, yes or no; ints,
  *     integers joined by a comma and a space, or none when empty; text, a
- *     string with its controls made visible.
+ *     string with its controls made visible; unmeasured, a scored summary's
+ *     not_measured status as fixed words, never the status key itself.
  * @return The text the page shows.
  * @throws TypeError When the value does not fit the kind, so a build fails
  *     rather than show a value in the wrong form.
@@ -66,5 +76,15 @@ export function fmt(value: unknown, kind: FmtKind): string {
         throw new TypeError(`fmt: ${JSON.stringify(value)} is not a string`);
       }
       return visible(value);
+    case 'unmeasured': {
+      const words =
+        typeof value === 'string' && Object.hasOwn(UNMEASURED, value)
+          ? UNMEASURED[value]
+          : undefined;
+      if (words === undefined) {
+        throw new TypeError(`fmt: ${JSON.stringify(value)} is no known not_measured status`);
+      }
+      return words;
+    }
   }
 }

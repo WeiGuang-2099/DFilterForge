@@ -42,7 +42,7 @@ function permalink(source: Src): string | null {
 
 interface NumProps {
   readonly node: NumNode;
-  readonly kind: Exclude<FmtKind, 'text'>;
+  readonly kind: Exclude<FmtKind, 'text' | 'unmeasured'>;
 }
 
 /** Renders a sourced number, boolean or integer list, linked to its file. */
@@ -77,6 +77,24 @@ export function Str({node}: StrProps): ReactNode {
       data-v={JSON.stringify(node.t)}
     >
       {fmt(node.t, 'text')}
+    </span>
+  );
+}
+
+/**
+ * Renders a scored summary's not_measured status as fixed words, never as
+ * the status key (fmt's unmeasured kind). The node stays in data-src and
+ * data-v, so the consistency test still re-derives the key, and a status
+ * fmt does not know fails the build.
+ */
+export function Unmeasured({node}: StrProps): ReactNode {
+  return (
+    <span
+      data-fmt="unmeasured"
+      data-src={JSON.stringify(node.src)}
+      data-v={JSON.stringify(node.t)}
+    >
+      {fmt(node.t, 'unmeasured')}
     </span>
   );
 }

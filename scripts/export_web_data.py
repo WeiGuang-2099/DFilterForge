@@ -2043,8 +2043,23 @@ def build_case(
 
 
 def build_methodology(repo: Repo, selection: Selection) -> Document:
-    """Conditions, bootstrap, environment, gates and what is unmeasured."""
+    """Conditions, bootstrap, environment, gates and what is unmeasured.
+
+    The page shows the anchor's not_measured keys as "not measured yet".
+    The scorer keeps writing ``repair_at_1: not_run`` there after a repair
+    round, whose numbers go to the pass's repair/summary.json instead
+    (docs/decisions/repair-round.md), so that summary's existence stops the
+    export (``repair_unread``) rather than let the page call a measured
+    round unmeasured.
+    """
     anchor = selection.rows[0].run
+    repair = f"{RESULTS}/{anchor.run_id}/repair/summary.json"
+    if repo.exists(repair):
+        raise ContractError(
+            "repair_unread",
+            f"{repair} holds a scored repair round, which the anchor's "
+            "not_measured would still call not measured",
+        )
     frames = _arr(repo.resolve(ptr(CAPTURES, "probes", 0, "frames")), "frames")
     probes = _arr(repo.resolve(ptr(CAPTURES, "probes")), "probes")
     not_measured = _obj(
