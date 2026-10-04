@@ -1513,6 +1513,10 @@ def _not_run_without_a_reason(value: Document, _: Path) -> None:
     _at(value, _TEST_MID)["status"] = "not_run"
 
 
+def _not_run_with_an_empty_reason(value: Document, _: Path) -> None:
+    _at(value, _TEST_MID).update(status="not_run", reason="")
+
+
 def _dangling_condition(value: Document, _: Path) -> None:
     _at(value, _tag(_TEST_MID, "fb"))["conditional_on"] = f"test-x-{_DATE}"
 
@@ -1574,6 +1578,16 @@ def _unused_with_a_manifest(_: Document, root: Path) -> None:
     )
 
 
+def _registered_with_a_manifest(value: Document, root: Path) -> None:
+    # Results committed while the row still says registered: the phase
+    # would stay dev and hide the test runs with no error.
+    _at(value, _TEST_MID)["status"] = "registered"
+    _write(
+        root / f"docs/results/{_TEST_MID}/run_manifest.json",
+        {"run_id": _TEST_MID},
+    )
+
+
 def _another_note(value: Document, _: Path) -> None:
     value["note"] = "docs/decisions/model-bakeoff.md"
 
@@ -1589,6 +1603,11 @@ def _another_note(value: Document, _: Path) -> None:
         (_dev_run_id, "split_mismatch", _ANCHOR),
         (_malformed_run_id, "run_id_invalid", "test-Bad_X"),
         (_not_run_without_a_reason, "not_run_invalid", _TEST_MID),
+        (
+            _not_run_with_an_empty_reason,
+            "not_run_invalid",
+            f"{_TEST_MID} is not_run with no reason",
+        ),
         (_dangling_condition, "condition_invalid", f"test-x-{_DATE}"),
         (
             _trigger_without_a_named_run,
@@ -1618,6 +1637,12 @@ def _another_note(value: Document, _: Path) -> None:
             _unused_with_a_manifest,
             "not_run_scored",
             f"{_tag(_TEST_MID, 'fb')} holds run_manifest.json",
+        ),
+        (
+            _registered_with_a_manifest,
+            "not_run_scored",
+            f"{_TEST_MID} holds run_manifest.json, but its row in "
+            f"{_TEST_RUNS} is registered",
         ),
         (_another_note, "note_mismatch", "note"),
     ],
