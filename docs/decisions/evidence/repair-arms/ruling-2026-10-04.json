@@ -114,7 +114,7 @@
     },
     {
       "option": "waiting on DeepInfra",
-      "why": "the 429s come from a shared pool (engine_overloaded, upstream_provider_shared_pool) with no bound on recovery; one later HTTP 200 from that pool did not show it usable"
+      "why": "the 198 attempts record no cause, and the one later HTTP 429 body the owner saw names a shared pool (engine_overloaded, upstream_provider_shared_pool), which gives no bound on recovery; one later HTTP 200 from that pool did not show it usable"
     },
     {
       "option": "reporting the frontier round not run",
@@ -132,5 +132,5 @@
     "the 108 registered arm run ids, the registry's rows and statuses, and the baseline test passes",
     "the repair plans and their triggered items"
   ],
-  "why": "deepseek/deepseek-v4-pro-0813 got no answer from DeepInfra in any of the 198 attempts of its three dev arm runs and their -r2 re-runs: all were HTTP 429 from the provider's shared pool and nothing was charged. Its test baseline had already met 754 HTTP 429 there. NextBit is the bake-off note's listed frontier fallback, committed in de05cad: the same fp8 label, seed supported, and the same settings but provider order and prices. Decided with 0 frontier repair answers on dev and no test repair request sent."
+  "why": "deepseek/deepseek-v4-pro-0813 got no answer on its DeepInfra-pinned route (provider order deepinfra, allow_fallbacks false) in any of the 198 attempts of its three dev arm runs and their -r2 re-runs, sent between 02:23 and 02:41 UTC: all were HTTP 429 and nothing was charged. The run records keep only the error code 429 and no served provider. One request the owner sent afterwards got an HTTP 429 whose body names engine_overloaded and upstream_provider_shared_pool. Its test baseline had already met 754 HTTP 429 on the same route. NextBit is the bake-off note's listed frontier fallback, committed in de05cad: the same fp8 label, seed supported, and the same settings but provider order and prices. Decided with 0 frontier repair answers on dev and no test repair request sent."
 }

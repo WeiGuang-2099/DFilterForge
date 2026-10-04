@@ -64,8 +64,10 @@ committed evidence.
       [`evidence/repair-arms/summary-dev-2026-10-04.json`](evidence/repair-arms/summary-dev-2026-10-04.json).
     - The owner's single-request diagnostics,
       [`evidence/repair-arms/frontier-provider-diagnostics-2026-10-04.md`](evidence/repair-arms/frontier-provider-diagnostics-2026-10-04.md).
-      The HTTP 429 body names `engine_overloaded` and
-      `upstream_provider_shared_pool`. The later HTTP 200 was still served
+      Its one HTTP 429 body, from a request sent after the round, names
+      `engine_overloaded` and `upstream_provider_shared_pool`; the runs'
+      own records keep only the error code, 429, and no served provider.
+      The later HTTP 200 was still served
       from DeepInfra's shared pool (`is_byok` false). The NextBit request,
       with seed 17, JSON mode and `require_parameters` true, returned HTTP
       200 with 0 reasoning tokens, billed at the committed prices.
@@ -86,7 +88,8 @@ committed evidence.
   - Rejected alternatives:
     - DeepSeek official: its endpoint lists no seed, and `require_parameters`
       is true;
-    - waiting on DeepInfra: a shared pool with no bound on recovery;
+    - waiting on DeepInfra: the runs record no cause, and the one later
+      HTTP 429 body names a shared pool, with no bound on recovery;
     - reporting the frontier round not run.
   - Decided with 0 frontier repair answers on dev and no test repair request
     sent.
