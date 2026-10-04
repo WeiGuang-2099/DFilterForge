@@ -2478,7 +2478,7 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     new_bytes = (_ROOT / ruling["to_config"]).read_bytes()
     old, new = json.loads(old_bytes), json.loads(new_bytes)
     frontier = _DEV[3]
-    assert ruling["schema"] == "repair-arms-ruling/1.0"
+    assert ruling["schema"] == "repair-arms-ruling/1.1"
     assert ruling["note"] == ra.NOTE
     assert ruling["registered_in"] == "docs/protocol.md"
     assert ruling["from_config"] == (
@@ -2517,17 +2517,42 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     }
     assert ruling["caps_usd"] == {"dev": _DEV_CAPS[3], "test": _TEST_CAPS[3]}
 
+    # OD5 is the owner's ruling of the ruling's date. OD6 to OD8 are the
+    # maintainer's defaults, which the owner confirmed on 2026-10-05; each
+    # move names who settled each decision it rests on, and when.
     decided = {item["id"]: item["by"] for item in ruling["decisions"]}
-    assert list(decided) == ["OD5", "OD6", "OD7", "OD8"]
-    assert decided["OD5"] == "owner"
-    assert {decided[od] for od in ("OD6", "OD7", "OD8")} <= {
-        "owner",
-        "default_taken",
+    assert decided == {
+        "OD5": "owner",
+        "OD6": "default_confirmed",
+        "OD7": "default_confirmed",
+        "OD8": "default_confirmed",
     }
-    assert all(item["text"] for item in ruling["decisions"])
+    confirmation = ruling["confirmation"]
+    assert confirmation == {
+        "by": "owner",
+        "date": "2026-10-05",
+        "decisions": [od for od, by in decided.items() if by != "owner"],
+        "text": confirmation["text"],
+    }
+    assert confirmation["text"].startswith(
+        "Confirmed by the owner on 2026-10-05:"
+    )
+    settled = {"owner": ruling["date"], "default_confirmed": "2026-10-05"}
+    for item in ruling["decisions"]:
+        assert item["text"]
+        if item["by"] != "owner":
+            assert item["text"].endswith(
+                " confirmed by the owner on 2026-10-05."
+            )
     dev_move, test_move = ruling["moves"]
-    for move in ruling["moves"]:
-        assert move["decided_by"] and set(move["decided_by"]) <= set(decided)
+    for move, rests_on in (
+        (dev_move, ("OD5", "OD6", "OD7")),
+        (test_move, ("OD5", "OD7", "OD8")),
+    ):
+        assert move["decided_by"] == [
+            {"by": decided[od], "date": settled[decided[od]], "id": od}
+            for od in rests_on
+        ]
 
     # The evidence, recounted from the committed DeepInfra arm runs.
     registered = [
@@ -2624,20 +2649,36 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
         (arm, *dev_move["arm_runs"][arm]) for arm in ra.ARMS
     ]
 
-    # The amended texts that register the move.
+    # The amended texts that register the move. Each credits OD5 to the
+    # owner and OD6 to OD8 to the maintainer's defaults the owner confirmed.
+    confirmed = "which the owner confirmed on 2026-10-05"
     protocol = " ".join(_read("docs/protocol.md").split())
     assert "Amended 2026-10-04" in protocol
     assert (
-        "before any test repair prompt is prepared (owner ruling OD5"
-        in protocol
-    )
+        "before any test repair prompt is prepared. The move is owner ruling"
+        " OD5 of 2026-10-04 in the [repair note](decisions/repair-round.md);"
+        " the dev re-run (OD6), the outage rule on NextBit (OD7) and the kept"
+        f" test ids (OD8) are maintainer defaults there, {confirmed}."
+    ) in protocol
     bakeoff = _read("docs/decisions/model-bakeoff.md")
     _, section = bakeoff.split("## Repair arms' provider: 2026-10-04", 1)
     assert f"`{_FALLBACK_CONFIGS['frontier']}`" in section
+    section = " ".join(section.split())
+    assert "OD5 in the [repair note](repair-round.md)" in section
+    assert f"is OD6 there, a maintainer default, {confirmed}" in section
+    repair_note = " ".join(_read(ra.NOTE).split())
+    assert "and the owner confirmed all three on 2026-10-05" in repair_note
+    for od in ("OD6", "OD7", "OD8"):
+        assert f"**{od}, a maintainer default the owner confirmed:" in (
+            repair_note
+        )
+    for stale in ("default taken", "not yet confirmed", "paid dev command"):
+        assert stale not in repair_note, stale
     (amended,) = registry["repair_arms"]["amended"]
     assert amended["ruling"] == _MOVE_RULING
     # The registry names every test arm run the move sends, -r2 included,
-    # in its JSON entry and in its note's dated paragraph.
+    # in its JSON entry and in its note's dated paragraph, and the defaults
+    # the -r2 re-runs and the kept ids rest on.
     test_id = re.compile(r"test-[a-z0-9][a-z0-9.-]{0,31}-\d{4}-\d{2}-\d{2}")
     moved_test = sorted(
         run for runs in test_move["arm_runs"].values() for run in runs
@@ -2647,6 +2688,10 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
     paragraph, _ = paragraph.split("## ", 1)
     for text in (amended["text"], paragraph):
         assert sorted(set(test_id.findall(text))) == moved_test
+        assert "OD7, for the outage re-runs, and OD8, for the kept ids," in (
+            text
+        )
+        assert confirmed in text
     locked = " ".join(_read(f"{ra.RESULTS}/locked-test-v1.md").split())
     assert (
         f"it met {baseline_429_before_last} HTTP 429 responses before an"

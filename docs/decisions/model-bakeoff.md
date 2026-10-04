@@ -275,5 +275,8 @@ arm runs move. Its passes do not: the counted dev pass and the counted test
 pass stay the DeepInfra ones, with the answers DeepInfra served, and rule 7
 still governs every test pass. No other candidate's route changes.
 
-The ruling is OD5 in the [repair note](repair-round.md), which also gives the
-new dev run ids. `evidence/repair-arms/ruling-2026-10-04.json` holds it.
+The move is OD5 in the [repair note](repair-round.md), the owner's ruling of
+2026-10-04. Its dev half, the dev arm runs sent again on NextBit under the new
+run ids the note gives, is OD6 there, a maintainer default, which the owner
+confirmed on 2026-10-05. `evidence/repair-arms/ruling-2026-10-04.json` holds
+both.

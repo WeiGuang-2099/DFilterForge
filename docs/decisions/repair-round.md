@@ -40,13 +40,15 @@ day recommended:
 ## Owner decisions, 2026-10-04
 
 The owner took one decision on 2026-10-04, OD5. The maintainer took three
-defaults with it, OD6 to OD8, which the owner was told of. They are kept apart
-below: a default stays one until the owner confirms it. The protocol's Repair
-section registers the move (its paragraph amended 2026-10-04), and
+defaults with it, OD6 to OD8, which the owner was told of, and the owner
+confirmed all three on 2026-10-05. They are kept apart below: OD5 is the
+owner's ruling, and OD6 to OD8 are maintainer defaults the owner confirmed.
+The protocol's Repair section registers the move (its paragraph amended
+2026-10-04), and
 [`evidence/repair-arms/ruling-2026-10-04.json`](evidence/repair-arms/ruling-2026-10-04.json)
-(schema `repair-arms-ruling/1.0`) holds the four decisions, the moved ids and
-the evidence figures, which `tests/test_repair_arms.py` recounts from the
-committed evidence.
+(schema `repair-arms-ruling/1.1`) holds the four decisions, the owner's
+confirmation, the moved ids and the evidence figures, which
+`tests/test_repair_arms.py` recounts from the committed evidence.
 
 - **OD5, by the owner: the frontier arms move to NextBit.** The frontier
   slot's repair arms move from DeepInfra to NextBit, using the committed
@@ -95,15 +97,20 @@ committed evidence.
     - reporting the frontier round not run.
   - Decided with 0 frontier repair answers on dev and no test repair request
     sent.
-- **OD6, default taken: dev is re-run first.** The dev frontier round is
-  re-run on NextBit before the test round, as new runs with the tag `nb`
-  after the arm tag. The owner was told and did not object; the owner's paid
-  dev command is the confirmation.
-- **OD7, default taken: the outage rule stays.** On NextBit an arm run keeps
-  the protocol's outage rule: one re-run from scratch, `-nb-r2` on dev and
-  `-r2` on test. A second outage is not run, and no arm moves again.
-- **OD8, default taken: the test ids stay.** The test frontier arms keep
-  their registered ids, which no request has used.
+- **OD6, a maintainer default the owner confirmed: dev is re-run first.**
+  The dev frontier round is re-run on NextBit before the test round, as new
+  runs with the tag `nb` after the arm tag, and the six DeepInfra runs are
+  reported not run and kept as evidence only. The maintainer took it as a
+  default on 2026-10-04, and the owner confirmed it on 2026-10-05.
+- **OD7, a maintainer default the owner confirmed: the outage rule stays.**
+  On NextBit an arm run keeps the protocol's outage rule: one re-run from
+  scratch, `-nb-r2` on dev and `-r2` on test. A second outage is not run, and
+  no arm moves again. Taken on 2026-10-04, confirmed by the owner on
+  2026-10-05.
+- **OD8, a maintainer default the owner confirmed: the test ids stay.** The
+  test frontier arms keep their registered ids, which no request has used,
+  and change only their config to NextBit. Taken on 2026-10-04, confirmed by
+  the owner on 2026-10-05.
 
 **The ids.** The dev frontier arm runs on NextBit, each with the one outage
 re-run OD7 allows:
@@ -114,10 +121,10 @@ re-run OD7 allows:
 | bare | `dev-deepseek-v4-pro-0813-bare-nb-2026-09-26` | `dev-deepseek-v4-pro-0813-bare-nb-r2-2026-09-26` |
 | counterexample | `dev-deepseek-v4-pro-0813-cx-nb-2026-09-26` | `dev-deepseek-v4-pro-0813-cx-nb-r2-2026-09-26` |
 
-The test frontier arms keep the ids in the arm run id table below, and their
-`-r2` re-runs, now sent on NextBit (OD8).
+The test frontier arms keep the ids in the arm run id table below (OD8), and
+their `-r2` re-runs (OD7), now sent on NextBit.
 
-**The ruling on the six DeepInfra runs.**
+**The six DeepInfra runs (OD6, confirmed by the owner on 2026-10-05).**
 `dev-deepseek-v4-pro-0813-res-2026-09-26`,
 `dev-deepseek-v4-pro-0813-bare-2026-09-26`,
 `dev-deepseek-v4-pro-0813-cx-2026-09-26` and their `-r2` re-runs are not run.
@@ -154,11 +161,12 @@ It also sends `--gate-first --max-attempts 3 --min-interval-seconds 1.0`. A
 model's arm runs go in this order: resample, then bare, then counterexample,
 each after the one before is complete.
 
-Amended 2026-10-04 (OD5). As registered, every arm run sends its pass's config
-unchanged. deepseek/deepseek-v4-pro-0813's arm runs, on dev and on test, now
-send provider order `nextbit` and its prices, 1.056 / 3.168 USD per million,
-from `deepseek-v4-pro-0813_nextbit_enabled-false`. Every other setting and
-call option above, and every other model's arm runs, are unchanged.
+Amended 2026-10-04 (OD5, OD6). As registered, every arm run sends its pass's
+config unchanged. deepseek/deepseek-v4-pro-0813's arm runs, on dev and on
+test, now send provider order `nextbit` and its prices, 1.056 / 3.168 USD per
+million, from `deepseek-v4-pro-0813_nextbit_enabled-false`. Every other
+setting and call option above, and every other model's arm runs, are
+unchanged.
 
 **Card.** A card is built offline, in the no-network lab container, from the
 split's feedback probe alone: dev semantic-29, test semantic-35.
@@ -246,7 +254,7 @@ keep the card and plan modules out.
   the pass and the plan. It also checks the item set, the condition, the
   split, and the settings, prices, host, attempts and pacing.
 
-  Amended 2026-10-04 (OD5). As registered, each arm run is held to its
+  Amended 2026-10-04 (OD5, OD6). As registered, each arm run is held to its
   pass's settings and prices. For a moved pass, `repair --check` holds each
   arm run to the pass's settings except the provider order, which must be
   the move's, and to the move's prices object. A moved dev run's
@@ -373,12 +381,12 @@ The call refuses an id that does not fit (`run_id_invalid`), so such an arm
 cannot be re-run and is reported not run. `tests/test_hosted_test_runs.py` derives every id
 from the registry and the bake-off ruling and checks this.
 
-Amended 2026-10-04 (OD5). As registered, the 108 ids above are every arm run
-id. The move adds six dev ids outside the 108, listed under Owner decisions,
-2026-10-04: each is a registered dev frontier id with `-nb` after the arm
-tag. The 108 stay as registered. All six fit the result-name pattern; the
-longest is `dev-deepseek-v4-pro-0813-bare-nb-r2-2026-09-26`, with a middle of
-31 characters. The test frontier arms keep their registered ids.
+Amended 2026-10-04 (OD5 to OD8). As registered, the 108 ids above are every
+arm run id. The move adds six dev ids outside the 108, listed under Owner
+decisions, 2026-10-04: each is a registered dev frontier id with `-nb` after
+the arm tag. The 108 stay as registered. All six fit the result-name pattern;
+the longest is `dev-deepseek-v4-pro-0813-bare-nb-r2-2026-09-26`, with a middle
+of 31 characters. The test frontier arms keep their registered ids.
 
 ## Caps and worst cases
 
@@ -394,8 +402,8 @@ what is already spent, would exceed `--max-usd` (`_worst_case_micro_usd` in
   prompt can exceed.
 - Fallback configs apply to test only, because the dev passes are fixed.
 
-Amended 2026-10-04 (OD5). As registered, fallback configs apply to test only.
-The NextBit config now also carries the dev frontier arm runs, under the
+Amended 2026-10-04 (OD5, OD6). As registered, fallback configs apply to test
+only. The NextBit config now also carries the dev frontier arm runs, under the
 frontier row's dev cap of 0.20, and the test frontier arm runs, under the
 test cap of 0.50 that both frontier rows give. The table below is unchanged.
 Its frontier fallback row already prices both worst requests, at the largest
@@ -477,8 +485,9 @@ were not re-run, and they are lower bounds with no retries:
       names it. It comes before any test repair prompt is prepared, the
       seeds below included.
 
-      Amended 2026-10-04 (OD5). As registered, the dev round is the owner's
-      dev command, then the maintainer's publish, score, `repair` and pool.
+      Amended 2026-10-04 (OD5, OD6). As registered, the dev round is the
+      owner's dev command, then the maintainer's publish, score, `repair` and
+      pool.
       The dev round now ends with the NextBit re-run of the frontier arms
       (OD6), its publish, score and `repair`, and then the pool, all before
       any further correction or test seed. The correction for the defect
@@ -527,8 +536,8 @@ The batch takes every row from the protocol and this note:
   the split, which the batch reads from the Caps table above, or the run's own
   raised cap once a budget stop of that run is resumed.
 
-  Amended 2026-10-04 (OD5). As registered, each arm run sends its repaired
-  pass's own config. The frontier arm runs send the move's config,
+  Amended 2026-10-04 (OD5, OD6, OD8). As registered, each arm run sends its
+  repaired pass's own config. The frontier arm runs send the move's config,
   `deepseek-v4-pro-0813_nextbit_enabled-false`, under the same caps. The dev
   frontier rows take the ids in the table under Owner decisions,
   2026-10-04; the test frontier rows keep their registered ids.
@@ -567,9 +576,10 @@ The batch takes every row from the protocol and this note:
     `-r2` id too long for a result name, is not run.
   - A refusal (no answer, and only HTTP 400 or 404) is not run: an arm has no
     fallback.
-  - Amended 2026-10-04 (OD5). As registered, no arm run is moved to another
-    provider. The frontier arms' move is the one exception: its config and
-    ids apply, and the same dev command re-runs only the frontier rows.
+  - Amended 2026-10-04 (OD5, OD6). As registered, no arm run is moved to
+    another provider. The frontier arms' move is the one exception: its
+    config and ids apply, and the same dev command re-runs only the frontier
+    rows.
   - HTTP 401, 402 or 403 aborts. A budget stop after an answer stops the batch
     until that run's cap is raised in the raised caps table and committed.
 - **Not run by rule.** If a second turn would exceed the 64 KiB prompt budget,
@@ -677,7 +687,7 @@ The variables:
 - `$ARM` is `resample`, `bare` or `counterexample`, and `$ARM_RUN` is its arm
   run id from the table above.
 
-  Amended 2026-10-04 (OD5). As registered, `$ARM_RUN` comes from the table
+  Amended 2026-10-04 (OD6). As registered, `$ARM_RUN` comes from the table
   above. On the dev frontier pass it comes from the table under Owner
   decisions, 2026-10-04.
 - `$RUN` is the run a `done` row counts: its arm run id, or its `-r2` re-run.
@@ -719,9 +729,8 @@ MSYS_NO_PATHCONV=1 docker compose --profile pilot run --rm lab repair-pool --res
   Owner command says of a second outage, and are kept as evidence. Under
   Owner decisions, 2026-10-04, the owner's OD5 moves the frontier arms to
   NextBit. Re-running the dev round there, so that the NextBit runs replace
-  the six, is OD6, a default the maintainer took and the owner has not yet
-  confirmed. The owner's paid dev command is that confirmation, and it comes
-  before that round's summary is written.
+  the six, is OD6, a default the maintainer took, which the owner confirmed
+  on 2026-10-05, before that round's summary is written.
 - **CI re-checks.** CI then re-checks every `repair/plan.json` and every
   `repair-pool/*.json` with `--check`, beside its existing re-score loop.
 
@@ -745,10 +754,10 @@ After: not measured. The dev round fills it in: per model and arm, the
 repaired items, repair@1 with its strata, the transitions, `answer_unchanged`,
 `card_value_reuse` and spend, each linked to its `repair/summary.json`.
 
-Amended 2026-10-04 (OD5). As registered, the dev round fills in each model's
-After from its arm runs. The frontier After is measured on NextBit, from the
-runs in the table under Owner decisions, 2026-10-04; the six DeepInfra runs
-give it no number.
+Amended 2026-10-04 (OD5, OD6). As registered, the dev round fills in each
+model's After from its arm runs. The frontier After is measured on NextBit,
+from the runs in the table under Owner decisions, 2026-10-04; the six
+DeepInfra runs give it no number.
 
 ## Receipts so far
 
@@ -799,7 +808,7 @@ give it no number.
 - **Two re-run ids do not fit.** Two arm re-run ids are too long for the
   result-name pattern; see the run ids above.
 
-Added 2026-10-04 with the frontier arms' move to NextBit (OD5):
+Added 2026-10-04 with the frontier arms' move to NextBit (OD5, OD6):
 
 - **The resample also measures a provider change.** The frontier resample
   arm sends the first-turn prompt DeepInfra answered to NextBit, so beside

@@ -213,25 +213,27 @@ note](decisions/repair-round.md) holds the run ids, commands, schemas and the
 measured before and after.
 
 Amended 2026-10-04, as the correction this section requires for a defect the
-dev round shows, before any test repair prompt is prepared (owner ruling OD5
-in the [repair note](decisions/repair-round.md)). The dev round showed that
-deepseek/deepseek-v4-pro-0813's arm runs got no answer between 02:23 and
-02:41 UTC on its DeepInfra-pinned route (provider order `deepinfra`,
-fallbacks off). All 198 attempts of its three dev arm runs and their `-r2`
-re-runs were HTTP 429, nothing was charged, and the test baseline had already
-met 776 HTTP 429 on the same route, 754 of them before an item's last attempt.
-The run records keep only the error code, 429, and no served provider, so
-they do not say where the 429 arose. One request the owner sent afterwards
-got an HTTP 429 whose body names
-`engine_overloaded` and `upstream_provider_shared_pool`. That model's arm
-runs, on dev and on test, therefore send the bake-off note's listed frontier
-fallback config, `deepseek-v4-pro-0813_nextbit_enabled-false` (NextBit,
-fp8). It differs from the pass's DeepInfra config only in provider order and
-prices. For those arm runs alone this overrides:
+dev round shows, before any test repair prompt is prepared. The move is owner
+ruling OD5 of 2026-10-04 in the [repair note](decisions/repair-round.md); the
+dev re-run (OD6), the outage rule on NextBit (OD7) and the kept test ids (OD8)
+are maintainer defaults there, which the owner confirmed on 2026-10-05. The
+dev round showed that deepseek/deepseek-v4-pro-0813's arm runs got no answer
+between 02:23 and 02:41 UTC on its DeepInfra-pinned route (provider order
+`deepinfra`, fallbacks off). All 198 attempts of its three dev arm runs and
+their `-r2` re-runs were HTTP 429, nothing was charged, and the test baseline
+had already met 776 HTTP 429 on the same route, 754 of them before an item's
+last attempt. The run records keep only the error code, 429, and no served
+provider, so they do not say where the 429 arose. One request the owner sent
+afterwards got an HTTP 429 whose body names `engine_overloaded` and
+`upstream_provider_shared_pool`. That model's arm runs, on dev (OD6) and on
+test, therefore send the bake-off note's listed frontier fallback config,
+`deepseek-v4-pro-0813_nextbit_enabled-false` (NextBit, fp8). It differs from
+the pass's DeepInfra config only in provider order and prices. For those arm
+runs alone this overrides:
 
 - in this section, "with its pass's model, provider, settings", and "an
   outage is re-run once" and "never moved to another provider" (the dev
-  frontier arms are sent again as new runs);
+  frontier arms are sent again as new runs, OD6);
 - under Decoding and provenance, that a new run changes the provider only as
   the bake-off note lists (that note now lists this move);
 - under Models, that a test run's provider is written before the first test
@@ -241,9 +243,9 @@ prices. For those arm runs alone this overrides:
 The counted first turns stay the answers DeepInfra served. Every other
 setting, call option and cap, and every other model's arm runs, are
 unchanged. On NextBit every gate, outage, refusal and budget rule of this
-section applies. The six DeepInfra runs are reported not run and kept as
-evidence. The repair note gives the new run ids and the maintainer defaults
-behind them (OD6 to OD8).
+section applies (OD7). The six DeepInfra runs are reported not run and kept as
+evidence (OD6). The repair note gives the new run ids and the maintainer
+defaults behind them (OD6 to OD8).
 
 ## Decoding and provenance
 

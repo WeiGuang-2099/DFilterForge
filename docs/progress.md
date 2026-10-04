@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 ## Current slice
 
@@ -8,10 +8,10 @@ The baseline test passes are sent, published and scored, and every hosted
 test-run registry row is final. The owner's dev repair batch ran on 2026-10-04
 at bff373c. On `dev-repair-round`, the anchor, 8B and 120B dev rounds are
 published, scored and summarized. The frontier arms got only HTTP 429 from
-DeepInfra, and their evidence is kept. By the owner's decision of 2026-10-04
-they move to NextBit. The ruled dev re-run there comes next, then the dev
-pool, any correction the dev round names, and the test seeds with their
-admission.
+DeepInfra, and their evidence is kept. By the owner's ruling of 2026-10-04
+(OD5) they move to NextBit. The dev re-run there, a maintainer default (OD6)
+the owner confirmed on 2026-10-05, comes next, then the dev pool, any
+correction the dev round names, and the test seeds with their admission.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -1457,7 +1457,8 @@ set the key variable.
   The lab used `--profile pilot run --rm lab`. The docs-mounted steps used
   `--profile dev run --rm --volume "$(pwd -W)/docs:/workspace/docs:ro" test`.
 - **Next.** The frontier round, the dev pool and the test seeds wait for
-  the ruled re-run on NextBit. The owner's decision of 2026-10-04, recorded
+  the re-run on NextBit, OD6 (a maintainer default; the owner confirmed it on
+  2026-10-05). The owner's decision of 2026-10-04, recorded
   in the committed diagnostics, moves the frontier slot's repair arms from
   DeepInfra to NextBit, using the committed config
   `evidence/bakeoff/configs/deepseek-v4-pro-0813_nextbit_enabled-false.json`.
@@ -1798,12 +1799,12 @@ the key variable, and nothing was pushed.
     `2942954e0c6896c29fe075f20cb9d0ce4a885d9ac72af8396022723b67de58ce`), at
     the slot's caps, 0.20 USD on dev and 0.50 on test. The counted first
     turns stay the answers DeepInfra served.
-  - OD6, a default taken: the dev frontier round is re-run on NextBit before
-    the test round, as a ruled re-run under the new ids
-    `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26`. The owner has
-    not objected; the owner's paid dev command confirms it. OD7 (one outage
+  - OD6, a maintainer default: the dev frontier round is re-run on NextBit
+    before the test round, under the new ids
+    `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26`. OD7 (one outage
     re-run on NextBit, `-nb-r2` on dev) and OD8 (the test arms keep their
-    registered ids) are defaults taken too.
+    registered ids) are maintainer defaults too. The owner confirmed all
+    three on 2026-10-05.
 - **The runner change** (c57142a and 1d07612; "Frontier arms moved to
   NextBit" above has the details). `scripts/repair_arms.py` sends the
   frontier rows with the NextBit config, under the `-nb` ids on dev and the
@@ -1892,8 +1893,9 @@ the key variable, and nothing was pushed.
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered and amended
-   on 2026-10-04 (OD5), in this order; its "Commands" section gives each
-   command. `repair-arms` merged in bff373c (PR #18). The owner's dev batch
+   on 2026-10-04 (OD5, the owner's ruling; OD6 to OD8, maintainer defaults
+   the owner confirmed on 2026-10-05), in this order; its "Commands" section
+   gives each command. `repair-arms` merged in bff373c (PR #18). The owner's dev batch
    ran there on 2026-10-04: three rounds are published on `dev-repair-round`,
    and the frontier arms moved to NextBit (the sections above).
    `dev-repair-round` merges before the next owner command, so that it runs
@@ -1962,9 +1964,9 @@ the key variable, and nothing was pushed.
   the tooling; the owner rules on it before that round's summary.
   - The dev frontier outage: the six DeepInfra runs are reported not run
     and kept as evidence. The owner's OD5 (725bb5e) moves the frontier arms
-    to NextBit. Replacing the six with the `-nb` runs rests on OD6, a default
-    the owner has not yet confirmed; the owner's paid dev command confirms
-    it, before that round's summary is written.
+    to NextBit. Replacing the six with the `-nb` runs rests on OD6, a
+    maintainer default the owner confirmed on 2026-10-05; the `-nb` runs are
+    not sent yet.
   - The general gap remains. A second outage on NextBit, which OD7 leaves
     not run, would again have no record in the tooling.
 - The Web remains recorded-only; Linux CI teardown and the production

@@ -333,8 +333,10 @@ no arm run keeps a row here, or the frozen test prompts, guarded. Dev runs and
 smoke runs are not test runs.
 
 Amended 2026-10-04 (owner ruling OD5 in the [repair note](repair-round.md),
-registered in the protocol's Repair section): the `winner_frontier` run's arm
-runs, `test-deepseek-v4-pro-0813-res-2026-09-26`,
+with its maintainer defaults OD7, for the outage re-runs, and OD8, for the
+kept ids, which the owner confirmed on 2026-10-05; registered in the
+protocol's Repair section): the `winner_frontier` run's arm runs,
+`test-deepseek-v4-pro-0813-res-2026-09-26`,
 `test-deepseek-v4-pro-0813-bare-2026-09-26` and
 `test-deepseek-v4-pro-0813-cx-2026-09-26`, and their outage re-runs,
 `test-deepseek-v4-pro-0813-res-r2-2026-09-26`,

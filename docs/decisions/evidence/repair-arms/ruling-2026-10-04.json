@@ -3,6 +3,16 @@
     "dev": 0.2,
     "test": 0.5
   },
+  "confirmation": {
+    "by": "owner",
+    "date": "2026-10-05",
+    "decisions": [
+      "OD6",
+      "OD7",
+      "OD8"
+    ],
+    "text": "Confirmed by the owner on 2026-10-05: the maintainer defaults OD6, OD7 and OD8 stand as written. The dev frontier arms are re-run on NextBit under the -nb ids, and the six DeepInfra runs are reported not run and kept as evidence only (OD6). On NextBit an outage still gets one re-run from scratch, -nb-r2 on dev and -r2 on test; a second outage is not run, and no arm moves to a third provider (OD7). The test frontier arms keep their registered ids and change only their config to NextBit (OD8). OD5 stays the owner's ruling of 2026-10-04."
+  },
   "date": "2026-10-04",
   "decisions": [
     {
@@ -11,19 +21,19 @@
       "text": "The frontier slot's repair arms move from DeepInfra to NextBit, with the committed config deepseek-v4-pro-0813_nextbit_enabled-false, for every frontier arm run still to be sent: the test round's, and the dev round's if it is re-run, which is OD6. Every other slot is unchanged, and the counted first turns stay the answers DeepInfra served."
     },
     {
-      "by": "default_taken",
+      "by": "default_confirmed",
       "id": "OD6",
-      "text": "The dev frontier round is re-run on NextBit before the test round, as new runs whose ids carry the tag nb after the arm tag. The owner was told and did not object; the owner's paid dev command is the confirmation."
+      "text": "The dev frontier round is re-run on NextBit before the test round, as new runs whose ids carry the tag nb after the arm tag, and the six DeepInfra runs are reported not run and kept as evidence only. Taken by the maintainer on 2026-10-04 as a default, of which the owner was told; confirmed by the owner on 2026-10-05."
     },
     {
-      "by": "default_taken",
+      "by": "default_confirmed",
       "id": "OD7",
-      "text": "On NextBit an arm run keeps the protocol's outage rule: one re-run from scratch, -nb-r2 on dev and -r2 on test. A second outage is not run, and no arm moves again."
+      "text": "On NextBit an arm run keeps the protocol's outage rule: one re-run from scratch, -nb-r2 on dev and -r2 on test. A second outage is not run, and no arm moves again. Taken by the maintainer on 2026-10-04 as a default, of which the owner was told; confirmed by the owner on 2026-10-05."
     },
     {
-      "by": "default_taken",
+      "by": "default_confirmed",
       "id": "OD8",
-      "text": "The test frontier arms keep their registered ids, which no request has used."
+      "text": "The test frontier arms keep their registered ids, which no request has used, and change only their config to NextBit. Taken by the maintainer on 2026-10-04 as a default, of which the owner was told; confirmed by the owner on 2026-10-05."
     }
   ],
   "evidence": {
@@ -68,9 +78,21 @@
       },
       "base_run": "dev-deepseek-v4-pro-0813-2026-09-26",
       "decided_by": [
-        "OD5",
-        "OD6",
-        "OD7"
+        {
+          "by": "owner",
+          "date": "2026-10-04",
+          "id": "OD5"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD6"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD7"
+        }
       ],
       "replaced_runs": [
         "dev-deepseek-v4-pro-0813-res-2026-09-26",
@@ -99,9 +121,21 @@
       },
       "base_run": "test-deepseek-v4-pro-0813-2026-09-26",
       "decided_by": [
-        "OD5",
-        "OD7",
-        "OD8"
+        {
+          "by": "owner",
+          "date": "2026-10-04",
+          "id": "OD5"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD7"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD8"
+        }
       ],
       "replaced_runs": [],
       "tag": null
@@ -123,7 +157,7 @@
       "why": "it would leave the frontier slot without a repair measurement while its registered fallback config, with the same fp8 label and seed support, is committed"
     }
   ],
-  "schema": "repair-arms-ruling/1.0",
+  "schema": "repair-arms-ruling/1.1",
   "to_config": "docs/decisions/evidence/bakeoff/configs/deepseek-v4-pro-0813_nextbit_enabled-false.json",
   "to_config_sha256": "2942954e0c6896c29fe075f20cb9d0ce4a885d9ac72af8396022723b67de58ce",
   "unchanged": [

@@ -16,8 +16,9 @@ one before has a final state, as the note orders them. A row's run id is
 the pass's with ``-res``, ``-bare`` or ``-cx`` before its date. Its config
 is the committed bake-off config the pass sent, checked against the
 pass's run manifest, unless the pass has a provider move in
-``PROVIDER_MOVES`` (the owner's ruling OD5 of 2026-10-04 in the note).
-A moved pass's arm runs send the move's committed config, which may
+``PROVIDER_MOVES`` (the owner's ruling OD5 of 2026-10-04 and the
+maintainer defaults OD6 to OD8 the owner confirmed on 2026-10-05, in the
+note). A moved pass's arm runs send the move's committed config, which may
 differ from the pass's only in provider order and prices, and a move
 with a tag puts it after the arm tag: the dev frontier rows are
 ``-res-nb``, ``-bare-nb`` and ``-cx-nb``, and the test frontier rows
@@ -243,10 +244,11 @@ class Move(NamedTuple):
 
 
 MOVE_CONFIG = f"{db.CONFIG_DIR}/deepseek-v4-pro-0813_nextbit_enabled-false.json"
-# The owner's ruling OD5 of 2026-10-04 and the defaults OD6 to OD8 in the
-# note: the frontier slot's arm runs move from DeepInfra to NextBit, under
-# new ids on dev and the registered ids on test. They are the same moves
-# as dfilterforge.repair_round.PROVIDER_MOVES, which a test ties.
+# The owner's ruling OD5 of 2026-10-04 and the maintainer defaults OD6 to
+# OD8, which the owner confirmed on 2026-10-05, in the note: the frontier
+# slot's arm runs move from DeepInfra to NextBit, under new ids on dev and
+# the registered ids on test. They are the same moves as
+# dfilterforge.repair_round.PROVIDER_MOVES, which a test ties.
 PROVIDER_MOVES: dict[str, Move] = {
     "dev-deepseek-v4-pro-0813-2026-09-26": Move(MOVE_CONFIG, "nb"),
     "test-deepseek-v4-pro-0813-2026-09-26": Move(MOVE_CONFIG, None),
