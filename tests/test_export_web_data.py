@@ -2883,35 +2883,95 @@ def test_scored_repair_results_stop_the_export_until_step_5_is_built(
     assert path in str(caught.value)
 
 
-def test_a_scored_anchor_round_stops_the_export_in_the_test_phase(
-    fixture: Fixture,
-) -> None:
-    # The dev anchor is no test pool run, but the methodology page shows its
-    # not_measured repair_at_1, which the scorer leaves at not_run, as "not
-    # measured yet"; a scored round beside it would make that false.
-    _settled(fixture)
-    root = fixture.build()
-    documents = _documents(exporter.export(root, "abc1234"))
-    assert documents["reel.json"]["phase"] == "test"
-    assert documents["methodology.json"]["not_measured"] == [
+def _statuses(run_id: str) -> list[Document]:
+    """The methodology's not_measured list as a run's summary gives it."""
+    return [
         {
             "key": "repair_at_1",
             "value": {
                 "t": "not_run",
                 "src": [
                     "ptr",
-                    f"docs/results/{_ANCHOR}/scored/summary.json",
+                    f"docs/results/{run_id}/scored/summary.json",
                     "/not_measured/repair_at_1",
                 ],
             },
         }
     ]
 
-    path = f"docs/results/{_ANCHOR}/repair/summary.json"
+
+def _methodology(root: Path) -> Document:
+    repo = exporter.Repo(root)
+    return exporter.build_methodology(repo, exporter.select(repo))
+
+
+@pytest.mark.parametrize(
+    ("stopped", "cited"),
+    [
+        ((), _PASS_A),
+        # Without pass A the small slot's winner leads the pool.
+        ((_PASS_A,), _TEST_SMALL),
+        # Only pass B is published: no pool run reports a test round.
+        ((_PASS_A, _TEST_SMALL, _TEST_MID, _TEST_FRONT), None),
+    ],
+)
+def test_the_test_phase_methodology_cites_the_first_pool_run(
+    fixture: Fixture, stopped: tuple[str, ...], cited: str | None
+) -> None:
+    # The page's repair line describes the round the site reports, which in
+    # the test phase is the test round, so a scored dev round of the anchor
+    # stops nothing.
+    _settled(fixture)
+    registration = _registration()
+    for run_id in stopped:
+        _stop(registration, run_id, "outage")
+    _register(
+        fixture,
+        registration,
+        *(run_id for _, run_id in _PLANNED if run_id not in stopped),
+    )
+    root = fixture.build()
+    _write(
+        root / f"docs/results/{_ANCHOR}/repair/summary.json",
+        {"schema": "repair-summary/1.0"},
+    )
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    assert documents["reel.json"]["phase"] == "test"
+    methodology = documents["methodology.json"]
+    assert methodology["not_measured"] == (
+        [] if cited is None else _statuses(cited)
+    )
+    # Everything else stays the dev anchor's.
+    assert methodology["bootstrap"]["seed"]["src"] == [
+        "ptr",
+        f"docs/results/{_ANCHOR}/scored/summary.json",
+        "/bootstrap/seed",
+    ]
+    check_sources(root, {"methodology.json": methodology})
+
+
+@pytest.mark.parametrize(
+    ("phase", "cited"), [("test", _PASS_A), ("dev", _ANCHOR)]
+)
+def test_a_scored_round_of_the_cited_run_stops_the_methodology(
+    fixture: Fixture, phase: str, cited: str
+) -> None:
+    # The scorer leaves the cited run's repair_at_1 at not_run after a
+    # round, so the page would call a measured round not measured yet. The
+    # Reel's pool guard stops the export for the same file; the methodology
+    # does not lean on it.
+    if phase == "test":
+        _settled(fixture)
+    root = fixture.build()
+    assert _methodology(root)["not_measured"] == _statuses(cited)
+
+    path = f"docs/results/{cited}/repair/summary.json"
     _write(root / path, {"schema": "repair-summary/1.0"})
 
     with pytest.raises(exporter.ContractError) as caught:
-        exporter.export(root, "abc1234")
+        _methodology(root)
     assert caught.value.code == "repair_unread"
     assert path in str(caught.value)
 
@@ -2927,8 +2987,10 @@ def test_repair_results_outside_the_pool_leave_the_export_alone(
         # Pass B is never pooled.
         f"docs/results/{_PASS_B}/repair/summary.json",
         f"docs/results/test-anchor-rerun-cx-{_DATE}/scored/summary.json",
-        # A dev pass and the dev split, in the test phase.
+        # Dev passes and the dev split, in the test phase; the methodology
+        # cites pass A, not the anchor.
         f"docs/results/{_MID}/repair/summary.json",
+        f"docs/results/{_ANCHOR}/repair/summary.json",
         "docs/results/repair-pool/dev.json",
     ):
         _write(root / path, {"schema": "repair-summary/1.0"})
@@ -3036,6 +3098,10 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
         "test-qwen3-32b-passb-2026-09-26",
     )
     assert board["test"]["not_run"] == []
+    # The repair line describes the test round, so it cites pass A.
+    assert documents["methodology.json"]["not_measured"] == _statuses(
+        "test-qwen3-32b-2026-09-26"
+    )
     assert check_sources(_ROOT, documents) > 150_000
 
 

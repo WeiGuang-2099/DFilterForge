@@ -72,6 +72,14 @@ not built: the export stops instead (``repair_unread``) once a pool run's
 repair round summary or scored -cx arm run, or the pool split's
 repair-pool file, is committed.
 
+methodology.json takes everything from the dev anchor but its not_measured
+statuses, which describe the repair round the site reports: in the test
+phase they come from the first test pool run's summary, pass A whenever it
+is published, and are empty with an empty pool; else from the dev
+anchor's. A repair round summary of that run stops the export
+(``repair_unread``), since the scorer keeps ``repair_at_1: not_run`` after
+a round.
+
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
 the same files and flags give the same bytes.
@@ -2042,29 +2050,59 @@ def build_case(
     }
 
 
-def build_methodology(repo: Repo, selection: Selection) -> Document:
-    """Conditions, bootstrap, environment, gates and what is unmeasured.
+def repair_status_run(selection: Selection) -> Run | None:
+    """The run whose not_measured the methodology page shows.
 
-    The page shows the anchor's not_measured keys as "not measured yet".
-    The scorer keeps writing ``repair_at_1: not_run`` there after a repair
-    round, whose numbers go to the pass's repair/summary.json instead
-    (docs/decisions/repair-round.md), so that summary's existence stops the
-    export (``repair_unread``) rather than let the page call a measured
-    round unmeasured.
+    The page's repair line describes the repair round the site reports: in
+    the test phase the test round, so the first test pool run, which is
+    pass A whenever pass A is published, and no run when the pool is empty;
+    else the dev round, so the dev anchor.
     """
-    anchor = selection.rows[0].run
-    repair = f"{RESULTS}/{anchor.run_id}/repair/summary.json"
+    if not selection.test_phase:
+        return selection.rows[0].run
+    return selection.pool[0].run if selection.pool else None
+
+
+def _not_measured(repo: Repo, run: Run | None) -> list[Node]:
+    """A run's not_measured statuses by key; none without a run.
+
+    The page shows each as "not measured yet". The scorer keeps writing
+    ``repair_at_1: not_run`` there after a repair round, whose numbers go to
+    the pass's repair/summary.json instead (docs/decisions/repair-round.md),
+    so that summary's existence stops the export (``repair_unread``) rather
+    than let the page call a measured round unmeasured.
+    """
+    if run is None:
+        return []
+    repair = f"{RESULTS}/{run.run_id}/repair/summary.json"
     if repo.exists(repair):
         raise ContractError(
             "repair_unread",
-            f"{repair} holds a scored repair round, which the anchor's "
-            "not_measured would still call not measured",
+            f"{repair} holds a scored repair round, which the not_measured "
+            f"of {run.summary} would still call not measured",
         )
+    statuses = _obj(
+        repo.resolve(ptr(run.summary, "not_measured")), "not_measured"
+    )
+    return [
+        {
+            "key": key,
+            "value": repo.t(ptr(run.summary, "not_measured", key)),
+        }
+        for key in sorted(statuses)
+    ]
+
+
+def build_methodology(repo: Repo, selection: Selection) -> Document:
+    """Conditions, bootstrap, environment, gates and what is unmeasured.
+
+    Everything but the not_measured statuses comes from the dev anchor, in
+    either phase; those come from ``repair_status_run``.
+    """
+    anchor = selection.rows[0].run
+    not_measured = _not_measured(repo, repair_status_run(selection))
     frames = _arr(repo.resolve(ptr(CAPTURES, "probes", 0, "frames")), "frames")
     probes = _arr(repo.resolve(ptr(CAPTURES, "probes")), "probes")
-    not_measured = _obj(
-        repo.resolve(ptr(anchor.summary, "not_measured")), "not_measured"
-    )
     return {
         "schema": "web-methodology/1.0",
         "conditions": [
@@ -2140,13 +2178,7 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
                 ("answers_flagged", ("committed_answers", "flagged", "full")),
             )
         },
-        "not_measured": [
-            {
-                "key": key,
-                "value": repo.t(ptr(anchor.summary, "not_measured", key)),
-            }
-            for key in sorted(not_measured)
-        ],
+        "not_measured": not_measured,
         "admitted_prepares": repo.listed(FREEZE, "admitted_prepares"),
     }
 

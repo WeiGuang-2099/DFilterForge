@@ -1,4 +1,4 @@
-import {existsSync, readdirSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
 import {expect, test} from '@playwright/test';
@@ -411,6 +411,25 @@ test('the committed registry shows and pools the published test runs', () => {
   });
   expect(resolver.executedRoutes()).toHaveLength(1854);
   expect(resolver.caseIds()).toHaveLength(76);
+  // The methodology's repair line describes the test round: pass A's.
+  expect(resolver.repairStatusSummary()).toBe(
+    'docs/results/test-qwen3-32b-2026-09-26/scored/summary.json',
+  );
+});
+
+test('the methodology page shows the repair status of the run the phase names', () => {
+  // A status the page takes from another summary would pass the value
+  // checks: every summary still says not_run after a scored round. The
+  // resolver throws, as the exporter stops, once the named run's round is
+  // scored. The server-rendered HTML holds the hydrated page's sources.
+  const html = readFileSync(path.join(OUT, 'methodology', 'index.html'), 'utf8');
+  const files = staticSources(html)
+    .map((source): unknown => JSON.parse(source))
+    .filter(isNotMeasured)
+    .map((source) => (source as readonly unknown[])[1]);
+  const summary = resolver.repairStatusSummary();
+
+  expect([...new Set(files)]).toEqual(summary === null ? [] : [summary]);
 });
 
 test('model text is cut only at the contract size and only where the exporter cuts it', () => {

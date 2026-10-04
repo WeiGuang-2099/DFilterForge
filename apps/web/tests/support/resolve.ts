@@ -6,8 +6,9 @@
  * code with scripts/export_web_data.py: the seven ops are written again here
  * from their definitions, over the same allowed roots, so a defect in either
  * implementation shows up as a mismatch instead of agreeing with itself. The
- * shown runs and the Disproof Reel's pool and pick are written again the same
- * way, from rule reel-v1 in docs/decisions/disproof-reel.md and the test-run
+ * shown runs, the Disproof Reel's pool and pick, and the run whose summary
+ * the methodology page's repair line cites are written again the same way,
+ * from rule reel-v1 in docs/decisions/disproof-reel.md and the test-run
  * registry described in docs/decisions/test-runs.md.
  *
  * Ops (paths are relative to the repository root):
@@ -782,6 +783,32 @@ export class Resolver {
         refuse(`${file} holds scored repair results, which reel-v1 step 5 would show`);
       }
     }
+  }
+
+  /**
+   * Names the scored summary whose not_measured statuses the methodology
+   * page shows. Its repair line describes the repair round the site
+   * reports: in the test phase the test round, so the first test pool run's
+   * summary, pass A's whenever pass A is published, and none with an empty
+   * pool; otherwise the dev round, so the dev anchor's. Throws, as the
+   * exporter stops, when that run's repair/summary.json exists: the scorer
+   * keeps not_measured.repair_at_1 at not_run after a round, so the page
+   * would call a measured round not measured yet.
+   */
+  repairStatusSummary(): string | null {
+    const settled = this.settled();
+    const runId =
+      settled === null
+        ? string(record(this.ranking()['anchor'], 'anchor')['run_id'], 'anchor run')
+        : this.testPool(settled).at(0);
+    if (runId === undefined) {
+      return null;
+    }
+    const repair = `docs/results/${runId}/repair/summary.json`;
+    if (this.exists(repair)) {
+      refuse(`${repair} holds a scored repair round, which the methodology would call unmeasured`);
+    }
+    return `docs/results/${runId}/scored/summary.json`;
   }
 
   /**

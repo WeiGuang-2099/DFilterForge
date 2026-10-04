@@ -9,7 +9,8 @@ import {Resolver} from './support/resolve';
 // The resolver reads the test-run registry (test-runs/1.0) the way the
 // exporter does, from docs/decisions/disproof-reel.md and
 // docs/decisions/test-runs.md: which test runs are shown, when the test
-// phase starts and which runs the Reel pools. Each case builds a scratch
+// phase starts, which runs the Reel pools and whose summary the methodology
+// page's repair line cites. Each case builds a scratch
 // tree with a bake-off ranking, the ruling and a registry; the exporter's
 // fixture tests in tests/test_export_web_data.py cover the same cases.
 
@@ -727,6 +728,62 @@ test('repair results outside the pool leave the Reel alone', () => {
 
   expect(new Resolver(root).reelPool()).toEqual([PASS_A, SMALL, MID, FRONTIER]);
 });
+
+// The methodology page's repair line describes the repair round the site
+// reports, as the exporter's methodology.json does: the test round in the
+// test phase, from the first test pool run's summary, so a scored dev round
+// of the anchor stops nothing there.
+const CITED: readonly {
+  readonly name: string;
+  readonly stopped: readonly string[];
+  readonly cited: string | null;
+}[] = [
+  {name: 'pass A', stopped: [], cited: PASS_A},
+  {name: 'the small winner without pass A', stopped: [PASS_A], cited: SMALL},
+  {name: 'no run with only pass B published', stopped: [PASS_A, SMALL, MID, FRONTIER], cited: null},
+];
+
+for (const {name, stopped, cited} of CITED) {
+  test(`the test-phase methodology cites ${name}, whatever the anchor's round`, () => {
+    const runs = registry();
+    for (const runId of stopped) {
+      stop(runs, runId, 'outage');
+    }
+    commit(runs);
+    put(`docs/results/${ANCHOR}/repair/summary.json`, {schema: 'repair-summary/1.0'});
+
+    expect(new Resolver(root).repairStatusSummary()).toBe(
+      cited === null ? null : `docs/results/${cited}/scored/summary.json`,
+    );
+  });
+}
+
+// In the dev phase the line describes the dev round, from the anchor. A
+// scored round of the cited run stops it in either phase: the scorer keeps
+// its repair_at_1 at not_run after a round.
+for (const {phase, cited} of [
+  {phase: 'test', cited: PASS_A},
+  {phase: 'dev', cited: ANCHOR},
+]) {
+  test(`a scored round of the ${phase}-phase methodology's run stops it`, () => {
+    const runs = registry();
+    if (phase === 'dev') {
+      at(runs, FRONTIER).status = 'registered';
+    }
+    commit(runs);
+
+    expect(new Resolver(root).repairStatusSummary()).toBe(
+      `docs/results/${cited}/scored/summary.json`,
+    );
+
+    const file = `docs/results/${cited}/repair/summary.json`;
+    put(file, {schema: 'repair-summary/1.0'});
+
+    expect(() => new Resolver(root).repairStatusSummary()).toThrow(
+      `${file} holds a scored repair round`,
+    );
+  });
+}
 
 test('the Reel picks the fewest frames, then the earlier pool run and lower item, C4 first', () => {
   // With no registry the pool is the anchor and the ranking's provisional
