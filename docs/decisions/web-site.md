@@ -294,7 +294,12 @@ On the web side, `lib/data.ts` checks every document's schema id, closed key
 sets and source ops before a page renders.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
-  `data-fmt`. `<Str>` renders a string the same way, without the link.
+  `data-fmt`. It accepts only the kinds that format a number, a boolean or
+  a list of integers (`int`, `num`, `bool`, `ints`); the string-only kinds
+  `text`, `unmeasured` and `split` are excluded from its `kind` prop, and
+  `tests/fmt.spec.ts` fails typecheck when a kind added to `lib/fmt.ts` is
+  neither excluded there nor listed with a sample value in the spec.
+  `<Str>` renders a string the same way, without the link.
   `<Term>` renders a reviewed name that holds a digit; the list in
   `lib/terms.ts` is `IPv4` and `SHA-256`. `<Split>` renders a run's split
   as the word that names its round, with `data-fmt="split"`: `test` reads
@@ -394,7 +399,7 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged) |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged) |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured

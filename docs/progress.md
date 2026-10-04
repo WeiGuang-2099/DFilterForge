@@ -1992,3 +1992,69 @@ the worktree's code mounted read-only and no network.
   - Not run: the Compose `web` service, Docker `--target data` and the
     rest of the CI python job.
 - Still open: the items of the sections above. B1 is now applied.
+
+## Web data: `<Num>` refuses the split kind, 2026-10-04, branch web-data
+
+- Why: a review of dfeaf11 found that it added the string-only kind
+  `split` to `FMT_KINDS` without adding it to the exclusion on `<Num>`'s
+  `kind` prop, which 69d237e had widened for `unmeasured`. `<Num>` takes a
+  `NumNode`, whose value is a number, a boolean or a list of integers, and
+  fmt's split kind throws on every one of those. So `<Num kind="split">`
+  passed `pnpm web:typecheck` and `pnpm web:lint` and would have failed
+  only in `next build`. No page used it: the only kind passed to `<Num>` on
+  a page is `int`. Three reviewers confirmed it with their own tsc probes.
+- 19dff88 makes the change in one commit:
+  - `lib/sourced.tsx`: the exclusion is now `text`, `unmeasured` and
+    `split`.
+  - `tests/fmt.spec.ts`: `NUM_KIND_SAMPLES` holds one `NumNode` value per
+    kind `<Num>` accepts, typed as a record over that kind type, which the
+    compiler checks both ways. A kind added to `FMT_KINDS` fails typecheck
+    there until it is listed or excluded on `<Num>`. A new test checks the
+    runtime half: each listed kind formats its sample, and fmt refuses
+    every sample under `text`, `unmeasured` and `split`.
+- Proof:
+  - The new spec before the fix: `pnpm web:typecheck` exits 2 with TS2741,
+    `split` missing from the record.
+  - The reviewers' probe after the fix: `<Num kind="split">` fails with
+    TS2322, not assignable to `"int" | "num" | "bool" | "ints"`. The
+    control, with `@ts-expect-error` on both `split` and `unmeasured`,
+    exits 0.
+  - Mutants, each applied to the worktree's files and restored byte for
+    byte, run with tsc and the formatter spec:
+    - The exclusion reverted: typecheck fails (TS2741). All 16 formatter
+      tests pass, since the runtime cannot see types, which is why the
+      record is typed.
+    - A numeric kind `count` added to fmt and left out of the record:
+      typecheck fails (TS2741). Two tests fail, the kinds list and the new
+      test.
+    - A string-only kind `role` added and not excluded: typecheck fails
+      (TS2741). The same two tests fail.
+    - `role` listed in the record with a number sample: typecheck passes,
+      and the same two tests fail.
+    - `num` excluded on `<Num>` and its sample removed: typecheck passes,
+      and the new test fails.
+    - `num` excluded with its sample kept: typecheck fails (TS2353, excess
+      property).
+- Checks at 19dff88:
+  - `pnpm web:typecheck` and `pnpm web:lint` exit 0.
+  - Docker `--target out`: 29 files and 924,010 bytes, the same sizes as
+    at dfeaf11. `methodology/index.html` is 108,305 bytes with 139 sourced
+    values. `next build`'s TypeScript step, which checks the specs, passes.
+  - Playwright on that build: 153 passed in 11.4 s on two workers (16
+    formatter, the rest unchanged).
+  - The CI python job's four web steps, run in `dfilterforge-test:0.1.0`
+    (created 2026-09-26, not rebuilt) with the worktree's code mounted
+    read-only, under Compose project `dfilterforge-webcheck`:
+    - pylint rates 10.00/10 (4 s).
+    - The evidence check exits 0 with 480 frames and 8 probes (3 s).
+    - The exporter and evidence tests give 180 passed (80 s).
+    - Two exports compare equal with `diff -r`: 1,935 files and
+      27,411,082 bytes (38 s).
+  - Not run: host pytest and the Python static checks (no Python changed),
+    the Compose `web` service and Docker `--target data`.
+- Docker's local exporter does not clear its destination. A first build
+  into the worktree's existing `apps/web/out` left three manifest files
+  from the dfeaf11 build's old build id, 32 files in all. The sizes above
+  come from a build into an emptied `apps/web/out`, as on a fresh CI
+  checkout.
+- Still open: the items of the sections above.
