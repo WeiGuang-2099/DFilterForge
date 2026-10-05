@@ -193,8 +193,13 @@ arm, beside its silent-wrong and invalid parts. Per model, counterexample
 against bare (primary), counterexample against resample and bare against
 resample are compared on each case's repaired share by discordant cases, fewer
 than 10 inconclusive; the same three over the four models, each drawn case
-bringing every model's items, are secondary. The A/A noise reading covers only
-the condition comparisons.
+bringing every model's items, are secondary, and their unit is the case too
+(owner ruling OD9 of 2026-10-05 in the [repair
+note](decisions/repair-round.md)): a case is discordant when the two arms
+repaired a different number of its items, the four models' taken together, and
+it counts for the arm that repaired more, never once per model. The owner ruled
+it after seeing the dev pool and before any test repair prompt was prepared.
+The A/A noise reading covers only the condition comparisons.
 
 Arm runs are named after their pass's run id with `-cx`, `-bare` or `-res`
 before its date (`test-qwen3-32b-cx-2026-09-26`); an outage is re-run once

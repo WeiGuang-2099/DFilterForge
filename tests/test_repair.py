@@ -97,6 +97,7 @@ from dfilterforge.repair_summary import ArmResult
 from dfilterforge.repair_summary import ARMS
 from dfilterforge.repair_summary import pool_summaries
 from dfilterforge.repair_summary import RepairCaseV1
+from dfilterforge.repair_summary import RepairItemOutcomesV1
 from dfilterforge.repair_summary import RepairPoolV1
 from dfilterforge.repair_summary import RepairSummaryV1
 from dfilterforge.repair_summary import RoundBase
@@ -2797,8 +2798,11 @@ def test_pooled_repair_at_1_sums_every_models_cells(
         draw_indices(12),
         _DEV_READY_CASES,
     )
-    # Cells: model a is 3 and 1, models b and c 3 and 0 each, so ten
-    # discordant cells make counterexample - bare conclusive.
+    # Discordance counts cases, every model's items on a case together
+    # (OD9). Counterexample repairs one more item than bare on
+    # udp-expiring-ttl in each of the three models: three discordant cells
+    # but one case. Model a is 3 and 1 by cells and models b and c 3 and 0
+    # each, ten cells that would read conclusive; by cases it is 3 and 1.
     assert [
         (
             item.first,
@@ -2812,20 +2816,93 @@ def test_pooled_repair_at_1_sums_every_models_cells(
         )
         for item in pooled.comparisons
     ] == [
-        ("counterexample", "bare", 0.47619, 9, 1, 10, False, "cells"),
-        ("counterexample", "resample", 0.761905, 14, 0, 14, False, "cells"),
-        ("bare", "resample", 0.285714, 6, 0, 6, True, "cells"),
+        ("counterexample", "bare", 0.47619, 3, 1, 4, True, "cases"),
+        ("counterexample", "resample", 0.761905, 5, 0, 5, True, "cases"),
+        ("bare", "resample", 0.285714, 2, 0, 2, True, "cases"),
     ]
-    # One model pooled alone is its own round.
+    # One model pooled alone is its own round, comparisons and all.
     assert [arm.repair_at_1 for arm in alone.arms] == [
         arm.repair_at_1 for arm in summary.arms
     ]
-    assert [item.difference for item in alone.comparisons] == [
-        item.difference for item in summary.comparisons
-    ]
+    assert alone.comparisons == summary.comparisons
     text = (results / "repair-pool" / "dev.md").read_text("utf-8")
     assert "| counterexample - bare | 0.476 [" in text
-    assert "| conclusive |" in text
+    assert "| conclusive |" not in text
+    assert "inconclusive (fewer than 10 discordant cases)" in text
+    assert "discordant cells" not in text
+
+
+def _arm_outcomes(
+    summary: RepairSummaryV1,
+    outcomes: Mapping[str, tuple[OutcomeV1, OutcomeV1]],
+) -> tuple[RepairItemOutcomesV1, ...]:
+    """The summary's items with new bare and counterexample outcomes."""
+    return tuple(
+        item.model_copy(
+            update={
+                "outcomes": {
+                    **item.outcomes,
+                    "bare": outcomes[item.item_id][0],
+                    "counterexample": outcomes[item.item_id][1],
+                }
+            }
+        )
+        for item in summary.items
+    )
+
+
+def test_a_pool_counts_each_case_once_over_every_models_items(
+    tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
+) -> None:
+    base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
+    summary = _summary(base_dir)
+    # Counterexample minus bare, in items repaired: model a is 0 on
+    # tcp-expiring-ttl, +1 on udp-expiring-ttl, ack-to-https and
+    # fin-or-dns-response, and -1 on dns-a-queries. Model b is 0, -1, +1,
+    # -2 and +1 there.
+    other = summary.model_copy(
+        update={
+            "base_run": "dev-model-b-2026-10-01",
+            "model_id": "vendor/model-b",
+            "items": _arm_outcomes(
+                summary,
+                {
+                    "mei-0001": (_SE, _SE),
+                    "mei-0002": (_SE, _SE),
+                    "mei-0003": (_SE, _SW),
+                    "mei-0005": (_SW, _SE),
+                    "mei-0007": (_INV, _SE),
+                    "mei-0009": (_SE, _SW),
+                    "mei-0010": (_SE, _SW),
+                },
+            ),
+        }
+    )
+
+    pooled = pool_summaries("dev", [(summary, "0" * 64), (other, "1" * 64)])
+    alone = pool_summaries("dev", [(other, "1" * 64)])
+
+    # Alone, model b is 2 and 2. By cells the pair would be 5 and 3; by
+    # cases the two models cancel on udp-expiring-ttl and dns-a-queries,
+    # add to one case on ack-to-https, and fin-or-dns-response, +1 and -2,
+    # counts once for bare, which repaired more of its items.
+    assert (
+        alone.comparisons[0].first_better,
+        alone.comparisons[0].second_better,
+    ) == (2, 2)
+    primary = pooled.comparisons[0]
+    assert (primary.first, primary.second) == ("counterexample", "bare")
+    assert (
+        primary.first_better,
+        primary.second_better,
+        primary.discordant,
+        primary.inconclusive,
+        primary.unit,
+    ) == (1, 1, 2, True, "cases")
+    # The difference still sums each case's shares over the models:
+    # (2.5 - 1.5) + (2 - 2.5) repaired over 3.5 + 3.5 triggered.
+    assert primary.difference.value == 0.071429
 
 
 def test_the_cli_writes_and_checks_a_pool_from_the_bases_it_names(

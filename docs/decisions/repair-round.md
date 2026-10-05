@@ -132,6 +132,38 @@ They are kept as evidence in `evidence/repair-arms/<run id>/`, are never
 published, and are replaced by the NextBit runs above. The frontier dev
 round's summary is written from the NextBit runs.
 
+## Owner decisions, 2026-10-05
+
+The owner took one decision on 2026-10-05, OD9. It was decided after the
+owner had seen the dev pool and before any test repair prompt was prepared.
+The protocol's Repair section states its unit with this date, and Comparisons
+below records it.
+
+- **OD9, by the owner: the pooled comparisons count discordant cases.** The
+  pooled secondary comparison of the repair arms counts discordant cases, not
+  model-case cells. For each canonical case, all four models' triggered items
+  are taken together. The case is discordant for a pair of arms when the two
+  arms repaired a different number of its items, and it counts for the arm
+  that repaired more. Fewer than 10 discordant cases is inconclusive. The
+  bootstrap is unchanged: each drawn case brings every model's items. The
+  per-model comparisons are unchanged.
+  - The defect the dev round showed: `repair-pool` counted the pooled
+    discordance on model-case cells, one per model and case, while the
+    protocol compares the arms by discordant cases. The cell count was
+    written in 1c7df3c on 2026-10-02 and merged with `repair-arms` in
+    bff373c. The dev pool committed in e93c39f read counterexample - bare
+    (15 cells, 13 against 2) and counterexample - resample (16 cells, 15
+    against 1) as conclusive. By case they are 8 (6 against 2) and 7 (6
+    against 1), and bare - resample is 3 (3 against 0) where it was 5 cells.
+    All three are inconclusive.
+  - The alternative was to register the cell unit as the code had it. The
+    owner chose the case unit when shown both counts on dev. It is the more
+    conservative of the two readings.
+  - The correction is 890a358, which names the defect and OD9 and derives
+    `docs/results/repair-pool/dev.{json,md}` again.
+  - On dev only 9 of the 12 ready cases trigger in any model, so no pooled
+    dev comparison can reach 10 discordant cases.
+
 ## What the protocol registers
 
 This section is a reading aid. The protocol text is the rule.
@@ -283,6 +315,14 @@ denominator.
   The difference is repair@1(a) - repair@1(b), on the same vectors.
 - The same three pairs pooled over the four models are secondary. There,
   each drawn case brings every model's cells.
+
+  Amended 2026-10-05 (OD9). As registered, this item named no unit for the
+  pooled discordance, and `repair-pool` counted model-case cells. The pooled
+  pairs are compared by discordant cases too, never by model-case cells. A
+  case is discordant when the two arms repaired a different number of its
+  items, the four models' taken together, and it counts for the arm that
+  repaired more. Fewer than 10 discordant cases is inconclusive. The
+  bootstrap and the per-model comparisons are unchanged.
 
 **Diagnostics** are reported but never count as outcomes:
 - transitions from pass outcome to arm outcome;
@@ -773,7 +813,8 @@ Before, measured 2026-10-01:
 - **Triggered items.** The dev passes hold the 36 triggered items above, and
   the test passes the 75 counted on 2026-10-02.
 
-After: not measured. The dev round fills it in: per model and arm, the
+After, dev: measured on 2026-10-04 and 2026-10-05, below. After, test: not
+measured. As registered, the dev round fills it in: per model and arm, the
 repaired items, repair@1 with its strata, the transitions, `answer_unchanged`,
 `card_value_reuse` and spend, each linked to its `repair/summary.json`.
 
@@ -782,10 +823,103 @@ model's After from its arm runs. The frontier After is measured on NextBit,
 from the runs in the table under Owner decisions, 2026-10-04; the six
 DeepInfra runs give it no number.
 
+**After, dev, filled in 2026-10-05.** Every figure below is read from
+committed files: the four round summaries, the dev pool, and the arm runs'
+manifests and attempt logs. These are dev numbers on 12
+ready cases: every comparison is inconclusive, as Limits expected, so none
+of them is a finding.
+
+- **Requests.** The 12 dev arm runs are complete. Their 108 requests, the
+  36 triggered items in each of 3 arms, were all answered with HTTP 200. The
+  only other attempts were the 8B resample's 4 HTTP 429, each retried. No
+  test repair request has been sent.
+  - The anchor, 8B and 120B runs were sent on 2026-10-04 from bff373c and
+    served by DeepInfra, DeepInfra and Novita. They are committed in
+    8a6e90d, d070b56 and 389c8ed.
+  - The frontier runs are the three `-nb` runs, sent on 2026-10-05 from
+    60d2421. All 33 answers were served by NextBit on the first attempt,
+    with finish reason stop. They are committed in d32efb3. The six
+    DeepInfra runs give no number (OD6).
+- **Second turns are scored.** The 72 bare and counterexample answers were
+  scored as C4 runs with their first two messages rebuilt, and
+  `repair --check` checks the rest of each prompt.
+- **Every dev pass has a repair number** in its `repair/summary.json`. No
+  arm is recorded as not run, and no base outcome changed since its plan.
+
+repair@1 per model and arm, with the bootstrap's 2.5 and 97.5 percentiles
+(1,000 case-level resamples, seed 17). The triggered items per pass are in
+the dev passes table above. A stratum's interval uses only the resamples
+that drew one of its items: the silent-wrong part's rests on 993 to 1,000
+of them, the invalid part's on 651 to 903, and the anchor's repair@1 on 999
+(`resamples_used` in each summary). Card value reuse applies to the
+counterexample arm only. Each `summary.md` beside the linked file holds the
+per-item outcomes and the full transition table.
+
+| Model | Arm | repair@1 | Silent-wrong part | Invalid part | Repaired | Answer unchanged | Card value reuse | Charged USD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| [anchor](../results/dev-qwen3-32b-2026-09-26/repair/summary.json) | resample | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0/10 | 7 | - | 0.001543 |
+| [anchor](../results/dev-qwen3-32b-2026-09-26/repair/summary.json) | bare | 0.200 [0.000, 0.417] | 0.167 [0.000, 0.500] | 0.250 [0.000, 0.500] | 2/10 | 2 | - | 0.001779 |
+| [anchor](../results/dev-qwen3-32b-2026-09-26/repair/summary.json) | counterexample | 0.400 [0.143, 0.750] | 0.500 [0.125, 1.000] | 0.250 [0.000, 0.500] | 4/10 | 1 | 2 | 0.001937 |
+| [8B](../results/dev-qwen3.5-9b-2026-09-26/repair/summary.json) | resample | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0/7 | 2 | - | 0.001224 |
+| [8B](../results/dev-qwen3.5-9b-2026-09-26/repair/summary.json) | bare | 0.143 [0.000, 0.500] | 0.200 [0.000, 0.800] | 0.000 [0.000, 0.000] | 1/7 | 2 | - | 0.001761 |
+| [8B](../results/dev-qwen3.5-9b-2026-09-26/repair/summary.json) | counterexample | 0.429 [0.000, 0.818] | 0.600 [0.000, 1.000] | 0.000 [0.000, 0.000] | 3/7 | 0 | 3 | 0.001883 |
+| [120B](../results/dev-qwen3.5-122b-a10b-2026-09-26/repair/summary.json) | resample | 0.125 [0.000, 0.400] | 0.143 [0.000, 0.444] | 0.000 [0.000, 0.000] | 1/8 | 5 | - | 0.011174 |
+| [120B](../results/dev-qwen3.5-122b-a10b-2026-09-26/repair/summary.json) | bare | 0.250 [0.000, 0.600] | 0.286 [0.000, 0.667] | 0.000 [0.000, 0.000] | 2/8 | 2 | - | 0.012068 |
+| [120B](../results/dev-qwen3.5-122b-a10b-2026-09-26/repair/summary.json) | counterexample | 0.625 [0.250, 1.000] | 0.714 [0.333, 1.000] | 0.000 [0.000, 0.000] | 5/8 | 1 | 3 | 0.012453 |
+| [frontier](../results/dev-deepseek-v4-pro-0813-2026-09-26/repair/summary.json) | resample | 0.182 [0.000, 0.444] | 0.222 [0.000, 0.500] | 0.000 [0.000, 0.000] | 2/11 | 0 | - | 0.024761 |
+| [frontier](../results/dev-deepseek-v4-pro-0813-2026-09-26/repair/summary.json) | bare | 0.091 [0.000, 0.333] | 0.111 [0.000, 0.400] | 0.000 [0.000, 0.000] | 1/11 | 2 | - | 0.026496 |
+| [frontier](../results/dev-deepseek-v4-pro-0813-2026-09-26/repair/summary.json) | counterexample | 0.636 [0.333, 1.000] | 0.778 [0.500, 1.000] | 0.000 [0.000, 0.000] | 7/11 | 1 | 3 | 0.027363 |
+
+- **Per model.** The counterexample arm repaired the most items in each of
+  the four models. Bare repaired more than resample in three; the
+  frontier's resample repaired 2 to bare's 1. None of the 12 per-model
+  comparisons is conclusive: each has 1 to 6 discordant cases.
+- **Transitions,** summed over the four models:
+  - resample: 3 strong exact, all from silent-wrong; 24 silent-wrong and 9
+    invalid. 2 silent-wrong answers became invalid, and 2 invalid ones
+    became silent-wrong.
+  - bare: 6 strong exact, 5 from silent-wrong and 1 from invalid; 18
+    silent-wrong, 10 invalid and 2 malformed. Of the silent-wrong answers,
+    4 became invalid and 2 malformed.
+  - counterexample: 19 strong exact, 18 from silent-wrong and 1 from
+    invalid; 10 silent-wrong, 3 invalid, 3 malformed and 1 abstained. 5
+    invalid answers became silent-wrong and 2 malformed. Of the silent-wrong
+    answers, 2 became invalid, 1 malformed and 1 abstained.
+  - No arm answer was a shortcut, a provider failure or false ready.
+- **`answer_unchanged`.** Resample 14 of 36, bare 8, counterexample 3. The
+  frontier's resample, which also changes provider (Limits), repeated none
+  of its 11 counted answers; the other three models' resamples repeated 7
+  of 10, 2 of 7 and 5 of 8.
+- **`card_value_reuse`.** 11 of the counterexample arm's 19 strong-exact
+  answers hold a value their card showed for that field. It is a
+  diagnostic, never an outcome (Limits).
+- **Spend.** The 12 runs charged at most 0.124442 USD: anchor 0.005259, 8B
+  0.004868, 120B 0.035695 and frontier 0.078620. The providers reported
+  0.124394 USD. Caps above estimated about 0.126 USD.
+
+Pooled over the four models
+([`repair-pool/dev.json`](../results/repair-pool/dev.json),
+[`dev.md`](../results/repair-pool/dev.md)): resample 0.083 [0.000, 0.259],
+3/36; bare 0.167 [0.050, 0.370], 6/36; counterexample 0.528 [0.257, 0.788],
+19/36. The pooled comparisons count discordant cases (OD9).
+
+| Pooled comparison | Difference | First better | Second better | Discordant cases | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| counterexample - bare | 0.361 [0.083, 0.632] | 6 | 2 | 8 | inconclusive |
+| counterexample - resample | 0.444 [0.150, 0.741] | 6 | 1 | 7 | inconclusive |
+| bare - resample | 0.083 [0.000, 0.178] | 3 | 0 | 3 | inconclusive |
+
+On dev no pooled comparison can reach 10 discordant cases, since only 9 of
+the 12 ready cases trigger in any model (OD9).
+
 ## Receipts so far
 
 - **The four dev passes.** Their `scored/summary.json` are linked in the
   table above.
+- **The dev round.** Each pass's `repair/summary.json`, linked in the After
+  table, with its `summary.md`; the pool's `repair-pool/dev.json` and
+  `dev.md`; and each arm run's `run_manifest.json`, `attempts/` and
+  `scored/` under `docs/results/<arm run id>/`.
 - **Feedback labels.**
   [`evidence/test-freeze-gate.json`](evidence/test-freeze-gate.json) records
   them in `measurement_identity.feedback_labels_sha256`: dev `be0c91824bb5`,
@@ -805,9 +939,11 @@ DeepInfra runs give it no number.
     against 37 without addresses and 9 with membership facts only;
   - the largest frame entry is about 333 B, so three frames come to about
     1,014 B.
-- **Expected spend.** The figures in Caps above are design estimates.
-- **Repair behaviour.** How hosted models answer a repair turn, repair@1,
-  and the arm comparisons.
+- **Test spend.** The test figures in Caps above are design estimates. The
+  dev round's spend is measured in the After above.
+- **Repair behaviour on test.** How hosted models answer a test repair turn,
+  test repair@1, and the test arm comparisons. The dev round is measured in
+  the After above.
 - **Ablation 008** on counterexample facts: Full (decode plus tshark
   confirmation) against Simplified (tshark membership facts only).
 - **Running cost.** The runtime of the per-leaf `field` lookup, and the CI
