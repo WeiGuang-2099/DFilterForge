@@ -332,6 +332,20 @@ Limits say, it is guarded until its own `run_manifest.json` sits beside it, so
 no arm run keeps a row here, or the frozen test prompts, guarded. Dev runs and
 smoke runs are not test runs.
 
+Amended 2026-10-04 (owner ruling OD5 in the [repair note](repair-round.md),
+with its maintainer defaults OD7, for the outage re-runs, and OD8, for the
+kept ids, which the owner confirmed on 2026-10-05; registered in the
+protocol's Repair section): the `winner_frontier` run's arm runs,
+`test-deepseek-v4-pro-0813-res-2026-09-26`,
+`test-deepseek-v4-pro-0813-bare-2026-09-26` and
+`test-deepseek-v4-pro-0813-cx-2026-09-26`, and their outage re-runs,
+`test-deepseek-v4-pro-0813-res-r2-2026-09-26`,
+`test-deepseek-v4-pro-0813-bare-r2-2026-09-26` and
+`test-deepseek-v4-pro-0813-cx-r2-2026-09-26`, send the `fallback_frontier`
+row's config, `deepseek-v4-pro-0813_nextbit_enabled-false`, under the repair
+frontier test cap of 0.50 USD, which the repair note's Caps table gives, not
+this registry's 1.25. No row or status here changes.
+
 ## Limits
 
 - Prices, quantizations and endpoints may change before a call; each run

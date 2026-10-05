@@ -1,16 +1,19 @@
 # Implementation Progress
 
-Last updated: 2026-10-02
+Last updated: 2026-10-05
 
 ## Current slice
 
 The baseline test passes are sent, published and scored, and every hosted
-test-run registry row is final. On `repair-arms` the four dev and four test
-repair plans are committed, and `scripts/repair_arms.py` gives the owner one
-command per split for the arm runs. The branch's PR check at eb7ebcd passed
-locally. The dev repair round is next, from main once `repair-arms` merges;
-the test round follows any correction the dev round names, after its seeds and
-their admission are committed.
+test-run registry row is final. The owner's dev repair batch ran on 2026-10-04
+at bff373c. On `dev-repair-round`, the anchor, 8B and 120B dev rounds are
+published, scored and summarized. The frontier arms got only HTTP 429 on their
+DeepInfra-pinned route, and their evidence is kept; the run records hold no
+served provider, so they do not say where the 429 arose. By the owner's ruling
+of 2026-10-04 (OD5) they move to NextBit. The dev re-run there, a maintainer
+default (OD6) the owner confirmed on 2026-10-05, comes next, then the dev
+pool, any correction the dev round names, and the test seeds with their
+admission.
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -1337,32 +1340,899 @@ the worktree's code mounted read-only and no network.
   the branch's `src/` mounted.
 - No model request was sent.
 
+## Dev repair rounds published: 2026-10-04, branch dev-repair-round
+
+The owner ran the dev repair batch (`scripts/repair_arms.py --split dev`)
+from the main checkout at bff373c on 2026-10-04. Its runner summary, now
+committed as
+[`evidence/repair-arms/summary-dev-2026-10-04.txt`](decisions/evidence/repair-arms/summary-dev-2026-10-04.txt)
+and `.json`, gives every row a final state: nine arm runs `done` and the
+three frontier arms `not_run` after an outage on their `-r2` re-runs. Its
+total charged upper bound is 0.0459 USD, rounded up (0.045822 exact), every
+first run an `-r2` re-run replaced included. On `dev-repair-round` the three
+done rounds are published, scored and summarized, and the frontier runs'
+evidence is kept. No model request was sent from this branch, and no command
+set the key variable.
+
+- **The nine runs.** Each is complete at bff373c and answered every
+  triggered item of its plan; each scored tree covers that many items.
+  - Anchor, `qwen/qwen3-32b`: 10 of 10 per arm, all served by DeepInfra,
+    one invocation each and no retry.
+  - 8B, `qwen/qwen3.5-9b`: 7 of 7 per arm, all served by DeepInfra. The
+    resample took three invocations (7, 3 and 1 requests sent): 11 attempts,
+    4 of them HTTP 429, so `mei-0022` took 3 attempts and `mei-0023` and
+    `mei-0024` took 2. Bare and counterexample took one invocation and no
+    retry.
+  - 120B, `qwen/qwen3.5-122b-a10b`: 8 of 8 per arm, all served by Novita,
+    one invocation each and no retry.
+- **repair@1 per arm**, from each committed `repair/summary.json`, with the
+  bootstrap's 2.5 and 97.5 percentiles and the repaired items. These are dev
+  numbers. Every arm comparison is inconclusive (fewer than 10 discordant
+  cases), as the [repair note's](decisions/repair-round.md) Limits expected.
+
+  | Round | Triggered | Resample | Bare | Counterexample |
+  | --- | --- | --- | --- | --- |
+  | [`dev-qwen3-32b-2026-09-26`](results/dev-qwen3-32b-2026-09-26/repair/summary.md) | 10 items in 6 cases | 0.000 [0.000, 0.000], 0/10 | 0.200 [0.000, 0.417], 2/10 | 0.400 [0.143, 0.750], 4/10 |
+  | [`dev-qwen3.5-9b-2026-09-26`](results/dev-qwen3.5-9b-2026-09-26/repair/summary.md) | 7 items in 6 cases | 0.000 [0.000, 0.000], 0/7 | 0.143 [0.000, 0.500], 1/7 | 0.429 [0.000, 0.818], 3/7 |
+  | [`dev-qwen3.5-122b-a10b-2026-09-26`](results/dev-qwen3.5-122b-a10b-2026-09-26/repair/summary.md) | 8 items in 7 cases | 0.125 [0.000, 0.400], 1/8 | 0.250 [0.000, 0.600], 2/8 | 0.625 [0.250, 1.000], 5/8 |
+
+- **Commits.** Each round is committed whole: its three published arm runs
+  with their `scored/` trees, and the pass's `repair/summary.json` and
+  `summary.md`. Each round's `repair/plan.json` is unchanged, and no
+  `not_run.json` exists.
+  - 68556a4: the frontier evidence, 15 files.
+  - 8a6e90d: the anchor round, 95 files.
+  - d070b56: the 8B round, 78 files.
+  - 389c8ed: the 120B round, 91 files.
+  - e810150: the [locked test page](results/locked-test-v1.md) now says that
+    no test repair request has been sent, with a dated correction. Its old
+    "No repair request has been sent" stopped being true when the dev batch
+    ran.
+- **The frontier pass** `dev-deepseek-v4-pro-0813-2026-09-26` got no answer.
+  Its three arm runs and their `-r2` re-runs each made 33 attempts (11 items,
+  3 each, over 3 invocations at `max_usd` 0.2), 198 in all. Every attempt was
+  HTTP 429 from the DeepInfra-pinned route, between 02:23:26 and 02:41:50 UTC.
+  Each manifest's `charged_usd_upper_bound` is 0.0, and the attempt logs'
+  `charged_micro_usd` sum to 0.
+  - Each run's `run_manifest.json` and `attempts/C4.jsonl` are kept in
+    `docs/decisions/evidence/repair-arms/<run id>/` (68556a4). They are
+    byte-equal (`cmp`) to the runner's copies, and these runs are never
+    published.
+  - Beside them sit the runner summary and the owner's
+    [provider diagnostics](decisions/evidence/repair-arms/frontier-provider-diagnostics-2026-10-04.md),
+    with the user id and the owner's location redacted.
+  - The pass's `repair/plan.json` is still at the plan stage, and no round
+    summary or `not_run.json` is written for it. `repair --not-run` records
+    only gate stops, so these arms have no record in the repair tooling.
+- **Images.** Both were built from the worktree at bff373c under their own
+  tags, so the shared `0.1.0` tags were not rebuilt:
+  - `dfilterforge-lab:dev-repair-round`
+    `sha256:15af4fbb765d8bee57aefa6f5bb7eb0b3818d261a204270e9f769527fa419fe8`.
+    Its doctor reported tshark 4.6.8, and its ID was unchanged before the
+    last score.
+  - `dfilterforge-test:dev-repair-round`
+    `sha256:16772cade7884576aa4ad2d02d75c2dfe80c55b4208971e2a79f0787e8b1b643`.
+- **Checks**, in those images with no network:
+  - Before anything was written, `repair --check` of the four dev plans at
+    the plan stage reported no difference.
+  - Each new arm run's `score --check` and each round's `repair --check`
+    reported no difference.
+  - At 389c8ed, CI's re-score loop checked 34 outputs (the 25 checked before
+    plus the 9 new `scored/` trees), and CI's repair loop checked 8 plans.
+    Neither found a difference. Three plans are at the summary stage;
+    `dev-deepseek-v4-pro-0813-2026-09-26` and the four test plans are still
+    at the plan stage.
+  - CI's three docs-mounted steps passed in the new test image: registration
+    290 passed, pair report 2, second turn 2. The second-turn nodes accept
+    the nine runs, whose prompts hold 2 messages in each resample and 4 in
+    each bare and counterexample run. After e810150 the registration and
+    pair steps passed again (290 and 2).
+  - Against bff373c, none of the 12 prepare-hashed files changed. Apart
+    from this file, every changed path is under `docs/results/` or
+    `docs/decisions/evidence/repair-arms/`. The only existing files modified
+    are this file and the locked page, where one line changed.
+  - Not run: the other CI steps (format, lint, type checks, the full suite,
+    the gates). No code changed.
+- **Two deviations from the repair note's maintainer section.**
+  - The work ran in the worktree `.worktrees/dev-repair-round`, not in the
+    main checkout, which stays untouched while other work runs. `publish`
+    read each run from the main checkout's ignored `artifacts/repair/` and
+    wrote into the worktree's `docs/results/`.
+  - `--code-revision` was fixed at bff373c, the code the runs were prepared,
+    sent and scored with, not `$(git rev-parse --short HEAD)` of this
+    docs-only branch. 431df73 played the same role for the dev bake-off
+    passes, and 0623248 for the test baselines.
+- **Compose override**, to recreate the setup. The override file holds
+  these five lines:
+
+  ```yaml
+  services:
+    lab:
+      image: dfilterforge-lab:dev-repair-round
+    test:
+      image: dfilterforge-test:dev-repair-round
+  ```
+
+  Every container ran under its own compose project, from the worktree root
+  in Git Bash:
+  `MSYS_NO_PATHCONV=1 docker compose -p dfilterforge-devrepair -f compose.yaml -f <override> ...`.
+  The lab used `--profile pilot run --rm lab`. The docs-mounted steps used
+  `--profile dev run --rm --volume "$(pwd -W)/docs:/workspace/docs:ro" test`.
+- **Next.** The frontier round, the dev pool and the test seeds wait for
+  the re-run on NextBit, OD6 (a maintainer default; the owner confirmed it on
+  2026-10-05). The owner's decision of 2026-10-04, recorded
+  in the committed diagnostics, moves the frontier slot's repair arms from
+  DeepInfra to NextBit, using the committed config
+  `evidence/bakeoff/configs/deepseek-v4-pro-0813_nextbit_enabled-false.json`.
+  By the default the maintainer took, the dev frontier round re-runs there
+  under new run ids before the test round. The ruling and its tooling are not
+  committed yet.
+
+## Frontier arms moved to NextBit: 2026-10-04, branch dev-repair-round
+
+The owner ruled on 2026-10-04 that the frontier slot's repair arms move from
+DeepInfra to NextBit (OD5). Three commits on `dev-repair-round` register the
+move and make the checks and the batch take it: 725bb5e, c57142a and 1d07612.
+Each new or extended test failed before its change and passed after it, in the
+test image built from the worktree. No model request was sent, no command set
+the key variable, and none of the 12 prepare-hashed files changed against
+bff373c.
+
+- **The ruling.** The [repair note](decisions/repair-round.md) keeps the
+  owner's decision apart from the maintainer's defaults, under "Owner
+  decisions, 2026-10-04". A default stays one until the owner confirms it.
+  - OD5, by the owner: deepseek/deepseek-v4-pro-0813's repair arm runs still
+    to be sent, on test and on dev if dev is re-run (OD6), send the committed
+    config `deepseek-v4-pro-0813_nextbit_enabled-false`. Every other slot is
+    unchanged, and the counted first turns stay the answers DeepInfra served.
+  - OD6, default taken: the dev frontier round is re-run on NextBit before the
+    test round, as new runs with the tag `nb` after the arm tag. The owner's
+    paid dev command is the confirmation.
+  - OD7, default taken: on NextBit an arm run keeps the outage rule, one
+    re-run from scratch, `-nb-r2` on dev and `-r2` on test. A second outage is
+    not run, and no arm moves again.
+  - OD8, default taken: the test frontier arms keep their registered ids,
+    which no request has used.
+- **Its evidence, recounted from the committed files.** The six DeepInfra
+  runs were sent from bff373c. Each made 33 attempts (3 invocations of 11
+  requests at `max_usd` 0.2), 198 in all, and every attempt was HTTP 429: 0
+  answers and 0 charged, from 2026-10-04T02:23:26.403803Z to
+  02:41:50.888604Z. The NextBit config's SHA-256 is
+  `2942954e0c6896c29fe075f20cb9d0ce4a885d9ac72af8396022723b67de58ce`.
+  Against the DeepInfra config it differs only in
+  `settings.openrouter.provider_order` and in `prices.source`,
+  `prices.usd_per_million_input` and `prices.usd_per_million_output`. The
+  ruling record carries the test baseline's HTTP 429, 776 in all and 754
+  before an item's last attempt, and the caps, 0.20 USD on dev and 0.50 on
+  test.
+- **The ids.** Each fits the call step's result-name pattern,
+  `(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-YYYY-MM-DD`, whose middle is at most 32
+  characters.
+  - New on dev: `dev-deepseek-v4-pro-0813-res-nb-2026-09-26`,
+    `dev-deepseek-v4-pro-0813-bare-nb-2026-09-26` and
+    `dev-deepseek-v4-pro-0813-cx-nb-2026-09-26` (middles 27, 28 and 26), and
+    their `-nb-r2` re-runs (30, 31 and 29). The longest is
+    `dev-deepseek-v4-pro-0813-bare-nb-r2-2026-09-26`, 46 characters.
+  - Registered and unchanged on test: `test-deepseek-v4-pro-0813-res-2026-09-26`,
+    `test-deepseek-v4-pro-0813-bare-2026-09-26` and
+    `test-deepseek-v4-pro-0813-cx-2026-09-26`, and their `-r2` re-runs
+    (middles 23 to 28).
+  - No registry run id contains `-nb-`. The registry's four frontier rows are
+    as they were: the pass `published`, and its `-fb`, `-r2` and `-fb-r2`
+    rows `unused`.
+  - The six DeepInfra runs are evidence only. They are never published or
+    sent again, and they are no longer batch rows.
+- **725bb5e: the registration.** It adds lines only, apart from one in
+  `test-runs.json`:
+  - a dated paragraph in the protocol's Repair section, with one-line
+    pointers under Decoding and provenance and under Models;
+  - the repair note's "Owner decisions, 2026-10-04" section, ten passages
+    marked "Amended 2026-10-04", and an added list under Limits;
+  - the bake-off note's section "Repair arms' provider: 2026-10-04";
+  - a dated note in `test-runs.md` and an `amended` entry in
+    `test-runs.json`, whose only removed line is `"rerun_tag": "r2"`, put back
+    with a trailing comma. No registry row or status changes.
+  - The record
+    [`evidence/repair-arms/ruling-2026-10-04.json`](decisions/evidence/repair-arms/ruling-2026-10-04.json)
+    (schema `repair-arms-ruling/1.0`) holds the four decisions, the moved ids
+    and the evidence figures.
+  - The four amended docs keep the code fence counts they had at bff373c,
+    and the registered four-cell arm table (8 rows) is identical to
+    bff373c's.
+  - Test: `test_the_frontier_move_ruling_matches_its_evidence` in
+    `tests/test_repair_arms.py` recounts the record's figures from the six
+    committed runs, checks the config's digest and diff, derives each moved
+    id from its registered one, and keeps the replaced runs out of
+    `docs/results`. With the test alone it failed (FileNotFoundError, no
+    record). After the commit it passed (1 passed).
+- **c57142a: `repair --check` takes the moves.**
+  - `repair_round.PROVIDER_MOVES` holds the two moves as constants, because
+    the lab container sees only `docs/results`.
+  - `arm_run_ids` gives the `-nb` names, and `registered_run_ids` keeps the
+    protocol's, the only names the follow-up step builds under. So a moved
+    run's `prepare.json` may name its arm's registered first id, and only a
+    moved run's may; its manifest must still name its own directory.
+  - A moved run's settings must be the pass's with the move's provider
+    order, and its prices the move's. Its host, attempts and pacing must be
+    the pass's. A base with no move is checked as before.
+  - Tests in `tests/test_repair.py`: five new and one extended, 11 nodes.
+    Before: 11 failed, each with an AttributeError (`repair_round` had no
+    `ProviderMove`, `PROVIDER_MOVES` or `registered_run_ids`). After: 11
+    passed.
+- **1d07612: the batch sends the moves.**
+  - `scripts/repair_arms.py` holds the same two moves with the committed
+    NextBit config. A moved pass's rows send that config under the slot's cap
+    (0.20 on dev, 0.50 on test), named by `arm_run_ids`.
+  - `check_move` refuses a move config that is not a committed bake-off
+    config or that names another host or model. It also refuses one that
+    keeps the pass's provider order, or that differs from the pass's config
+    in any other setting.
+  - A moved run's prompt set is built under the arm's registered first id
+    and installed under its own id.
+  - Tests in `tests/test_repair_arms.py`: four new and three extended.
+    Before: 7 failed, with an AttributeError (`repair_arms` had no
+    `PROVIDER_MOVES` or `registered_run_ids`) or, in one, because the
+    frontier row still took the DeepInfra config. After: 7 passed. On the
+    host the file gave 73 passed and 7 failed before, and 80 passed after.
+- **Mirrors.** Each ran in the test image built from the worktree at that
+  commit. The compose `test` service has no network, and the compose project
+  was `dfilterforge-devrepair`, with the override from "Dev repair rounds
+  published" above.
+  - At 725bb5e, `dfilterforge-test:dev-repair-round`
+    `sha256:f32637e2aac725fd5315df8ac6e43f1610b8e84c02b69bebe4f010c4ce6dd835`:
+    - pyink (96 files) and isort clean, pylint 10.00/10 with rc 0, pyright 0
+      errors;
+    - CI's docs-mounted steps: registration 291 passed, pair report 2,
+      second turn 2.
+    - The full suite and the gates did not run for this docs and test commit.
+  - At c57142a,
+    `sha256:51cb0f3b38d483f31cb5175beecc8cf21650cd1db59395ceb700e0f2bc00a992`:
+    - pyink, isort, pylint (10.00/10, rc 0), pyright (0 errors) and
+      lint-imports (5 contracts kept, 0 broken) pass;
+    - pytest: 1,795 passed and 25 skipped, coverage 96.83 percent;
+    - registration 291, pair report 2, second turn 2.
+  - At 1d07612,
+    `sha256:ab8d3b9259896fe284e29b58faddddadf2048a290018b99d52fe5c6a3f0e96d3`:
+    - the same format, lint, type and import checks pass;
+    - pytest: 1,799 passed and 25 skipped, coverage 96.85 percent;
+    - registration 295 (the four new tests), pair report 2, second turn 2;
+    - the benchmark gate (36 of 36 semantics), the adequacy gate (344
+      mutants, 4 waived survivors, 0 unwaived), prepare (40 items) and recall
+      pass.
+- **Lab image and checks.** `dfilterforge-lab:dev-repair-round` was rebuilt
+  from the worktree at c57142a:
+  `sha256:03aa46ed3dc95d9ac52b65d2217d37207098a544f7e90ee75eeb3b04ba43fef4`.
+  The rebuild at 1d07612 cached every step and gave the same ID: the image
+  copies `src/` and the project files, none of which 1d07612 touches.
+  - At both commits, `repair --check` checked the 8 committed plans with no
+    difference. The three dev rounds at the summary stage kept their
+    `summary.json` digests (`f69f0ded`, `d4bb1e5c`, `e95af163`). The frontier
+    dev plan and the four test plans are still at the plan stage.
+  - At both commits, CI's re-score loop checked 34 committed outputs with 0
+    failures.
+- **Keyless end to end at 1d07612.** The main checkout's ignored
+  `artifacts/repair` was copied into the worktree's ignored
+  `artifacts/repair` (`diff -rq`: identical). The batch ran from the
+  worktree with the key variable unset.
+  - `--dry-run` exited 0. It listed 12 arm runs of 4 passes: the nine done
+    rows as done (complete), and the three frontier rows owed. Those are
+    `dev-deepseek-v4-pro-0813-res-nb-2026-09-26`,
+    `dev-deepseek-v4-pro-0813-bare-nb-2026-09-26` and
+    `dev-deepseek-v4-pro-0813-cx-nb-2026-09-26`, each with config
+    `deepseek-v4-pro-0813_nextbit_enabled-false`, 11 items and cap 0.20.
+  - Worst request: 0.012053, 0.012645 and 0.013197 USD. Full-arm worst, at
+    one attempt per item: 0.1299, 0.1368 and 0.1413.
+  - The dry run printed each build as `follow-up ... --output-dir
+    artifacts/repair/dev-deepseek-v4-pro-0813-<arm tag>-2026-09-26`,
+    installed as the `-nb` directory.
+  - Without `--dry-run`, the batch built the three prompt sets, and each
+    keyless preflight stopped at `api_key_missing` (call exit 2). It printed
+    "ABORTED: the keyless preflight passed and nothing was sent" and exited 3. The
+    summary's total charged upper bound stayed 0.0459 USD (0.045822 exact).
+  - Each built `prepare.json` names its arm's registered first id as its
+    `prepare_id`: `dev-deepseek-v4-pro-0813-res-2026-09-26`,
+    `dev-deepseek-v4-pro-0813-bare-2026-09-26` and
+    `dev-deepseek-v4-pro-0813-cx-2026-09-26`.
+  - Afterwards the copy differed from the main checkout's only by the three
+    new `-nb` directories, and it was removed. The SHA-256 list of the main
+    checkout's `artifacts/repair` and `artifacts/repair-arms` was the same
+    before and after (`cmp` rc 0).
+- **Host checks**, on Windows. pyink, isort and pyright passed at each
+  commit.
+  - Host pylint gave rc 2 at 725bb5e and 1d07612, from eight E1101 messages
+    in `src/` on POSIX-only members (`os.O_NOFOLLOW`, `os.O_NONBLOCK`,
+    `os.killpg`, `signal.SIGKILL`). In the test image pylint gave 10.00/10
+    and rc 0.
+  - At c57142a, `tests/test_repair.py` gave 136 passed, 2 skipped and 3
+    failed on the host. The three failures are tests older than c57142a
+    that create symlinks, which the host refused (WinError 1314). In the
+    test image the full suite passed.
+- **Paths and guard.** Against bff373c, `git diff --name-only` lists only:
+  - `docs/results/` (the three rounds and the locked page);
+  - `docs/decisions/evidence/repair-arms/` and
+    `docs/decisions/evidence/test-runs.json`;
+  - `docs/protocol.md`, the repair, bake-off and test-run notes, and this
+    file;
+  - `scripts/repair_arms.py`, `src/dfilterforge/repair_round.py`,
+    `tests/test_repair.py` and `tests/test_repair_arms.py`.
+
+  The prepare-hashed guard printed nothing.
+- **This log.** With this section in place, CI's three docs-mounted steps
+  passed in the 1d07612 test image: registration 295, pair report 2, second
+  turn 2.
+- **Not run.** No paid request was sent. The NextBit rows have stopped only
+  at the keyless preflight, so NextBit has served no repair arm yet. CI's
+  web and container jobs did not run, and nothing was pushed.
+
+## Frontier move review fixes: 2026-10-04, branch dev-repair-round
+
+A review of the move's registration (725bb5e to 30eb879) confirmed five
+findings; five commits fix them, two with a test. No model request was sent,
+no command set the key variable, and nothing was pushed.
+
+- **What the 429 records show (169d2fb).** The protocol amendment and the
+  ruling said all 198 dev frontier attempts were HTTP 429 "from the
+  provider's shared pool (`engine_overloaded`,
+  `upstream_provider_shared_pool`)". The records do not show that.
+  - Recounted from the six committed evidence runs: 198 attempts, every one
+    HTTP 429 with `provider` null and `provider_error_code` "429". No file
+    under the six evidence directories contains `engine_overloaded` or
+    `shared_pool`.
+  - The client keeps only `error.code` from an error body
+    (`_error_body_code` in `src/dfilterforge/model_client.py`). The
+    shared-pool body comes from one request the owner sent after the round
+    (diagnostics, section 2).
+  - The protocol, the ruling's `why` and its rejected "waiting on DeepInfra"
+    entry, and the note's shorthand of that entry now say this: no answer
+    between 02:23 and 02:41 UTC on the DeepInfra-pinned route, and the
+    shared-pool body from the owner's later request.
+  - Not changed: the progress lines. They already said only "HTTP 429 from
+    the DeepInfra-pinned route". 725bb5e's commit message keeps the old
+    claim, since history is not rewritten. (Corrected on 2026-10-05: this
+    was false when written. The Current slice said "The frontier arms got
+    only HTTP 429 from DeepInfra", which credits the 429s to the provider;
+    dabaf6c changed it to the DeepInfra-pinned route.)
+- **The test baseline's 429 count (3b83b27).** The amendment set "754 HTTP
+  429" beside the dev round's 198, which counts every attempt.
+  - Recounted from
+    `docs/results/test-deepseek-v4-pro-0813-2026-09-26/attempts/`: 1,202
+    attempts, 776 HTTP 429 and 426 HTTP 200. Of the 429s, 754 came before an
+    item's last attempt (C1 195, C2 199, C3 193, C4 167) and 22 on it (C1
+    21, C4 1). All 776 have `provider` null.
+  - The ruling now holds `test_baseline_http_429` 776,
+    `test_baseline_http_429_before_last_attempt` 754 and
+    `test_baseline_run`. The protocol, the repair note, the ruling's `why`
+    and the progress line above give both figures.
+  - `test_the_frontier_move_ruling_matches_its_evidence` recounts both from
+    the baseline's committed attempts and ties the second to the locked
+    page's sentence. Before the ruling changed it failed on
+    `{'test_baseline_http_429': 754} != {'test_baseline_http_429': 776}`;
+    after, it passed.
+- **OD6, not OD5, replaces the six runs (adb2f8d).** The "Not run beyond the
+  gate" amendment said OD5 replaced the six DeepInfra runs with the NextBit
+  runs. The committed diagnostics say the owner did not answer whether dev
+  re-runs; that is the default OD6.
+  - The amendment now says the six are not run under the outage rule and
+    are kept as evidence, and that OD5 is the provider move. It says their
+    replacement is OD6, which the owner's paid dev command confirms before
+    the round's summary.
+  - OD5's text in the note and the ruling now covers the dev round only if
+    it is re-run. So do the two progress lines that repeated the
+    attribution: the OD5 bullet above and the bullet under Blocked or
+    unverified.
+- **The Order step (7586346).** The amended Order step put the NextBit
+  re-run and the pool "before any correction". It now says "any further
+  correction", and names OD5's move (725bb5e, c57142a, 1d07612) as the
+  correction for the DeepInfra outage, as the protocol and Planned next
+  already did.
+- **The registry names the -r2 re-runs (2915a74).** The registry's
+  amendment, in `test-runs.md` and in `test-runs.json`, named only the three
+  first test frontier arm runs. Both now also name
+  `test-deepseek-v4-pro-0813-{res,bare,cx}-r2-2026-09-26`, which the ruling,
+  OD7 and the batch move too.
+  - The ruling test now requires both texts to name exactly the ruling's
+    six test move arm runs. Before the text changed it failed: the ruling
+    had 3 more items, the first
+    `test-deepseek-v4-pro-0813-cx-r2-2026-09-26`. After, it passed.
+- **Checks.** They ran in `dfilterforge-test:dev-repair-round`, rebuilt from
+  the worktree at 2915a74:
+  `sha256:a7ca6d35053540567dcb97975bd0ce76053eaefd34aea42c438871caee3058e0`.
+  The compose project was `dfilterforge-devrepair`, with the override above.
+  - pyink (96 files) and isort are clean, and pyright reports 0 errors.
+  - CI's three docs-mounted steps passed: registration 295, with no skip;
+    pair report 2; second turn 2.
+  - On the host, `tests/test_repair_arms.py`, `tests/test_hosted_test_runs.py`
+    and `tests/test_test_passes.py` gave 155 passed.
+  - Not run: the full suite, the gates and pylint. No `src/` or `scripts/`
+    file changed, and the only code change is inside a docs-gated test.
+  - The prepare-hashed guard printed nothing.
+    `git diff --name-only 30eb879..HEAD` lists only `docs/protocol.md`, the
+    repair and test-run notes, the ruling, `test-runs.json`,
+    `tests/test_repair_arms.py` and this file.
+
+## Dev repair round verified at 918bed9: 2026-10-04, branch dev-repair-round
+
+The branch was checked whole at 918bed9 on 2026-10-04: CI's python job
+mirrored, CI's lab loops run, and the owner's dev and test commands run
+without the key. This section also gathers the dev round's figures, read
+again from the committed files. No model request was sent, no command set
+the key variable, and nothing was pushed.
+
+- **The owner's dev batch**, from the committed runner summary
+  [`summary-dev-2026-10-04.json`](decisions/evidence/repair-arms/summary-dev-2026-10-04.json),
+  written at 2026-10-04T02:41:51Z from bff373c and marked final. The batch
+  sent 277 requests: 79 in the nine done arm runs and 198 in the six
+  frontier runs. Its total charged upper bound is 0.045822 USD, printed
+  rounded up as 0.0459, all of it from the nine done runs.
+
+  | Slot | Arm runs | Requests | Answers | HTTP 429 | Served by | Charged at most (USD) |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Anchor, `qwen/qwen3-32b` | 3, 10 items each, `done` | 30 | 30 | 0 | DeepInfra | 0.005259 |
+  | 8B, `qwen/qwen3.5-9b` | 3, 7 items each, `done` | 25 | 21 | 4 | DeepInfra | 0.004868 |
+  | 120B, `qwen/qwen3.5-122b-a10b` | 3, 8 items each, `done` | 24 | 24 | 0 | Novita | 0.035695 |
+  | Frontier, `deepseek/deepseek-v4-pro-0813` | 3, 11 items each, `not_run` (outage on the `-r2` re-run) | 198 | 0 | 198 | none | 0.0 |
+
+  - The 8B resample retried its 4 HTTP 429: 11 requests over 3
+    invocations for 7 answers. Every other done run took one invocation.
+  - The summary counts each frontier row by its `-r2` re-run (33 requests
+    over 3 invocations, 0 answers, 0.0 charged) and gives its first run 0.0
+    charged. The first runs' 99 requests are recounted from the committed
+    evidence below.
+- **The three repaired passes**, from each committed `repair/summary.json`:
+  repair@1 with the bootstrap's 2.5 and 97.5 percentiles (1,000 resamples
+  over 12 cases, seed 17), then the repaired items. These are dev numbers.
+
+  | Pass | Triggered | Resample | Bare | Counterexample |
+  | --- | --- | --- | --- | --- |
+  | [`dev-qwen3-32b-2026-09-26`](results/dev-qwen3-32b-2026-09-26/repair/summary.md) | 10 items in 6 cases | 0.000 [0.000, 0.000], 0/10 | 0.200 [0.000, 0.417], 2/10 | 0.400 [0.143, 0.750], 4/10 |
+  | [`dev-qwen3.5-9b-2026-09-26`](results/dev-qwen3.5-9b-2026-09-26/repair/summary.md) | 7 items in 6 cases | 0.000 [0.000, 0.000], 0/7 | 0.143 [0.000, 0.500], 1/7 | 0.429 [0.000, 0.818], 3/7 |
+  | [`dev-qwen3.5-122b-a10b-2026-09-26`](results/dev-qwen3.5-122b-a10b-2026-09-26/repair/summary.md) | 8 items in 7 cases | 0.125 [0.000, 0.400], 1/8 | 0.250 [0.000, 0.600], 2/8 | 0.625 [0.250, 1.000], 5/8 |
+
+  Every arm comparison is inconclusive. The most discordant cases in any
+  pair is 6 (120B, counterexample against resample), and a conclusive
+  comparison needs 10. No pass has an arm not run.
+- **The frontier outage and the move.** The six DeepInfra runs,
+  `dev-deepseek-v4-pro-0813-{res,bare,cx}-2026-09-26` and their `-r2`
+  re-runs, made 33 attempts each, 198 in all. Every attempt was HTTP 429,
+  none was answered, the attempt logs charge 0 micro-USD, and each
+  manifest's bound is 0.0. Their evidence is committed (68556a4), and they
+  are never published.
+  - OD5, by the owner, in
+    [`ruling-2026-10-04.json`](decisions/evidence/repair-arms/ruling-2026-10-04.json):
+    the frontier slot's repair arms still to be sent move from DeepInfra to
+    NextBit, with `deepseek-v4-pro-0813_nextbit_enabled-false` (SHA-256
+    `2942954e0c6896c29fe075f20cb9d0ce4a885d9ac72af8396022723b67de58ce`), at
+    the slot's caps, 0.20 USD on dev and 0.50 on test. The counted first
+    turns stay the answers DeepInfra served.
+  - OD6, a maintainer default: the dev frontier round is re-run on NextBit
+    before the test round, under the new ids
+    `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26`. OD7 (one outage
+    re-run on NextBit, `-nb-r2` on dev) and OD8 (the test arms keep their
+    registered ids) are maintainer defaults too. The owner confirmed all
+    three on 2026-10-05.
+- **The runner change** (c57142a and 1d07612; "Frontier arms moved to
+  NextBit" above has the details). `scripts/repair_arms.py` sends the
+  frontier rows with the NextBit config, under the `-nb` ids on dev and the
+  registered ids on test. It builds a moved prompt set under the arm's
+  registered first id and installs it under the moved id.
+  `dfilterforge repair --check` accepts a moved run only for a registered
+  move, sent with the move's provider order and prices.
+- **CI's python job, mirrored at 918bed9**, from 13:26:27Z to 14:14:24Z. It
+  ran in `dfilterforge-test:0.1.0`
+  (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`)
+  with the worktree's `src`, `tests`, `scripts`, `pcap_lab`,
+  `pyproject.toml` and `README.md` mounted read-only, no network, and the
+  compose test service's limits. The package resolved to `/workspace/src`.
+  - pyink (96 files unchanged), isort, pylint (10.00/10), pyright (0
+    errors) and lint-imports (5 contracts kept, 0 broken) pass.
+  - pytest: 1,799 passed and 25 skipped, coverage 96.85 percent.
+  - The benchmark gate (36 of 36 semantics), the adequacy gate (344 mutants
+    executed, 4 survived, 0 unwaived; dev 72, 0 and 0), prepare and recall
+    pass.
+  - `score --check` over 34 committed outputs and `repair --check` over 8
+    plans report no difference. The three dev rounds check at the summary
+    stage; the frontier dev plan and the four test plans at the plan stage.
+    No pool is committed.
+  - CI's three docs-mounted steps first exited 4. The mirror script wrote
+    their commands with CRLF line ends, so each last pytest argument ended
+    in a carriage return ("file or directory not found:
+    tests/test_held_out.py"). Re-run with the carriage returns stripped and
+    the same container flags: registration 295, pair report 2, second turn
+    2, none skipped. The fault was in the mirror script, not the branch.
+- **CI's lab loops at 918bed9**, as `ci.yml` writes them, from 14:15:15Z to
+  14:39:45Z. The lab image was built from the worktree under its own tag,
+  `dfilterforge-lab:verify-918bed9`
+  (`sha256:5adc9c7dcd8b40aed51be89c4597bde0ef4c8375f66727a76d9156d1d372fbdc`),
+  in the compose project `dfilterforge-verify918`, with the full HEAD
+  revision as `--code-revision`. The 34 score checks and 8 repair checks
+  exited 0 and reported no difference, and no pool was committed to check.
+- **The owner's commands, keyless, at 918bed9.** They ran from the worktree
+  against copies of the main checkout's ignored `artifacts/repair` and
+  `artifacts/repair-arms`, with the key variable unset.
+  - `--split dev --dry-run` exited 0. Rows 1 to 9 are done (complete). Rows
+    10 to 12 are owed as the three `-nb` runs, with
+    `deepseek-v4-pro-0813_nextbit_enabled-false`, 11 items each and cap
+    0.20. Worst request: 0.012053, 0.012645 and 0.013197 USD; full-arm
+    worst: 0.1299, 0.1368 and 0.1413. Each follow-up line builds under the
+    registered first id, "installed as" the `-nb` directory.
+  - `--split dev` exited 3. It built the three `-nb` prompt sets, each
+    keyless preflight stopped at `api_key_missing`, and it printed
+    "ABORTED: the keyless preflight passed and nothing was sent". The total
+    charged upper bound stayed 0.0459 USD (0.045822 exact).
+  - Each built `prepared/C4.json` equals (`cmp`) the DeepInfra first run's,
+    and each `prepare.json` differs from it only in `created_at` and
+    `source_revision`; both name the registered first id as `prepare_id`.
+    So the NextBit arms are to send the prompts the DeepInfra arms sent.
+  - `--split test --dry-run` and `--split test` exited 2, refused: "the test
+    round needs its seed and admission commits first", naming the 12 test
+    arm run directories. No test prompt set was built.
+  - Run again after the sets were built, the dry run exited 0 and printed
+    "equal to what follow-up builds now" for each `-nb` set, in place of
+    "would build" and the follow-up lines. The keyless run printed the same
+    output as before and exited 3. So a dry run after an aborted run shows
+    the built sets, not the follow-up commands.
+- **The main checkout** is on `main` at bff373c with a clean tree and 15
+  run directories under `artifacts/repair`. Its `artifacts/repair-arms`
+  files keep the modification time of the owner's batch.
+- **The branch at 918bed9** is 16 commits and 291 files ahead of bff373c.
+  None of the 12 prepare-hashed files changed, and the only code files
+  changed are `scripts/repair_arms.py`, `src/dfilterforge/repair_round.py`,
+  `tests/test_repair.py` and `tests/test_repair_arms.py`.
+- **This log.** With this section in place, CI's three docs-mounted steps
+  passed in `dfilterforge-test:dev-repair-round`
+  (`sha256:a7ca6d35053540567dcb97975bd0ce76053eaefd34aea42c438871caee3058e0`,
+  built at 2915a74, whose code 918bed9 keeps), compose project
+  `dfilterforge-devrepair`: registration 295, pair report 2, second turn 2,
+  none skipped.
+- **Not run.** No paid request was sent, so NextBit has served no repair
+  arm. CI's web and container jobs did not run, and nothing was pushed.
+- **Next**, as Planned next 1 lists it, which this section leaves
+  unchanged: `dev-repair-round` merges; the owner re-runs the frontier dev
+  arms on NextBit with the unchanged dev command, which sends only rows 10
+  to 12 (OD6); the maintainer publishes and scores each `done` `-nb` run,
+  writes and checks the frontier round summary, then the dev pool; then the
+  test seed and admission PR, with the frontier arms seeded under their
+  registered ids and sent on NextBit (OD5, OD8); then the owner's test
+  round.
+
+## Owner confirmation and review fixes: 2026-10-05, branch dev-repair-round
+
+On 2026-10-05 the owner confirmed the maintainer defaults OD6, OD7 and OD8.
+Four commits on `dev-repair-round` record that and fix what the review of
+918bed9 found: 39166f2, dabaf6c, 3c3ad82 and 53a55e9. No model request was
+sent, no command set the key variable, nothing was pushed, and none of the
+12 prepare-hashed files changed against bff373c.
+
+- **The confirmation (39166f2).** OD5 stays the owner's ruling of
+  2026-10-04. OD6 (the dev frontier arms re-run on NextBit under the `-nb`
+  ids, the six DeepInfra runs reported not run and kept as evidence only),
+  OD7 (one outage re-run on NextBit, `-nb-r2` on dev and `-r2` on test, and
+  no third provider) and OD8 (the test frontier arms keep their registered
+  ids and change only their config) are maintainer defaults the owner
+  confirmed on 2026-10-05.
+  - The protocol's amendment, the repair note's Owner decisions and its
+    amendment labels, the bake-off note, the registry's amendment in
+    `test-runs.md` and `test-runs.json`, the batch's docstring and the
+    progress lines that called the OD6 re-run "ruled" now say so. Each
+    repair-note label names the decisions its passage rests on; none whose
+    passage states OD6, OD7 or OD8 content is labelled OD5 alone.
+  - The ruling is now schema `repair-arms-ruling/1.1`. OD6 to OD8 have `by`
+    `default_confirmed`, a `confirmation` record names the owner, 2026-10-05
+    and OD6 to OD8, and each move's `decided_by` names every decision it
+    rests on with who settled it and when.
+  - The ruling test pins the attribution in each of the six files it
+    reads. Served each file's previous text in turn, and the ruling's also
+    with only its schema raised to 1.1, it failed in 7 of 7 cases, each on
+    that file's assertion; with the committed texts it passed.
+  - On OD6 to OD8, 39166f2 updated two sections above dated 2026-10-04:
+    the "Next" bullet of "Dev repair rounds published" and the OD6 bullet
+    of "Dev repair round verified at 918bed9" now say the owner confirmed
+    them on 2026-10-05. The other sections dated 2026-10-04 keep their OD6
+    to OD8 text as written: the OD6 bullet of "Frontier arms moved to
+    NextBit" and the adb2f8d bullet of "Frontier move review fixes" still
+    say the owner's paid dev command confirms OD6. Only OD6 was ever tied
+    to that command. OD7 and OD8 were defaults awaiting the owner's
+    confirmation, as every default is until the owner confirms it. The
+    owner confirmed all three on 2026-10-05, before any paid dev command.
+    (Corrected on 2026-10-05: this bullet first said that every section
+    dated 2026-10-04 kept its text and that OD6 to OD8 all waited for the
+    paid dev command; both were false.)
+- **The progress facts (dabaf6c).** The Current slice no longer credits the
+  frontier 429s to DeepInfra: recounted from the six runs' committed
+  attempts, all 198 have HTTP status 429 and provider null, so they show
+  429 on the DeepInfra-pinned route only. This disproves the 2026-10-04
+  bullet "Not changed: the progress lines" under "What the 429 records
+  show", which now carries a dated correction. The Blocked line that said
+  `repair-arms` was not pushed now says PR #18 merged it as bff373c, and that
+  no CI result for that PR is recorded here.
+- **The moved runs' follow-up line (3c3ad82).** For each moved dev run the
+  dry run printed `--output-dir artifacts/repair/<registered first id>`.
+  - Before: in the worktree, beside the copies of the main checkout's
+    DeepInfra run directories and with the `-nb` sets set aside, each of the
+    three printed commands, run as printed, exited 2 with `output_exists`.
+  - After: the line reads `--output-dir
+    artifacts/repair-arms/build/<-nb run id>/<registered first id>`, still
+    ending ", installed as artifacts/repair/<-nb run id>". Run as printed,
+    each exited 0. (Corrected on 2026-10-05: "as printed" was false here and
+    in the Before bullet. Each line was run without its ", installed as"
+    tail and with a `python` that holds the project. As printed, `python`
+    on this machine is the system Python, which has no `dfilterforge`
+    (ModuleNotFoundError, exit 1), and the tail makes the revision end in a
+    comma (exit 2). The line now starts `uv run --frozen python` and puts
+    "installed as" on a comment line of its own.) `differences` found
+    nothing between each built set and the `-nb` set the keyless batch
+    installed at 918bed9. Their
+    `prepared/C4.json` SHA-256 prefixes, `43b396f05b3e`, `b4fb01c575b7` and
+    `2fb03e788c2d`, equal the replaced DeepInfra runs' sets'. A second dry
+    run after those builds printed the same output.
+  - `test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept`
+    runs each printed line through the scripted follow-up step, which
+    refuses an existing output. Before the change it failed on
+    `(False, 'output_exists') == (True, None)`; after, it passed. The
+    existing moved-pass test now pins the new line.
+- **The dry run's expected lines (53a55e9).** The repair note's Commands and
+  Planned next 1.1 say that step 1, the dry run, prints "would build" and an
+  "installed as" follow-up line for each `-nb` set only until step 2 has
+  built the sets, and "equal to what follow-up builds now" after that. Read
+  from the worktree's dry run, both exiting 0: with the `-nb` sets absent,
+  3 "would build" and 3 follow-up lines; with them in place, 3 "equal to
+  what follow-up builds now" and no "installed as" line.
+- **The ignored copies.** The verify of 918bed9 left copies in the
+  worktree's `artifacts/repair` (3.6 MB) and `artifacts/repair-arms` (396
+  KB), which git ignores. Both are deleted, with the `build/` directory the
+  hand runs above made. The main checkout's `artifacts/` was not touched;
+  its `artifacts/repair` still holds 15 run directories.
+- **Checks at 53a55e9.**
+  - In `dfilterforge-test:0.1.0`
+    (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`),
+    with `src`, `tests`, `scripts`, `docs`, `pyproject.toml`, `README.md`
+    and `pcap_lab` mounted read-only and no network:
+    `tests/test_repair_arms.py`, `tests/test_repair.py`,
+    `tests/test_hosted_test_runs.py` and `tests/test_test_passes.py` gave
+    297 passed, none skipped.
+  - On the host, with `uv run --frozen --offline --extra dev`: pyink (96
+    files unchanged), isort, pylint on `scripts/repair_arms.py` (10.00/10,
+    exit 0) and `pyright --pythonplatform Linux` (0 errors) pass. Host
+    pytest of the same four files gave 292 passed, 2 skipped and 3 failed:
+    three `tests/test_repair.py` tests that make symlinks, which Windows
+    refuses here (WinError 1314); they pass in the container. Before the
+    ignored copies were deleted, the host run also failed
+    `test_the_real_follow_up_builds_every_committed_dev_arm`, which reads
+    the worktree's `artifacts/repair`.
+  - Not run: the full suite, the gates, lint-imports and CI's lab loops.
+    The only code files changed are `scripts/repair_arms.py` and
+    `tests/test_repair_arms.py`.
+- **Not run.** No paid request was sent, so NextBit has served no repair
+  arm. Planned next keeps its order; only its attribution and the dry run's
+  expected lines changed.
+
+## Review fixes at 03eca2e: 2026-10-05, branch dev-repair-round
+
+A review of 03eca2e confirmed four minor findings, and four commits fix
+them: 45b39ba, 716362b, 4d48a68 and b6ab13b. The last two change the batch
+and add tests. OD5 stays the owner's ruling of 2026-10-04, and OD6 to OD8
+stay maintainer defaults confirmed by the owner on 2026-10-05. No model
+request was sent, no command set the key variable, nothing was pushed, and
+none of the 12 prepare-hashed files changed against bff373c (`git diff`
+printed nothing).
+
+- **Which 2026-10-04 sections the confirmation changed (45b39ba).** The
+  2026-10-05 section said every section dated 2026-10-04 kept what was true
+  when written, and that OD6 to OD8 all waited for the owner's paid dev
+  command. 39166f2 had rewritten the OD6 lines in two of those sections,
+  and at f90674e only OD6 was tied to the paid dev command: in the ruling's
+  OD6 text, in lines 101 and 723 of the repair note, and in four progress
+  lines. The bullet now names the two sections 39166f2 updated and the two
+  it left, says that only OD6 was tied to that command, and carries a dated
+  correction.
+- **The 429 bullet (716362b).** The 2026-10-04 bullet "Not changed: the
+  progress lines" said they already read only "HTTP 429 from the
+  DeepInfra-pinned route". At 918bed9, which added that bullet, the Current
+  slice read "The frontier arms got only HTTP 429 from DeepInfra"
+  (`git show 918bed9:docs/progress.md`). The bullet now carries a dated
+  correction, and the dabaf6c bullet says it disproves it.
+- **A follow-up refusal gives its reason (4d48a68).** For a refusal the
+  protocol does not report, the batch used to tell the owner to run the
+  printed follow-up line "to read why". That line builds in a fixed place,
+  and follow-up refuses an existing output before any other check.
+  - Before: the new test's two cases failed on the old hint. One named
+    `artifacts/repair-arms/build/<-nb run id>/<registered first id>`, where
+    the case had built the set by hand. The other named
+    `artifacts/repair/dev-qwen3.5-122b-a10b-cx-2026-09-26`, where the
+    keyless run had installed the set.
+  - After: the in-process follow-up returns its message with its code, and
+    the refusal quotes it.
+    `test_a_follow_up_refusal_gives_its_reason_with_built_sets_in_place`
+    passed for both cases. The test of the real follow-up step now pins
+    its message, "A required file is missing".
+  - A real dry run was made in the worktree, with copies of the main
+    checkout's 15 run directories and the three moved sets built by hand
+    under `artifacts/repair-arms/build/`. For that one dry run the frontier
+    pass's `repair/plan.json` was rewritten with indent 2, then copied
+    back; `git status` showed it unchanged. The dry run exited 2 with:
+    "refused: dev-deepseek-v4-pro-0813-res-nb-2026-09-26: follow-up refused
+    (plan_invalid) to build its prompt set from
+    docs/results/dev-deepseek-v4-pro-0813-2026-09-26 and its plan: The
+    repair plan is not in its canonical encoding".
+- **The printed follow-up command runs as printed (b6ab13b).**
+  - Before, at 4d48a68: the dev dry run (exit 0) printed `python
+    scripts/model_run.py follow-up ... --source-revision 4d48a68, installed
+    as artifacts/repair/<-nb run id>`. In Git Bash, `python` resolves to the
+    system Python 3.12, which has no `dfilterforge`. Run literally in Git
+    Bash and in Windows PowerShell 5.1, the first line exited 1 with
+    `ModuleNotFoundError: No module named 'dfilterforge'`.
+  - After: each moved set gets two lines,
+    `uv run --frozen python scripts/model_run.py follow-up ...
+    --source-revision <rev>` and `# installed as artifacts/repair/<-nb run
+    id>`. Each pair was pasted whole and run as printed from the worktree
+    root:
+    - in Git Bash, each exited 0;
+    - after those builds were moved aside, in Windows PowerShell
+      5.1.26100.9444, each exited 0 again.
+  - `differences` found nothing between each set built in either shell and
+    the replaced DeepInfra run's set. The `prepared/C4.json` SHA-256
+    prefixes were `43b396f05b3e`, `b4fb01c575b7` and `2fb03e788c2d`.
+  - A dry run at b6ab13b printed the same output apart from the revision.
+  - The tests:
+    - The printed-line test now takes every word after the script through
+      `scripts/model_run.py`'s own parser.
+    - The moved-pass test pins the comment line.
+    - A docs-mounted test ties `HOST_PYTHON` to the repair note's
+      follow-up command.
+
+    Against the code before the change all three failed; after, they
+    passed. The repair note's Commands, Planned next 1.1 and the 3c3ad82
+    bullet above, with a dated correction, describe the new lines.
+- **The ignored copies.** The copies these checks put in the worktree's
+  `artifacts/repair` and `artifacts/repair-arms`, built sets included, are
+  deleted; only the tracked `artifacts/.gitkeep` remains. The main
+  checkout's `artifacts/` was only read, and its `artifacts/repair` still
+  holds 15 run directories.
+- **Checks at b6ab13b.**
+  - In `dfilterforge-test:0.1.0`
+    (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`),
+    with `src`, `tests`, `scripts`, `docs`, `pyproject.toml`, `README.md`
+    and `pcap_lab` mounted read-only and no network, the four test files
+    `tests/test_repair_arms.py`, `tests/test_repair.py`,
+    `tests/test_hosted_test_runs.py` and `tests/test_test_passes.py` gave
+    300 passed, none skipped.
+  - On the host, with `uv run --frozen --offline --extra dev`, these passed:
+    - pyink, with 96 files unchanged;
+    - isort;
+    - pylint on `scripts/repair_arms.py`, at 10.00/10;
+    - `pyright --pythonplatform Linux`, with 0 errors.
+  - Host pytest of the same four files gave 295 passed, 2 skipped and 3
+    failed. The failures are the three symlink tests above (WinError 1314).
+  - Not run: the full suite, the gates, lint-imports and CI's lab loops.
+    The only code files changed are `scripts/repair_arms.py` and
+    `tests/test_repair_arms.py`.
+
+## Branch verified at fb4110a: 2026-10-05, branch dev-repair-round
+
+The branch was checked at fb4110a with no tracked edit. The times below are
+UTC, 2026-10-04 17:11:51Z to 17:16:36Z (03:41 to 03:46 on 2026-10-05,
+ACDT). OD5 stays the owner's ruling of 2026-10-04; OD6 to OD8 are
+maintainer defaults confirmed by the owner on 2026-10-05. No model request
+was sent, no command set the key variable, and nothing was pushed.
+
+- **The branch.** fb4110a is 27 commits ahead of bff373c, its merge base
+  with `origin/main`. `origin/main` is now df90b9b (PR #19, `web-data`), 53
+  commits past that base. `git merge-tree` merges fb4110a and df90b9b with
+  no conflict; `docs/progress.md` is the only file both sides changed.
+  - None of the 12 prepare-hashed files is in `git diff --name-only`
+    against `origin/main`, two-dot (336 files) or three-dot (291 files).
+  - The log of `origin/main..HEAD` has no Co-Authored-By line and no
+    non-ASCII character. The tree is clean, and the branch has no upstream.
+- **CI's python job checks,** from 17:11:51Z to 17:16:36Z, in
+  `dfilterforge-test:0.1.0`
+  (`sha256:841791ecaaa12b00357895a526c0b628e4bd9e099a03adcdda22d4e0b4ccd90d`).
+  Its `/workspace/uv.lock` equals the worktree's (SHA-256 prefix
+  `2fac5eded2dc`). `src`, `tests`, `scripts`, `pyproject.toml`, `README.md`
+  and `pcap_lab` were mounted read-only, with no network, a 128 MB `/tmp`
+  and the compose test service's limits. The package resolved to
+  `/workspace/src`.
+  - pyink (96 files unchanged), isort, pylint on CI's list of `src` and
+    nine scripts (10.00/10, exit 0), pyright (0 errors) and `lint-imports
+    --no-cache` (5 contracts kept, 0 broken) pass.
+  - pytest with coverage off over `tests/test_repair_arms.py`,
+    `tests/test_repair.py`, `tests/test_hosted_test_runs.py`,
+    `tests/test_test_passes.py` and `tests/test_model_run.py`: 429 passed
+    and 17 skipped, each skip for the missing `docs/` tree.
+  - CI's three docs-mounted steps, as `ci.yml` writes them, with `docs/`
+    mounted read-only too: registration 299 passed, pair report 2, second
+    turn 2, none skipped.
+- **CI's repair loop,** from 17:12:30Z to 17:13:21Z. The lab image was
+  built from the worktree as `dfilterforge-lab:verify-fb4110a`
+  (`sha256:cffa2162f57b25caffd6294f835c9b4ad632edef469e81aa8e709e3fb192d43b`)
+  in the compose project `dfilterforge-verifyfb4110a`, with the full HEAD
+  revision as `--code-revision`.
+  - All 8 `repair --check` runs exited 0 with no difference. The three
+    published dev rounds checked at the summary stage; the frontier dev
+    plan and the four test plans at the plan stage.
+  - No repair pool is committed, and `git status` stayed clean.
+- **The owner's commands, keyless,** from the worktree root in Git Bash,
+  against fresh copies of the main checkout's `artifacts/repair` (15 run
+  directories) and `artifacts/repair-arms`.
+  - `--split dev --dry-run` exited 0. Rows 1 to 9 are `done (complete)`.
+    Rows 10 to 12 are owed as `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26`
+    with `deepseek-v4-pro-0813_nextbit_enabled-false`, 11 items each and
+    cap 0.20. Worst request: 0.012053, 0.012645 and 0.013197 USD; full-arm
+    worst: 0.1299, 0.1368 and 0.1413. Each of the three sets reads `would
+    build`, with a `uv run --frozen python scripts/model_run.py follow-up`
+    line and a `# installed as` comment.
+  - `--split dev` exited 3. It built the three `-nb` sets, and each keyless
+    preflight stopped at `api_key_missing`: 3 in the output, 3 new entries
+    in the step log. It printed "ABORTED: the keyless preflight passed and
+    nothing was sent". The total charged upper bound stayed 0.0459 USD
+    (0.045822 exact).
+  - The six printed lines, run as printed in Git Bash, each exited 0 and
+    built under `artifacts/repair-arms/build/<-nb run id>/<registered first
+    id>`. `differences` found nothing between each hand-built set, the
+    `-nb` set the keyless run installed and the replaced DeepInfra run's
+    set. The `prepared/C4.json` SHA-256 prefixes are `43b396f05b3e`,
+    `b4fb01c575b7` and `2fb03e788c2d`.
+  - A repeated dev dry run exited 0, with 3 "equal to what follow-up builds
+    now" lines and no "would build" or "installed as" line.
+  - `--split test --dry-run` and `--split test` each exited 2, refused:
+    "the test round needs its seed and admission commits first", naming the
+    12 test arm run directories. No prompt set was added.
+  - The copies (3.6 MB and 396 KB) are deleted; only `artifacts/.gitkeep`
+    remains. The main checkout is on `main` at bff373c with a clean tree.
+    Its `artifacts/repair` and `artifacts/repair-arms` listings (names,
+    sizes and modification times) did not change.
+- **Not run.** The full suite with coverage, the benchmark and adequacy
+  gates, prepare, recall, the `score --check` loop, and CI's web and
+  container jobs. No paid request was sent, so NextBit has served no repair
+  arm. Planned next is unchanged.
+
 ## Planned next
 
-1. The [repair round](decisions/repair-round.md) as registered, in this
-   order; its "Commands" section gives each command. `repair-arms` merges
-   first, with a merge commit.
-   1. **Owner: the dev round.** From the main checkout on `main`, in Windows
-      PowerShell 5.1 or Git Bash, with the key only in that shell:
+1. The [repair round](decisions/repair-round.md) as registered and amended on
+   2026-10-04 (OD5, the owner's ruling; OD6 to OD8, maintainer defaults the
+   owner confirmed on 2026-10-05), in this order; its "Commands" section gives
+   each command. `repair-arms` merged in bff373c (PR #18). The owner's dev
+   batch ran there on 2026-10-04: three rounds are published on
+   `dev-repair-round`, and the frontier arms moved to NextBit (the sections
+   above). `dev-repair-round` merges before the next owner command, so that it
+   runs from the main checkout on `main`.
+   1. **Owner: the dev frontier arms on NextBit.** The unchanged dev
+      command, from the main checkout on `main`, in Windows PowerShell 5.1
+      or Git Bash, with the key only in that shell:
       `uv run --frozen python scripts/repair_arms.py --split dev`, after its
-      `--dry-run`.
-   2. **Maintainer: dev publish, score and check.** Publish and score each
-      `done` arm run, keep the evidence of each run not run, write each
-      pass's round summary with `dfilterforge repair` and check it with
-      `repair --check`, then the dev pool with `repair-pool` and its check.
-      Each round is committed whole.
+      `--dry-run`. It re-runs only the three frontier arms, as
+      `dev-deepseek-v4-pro-0813-{res,bare,cx}-nb-2026-09-26` with
+      `deepseek-v4-pro-0813_nextbit_enabled-false` at the 0.20 cap (OD6). An
+      outage is re-run once as `-nb-r2` (OD7). The nine done arm runs and the
+      six DeepInfra runs are not sent again. The dry run prints a follow-up
+      command and a comment line "# installed as" for each `-nb` set only
+      until the dev command has built the sets, which it does before its
+      keyless preflight; a dry run after that prints "equal to what
+      follow-up builds now" for each, which is expected (the repair note's
+      Commands).
+   2. **Maintainer: the frontier dev round, then the dev pool.** Publish and
+      score each `done` `-nb` run, then write the frontier pass's round
+      summary with `dfilterforge repair` and check it with `repair --check`,
+      which accepts the moved runs (c57142a). Then the dev pool with
+      `repair-pool` and its check. Each is committed whole.
    3. **A correction for any defect the dev round shows,** in a commit that
-      names it, before any test repair prompt is prepared.
+      names it, before any test repair prompt is prepared. Taken by OD5 for
+      the defect the first dev batch showed, the frontier arms' outage on
+      DeepInfra: 725bb5e, c57142a and 1d07612 on `dev-repair-round`. A
+      defect the NextBit re-run shows needs a commit of its own.
    4. **Test seed and admission PR.** The 12 test arm prompt sets seeded in
-      `docs/results/<arm run id>/`, a pass's three in one commit, then their
-      `prepare.json` digests admitted in
-      `src/dfilterforge/held_out_freeze.json` in a commit of its own (13 of
-      the record's 32 admitted prepares).
+      `docs/results/<arm run id>/`, a pass's three in one commit, the
+      frontier's under their registered ids (OD8). Then their `prepare.json`
+      digests admitted in `src/dfilterforge/held_out_freeze.json` in a
+      commit of its own (13 of the record's 32 admitted prepares).
    5. **Owner: the test round,** once that PR is on `main`:
-      `repair_arms.py --split test`, the same way. Then the maintainer's
-      publish, score, `repair` and pool for test.
+      `repair_arms.py --split test`, the same way. The frontier arms send
+      the NextBit config at the 0.50 cap under their registered ids (OD5,
+      OD8). Then the maintainer's publish, score, `repair` and pool for test.
    6. **The repair half of
-      [`results/locked-test-v1.md`](results/locked-test-v1.md).**
+      [`results/locked-test-v1.md`](results/locked-test-v1.md),** which
+      discloses the move. The frontier arms' answers come from NextBit while
+      the frontier pass's counted first turns are the ones DeepInfra served,
+      as the Limits the repair note added on 2026-10-04 say.
 2. The hosted static page generated from receipts, with its Disproof Reel
    chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -1381,15 +2251,26 @@ the worktree's code mounted read-only and no network.
 - `docs/results/locked-test-v1.md` is generated by a local, uncommitted
   script, so no CI check ties the page to its files yet. PR #17 merged the
   `score-test-baselines` branch into main (7a8ec03).
-- CI has not run on `repair-arms`, which is not pushed; only the local
-  mirrors above have.
-- `scripts/repair_arms.py` has sent no paid call. Its sending path is tested
-  only against a scripted call step, its keyless path against the real call
-  step, and its invoker's key withholding against a stub child.
+- `repair-arms` was pushed and merged into `main` by PR #18 as bff373c. CI
+  runs on every pull request and every push to `main` (`ci.yml`), but no
+  result of it on PR #18 is recorded here. `dev-repair-round` is not pushed,
+  so CI has not run on it; only the local mirrors above have.
+- `scripts/repair_arms.py` has sent paid calls once, in the owner's dev batch
+  of 2026-10-04 ("Dev repair rounds published" above); its test split has
+  sent nothing. Apart from that batch, its sending path is tested only
+  against a scripted call step, its keyless path against the real call step,
+  and its invoker's key withholding against a stub child.
 - The repair tooling records only gate stops as an arm not run
   (`repair --not-run`, at most two arms). An arm not run after an outage on
-  its re-run or a refusal, or a round with no arm run, has no record yet; the
-  owner would rule on it before that round's summary.
+  its re-run or a refusal, or a round with no arm run, still has no record in
+  the tooling; the owner rules on it before that round's summary.
+  - The dev frontier outage: the six DeepInfra runs are reported not run
+    and kept as evidence. The owner's OD5 (725bb5e) moves the frontier arms
+    to NextBit. Replacing the six with the `-nb` runs rests on OD6, a
+    maintainer default the owner confirmed on 2026-10-05; the `-nb` runs are
+    not sent yet.
+  - The general gap remains. A second outage on NextBit, which OD7 leaves
+    not run, would again have no record in the tooling.
 - The Web remains recorded-only; Linux CI teardown and the production
   container were not re-verified, so no live Web job boundary is enabled.
 - Container limits and process controls do not constitute an exhaustive

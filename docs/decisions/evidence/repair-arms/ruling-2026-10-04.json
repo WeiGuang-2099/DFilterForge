@@ -1,0 +1,172 @@
+{
+  "caps_usd": {
+    "dev": 0.2,
+    "test": 0.5
+  },
+  "confirmation": {
+    "by": "owner",
+    "date": "2026-10-05",
+    "decisions": [
+      "OD6",
+      "OD7",
+      "OD8"
+    ],
+    "text": "Confirmed by the owner on 2026-10-05: the maintainer defaults OD6, OD7 and OD8 stand as written. The dev frontier arms are re-run on NextBit under the -nb ids, and the six DeepInfra runs are reported not run and kept as evidence only (OD6). On NextBit an outage still gets one re-run from scratch, -nb-r2 on dev and -r2 on test; a second outage is not run, and no arm moves to a third provider (OD7). The test frontier arms keep their registered ids and change only their config to NextBit (OD8). OD5 stays the owner's ruling of 2026-10-04."
+  },
+  "date": "2026-10-04",
+  "decisions": [
+    {
+      "by": "owner",
+      "id": "OD5",
+      "text": "The frontier slot's repair arms move from DeepInfra to NextBit, with the committed config deepseek-v4-pro-0813_nextbit_enabled-false, for every frontier arm run still to be sent: the test round's, and the dev round's if it is re-run, which is OD6. Every other slot is unchanged, and the counted first turns stay the answers DeepInfra served."
+    },
+    {
+      "by": "default_confirmed",
+      "id": "OD6",
+      "text": "The dev frontier round is re-run on NextBit before the test round, as new runs whose ids carry the tag nb after the arm tag, and the six DeepInfra runs are reported not run and kept as evidence only. Taken by the maintainer on 2026-10-04 as a default, of which the owner was told; confirmed by the owner on 2026-10-05."
+    },
+    {
+      "by": "default_confirmed",
+      "id": "OD7",
+      "text": "On NextBit an arm run keeps the protocol's outage rule: one re-run from scratch, -nb-r2 on dev and -r2 on test. A second outage is not run, and no arm moves again. Taken by the maintainer on 2026-10-04 as a default, of which the owner was told; confirmed by the owner on 2026-10-05."
+    },
+    {
+      "by": "default_confirmed",
+      "id": "OD8",
+      "text": "The test frontier arms keep their registered ids, which no request has used, and change only their config to NextBit. Taken by the maintainer on 2026-10-04 as a default, of which the owner was told; confirmed by the owner on 2026-10-05."
+    }
+  ],
+  "evidence": {
+    "answers": 0,
+    "attempts": 198,
+    "charged_usd_upper_bound": 0.0,
+    "diagnostics": "docs/decisions/evidence/repair-arms/frontier-provider-diagnostics-2026-10-04.md",
+    "first_attempt_at": "2026-10-04T02:23:26.403803Z",
+    "http_429": 198,
+    "last_attempt_at": "2026-10-04T02:41:50.888604Z",
+    "runner_summary": "docs/decisions/evidence/repair-arms/summary-dev-2026-10-04.json",
+    "runs": [
+      "dev-deepseek-v4-pro-0813-res-2026-09-26",
+      "dev-deepseek-v4-pro-0813-res-r2-2026-09-26",
+      "dev-deepseek-v4-pro-0813-bare-2026-09-26",
+      "dev-deepseek-v4-pro-0813-bare-r2-2026-09-26",
+      "dev-deepseek-v4-pro-0813-cx-2026-09-26",
+      "dev-deepseek-v4-pro-0813-cx-r2-2026-09-26"
+    ],
+    "source_revision": "bff373c",
+    "test_baseline_http_429": 776,
+    "test_baseline_http_429_before_last_attempt": 754,
+    "test_baseline_run": "docs/results/test-deepseek-v4-pro-0813-2026-09-26"
+  },
+  "from_config": "docs/decisions/evidence/bakeoff/configs/deepseek-v4-pro-0813_deepinfra_enabled-false.json",
+  "model_id": "deepseek/deepseek-v4-pro-0813",
+  "moves": [
+    {
+      "arm_runs": {
+        "bare": [
+          "dev-deepseek-v4-pro-0813-bare-nb-2026-09-26",
+          "dev-deepseek-v4-pro-0813-bare-nb-r2-2026-09-26"
+        ],
+        "counterexample": [
+          "dev-deepseek-v4-pro-0813-cx-nb-2026-09-26",
+          "dev-deepseek-v4-pro-0813-cx-nb-r2-2026-09-26"
+        ],
+        "resample": [
+          "dev-deepseek-v4-pro-0813-res-nb-2026-09-26",
+          "dev-deepseek-v4-pro-0813-res-nb-r2-2026-09-26"
+        ]
+      },
+      "base_run": "dev-deepseek-v4-pro-0813-2026-09-26",
+      "decided_by": [
+        {
+          "by": "owner",
+          "date": "2026-10-04",
+          "id": "OD5"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD6"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD7"
+        }
+      ],
+      "replaced_runs": [
+        "dev-deepseek-v4-pro-0813-res-2026-09-26",
+        "dev-deepseek-v4-pro-0813-res-r2-2026-09-26",
+        "dev-deepseek-v4-pro-0813-bare-2026-09-26",
+        "dev-deepseek-v4-pro-0813-bare-r2-2026-09-26",
+        "dev-deepseek-v4-pro-0813-cx-2026-09-26",
+        "dev-deepseek-v4-pro-0813-cx-r2-2026-09-26"
+      ],
+      "tag": "nb"
+    },
+    {
+      "arm_runs": {
+        "bare": [
+          "test-deepseek-v4-pro-0813-bare-2026-09-26",
+          "test-deepseek-v4-pro-0813-bare-r2-2026-09-26"
+        ],
+        "counterexample": [
+          "test-deepseek-v4-pro-0813-cx-2026-09-26",
+          "test-deepseek-v4-pro-0813-cx-r2-2026-09-26"
+        ],
+        "resample": [
+          "test-deepseek-v4-pro-0813-res-2026-09-26",
+          "test-deepseek-v4-pro-0813-res-r2-2026-09-26"
+        ]
+      },
+      "base_run": "test-deepseek-v4-pro-0813-2026-09-26",
+      "decided_by": [
+        {
+          "by": "owner",
+          "date": "2026-10-04",
+          "id": "OD5"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD7"
+        },
+        {
+          "by": "default_confirmed",
+          "date": "2026-10-05",
+          "id": "OD8"
+        }
+      ],
+      "replaced_runs": [],
+      "tag": null
+    }
+  ],
+  "note": "docs/decisions/repair-round.md",
+  "registered_in": "docs/protocol.md",
+  "rejected": [
+    {
+      "option": "DeepSeek official",
+      "why": "its endpoint lists no seed, and require_parameters is true, so a seeded request cannot route to it"
+    },
+    {
+      "option": "waiting on DeepInfra",
+      "why": "the 198 attempts record no cause, and the one later HTTP 429 body the owner saw names a shared pool (engine_overloaded, upstream_provider_shared_pool), which gives no bound on recovery; one later HTTP 200 from that pool did not show it usable"
+    },
+    {
+      "option": "reporting the frontier round not run",
+      "why": "it would leave the frontier slot without a repair measurement while its registered fallback config, with the same fp8 label and seed support, is committed"
+    }
+  ],
+  "schema": "repair-arms-ruling/1.1",
+  "to_config": "docs/decisions/evidence/bakeoff/configs/deepseek-v4-pro-0813_nextbit_enabled-false.json",
+  "to_config_sha256": "2942954e0c6896c29fe075f20cb9d0ce4a885d9ac72af8396022723b67de58ce",
+  "unchanged": [
+    "the counted first turns: the dev and test passes' answers that DeepInfra served",
+    "every other setting and call option of the frontier arm runs: model, reasoning switch, temperature 0, seed 17, max_output_tokens 2048, JSON mode, a 120 s timeout, require_parameters true, allow_fallbacks false, --gate-first, --max-attempts 3 and --min-interval-seconds 1.0",
+    "the frontier caps: 0.20 USD on dev and 0.50 USD on test",
+    "every other model's arm runs, configs and caps",
+    "the 108 registered arm run ids, the registry's rows and statuses, and the baseline test passes",
+    "the repair plans and their triggered items"
+  ],
+  "why": "deepseek/deepseek-v4-pro-0813 got no answer on its DeepInfra-pinned route (provider order deepinfra, allow_fallbacks false) in any of the 198 attempts of its three dev arm runs and their -r2 re-runs, sent between 02:23 and 02:41 UTC: all were HTTP 429 and nothing was charged. The run records keep only the error code 429 and no served provider. One request the owner sent afterwards got an HTTP 429 whose body names engine_overloaded and upstream_provider_shared_pool. Its test baseline had already met 776 HTTP 429 on the same route, 754 of them before an item's last attempt. NextBit is the bake-off note's listed frontier fallback, committed in de05cad: the same fp8 label, seed supported, and the same settings but provider order and prices. Decided with 0 frontier repair answers on dev and no test repair request sent."
+}

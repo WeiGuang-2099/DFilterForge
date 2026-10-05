@@ -15,8 +15,16 @@ each pass's arms go resample, bare, then counterexample, each after the
 one before has a final state, as the note orders them. A row's run id is
 the pass's with ``-res``, ``-bare`` or ``-cx`` before its date. Its config
 is the committed bake-off config the pass sent, checked against the
-pass's run manifest. Its cap is the slot's registered cap for the split,
-read from the note's caps table, which a raise never edits. A run whose
+pass's run manifest, unless the pass has a provider move in
+``PROVIDER_MOVES`` (the owner's ruling OD5 of 2026-10-04 and the
+maintainer defaults OD6 to OD8 the owner confirmed on 2026-10-05, in the
+note). A moved pass's arm runs send the move's committed config, which may
+differ from the pass's only in provider order and prices, and a move
+with a tag puts it after the arm tag: the dev frontier rows are
+``-res-nb``, ``-bare-nb`` and ``-cx-nb``, and the test frontier rows
+keep the registered ids. A row's cap is the slot's registered cap for
+the split, a moved pass's included, read from the note's caps table,
+which a raise never edits. A run whose
 budget stop is resumed takes the cap the note's raised caps table gives
 that run alone; a raise for a run with no budget stop to resume, or one
 not above the slot's cap, is refused, so no other arm and no outage
@@ -28,6 +36,13 @@ anything is sent, ``scripts/model_run.py follow-up --from-run
 docs/results/<pass> --plan docs/results/<pass>/repair/plan.json --arm
 <arm>`` builds each owed row's prompt set again, in process and in a
 temporary directory: no socket, no key, no gold, the plan read as data.
+Follow-up builds only under an arm's registered ids, so a moved run's set
+is built under its arm's registered first id, which its ``prepare.json``
+keeps, and put in place under its own run id. The follow-up command the
+batch prints runs as printed through ``uv run --frozen python``, as the
+note's commands do; for a moved run it builds in
+``artifacts/repair-arms/build/<arm run id>``, since the registered id's
+directory under ``artifacts/repair`` keeps the run the move replaced.
 - dev: a missing prompt set is that build; an existing one must equal it,
   its creation time and source revision aside, or the batch refuses.
 - test: the committed seed ``docs/results/<arm run id>/prepare.json`` and
@@ -66,7 +81,10 @@ What follows a call, by the bake-off runner's own reading of a run
 - An outage (no completed answer and not a refusal) is re-run once from
   scratch under the arm's ``-r2`` run id after 60 s, from its own prompt
   set (and, on test, its own seed and admission). A re-run that is an
-  outage too, or a re-run id too long for a result name, is not run.
+  outage too, or a re-run id too long for a result name, is not run. A
+  moved run keeps this rule on the move's provider: its one re-run is
+  ``-r2`` after its ``-nb`` tag on dev and ``-r2`` on test, sent with the
+  move's config, and no arm moves again.
 - A complete pass whose every lasting failure is HTTP 400 or 404 is a
   refusal, not run: an arm has no fallback.
 - HTTP 401, 402 or 403 aborts. A budget stop after an answer stops the
@@ -187,6 +205,15 @@ NOTE = "docs/decisions/repair-round.md"
 RESULTS = "docs/results"
 PREPARE_ROOT = "artifacts/repair"
 OUT_DIR = "artifacts/repair-arms"
+# Where a moved run's printed follow-up command builds its prompt set when
+# run by hand, one directory per moved run. Follow-up builds only under the
+# arm's registered ids and refuses an existing output, and in the checkout
+# that sent the replaced run, PREPARE_ROOT/<registered id> holds that run.
+# No step of the batch reads it.
+HAND_BUILD_ROOT = f"{OUT_DIR}/build"
+# How the note's host commands start a script: the project's locked
+# environment, which the system Python does not hold.
+HOST_PYTHON = ("uv", "run", "--frozen", "python")
 # Where a row that left a run directory but is not run keeps that run's
 # manifest and attempt logs, as the bake-off and the test passes keep
 # theirs.
@@ -215,6 +242,30 @@ DEV_PASSES = (
     "dev-qwen3.5-122b-a10b-2026-09-26",
     "dev-deepseek-v4-pro-0813-2026-09-26",
 )
+
+
+class Move(NamedTuple):
+    """A registered move of a pass's arm runs to another provider.
+
+    ``config`` is the committed bake-off config the moved arm runs send,
+    and ``tag`` what their run ids carry after the arm tag, or None when
+    they keep the registered ids.
+    """
+
+    config: str
+    tag: str | None
+
+
+MOVE_CONFIG = f"{db.CONFIG_DIR}/deepseek-v4-pro-0813_nextbit_enabled-false.json"
+# The owner's ruling OD5 of 2026-10-04 and the maintainer defaults OD6 to
+# OD8, which the owner confirmed on 2026-10-05, in the note: the frontier
+# slot's arm runs move from DeepInfra to NextBit, under new ids on dev and
+# the registered ids on test. They are the same moves as
+# dfilterforge.repair_round.PROVIDER_MOVES, which a test ties.
+PROVIDER_MOVES: dict[str, Move] = {
+    "dev-deepseek-v4-pro-0813-2026-09-26": Move(MOVE_CONFIG, "nb"),
+    "test-deepseek-v4-pro-0813-2026-09-26": Move(MOVE_CONFIG, None),
+}
 # The note's caps table names a slot by size class; a bake-off slot or a
 # registry role maps onto it, a fallback onto its own row.
 SLOT_ORDER = ("anchor", "8B", "120B", "frontier")
@@ -268,7 +319,10 @@ FINAL_STATES = frozenset({"done", "not_run", "unused"})
 GATE_KINDS = frozenset({"gate_stop", "reasoned"})
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
 
-FollowUp = Callable[[Sequence[str]], tuple[dict[str, Any] | None, str | None]]
+# The follow-up step's report, or None with its refusal code and message.
+FollowUp = Callable[
+    [Sequence[str]], tuple[dict[str, Any] | None, str | None, str]
+]
 Invoker = Callable[[Sequence[str], bool], Any]
 
 
@@ -299,8 +353,10 @@ class Cap(NamedTuple):
 class Row(NamedTuple):
     """One arm run of one repaired pass, as the note names and caps it.
 
-    ``cap_usd`` is the slot's registered cap for the split, which both of
-    the row's runs take unless the note raises one of them.
+    ``config`` is the config its runs send: the pass's own, or its
+    registered move's. ``cap_usd`` is the slot's registered cap for the
+    split, which both of the row's runs take unless the note raises one
+    of them.
     """
 
     number: int
@@ -389,11 +445,29 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def arm_run_ids(base_run: str, arm: str) -> tuple[str, str]:
-    """Names one arm's run and its one outage re-run after the pass."""
+def registered_run_ids(base_run: str, arm: str) -> tuple[str, str]:
+    """Names one arm's run and its one outage re-run as registered.
+
+    They are the only names follow-up builds an arm's prompt set under.
+    """
     stem = base_run[: -DATE_LENGTH - 1]
     date = base_run[-DATE_LENGTH:]
     tagged = f"{stem}-{ARM_TAGS[arm]}"
+    return f"{tagged}-{date}", f"{tagged}-{RERUN_TAG}-{date}"
+
+
+def arm_run_ids(base_run: str, arm: str) -> tuple[str, str]:
+    """Names one arm's run and its one outage re-run after the pass.
+
+    They are the registered names, unless the pass has a provider move
+    with a tag, whose runs carry that tag after the arm tag.
+    """
+    move = PROVIDER_MOVES.get(base_run)
+    if move is None or move.tag is None:
+        return registered_run_ids(base_run, arm)
+    stem = base_run[: -DATE_LENGTH - 1]
+    date = base_run[-DATE_LENGTH:]
+    tagged = f"{stem}-{ARM_TAGS[arm]}-{move.tag}"
     return f"{tagged}-{date}", f"{tagged}-{RERUN_TAG}-{date}"
 
 
@@ -578,6 +652,9 @@ def rows_for(
 ) -> tuple[Row, ...]:
     """Names, configures and caps each pass's three arm runs, in order.
 
+    The cap is read by the pass's own config and slot, and a pass with a
+    provider move sends its arm runs with the move's config.
+
     Raises:
         PlanError: If the note gives a pass's slot no cap for the split,
             or its caps row names another config, or an arm run id is
@@ -598,6 +675,8 @@ def rows_for(
                 f"{repaired.run_id}: {NOTE} gives the {repaired.slot} slot"
                 f" no usable {split} cap"
             )
+        move = PROVIDER_MOVES.get(repaired.run_id)
+        sent = repaired.config if move is None else move.config
         for arm in ARMS:
             first, rerun = arm_run_ids(repaired.run_id, arm)
             if not fits(first):
@@ -610,7 +689,7 @@ def rows_for(
                     arm,
                     first,
                     rerun,
-                    repaired.config,
+                    sent,
                     usd,
                 )
             )
@@ -659,6 +738,72 @@ def check_pass(root: Path, repaired: RepairedPass) -> Any:
     ):
         raise PlanError(
             f"{repaired.run_id}: not sent with the registered call options"
+        )
+    return config
+
+
+def check_move(root: Path, repaired: RepairedPass, sent: Any) -> Any | None:
+    """Requires a moved pass's move config to change only its route.
+
+    ``sent`` is the config the pass sent, as :func:`check_pass` read it.
+    The move config's prices are its own.
+
+    Returns:
+        The move's config, as the call step reads it, or None when the
+        pass has no provider move.
+
+    Raises:
+        PlanError: If the move config is not a committed bake-off config,
+            names another endpoint host or model, sends the pass's own
+            provider order, or differs from the pass's config in any
+            other setting.
+    """
+    move = PROVIDER_MOVES.get(repaired.run_id)
+    if move is None:
+        return None
+    named = f"the move of {repaired.run_id}'s arm runs to {move.config}"
+    path = root / move.config
+    if (
+        Path(move.config).parent.as_posix() != db.CONFIG_DIR
+        or not path.is_file()
+    ):
+        raise PlanError(f"{named}: not a committed bake-off config")
+    try:
+        config = model_run.CallConfigV1.model_validate_json(path.read_bytes())
+    except ValueError:
+        raise PlanError(
+            f"{named}: not a bake-off config the call step reads"
+        ) from None
+    own, moved = sent.settings, config.settings
+    if (urlsplit(str(config.endpoint_url)).hostname, moved.model_id) != (
+        urlsplit(str(sent.endpoint_url)).hostname,
+        own.model_id,
+    ):
+        raise PlanError(
+            f"{named}: it names another endpoint host or model than"
+            f" {repaired.config}"
+        )
+    routes, own_routes = moved.openrouter, own.openrouter
+    if (
+        routes is None
+        or own_routes is None
+        or routes.provider_order == own_routes.provider_order
+    ):
+        raise PlanError(
+            f"{named}: it sends the provider order of {repaired.config}, so"
+            " it moves nothing"
+        )
+    rerouted = own.model_copy(
+        update={
+            "openrouter": own_routes.model_copy(
+                update={"provider_order": routes.provider_order}
+            )
+        }
+    )
+    if moved != rerouted:
+        raise PlanError(
+            f"{named}: its settings differ from {repaired.config}'s beyond"
+            " the provider order"
         )
     return config
 
@@ -790,25 +935,49 @@ def calls_due(ctx: Context) -> list[tuple[Row, str, Any]]:
 
 def run_follow_up(
     argv: Sequence[str],
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[dict[str, Any] | None, str | None, str]:
     """Runs ``scripts/model_run.py follow-up`` in process, offline.
 
     Returns:
-        The report it printed, or None and the code it refused with.
+        The report it printed, None and an empty message; or None, the
+        code it refused with and its message.
     """
     stdout, stderr = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
         code = int(model_run.main(list(argv)))
     if code != 0:
-        return None, db.parse_output("", stderr.getvalue())[1] or "refused"
+        refused, message = _refusal(stderr.getvalue())
+        return None, refused, message
     lines = stdout.getvalue().strip().splitlines()
     try:
         report: object = json.loads(lines[-1]) if lines else None
     except ValueError:
         report = None
     if not isinstance(report, dict):
-        return None, "report_unreadable"
-    return cast(dict[str, Any], report), None
+        return None, "report_unreadable", "its report is not a JSON object"
+    return cast(dict[str, Any], report), None, ""
+
+
+def _refusal(stderr: str) -> tuple[str, str]:
+    """Reads a step's last error envelope as its code and its message.
+
+    The message is kept on one line, so that a refusal that quotes it is
+    one line too.
+    """
+    for line in reversed(stderr.strip().splitlines()):
+        try:
+            value: object = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        error: object = cast(dict[str, Any], value).get("error")
+        if isinstance(error, dict):
+            fields = cast(dict[str, Any], error)
+            return str(fields.get("code")), " ".join(
+                str(fields.get("message", "")).split()
+            )
+    return "refused", ""
 
 
 def follow_up_argv(
@@ -830,15 +999,45 @@ def follow_up_argv(
     ]
 
 
-def follow_up_line(row: Row, run_id: str, ctx: Context) -> str:
-    """Spells the follow-up command that builds a run's prompt set."""
-    argv = follow_up_argv(
-        f"{RESULTS}/{row.base_run}",
-        row.arm,
-        f"{PREPARE_ROOT}/{run_id}",
-        ctx.source_revision,
+def build_name(row: Row, run_id: str) -> str:
+    """Names the directory follow-up builds a run's prompt set in.
+
+    Follow-up builds only under the arm's registered ids and refuses any
+    other name (``arm_id_mismatch``), so a moved run's set is built under
+    the arm's registered first id, which its ``prepare.json`` keeps, and
+    put in place under its own run id.
+    """
+    registered = registered_run_ids(row.base_run, row.arm)
+    return run_id if run_id in registered else registered[0]
+
+
+def follow_up_lines(row: Row, run_id: str, ctx: Context) -> list[str]:
+    """Spells the follow-up command that builds a run's prompt set.
+
+    The command runs as printed from the repository root, in Windows
+    PowerShell 5.1 or Git Bash, through ``HOST_PYTHON`` as the note's
+    commands do. A moved run's command builds under the arm's registered
+    first id in ``HAND_BUILD_ROOT/<run id>``, never in
+    ``PREPARE_ROOT/<registered id>``, where the run the move replaced is
+    kept; a comment line after it, which both shells ignore, says where
+    the batch installs the set.
+
+    Returns:
+        The command, then for a moved run the comment.
+    """
+    name = build_name(row, run_id)
+    output = (
+        f"{PREPARE_ROOT}/{name}"
+        if name == run_id
+        else f"{HAND_BUILD_ROOT}/{run_id}/{name}"
     )
-    return " ".join(["python", db.MODEL_RUN, *argv])
+    argv = follow_up_argv(
+        f"{RESULTS}/{row.base_run}", row.arm, output, ctx.source_revision
+    )
+    lines = [" ".join([*HOST_PYTHON, db.MODEL_RUN, *argv])]
+    if name != run_id:
+        lines.append(f"# installed as {PREPARE_ROOT}/{run_id}")
+    return lines
 
 
 def differences(built: Path, existing: Path) -> list[str]:
@@ -969,15 +1168,22 @@ def build_now(
 ) -> Path | None:
     """Builds a run's prompt set in ``scratch`` as follow-up builds it now.
 
+    It is built under :func:`build_name`, the run id unless the run is
+    moved; :func:`place` and :func:`install` put it in place under the
+    run id all the same.
+
     Returns:
         The built directory, or None when follow-up refuses for a reason
         the protocol reports; that run's final state is then recorded.
 
     Raises:
-        PlanError: If follow-up refuses for any other reason.
+        PlanError: If follow-up refuses for any other reason. Its message
+            says why, since a command to read it with would build where a
+            set may already be, and follow-up refuses an existing output
+            before any other check.
     """
-    built = scratch / run_id
-    report, code = ctx.follow_up(
+    built = scratch / build_name(row, run_id)
+    report, code, message = ctx.follow_up(
         follow_up_argv(
             (ctx.root / RESULTS / row.base_run).as_posix(),
             row.arm,
@@ -989,9 +1195,10 @@ def build_now(
         return built
     blocked = _blocked(code, row, run_id)
     if blocked is None:
+        why = f": {message}" if message else ""
         raise PlanError(
-            f"{run_id}: follow-up refused ({code}): run"
-            f" {follow_up_line(row, run_id, ctx)} to read why"
+            f"{run_id}: follow-up refused ({code}) to build its prompt set"
+            f" from {RESULTS}/{row.base_run} and its plan{why}"
         )
     ctx.prompts.blocked[run_id] = blocked
     return None
@@ -1792,7 +1999,8 @@ def dry_run(ctx: Context) -> None:
     for row in ctx.plan.rows:
         for run_id in (row.run_id, row.rerun_id):
             if ctx.prompts.notes.get(run_id) == "would build":
-                ctx.out(f"    {follow_up_line(row, run_id, ctx)}")
+                for line in follow_up_lines(row, run_id, ctx):
+                    ctx.out(f"    {line}")
     ctx.out("")
     ctx.out("preflight (key withheld; each must stop at api_key_missing):")
     due = calls_due(ctx)
@@ -1823,7 +2031,8 @@ def build_context(
     """Reads the passes, their plans and configs, and the note's caps.
 
     Raises:
-        PlanError: If a pass, plan, config, cap or raised cap is not usable.
+        PlanError: If a pass, plan, config, provider move, cap or raised
+            cap is not usable.
         ValueError: If a file does not parse.
         OSError: If a file cannot be read.
     """
@@ -1834,7 +2043,14 @@ def build_context(
         raise PlanError(f"no {split} pass is repaired")
     note = (root / NOTE).read_text(encoding="utf-8")
     caps = load_caps(note)
-    configs = [check_pass(root, repaired) for repaired in passes]
+    # A moved pass's timeout is its move config's too.
+    configs: list[Any] = []
+    for repaired in passes:
+        sent = check_pass(root, repaired)
+        configs.append(sent)
+        moved = check_move(root, repaired, sent)
+        if moved is not None:
+            configs.append(moved)
     wait = db.INTERRUPT_GRACE_SECONDS + max(
         config.settings.timeout_seconds for config in configs
     )

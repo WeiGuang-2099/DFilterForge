@@ -16,6 +16,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import sys
 from typing import Any, cast, Literal
@@ -25,6 +26,7 @@ import pytest
 
 from dfilterforge import held_out as held_out_module
 from dfilterforge import repair as repair_module
+from dfilterforge import repair_round
 from dfilterforge.canonical import canonical_json
 from dfilterforge.cli import main
 from dfilterforge.completions import CatalogIdentityV1
@@ -33,6 +35,7 @@ from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import ConditionRunV1
 from dfilterforge.completions import InvocationV1
+from dfilterforge.completions import OpenRouterOptionsV1
 from dfilterforge.completions import PreparedConditionV1
 from dfilterforge.completions import PrepareManifestV1
 from dfilterforge.completions import REPAIR_CARD_MAX_BYTES
@@ -204,11 +207,13 @@ def _write_base(
     label: ConditionLabel = "C4",
     status: Literal["complete", "incomplete"] = "complete",
     reverse: bool = False,
+    settings: RequestSettingsV1 = _SETTINGS,
 ) -> Path:
     """Writes a published one-condition pass, unscored.
 
     A null reply is a provider failure. ``reverse`` writes the prompts in
     descending item order, so prepare order is not numbering order.
+    ``settings`` are the ones the pass was sent with.
     """
     items = _items(source, split, count)
     if reverse:
@@ -259,7 +264,7 @@ def _write_base(
         CompletionBatchV1(
             output_contract=output_contract,
             retrieval=retrieval,
-            settings=_SETTINGS,
+            settings=settings,
             completions=tuple(answers),
         ),
     )
@@ -300,7 +305,7 @@ def _write_base(
             prepare=prepare,
             prepare_sha256="6" * 64,
             endpoint_host="openrouter.ai",
-            settings=_SETTINGS,
+            settings=settings,
             max_attempts=3,
             min_interval_seconds=1.0,
             invocations=(
@@ -1296,12 +1301,17 @@ _ARM_RUNS = {
 }
 
 
-def _round_base(root: Path, source: ModelSplitArtifacts) -> Path:
+def _round_base(
+    root: Path,
+    source: ModelSplitArtifacts,
+    settings: RequestSettingsV1 = _SETTINGS,
+) -> Path:
     """Writes the scored dev base pass and its plan, from the fake builder."""
     run_dir = _write_base(
         root,
         source,
         replies={item: _ir_reply(ir) for item, (ir, _) in _ROUND_BASE.items()},
+        settings=settings,
     )
     _write_scored(
         run_dir,
@@ -2147,6 +2157,250 @@ def test_every_committed_second_turn_is_an_arm_a_plan_checks() -> None:
     assert unchecked_second_turns(results) == ()
 
 
+# The dev base pass as one provider served it, and its arm runs moved to
+# another under the tag nb, as the owner moved the frontier arms (OD5).
+_ROUTED = RequestSettingsV1(
+    model_id="vendor/model-a",
+    openrouter=OpenRouterOptionsV1(provider_order=("deepinfra",)),
+)
+_MOVED = RequestSettingsV1(
+    model_id="vendor/model-a",
+    openrouter=OpenRouterOptionsV1(provider_order=("nextbit",)),
+)
+_MOVE_PRICES = TokenPricesV1(
+    usd_per_million_input=1.056,
+    usd_per_million_output=3.168,
+    source="test move",
+)
+_MOVED_RUNS = {
+    "resample": "dev-model-a-res-nb-2026-10-01",
+    "bare": "dev-model-a-bare-nb-2026-10-01",
+    "counterexample": "dev-model-a-cx-nb-2026-10-01",
+}
+
+
+def _move(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Registers the dev base pass's move to NextBit, tagged nb."""
+    monkeypatch.setattr(
+        repair_round,
+        "PROVIDER_MOVES",
+        {
+            _RUNS["dev"]: repair_round.ProviderMove(
+                "nb", ("nextbit",), _MOVE_PRICES
+            )
+        },
+    )
+
+
+# pylint: disable-next=too-many-arguments
+def _write_moved_arm(
+    base_dir: Path,
+    source: ModelSplitArtifacts,
+    arm: str,
+    *,
+    settings: RequestSettingsV1 = _MOVED,
+    prices: TokenPricesV1 = _MOVE_PRICES,
+    manifest: Mapping[str, object] | None = None,
+    prepare: Mapping[str, object] | None = None,
+) -> Path:
+    """Writes one moved arm run, published and scored, as the batch sends it.
+
+    It is named with the move's tag, and its prepare record names its arm's
+    registered first run, the only name follow-up builds under.
+    """
+    return _write_arm(
+        base_dir,
+        source,
+        arm,
+        name=_MOVED_RUNS[arm],
+        settings=settings,
+        manifest={"prices": prices, **(manifest or {})},
+        prepare={"prepare_id": _ARM_RUNS[arm], **(prepare or {})},
+    )
+
+
+def _moved_round(root: Path, source: ModelSplitArtifacts) -> Path:
+    """A base pass, its plan and its three moved, published arm runs."""
+    base_dir = _round_base(root / "results", source, _ROUTED)
+    for arm in _MOVED_RUNS:
+        _write_moved_arm(base_dir, source, arm)
+    return base_dir
+
+
+def test_a_moved_round_counts_its_tagged_arm_runs(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _move(monkeypatch)
+    base_dir = _moved_round(tmp_path, source)
+
+    written = round_run(base_dir, code_revision="rev")
+    checked = round_run(base_dir, code_revision="rev", check=True)
+
+    assert (written.stage, written.arm_runs) == ("summary", _MOVED_RUNS)
+    assert [arm.run for arm in _summary(base_dir).arms] == list(
+        _MOVED_RUNS.values()
+    )
+    assert (checked.stage, checked.differences) == ("summary", ())
+    assert checked.summary_sha256 == written.summary_sha256
+
+
+@pytest.mark.parametrize(
+    ("settings", "prices", "moved"),
+    [
+        (_ROUTED, _MOVE_PRICES, True),
+        (
+            _MOVED,
+            TokenPricesV1(
+                usd_per_million_input=0.1,
+                usd_per_million_output=0.3,
+                source="test",
+            ),
+            True,
+        ),
+        (
+            RequestSettingsV1(
+                model_id="vendor/model-a",
+                temperature=0.5,
+                openrouter=OpenRouterOptionsV1(provider_order=("nextbit",)),
+            ),
+            _MOVE_PRICES,
+            True,
+        ),
+        (_MOVED, _MOVE_PRICES, False),
+    ],
+    ids=["deepinfra", "prices", "temperature", "unregistered"],
+)
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def test_a_moved_arm_sent_otherwise_is_refused(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    monkeypatch: pytest.MonkeyPatch,
+    settings: RequestSettingsV1,
+    prices: TokenPricesV1,
+    moved: bool,
+) -> None:
+    base_dir = _round_base(tmp_path / "results", source, _ROUTED)
+    if moved:
+        _move(monkeypatch)
+        _write_moved_arm(base_dir, source, "resample")
+        _write_moved_arm(base_dir, source, "bare")
+        sent = _write_moved_arm(
+            base_dir, source, "counterexample", settings=settings, prices=prices
+        )
+    else:
+        # The arm runs keep the registered names of a base with no move.
+        monkeypatch.setattr(repair_round, "PROVIDER_MOVES", {})
+        _write_arm(base_dir, source, "resample", settings=_ROUTED)
+        _write_arm(base_dir, source, "bare", settings=_ROUTED)
+        sent = _write_arm(
+            base_dir,
+            source,
+            "counterexample",
+            settings=settings,
+            manifest={"prices": prices},
+        )
+
+    error = _round_refusal(base_dir)
+
+    assert error.code == "repair_settings_mismatch"
+    assert str(error).startswith(f"{sent.name} was not sent")
+
+
+@pytest.mark.parametrize(
+    ("prepare", "manifest"),
+    [
+        ({"prepare_id": "dev-model-a-cx-r2-2026-10-01"}, None),
+        ({"prepare_id": "dev-model-a-bare-2026-10-01"}, None),
+        (None, {"run_id": "dev-model-a-cx-2026-10-01"}),
+    ],
+    ids=["rerun-id", "other-arm", "run-id"],
+)
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def test_a_moved_run_must_name_its_arms_registered_first_run(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    monkeypatch: pytest.MonkeyPatch,
+    prepare: dict[str, str] | None,
+    manifest: dict[str, str] | None,
+) -> None:
+    _move(monkeypatch)
+    base_dir = _round_base(tmp_path / "results", source, _ROUTED)
+    _write_moved_arm(base_dir, source, "resample")
+    _write_moved_arm(base_dir, source, "bare")
+    _write_moved_arm(
+        base_dir, source, "counterexample", prepare=prepare, manifest=manifest
+    )
+
+    error = _round_refusal(base_dir)
+
+    assert error.code == "repair_arm_mismatch"
+    assert str(error).startswith(f"{_MOVED_RUNS['counterexample']} is not")
+
+
+def test_a_moved_base_leaves_its_registered_ids_unchecked(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _move(monkeypatch)
+    base_dir = _moved_round(tmp_path, source)
+    results = base_dir.parent
+    # A replaced run under the registered name, and the moved re-run.
+    shutil.copytree(results / _MOVED_RUNS["bare"], results / _ARM_RUNS["bare"])
+    shutil.copytree(
+        results / _MOVED_RUNS["bare"],
+        results / "dev-model-a-bare-nb-r2-2026-10-01",
+    )
+
+    assert unchecked_second_turns(results) == (_ARM_RUNS["bare"],)
+
+
+def test_the_committed_moves_name_result_runs() -> None:
+    dev = "dev-deepseek-v4-pro-0813-2026-09-26"
+    test = "test-deepseek-v4-pro-0813-2026-09-26"
+    moves = repair_round.PROVIDER_MOVES
+    result_dir = cast(re.Pattern[str], getattr(repair_round, "_RESULT_DIR"))
+    moved = [run_id for arm in ARMS for run_id in arm_run_ids(dev, arm)]
+    kept = [run_id for arm in ARMS for run_id in arm_run_ids(test, arm)]
+    others = [
+        *(
+            f"{split}-{model}-2026-09-26"
+            for split in ("dev", "test")
+            for model in ("qwen3-32b", "qwen3.5-9b", "qwen3.5-122b-a10b")
+        ),
+        "test-deepseek-v4-pro-0813-fb-2026-09-26",
+        "test-deepseek-v4-pro-0813-r2-2026-09-26",
+        *_RUNS.values(),
+    ]
+
+    assert sorted(moves) == [dev, test]
+    assert moved == [
+        "dev-deepseek-v4-pro-0813-res-nb-2026-09-26",
+        "dev-deepseek-v4-pro-0813-res-nb-r2-2026-09-26",
+        "dev-deepseek-v4-pro-0813-bare-nb-2026-09-26",
+        "dev-deepseek-v4-pro-0813-bare-nb-r2-2026-09-26",
+        "dev-deepseek-v4-pro-0813-cx-nb-2026-09-26",
+        "dev-deepseek-v4-pro-0813-cx-nb-r2-2026-09-26",
+    ]
+    assert kept == [
+        run_id
+        for arm in ARMS
+        for run_id in repair_round.registered_run_ids(test, arm)
+    ]
+    assert all(result_dir.fullmatch(run_id) for run_id in moved + kept)
+    for base in others:
+        for arm in ARMS:
+            assert arm_run_ids(base, arm) == repair_round.registered_run_ids(
+                base, arm
+            )
+
+
 def test_a_committed_plan_is_never_rewritten_under_its_arms(
     tmp_path: Path, source: ModelSplitArtifacts, spy: _Spy
 ) -> None:
@@ -2771,7 +3025,11 @@ def test_the_arm_tags_are_the_ones_follow_up_names_runs_with() -> None:
 
     assert dict(ARM_TAGS) == dict(tags)
     assert ARM_RERUN == rerun
-    assert arm_run_ids("dev-qwen3-32b-2026-09-26", "resample") == (
+    # Follow-up builds under the registered names alone; a move's names
+    # are tested with the committed moves.
+    assert repair_round.registered_run_ids(
+        "dev-qwen3-32b-2026-09-26", "resample"
+    ) == (
         "dev-qwen3-32b-res-2026-09-26",
         "dev-qwen3-32b-res-r2-2026-09-26",
     )

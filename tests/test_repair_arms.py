@@ -104,6 +104,8 @@ _FALLBACK_CONFIGS = {
     "frontier": "deepseek-v4-pro-0813_nextbit_enabled-false",
 }
 _TEST_PASSES = [base.replace("dev-", "test-", 1) for base in _DEV]
+# The config the frontier arm runs move to (owner ruling OD5, 2026-10-04).
+_NEXTBIT = f"{db.CONFIG_DIR}/{_FALLBACK_CONFIGS['frontier']}.json"
 _PASS_B = f"test-qwen3-32b-passb-{_DATE}"
 _ITEMS = 2
 _CAPS_ROWS = (
@@ -129,6 +131,16 @@ def _arms(base: str) -> list[str]:
 
 def _r2(arm_run: str) -> str:
     return arm_run.removesuffix(f"-{_DATE}") + f"-r2-{_DATE}"
+
+
+def _nb(arm_run: str) -> str:
+    """Names a dev frontier arm run as the move to NextBit names it (OD6)."""
+    return arm_run.removesuffix(f"-{_DATE}") + f"-nb-{_DATE}"
+
+
+def _refused_by_stub(code: str) -> str:
+    """The message the scripted follow-up step refuses with, by code."""
+    return f"The scripted follow-up step refused with {code}"
 
 
 def _origin(run_id: str) -> tuple[str, str]:
@@ -495,6 +507,9 @@ class Bench:
     ``items`` gives each base pass's planned item count and ``refusals``
     the code follow-up refuses with, by base pass or by (base pass, arm).
     The waits before a resume or a re-run are recorded in ``slept``.
+    Every pass sends its own config, as a pass without a registered
+    provider move does; ``moves`` keeps the committed moves, which
+    :meth:`send_moves` puts back.
     """
 
     def __init__(self, root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -509,7 +524,13 @@ class Bench:
         self.script: list[Step] = []
         self.follow_ups: list[dict[str, str]] = []
         self.refusals: dict[Any, str] = {}
+        self.moves: dict[str, Any] = dict(getattr(ra, "PROVIDER_MOVES", {}))
         monkeypatch.setattr(ra, "pause", self.slept.append)
+        monkeypatch.setattr(ra, "PROVIDER_MOVES", {}, raising=False)
+
+    def send_moves(self) -> None:
+        """Sends the committed provider moves, as the batch does."""
+        self.monkeypatch.setattr(ra, "PROVIDER_MOVES", self.moves)
 
     def tick(self) -> datetime:
         """Moves the clock on by one second."""
@@ -533,7 +554,7 @@ class Bench:
 
     def follow_up(
         self, argv: Sequence[str]
-    ) -> tuple[Fields | None, str | None]:
+    ) -> tuple[Fields | None, str | None, str]:
         """Plays the follow-up step: writes the arm's synthetic prompt set."""
         args = dict(zip(argv[1::2], argv[2::2]))
         assert argv[0] == "follow-up" and len(argv) == 11
@@ -543,10 +564,15 @@ class Bench:
         assert args["--plan"] == f"{args['--from-run']}/{ra.PLAN_PATH}"
         code = self.refusals.get((base, arm)) or self.refusals.get(base)
         if code is not None:
-            return None, code
+            return None, code, _refused_by_stub(code)
         output = Path(args["--output-dir"])
+        # As the real step, it builds only under the arm's registered run
+        # id or its one re-run id.
+        registered = dict(zip(ra.ARMS, _arms(base)))[arm]
+        if output.name not in (registered, _r2(registered)):
+            return None, "arm_id_mismatch", _refused_by_stub("arm_id_mismatch")
         if output.exists():
-            return None, "output_exists"
+            return None, "output_exists", _refused_by_stub("output_exists")
         items = [f"mei-{index:04d}" for index in range(1, _ITEMS + 1)]
         _write_prompts(
             output,
@@ -556,12 +582,12 @@ class Bench:
             self.tick(),
             args["--source-revision"],
         )
-        return {"prepare_id": output.name, "items": items, "arm": arm}, None
+        return {"prepare_id": output.name, "items": items, "arm": arm}, None, ""
 
     def seed(self, run_id: str, admit: bool = True) -> str:
         """Commits a test arm's seed as the seeding step writes it."""
         base, arm = _origin(run_id)
-        report, _ = self.follow_up(
+        report, *_ = self.follow_up(
             ra.follow_up_argv(
                 (self.root / ra.RESULTS / base).as_posix(),
                 arm,
@@ -838,6 +864,9 @@ OUTAGE = play("budget", lambda s: first(2, TIMEOUT))
 REFUSED = play(None, lambda s: rest(s, http(404)))
 PENDING = play(None, lambda s: [(0, http(503)), (1, ok())])
 BUDGET = play("budget", lambda s: first(1, ok()))
+# Every prompt rate limited on each pass, as DeepInfra met the frontier
+# arm runs: resumed until no attempt is left, an outage with no answer.
+LIMITED = play(None, lambda s: rest(s, http(429)))
 
 
 # The rows, the order, the argument lists and the summary.
@@ -1568,9 +1597,10 @@ def test_any_other_follow_up_refusal_is_refused_before_a_request(
     assert bench.run([]) == 2
     assert not bench.calls
     refusal = next(line for line in bench.printed if line.startswith("REFUSED"))
-    assert refusal.startswith(
-        f"REFUSED: {DEV_ARMS[8]}: follow-up refused (plan_mismatch): run"
-        " python scripts/model_run.py follow-up --from-run"
+    assert refusal == (
+        f"REFUSED: {DEV_ARMS[8]}: follow-up refused (plan_mismatch) to build"
+        f" its prompt set from docs/results/{_DEV[2]} and its plan:"
+        f" {_refused_by_stub('plan_mismatch')}"
     )
 
 
@@ -1909,10 +1939,382 @@ def test_the_arms_are_the_call_steps_and_the_rounds() -> None:
     assert ra.ARM_TAGS == dict(repair_round.ARM_TAGS)
     assert ra.ARM_TAGS == dict(getattr(model_run, "_ARM_TAGS"))
     assert ra.RERUN_TAG == repair_round.ARM_RERUN
-    for arm in ra.ARMS:
-        assert ra.arm_run_ids(_DEV[0], arm) == repair_round.arm_run_ids(
-            _DEV[0], arm
+    for base in _DEV + _TEST_PASSES:
+        for arm in ra.ARMS:
+            assert ra.arm_run_ids(base, arm) == repair_round.arm_run_ids(
+                base, arm
+            )
+            assert ra.registered_run_ids(
+                base, arm
+            ) == repair_round.registered_run_ids(base, arm)
+    # The batch sends the moves repair --check holds the arm runs to.
+    assert {base: move.tag for base, move in ra.PROVIDER_MOVES.items()} == {
+        base: move.tag for base, move in repair_round.PROVIDER_MOVES.items()
+    }
+
+
+# The frontier arm runs moved to NextBit (owner ruling OD5, 2026-10-04).
+
+
+def test_a_moved_dev_pass_sends_new_runs_with_the_move_config(
+    bench: Bench,
+) -> None:
+    bench.send_moves()
+    registered = [ra.registered_run_ids(_DEV[3], arm)[0] for arm in ra.ARMS]
+    moved = [_nb(run_id) for run_id in registered]
+    assert registered == DEV_ARMS[9:]
+    assert ra.MOVE_CONFIG == _NEXTBIT
+    # The dry run prints a follow-up command that builds each moved set.
+    assert bench.run([], ["--dry-run"]) == 0
+    text = "\n".join(bench.printed)
+    for run_id, name in zip(moved, registered):
+        assert f"  artifacts/repair/{run_id}: would build" in text
+        assert (
+            f" --output-dir artifacts/repair-arms/build/{run_id}/{name}"
+            " --source-revision test-rev\n"
+            f"    # installed as artifacts/repair/{run_id}\n"
+        ) in text
+    assert f"10 | {moved[0]} | {_FALLBACK_CONFIGS['frontier']} | 2 |" in text
+    # An unmoved run's command builds where the batch installs its set.
+    assert (
+        f" --output-dir artifacts/repair/{DEV_ARMS[0]}"
+        " --source-revision test-rev\n"
+        "    uv run --frozen python scripts/model_run.py follow-up"
+    ) in text
+
+    # Keyless: the moved rows send their new ids with the move's config at
+    # the frontier dev cap; follow-up builds each under its registered id.
+    assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
+    keyless = [argv for argv, key in bench.calls if not key]
+    assert [_flag(argv, "--run-id") for argv in keyless] == (
+        DEV_ARMS[:9] + moved
+    )
+    for argv in keyless[9:]:
+        assert (_flag(argv, "--config"), _flag(argv, "--max-usd")) == (
+            _NEXTBIT,
+            "0.200000",
         )
+    built = [Path(args["--output-dir"]).name for args in bench.follow_ups]
+    assert built == DEV_ARMS
+    for run_id, name in zip(moved, registered):
+        prepare = bench.root / ra.PREPARE_ROOT / run_id / "prepare.json"
+        assert (
+            PrepareManifestV1.model_validate_json(
+                prepare.read_bytes()
+            ).prepare_id
+            == name
+        )
+        assert not (bench.root / ra.PREPARE_ROOT / name).exists()
+
+    # Paid: rows 1 to 9 as before, rows 10 to 12 on NextBit.
+    assert bench.run(bench.keyless() + [COMPLETE] * 12) == ra.EXIT_OK
+    assert bench.paid() == DEV_ARMS[:9] + moved
+    paid = bench.paid_argv()
+    for argv, run_id in zip(paid[9:], moved):
+        assert argv == [
+            sys.executable,
+            "scripts/model_run.py",
+            "call",
+            "--prepare-dir",
+            f"artifacts/repair/{run_id}",
+            "--run-id",
+            run_id,
+            "--config",
+            _NEXTBIT,
+            "--max-usd",
+            "0.200000",
+            "--source-revision",
+            "test-rev",
+            "--min-interval-seconds",
+            "1.0",
+            "--max-attempts",
+            "3",
+            "--gate-first",
+        ]
+    configs = [f"{db.CONFIG_DIR}/{c}.json" for c in _DEV_CONFIGS.values()]
+    assert [_flag(argv, "--config") for argv in paid[:9]] == [
+        config for config in configs[:3] for _ in range(3)
+    ]
+    assert [_flag(argv, "--max-usd") for argv in paid[:9]] == [
+        f"{cap:.6f}" for cap in _DEV_CAPS[:3] for _ in range(3)
+    ]
+    rows = bench.rows()
+    assert list(rows) == DEV_ARMS[:9] + moved
+    for number, run_id in enumerate(DEV_ARMS[:9]):
+        assert rows[run_id]["config"] == configs[number // 3]
+    for run_id in moved:
+        row = rows[run_id]
+        assert (row["config"], row["cap_usd"], row["state"]) == (
+            _NEXTBIT,
+            0.20,
+            "done",
+        )
+        assert row["counted_run_id"] == run_id
+        assert row["maintainer"]["commit_to"] == f"docs/results/{run_id}/"
+
+
+def test_a_moved_runs_printed_follow_up_runs_where_the_replaced_run_is_kept(
+    bench: Bench,
+) -> None:
+    """Each moved run's printed follow-up command can be run as printed.
+
+    In the owner's checkout the arm's registered first id, the only name
+    follow-up builds under, names the run directory of the DeepInfra run
+    the move replaced, and follow-up refuses an existing output. The
+    printed command builds elsewhere, a set equal to the one the batch
+    installs under the moved id. It starts the step in the project's
+    locked environment, as the note's commands do, and the real step's
+    parser takes every word after the script as printed; where the batch
+    installs the set is a comment line of its own.
+    """
+    bench.send_moves()
+    registered = [ra.registered_run_ids(_DEV[3], arm)[0] for arm in ra.ARMS]
+    moved = [_nb(run_id) for run_id in registered]
+    for name in registered:
+        (bench.root / ra.PREPARE_ROOT / name / "runs" / name).mkdir(
+            parents=True
+        )
+    assert bench.run([], ["--dry-run"]) == 0
+    printed = [line.strip() for line in bench.printed]
+    comments = [
+        at
+        for at, line in enumerate(printed)
+        if line.startswith("# installed as ")
+    ]
+    assert len(comments) == len(moved)
+    by_hand: list[Path] = []
+    for at, run_id, name, arm in zip(comments, moved, registered, ra.ARMS):
+        assert printed[at] == f"# installed as {ra.PREPARE_ROOT}/{run_id}"
+        line = printed[at - 1]
+        words = line.split(" ")
+        assert words[:5] == ["uv", "run", "--frozen", "python", db.MODEL_RUN]
+        argv = words[5:]
+        parsed = model_run.build_parser().parse_args(argv)
+        assert (parsed.source_revision, parsed.arm) == ("test-rev", arm)
+        # Run as printed from the root of the bench's tree.
+        rooted = list(argv)
+        for index, flag in enumerate(argv[:-1]):
+            if flag in ("--from-run", "--plan", "--output-dir"):
+                rooted[index + 1] = (bench.root / argv[index + 1]).as_posix()
+        report, code, _ = bench.follow_up(rooted)
+        assert (report is not None, code) == (True, None), line
+        output = Path(_flag(rooted, "--output-dir"))
+        assert output.name == name
+        by_hand.append(output)
+    assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
+    for built, run_id in zip(by_hand, moved):
+        assert not ra.differences(built, bench.root / ra.PREPARE_ROOT / run_id)
+
+
+@pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
+def test_the_printed_follow_up_starts_as_the_notes_follow_up_command() -> None:
+    """The batch prints follow-up the way the note's Commands run it."""
+    note = (_ROOT / ra.NOTE).read_text(encoding="utf-8")
+    start = " ".join([*ra.HOST_PYTHON, db.MODEL_RUN, "follow-up --from-run"])
+    assert f"\n{start} docs/results/$PASS" in note
+
+
+@pytest.mark.parametrize("moved", [True, False])
+def test_a_follow_up_refusal_gives_its_reason_with_built_sets_in_place(
+    bench: Bench, capsys: pytest.CaptureFixture[str], moved: bool
+) -> None:
+    """A refusal carries follow-up's own message, so nothing is re-run.
+
+    A command printed to read the reason would build where a set may
+    already be: a moved run's printed line where the owner ran it by
+    hand, an unmoved run's where the batch installed its set. Follow-up
+    refuses an existing output before anything else, so that command
+    could only say ``output_exists``.
+    """
+    bench.send_moves()
+    if moved:
+        base, arm = _DEV[3], "resample"
+        name = ra.registered_run_ids(base, arm)[0]
+        run_id = _nb(name)
+        # The replaced DeepInfra run is kept, and the owner built the
+        # moved set by hand where the dry run's line builds it.
+        (bench.root / ra.PREPARE_ROOT / name / "runs" / name).mkdir(
+            parents=True
+        )
+        kept = bench.root / ra.HAND_BUILD_ROOT / run_id / name
+        report, *_ = bench.follow_up(
+            ra.follow_up_argv(
+                (bench.root / ra.RESULTS / base).as_posix(),
+                arm,
+                kept.as_posix(),
+                "test-rev",
+            )
+        )
+        assert report is not None
+    else:
+        base, arm, run_id = _DEV[2], "counterexample", DEV_ARMS[8]
+        kept = bench.root / ra.PREPARE_ROOT / run_id
+    # Step 2 without the key installs every owed set, then stops.
+    assert bench.run(bench.keyless(), key=False) == ra.EXIT_ABORTED
+    assert (kept / "prepare.json").is_file()
+    assert (bench.root / ra.PREPARE_ROOT / run_id / "prepare.json").is_file()
+
+    bench.refusals[(base, arm)] = "plan_invalid"
+    capsys.readouterr()
+    assert bench.run([], ["--dry-run"]) == ra.EXIT_REFUSED
+    dry = capsys.readouterr().err.strip()
+    assert bench.run([]) == ra.EXIT_REFUSED
+    assert not bench.calls
+    owner = next(line for line in bench.printed if line.startswith("REFUSED"))
+    expected = (
+        f"{run_id}: follow-up refused (plan_invalid) to build its prompt set"
+        f" from docs/results/{base} and its plan:"
+        f" {_refused_by_stub('plan_invalid')}"
+    )
+    assert dry == f"refused: {expected}"
+    assert owner == f"REFUSED: {expected}"
+    assert (kept / "prepare.json").is_file()
+
+
+def test_a_moved_runs_outage_is_re_run_once_as_its_nb_r2(
+    bench: Bench,
+) -> None:
+    bench.send_moves()
+    moved, rerun = ra.arm_run_ids(_DEV[3], "resample")
+    name = ra.registered_run_ids(_DEV[3], "resample")[0]
+    assert (moved, rerun) == (_nb(DEV_ARMS[9]), _r2(_nb(DEV_ARMS[9])))
+    script = (
+        bench.keyless()
+        + [COMPLETE] * 9
+        + [LIMITED] * 3
+        + [refuse("api_key_missing")]
+        + [LIMITED] * 3
+        + [COMPLETE] * 2
+    )
+    assert bench.run(script) == ra.EXIT_OK
+    later = [_nb(run_id) for run_id in DEV_ARMS[10:]]
+    assert bench.paid() == DEV_ARMS[:9] + [moved] * 3 + [rerun] * 3 + later
+    # Two resumes of each run and the wait before the re-run.
+    assert bench.slept == [db.RESUME_WAIT_SECONDS] * 5
+    # The re-run answers its own prompt set, which follow-up builds under
+    # the arm's registered first id, and sends the move's config at the
+    # frontier dev cap; no arm moves again.
+    keyless = [argv for argv, key in bench.calls if not key]
+    assert _flag(keyless[-1], "--run-id") == rerun
+    assert bench.follow_ups[-1]["--arm"] == "resample"
+    assert Path(bench.follow_ups[-1]["--output-dir"]).name == name
+    prepare = bench.root / ra.PREPARE_ROOT / rerun / "prepare.json"
+    assert (
+        PrepareManifestV1.model_validate_json(prepare.read_bytes()).prepare_id
+        == name
+    )
+    for argv in [*bench.paid_argv()[9:], keyless[-1]]:
+        assert (_flag(argv, "--config"), _flag(argv, "--max-usd")) == (
+            _NEXTBIT,
+            "0.200000",
+        )
+        run_id = _flag(argv, "--run-id")
+        assert _flag(argv, "--prepare-dir") == f"artifacts/repair/{run_id}"
+    row = bench.rows()[moved]
+    assert (row["state"], row["counted_run_id"]) == ("not_run", rerun)
+    assert row["reason"] == (
+        "outage (no_answer_only_transient_failures); its re-run"
+        f" {rerun} met an outage too"
+    )
+    assert row["maintainer"] == {
+        "commit_to": f"{ra.EVIDENCE_DIR}/{rerun}/",
+        "repair_not_run": None,
+        "first_run_evidence": f"{ra.EVIDENCE_DIR}/{moved}/",
+    }
+    assert row["config"] == _NEXTBIT
+    # The row is final: the same command sends nothing more.
+    assert bench.run([]) == ra.EXIT_OK
+    assert not bench.calls
+
+
+def test_a_move_config_beyond_provider_and_prices_is_refused(
+    bench: Bench,
+) -> None:
+    bench.send_moves()
+    path = bench.root / _NEXTBIT
+    text = path.read_text(encoding="utf-8")
+    # The bench's NextBit config differs from the pass's in route and
+    # prices alone, so the move is taken as it stands.
+    assert bench.context().plan.rows[9].config == _NEXTBIT
+
+    def edited(change: Callable[[Fields], None]) -> Fields:
+        document: Fields = json.loads(text)
+        change(document)
+        return document
+
+    def refused(document: Fields | str, why: str, config: str) -> None:
+        target = bench.root / config
+        if isinstance(document, str):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(document, encoding="utf-8")
+        else:
+            _write_json(target, document)
+        bench.monkeypatch.setattr(
+            ra, "PROVIDER_MOVES", {_DEV[3]: ra.Move(config, "nb")}
+        )
+        named = f"the move of {_DEV[3]}'s arm runs to {config}: {why}"
+        with pytest.raises(tp.PlanError, match=re.escape(named)):
+            bench.context()
+        path.write_text(text, encoding="utf-8")
+
+    own = f"{db.CONFIG_DIR}/{_DEV_CONFIGS[_DEV[3]]}.json"
+    differ = f"its settings differ from {own}'s beyond the provider order"
+    other = f"it names another endpoint host or model than {own}"
+    refused(edited(lambda d: d["settings"].update(seed=18)), differ, _NEXTBIT)
+    refused(
+        edited(lambda d: d["settings"].update(model_id="deepseek/other")),
+        other,
+        _NEXTBIT,
+    )
+    refused(
+        edited(lambda d: d.update(endpoint_url="https://example.com/v1")),
+        other,
+        _NEXTBIT,
+    )
+    outside = f"docs/decisions/evidence/repair-arms/{Path(_NEXTBIT).name}"
+    refused(text, "not a committed bake-off config", outside)
+    # A move that keeps the pass's route, or a config the call step cannot
+    # read, is no move either.
+    refused(
+        (bench.root / own).read_text(encoding="utf-8"),
+        f"it sends the provider order of {own}",
+        own,
+    )
+    refused("{", "not a bake-off config the call step reads", _NEXTBIT)
+
+
+def test_rows_take_the_move_config_ids_and_the_slot_cap() -> None:
+    caps = ra.load_caps(_note())
+    assert sorted(ra.PROVIDER_MOVES) == [_DEV[3], _TEST_PASSES[3]]
+    for split, bases, arms, slot_caps in (
+        ("dev", _DEV, DEV_ARMS, _DEV_CAPS),
+        ("test", _TEST_PASSES, TEST_ARMS, _TEST_CAPS),
+    ):
+        passes = [
+            ra.RepairedPass(base, slot, f"{db.CONFIG_DIR}/{config}.json")
+            for base, slot, config in zip(
+                bases, ra.SLOT_ORDER, _DEV_CONFIGS.values()
+            )
+        ]
+        rows = ra.rows_for(passes, caps, split)
+        frontier = list(arms[9:])
+        if split == "dev":
+            frontier = [_nb(run_id) for run_id in frontier]
+        assert [row.run_id for row in rows] == list(arms[:9]) + frontier
+        assert [row.rerun_id for row in rows] == [
+            _r2(run_id) for run_id in list(arms[:9]) + frontier
+        ]
+        assert [row.config for row in rows] == [
+            config
+            for repaired in passes[:3]
+            for config in [repaired.config] * 3
+        ] + [_NEXTBIT] * 3
+        assert [row.cap_usd for row in rows] == [
+            cap for cap in slot_caps for _ in range(3)
+        ]
+        assert [row.base_run for row in rows] == [
+            base for base in bases for _ in range(3)
+        ]
 
 
 # Interrupts and errors after a paid call may have been sent.
@@ -1982,11 +2384,11 @@ def test_the_real_invoker_withholds_the_key_from_a_keyless_call(
     assert "not-a-credential" not in "\n".join(printed)
 
 
-def test_the_real_follow_up_reports_a_refusal_code(
+def test_the_real_follow_up_reports_a_refusal_code_and_message(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     missing = tmp_path / "dev-none-2026-09-26"
-    report, code = ra.run_follow_up(
+    report, code, message = ra.run_follow_up(
         ra.follow_up_argv(
             missing.as_posix(),
             "bare",
@@ -1994,7 +2396,11 @@ def test_the_real_follow_up_reports_a_refusal_code(
             "test",
         )
     )
-    assert (report, code) == (None, "plan_invalid")
+    assert (report, code, message) == (
+        None,
+        "plan_invalid",
+        "A required file is missing",
+    )
     assert capsys.readouterr() == ("", "")
 
 
@@ -2011,7 +2417,10 @@ def test_the_committed_passes_give_the_notes_arm_run_ids_and_caps() -> None:
 
     The note's caps table holds the registered caps, which a raise never
     edits, so a budget stop resumed under a raised cap leaves this test
-    as it was.
+    as it was. Its arm run id table holds the registered ids; the dev
+    frontier rows take the ids of the owner's move to NextBit instead
+    (OD5, OD6), from the note's table of them, and the frontier rows of
+    both splits send the move's config.
     """
     note = (_ROOT / ra.NOTE).read_text(encoding="utf-8")
     protocol = (_ROOT / "docs" / "protocol.md").read_text(encoding="utf-8")
@@ -2036,9 +2445,23 @@ def test_the_committed_passes_give_the_notes_arm_run_ids_and_caps() -> None:
         table = [row for row in listed if row[0].startswith(f"{split}-")]
         bases = dict.fromkeys(row.base_run for row in rows)
         assert [
-            (base, *(row.run_id for row in rows if row.base_run == base))
+            (
+                base,
+                *(ra.registered_run_ids(base, arm)[0] for arm in ra.ARMS),
+            )
             for base in bases
         ] == table
+        moved = [
+            (row.arm, row.run_id, row.rerun_id)
+            for row in rows
+            if row.run_id != ra.registered_run_ids(row.base_run, row.arm)[0]
+        ]
+        assert moved == (_NOTE_MOVE_ROW.findall(note) if split == "dev" else [])
+        assert len(moved) == {"dev": 3, "test": 0}[split]
+        assert {Path(row.config).stem for row in rows[9:]} == {
+            "deepseek-v4-pro-0813_nextbit_enabled-false"
+        }
+        assert {row.slot for row in rows[9:]} == {"frontier"}
         assert [row.cap_usd for row in rows] == [
             c for c in caps for _ in range(3)
         ]
@@ -2125,3 +2548,284 @@ def test_the_note_gives_the_owner_command_for_each_split_in_both_shells() -> (
             "git switch main",
             "git pull --ff-only",
         ]
+
+
+# The owner's ruling of 2026-10-04 (OD5) that moves the frontier slot's
+# arm runs from DeepInfra to NextBit, and the run ids the move takes.
+_MOVE_RULING = "docs/decisions/evidence/repair-arms/ruling-2026-10-04.json"
+_CONFIG_DIR = "docs/decisions/evidence/bakeoff/configs"
+# Every tag a run id already carries: arms, re-run, fallback and pass B.
+_TAKEN_TAGS = frozenset({"res", "bare", "cx", "fb", "r2", "passb"})
+_SMOKE_TAG = re.compile(r"rs[0-9]*")
+_NOTE_MOVE_ROW = re.compile(
+    r"^\| (resample|bare|counterexample) \| `(dev-[^`]+)` \| `([^`]+)` \|$",
+    re.MULTILINE,
+)
+
+
+def _read(path: str) -> str:
+    return (_ROOT / path).read_text(encoding="utf-8")
+
+
+def _http_429_counts(run_dir: str) -> tuple[int, int]:
+    """Counts a run's HTTP 429 attempts: all, and before an item's last.
+
+    The first is the basis of the dev figure beside it; the second is the
+    one the locked test page states.
+    """
+    run = _ROOT / run_dir
+    manifest = json.loads(
+        (run / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    every = before_last = 0
+    for condition in manifest["conditions"]:
+        lines = (run / condition["attempts_path"]).read_text(encoding="utf-8")
+        attempts = [json.loads(line) for line in lines.splitlines()]
+        last: dict[str, int] = {}
+        for attempt in attempts:
+            item = attempt["completion"]["item_id"]
+            last[item] = max(last.get(item, 0), attempt["attempt"])
+        for attempt in attempts:
+            if attempt["completion"]["http_status"] != 429:
+                continue
+            every += 1
+            item = attempt["completion"]["item_id"]
+            before_last += attempt["attempt"] < last[item]
+    return every, before_last
+
+
+@pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
+def test_the_frontier_move_ruling_matches_its_evidence() -> None:
+    """The move to NextBit holds to its config, its evidence and its ids.
+
+    Its figures are recounted from the committed evidence of the six
+    DeepInfra runs it replaces, and the test baseline's HTTP 429 from that
+    pass's committed attempts, so a ruling that misstates them fails.
+    Each moved id is the registered one with the move's tag after the arm
+    tag. A replaced run never reaches docs/results, which guards the
+    resample arm that no second-turn check covers.
+    """
+    ruling = json.loads(_read(_MOVE_RULING))
+    old_bytes = (_ROOT / ruling["from_config"]).read_bytes()
+    new_bytes = (_ROOT / ruling["to_config"]).read_bytes()
+    old, new = json.loads(old_bytes), json.loads(new_bytes)
+    frontier = _DEV[3]
+    assert ruling["schema"] == "repair-arms-ruling/1.1"
+    assert ruling["note"] == ra.NOTE
+    assert ruling["registered_in"] == "docs/protocol.md"
+    assert ruling["from_config"] == (
+        f"{_CONFIG_DIR}/{_DEV_CONFIGS[frontier]}.json"
+    )
+    assert ruling["to_config"] == (
+        f"{_CONFIG_DIR}/{_FALLBACK_CONFIGS['frontier']}.json"
+    )
+    assert ruling["to_config_sha256"] == _sha256(new_bytes)
+    assert ruling["model_id"] == new["settings"]["model_id"]
+    assert old["settings"]["openrouter"]["provider_order"] == ["deepinfra"]
+    assert new["settings"]["openrouter"]["provider_order"] == ["nextbit"]
+    assert old["prices"] != new["prices"]
+    # The batch sends the ruled moves, and repair --check holds the arm
+    # runs to the moved config's provider order and its whole prices.
+    assert {
+        move["base_run"]: (ruling["to_config"], move["tag"])
+        for move in ruling["moves"]
+    } == {
+        base: (move.config, move.tag)
+        for base, move in ra.PROVIDER_MOVES.items()
+    }
+    for move in repair_round.PROVIDER_MOVES.values():
+        assert move.provider_order == tuple(
+            new["settings"]["openrouter"]["provider_order"]
+        )
+        assert move.prices.model_dump(mode="json") == new["prices"]
+    for config in (old, new):
+        del config["settings"]["openrouter"]["provider_order"]
+        del config["prices"]
+    assert old == new
+    caps = ra.load_caps(_read(ra.NOTE))
+    assert ruling["caps_usd"] == {
+        "dev": caps["frontier"].dev,
+        "test": caps["frontier fallback"].test,
+    }
+    assert ruling["caps_usd"] == {"dev": _DEV_CAPS[3], "test": _TEST_CAPS[3]}
+
+    # OD5 is the owner's ruling of the ruling's date. OD6 to OD8 are the
+    # maintainer's defaults, which the owner confirmed on 2026-10-05; each
+    # move names who settled each decision it rests on, and when.
+    decided = {item["id"]: item["by"] for item in ruling["decisions"]}
+    assert decided == {
+        "OD5": "owner",
+        "OD6": "default_confirmed",
+        "OD7": "default_confirmed",
+        "OD8": "default_confirmed",
+    }
+    confirmation = ruling["confirmation"]
+    assert confirmation == {
+        "by": "owner",
+        "date": "2026-10-05",
+        "decisions": [od for od, by in decided.items() if by != "owner"],
+        "text": confirmation["text"],
+    }
+    assert confirmation["text"].startswith(
+        "Confirmed by the owner on 2026-10-05:"
+    )
+    settled = {"owner": ruling["date"], "default_confirmed": "2026-10-05"}
+    for item in ruling["decisions"]:
+        assert item["text"]
+        if item["by"] != "owner":
+            assert item["text"].endswith(
+                " confirmed by the owner on 2026-10-05."
+            )
+    dev_move, test_move = ruling["moves"]
+    for move, rests_on in (
+        (dev_move, ("OD5", "OD6", "OD7")),
+        (test_move, ("OD5", "OD7", "OD8")),
+    ):
+        assert move["decided_by"] == [
+            {"by": decided[od], "date": settled[decided[od]], "id": od}
+            for od in rests_on
+        ]
+
+    # The evidence, recounted from the committed DeepInfra arm runs.
+    registered = [
+        run for first in _arms(frontier) for run in (first, _r2(first))
+    ]
+    kept = [
+        run for run in registered if (_ROOT / ra.EVIDENCE_DIR / run).is_dir()
+    ]
+    attempts: list[Any] = []
+    bound = 0.0
+    revisions: set[str] = set()
+    for run_id in kept:
+        run = _ROOT / ra.EVIDENCE_DIR / run_id
+        manifest = json.loads(
+            (run / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["run_id"] == run_id
+        assert manifest["charged_usd_upper_bound"] == 0.0
+        assert manifest["settings"]["openrouter"]["provider_order"] == [
+            "deepinfra"
+        ]
+        bound += manifest["charged_usd_upper_bound"]
+        revisions |= {
+            item["source_revision"] for item in manifest["invocations"]
+        }
+        for condition in manifest["conditions"]:
+            lines = (run / condition["attempts_path"]).read_text(
+                encoding="utf-8"
+            )
+            attempts += [json.loads(line) for line in lines.splitlines()]
+    completions = [attempt["completion"] for attempt in attempts]
+    sent = sorted(attempt["sent_at"] for attempt in attempts)
+    (revision,) = revisions
+    assert (len(kept), len(attempts)) == (6, 198)
+    assert {completion["http_status"] for completion in completions} == {429}
+    assert {completion["status"] for completion in completions} == {"failed"}
+    assert sum(attempt["charged_micro_usd"] for attempt in attempts) == 0
+    evidence = ruling["evidence"]
+    baseline = f"{ra.RESULTS}/{_TEST_PASSES[3]}"
+    baseline_429, baseline_429_before_last = _http_429_counts(baseline)
+    assert evidence == {
+        "runs": kept,
+        "attempts": len(attempts),
+        "http_429": sum(c["http_status"] == 429 for c in completions),
+        "answers": sum(c["status"] == "completed" for c in completions),
+        "charged_usd_upper_bound": bound,
+        "first_attempt_at": sent[0],
+        "last_attempt_at": sent[-1],
+        "source_revision": revision,
+        "diagnostics": (
+            f"{ra.EVIDENCE_DIR}/frontier-provider-diagnostics-2026-10-04.md"
+        ),
+        "runner_summary": f"{ra.EVIDENCE_DIR}/summary-dev-2026-10-04.json",
+        "test_baseline_run": baseline,
+        "test_baseline_http_429": baseline_429,
+        "test_baseline_http_429_before_last_attempt": baseline_429_before_last,
+    }
+    assert (_ROOT / evidence["diagnostics"]).is_file()
+    assert (_ROOT / evidence["runner_summary"]).is_file()
+    assert kept == dev_move["replaced_runs"]
+    assert test_move["replaced_runs"] == []
+
+    # The moved ids: the registered ones, the tag after the arm tag.
+    assert (dev_move["base_run"], dev_move["tag"]) == (frontier, "nb")
+    assert (test_move["base_run"], test_move["tag"]) == (_TEST_PASSES[3], None)
+    tag = dev_move["tag"]
+    assert tag not in _TAKEN_TAGS and _SMOKE_TAG.fullmatch(tag) is None
+    result_dir: re.Pattern[str] = getattr(model_run, "_RESULT_DIR")
+    moved: list[str] = []
+    for move in ruling["moves"]:
+        assert sorted(move["arm_runs"]) == sorted(ra.ARMS)
+        for arm, first in zip(ra.ARMS, _arms(move["base_run"])):
+            arm_tag = f"-{ra.ARM_TAGS[arm]}-"
+            runs = [first, _r2(first)]
+            assert all(run.count(arm_tag) == 1 for run in runs)
+            if move["tag"] is not None:
+                runs = [
+                    run.replace(arm_tag, f"{arm_tag}{move['tag']}-")
+                    for run in runs
+                ]
+            assert move["arm_runs"][arm] == runs
+            moved += runs
+    assert len(moved) == len(set(moved)) == 12
+    assert all(result_dir.fullmatch(run) is not None for run in moved)
+    registry = json.loads(_read(tp.REGISTRY))
+    named = [row["run_id"] for row in registry["runs"]] + list(ra.DEV_PASSES)
+    assert not [name for name in named if f"-{tag}-" in name]
+    assert not [
+        run
+        for run in dev_move["replaced_runs"]
+        if (_ROOT / ra.RESULTS / run).exists()
+    ]
+    assert _NOTE_MOVE_ROW.findall(_read(ra.NOTE)) == [
+        (arm, *dev_move["arm_runs"][arm]) for arm in ra.ARMS
+    ]
+
+    # The amended texts that register the move. Each credits OD5 to the
+    # owner and OD6 to OD8 to the maintainer's defaults the owner confirmed.
+    confirmed = "which the owner confirmed on 2026-10-05"
+    protocol = " ".join(_read("docs/protocol.md").split())
+    assert "Amended 2026-10-04" in protocol
+    assert (
+        "before any test repair prompt is prepared. The move is owner ruling"
+        " OD5 of 2026-10-04 in the [repair note](decisions/repair-round.md);"
+        " the dev re-run (OD6), the outage rule on NextBit (OD7) and the kept"
+        f" test ids (OD8) are maintainer defaults there, {confirmed}."
+    ) in protocol
+    bakeoff = _read("docs/decisions/model-bakeoff.md")
+    _, section = bakeoff.split("## Repair arms' provider: 2026-10-04", 1)
+    assert f"`{_FALLBACK_CONFIGS['frontier']}`" in section
+    section = " ".join(section.split())
+    assert "OD5 in the [repair note](repair-round.md)" in section
+    assert f"is OD6 there, a maintainer default, {confirmed}" in section
+    repair_note = " ".join(_read(ra.NOTE).split())
+    assert "and the owner confirmed all three on 2026-10-05" in repair_note
+    for od in ("OD6", "OD7", "OD8"):
+        assert f"**{od}, a maintainer default the owner confirmed:" in (
+            repair_note
+        )
+    for stale in ("default taken", "not yet confirmed", "paid dev command"):
+        assert stale not in repair_note, stale
+    (amended,) = registry["repair_arms"]["amended"]
+    assert amended["ruling"] == _MOVE_RULING
+    # The registry names every test arm run the move sends, -r2 included,
+    # in its JSON entry and in its note's dated paragraph, and the defaults
+    # the -r2 re-runs and the kept ids rest on.
+    test_id = re.compile(r"test-[a-z0-9][a-z0-9.-]{0,31}-\d{4}-\d{2}-\d{2}")
+    moved_test = sorted(
+        run for runs in test_move["arm_runs"].values() for run in runs
+    )
+    note = " ".join(_read("docs/decisions/test-runs.md").split())
+    _, paragraph = note.split("Amended 2026-10-04 (owner ruling OD5", 1)
+    paragraph, _ = paragraph.split("## ", 1)
+    for text in (amended["text"], paragraph):
+        assert sorted(set(test_id.findall(text))) == moved_test
+        assert "OD7, for the outage re-runs, and OD8, for the kept ids," in (
+            text
+        )
+        assert confirmed in text
+    locked = " ".join(_read(f"{ra.RESULTS}/locked-test-v1.md").split())
+    assert (
+        f"it met {baseline_429_before_last} HTTP 429 responses before an"
+        " item's last attempt" in locked
+    )
