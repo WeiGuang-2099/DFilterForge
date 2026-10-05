@@ -2255,12 +2255,11 @@ the key variable, and nothing was pushed.
     split test at source revision be9f611, under its own registered run id.
   - `admitted_prepares` holds 13 digests: the frozen test prepare first,
     unchanged (`206599bb67e1`), then the 12 seeds' in batch order.
-- **Checks at d95483a,** from 04:44:13Z to 04:46:35Z, and of this
-  section's edits from 04:50:19Z to 04:54:03Z. They ran on the host,
-  with the worktree's venv: Python 3.12.10, and the locked dev extras
-  installed offline with `uv sync --frozen --extra dev`. They did not run in
-  the lab or test image, because the Docker daemon did not answer (`docker
-  info` timed out after 20 s, with C: at 2.1 GB free).
+- **Checks at d95483a and of this section's edits,** made after the
+  container runs at d95483a that the next section lists. They ran on the
+  host, with the worktree's venv: Python 3.12.10, and the locked dev extras
+  installed offline with `uv sync --frozen --extra dev`, because by then the
+  Docker daemon no longer answered.
   - `repair --check` over the 8 plans found no difference: the four dev
     passes at the summary stage, the four test passes at the prompts stage.
   - `repair-pool --check --split dev` found no difference, with
@@ -2410,7 +2409,10 @@ was sent, no command set the key variable, and nothing was pushed.
     isort, pylint 10.00/10, pyright 0 errors, lint-imports 5 kept and 0
     broken; registration 300 passed, second turn 2, web exporter tests 180;
     the repair loop 8 plans and `repair-pool --check` (`dcba4a24342b`), no
-    difference.
+    difference. That loop checked the four test passes at the plan stage,
+    the last check that re-derives their cards: once a pass's seeds are
+    committed, `repair --check` reads its committed plan at the prompts
+    stage.
   - The seeds at d95483a: the full suite 1,979 passed and 31 skipped,
     coverage 97.09%; registration 300, pair 2, second turn 2; the repair
     loop 8 plans with 0 failures (dev at the summary stage, test at the
@@ -2476,10 +2478,15 @@ was sent, no command set the key variable, and nothing was pushed.
     non-ASCII character. Both the worktree and the main checkout (on `main`)
     were clean.
 - **Next.**
-  1. The Docker checks not run at 611afb4 run once the engine answers. CI
-     runs its jobs on the pull request as well.
-  2. The maintainer pushes `dev-pool-test-seeds` and opens its pull request.
-     The owner pushes nothing.
+  1. The four gates of CI's python job (benchmark, adequacy, prepare and
+     recall) and the `uv.lock` comparison have not run at any commit of this
+     branch, and the `score --check` loop last ran at e93c39f. CI runs them
+     on the pull request. The images `dfilterforge-{lab,test}:dev-pool-test-seeds`
+     and `dfilterforge-{lab,test}:rv-docs-ci` are removed once the engine
+     answers.
+  2. The maintainer pushes `dev-pool-test-seeds`; on 2026-10-05 the owner
+     asked for the push before item 1's checks, with the engine still down.
+     The owner opens its pull request and pushes nothing.
   3. The owner merges it into `main`, then runs the test round from the
      main checkout with the Windows PowerShell 5.1 block "The test round,
      the same way" in the repair note's Commands: `--split test --dry-run`,
@@ -2543,9 +2550,11 @@ was sent, no command set the key variable, and nothing was pushed.
 - `repair-arms` was pushed and merged into `main` by PR #18 as bff373c. CI
   runs on every pull request and every push to `main` (`ci.yml`), but no
   result of it on PR #18 is recorded here. PR #20 merged `dev-repair-round`
-  into `main` as 60d2421. `dev-pool-test-seeds` is not pushed, so CI has not
-  run on it; this session's checks of it ran on the host, not in CI's
-  images.
+  into `main` as 60d2421. `dev-pool-test-seeds` was pushed on 2026-10-05, at
+  the owner's request, while Docker's engine did not answer. Its full suite
+  and docs-mounted steps ran in the test image at be9f611 and d95483a, and
+  its repair loops at d95483a; the four CI gates, the `uv.lock` comparison
+  and a score loop after e93c39f run only in CI on its pull request.
 - `scripts/repair_arms.py` has sent paid calls twice, both on the dev split:
   the owner's dev batch of 2026-10-04 ("Dev repair rounds published" above)
   and its re-run of 2026-10-05, whose committed runs are only the three
