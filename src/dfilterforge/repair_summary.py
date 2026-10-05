@@ -17,7 +17,9 @@ over their own items. Each pair of arms is compared on the case shares:
 the difference is the ratio estimator over their differences, and the
 cases on which they differ are counted as discordant. A pool sums every
 model's shares case by case, so each drawn case brings every model's cells,
-and counts discordant cells.
+and still counts discordant cases: a case is discordant when the two arms
+repaired a different number of its items, every model's taken together,
+and counts for the arm that repaired more (owner ruling OD9, 2026-10-05).
 
 A summary holds every ready case of the base pass with its C4 item count
 and every triggered item with its outcome in each arm run, so a pool is
@@ -122,14 +124,14 @@ class RepairCaseV1(FrozenModel):
 class RepairComparisonV1(FrozenModel):
     """Two arms' repaired shares, paired on every case.
 
-    ``unit`` is ``cases`` for one model and ``cells``, one model's case,
-    for a pool. ``difference`` is the first arm's repair@1 minus the
-    second's on the same vectors.
+    ``unit`` is ``cases`` for one model and for a pool alike: a pool never
+    counts one model's case on its own (OD9). ``difference`` is the first
+    arm's repair@1 minus the second's on the same vectors.
     """
 
     first: ArmName
     second: ArmName
-    unit: Literal["cases", "cells"]
+    unit: Literal["cases"]
     difference: RateV1
     first_better: int = Field(ge=0)
     second_better: int = Field(ge=0)
@@ -380,25 +382,32 @@ def _comparison(
     models: Sequence[_Cells],
     universe: _Universe,
     pair: tuple[ArmName, ArmName],
-    unit: Literal["cases", "cells"],
 ) -> RepairComparisonV1:
-    """Compares two arms' repaired shares, paired on every case and model."""
+    """Compares two arms' repaired shares, paired on every case.
+
+    The difference is the ratio estimator over each case's share
+    differences summed over the models. A case is discordant when the two
+    arms repaired a different number of its items, every model's taken
+    together, and it counts for the arm that repaired more (owner ruling
+    OD9, 2026-10-05, in the repair note).
+    """
     first, second = pair
+    by_first, by_second = _repaired(first), _repaired(second)
     differences: list[dict[str, float]] = []
-    cells: dict[str, float] = {}
-    for index, model in enumerate(models):
-        ahead = model.shares(_repaired(first))
-        behind = model.shares(_repaired(second))
-        difference = {key: ahead[key] - behind[key] for key in ahead}
-        differences.append(difference)
-        cells.update(
-            {f"{index}/{key}": value for key, value in difference.items()}
+    margins: Counter[str] = Counter()
+    for model in models:
+        ahead = model.shares(by_first)
+        behind = model.shares(by_second)
+        differences.append({key: ahead[key] - behind[key] for key in ahead})
+        margins.update(item.case_id for item in model.items if by_first(item))
+        margins.subtract(
+            item.case_id for item in model.items if by_second(item)
         )
-    counts = discordance(cells)
+    counts = discordance(margins)
     return RepairComparisonV1(
         first=first,
         second=second,
-        unit=unit,
+        unit="cases",
         difference=ratio_rate(
             _summed(differences),
             _summed(model.shares(_triggered()) for model in models),
@@ -625,7 +634,7 @@ def summarize_round(
             if arm in arms
         ),
         comparisons=tuple(
-            _comparison([cells], universe, pair, "cases")
+            _comparison([cells], universe, pair)
             for pair in ARM_PAIRS
             if set(pair) <= set(arms)
         ),
@@ -653,7 +662,8 @@ def pool_summaries(
     Returns:
         repair@1 per arm over every model's triggered items, each drawn
         case bringing every model's cells, and the arm comparisons over
-        discordant cells.
+        discordant cases, each case's items over every model taken
+        together.
 
     Raises:
         RoundError: With ``repair_pool_mismatch`` when a summary is of
@@ -710,6 +720,6 @@ def pool_summaries(
             for arm in ARMS
         ),
         comparisons=tuple(
-            _comparison(cells, universe, pair, "cells") for pair in ARM_PAIRS
+            _comparison(cells, universe, pair) for pair in ARM_PAIRS
         ),
     )

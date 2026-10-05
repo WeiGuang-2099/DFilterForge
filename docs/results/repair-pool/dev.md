@@ -24,6 +24,6 @@ Bootstrap: 1,000 case-level resamples, seed 17, nearest-rank 2.5 and 97.5 percen
 
 | Comparison | Difference | First better | Second better | Discordant | Verdict |
 | --- | ---: | ---: | ---: | ---: | --- |
-| counterexample - bare | 0.361 [0.083, 0.632] | 13 | 2 | 15 | conclusive |
-| counterexample - resample | 0.444 [0.150, 0.741] | 15 | 1 | 16 | conclusive |
-| bare - resample | 0.083 [0.000, 0.178] | 4 | 1 | 5 | inconclusive (fewer than 10 discordant cells) |
+| counterexample - bare | 0.361 [0.083, 0.632] | 6 | 2 | 8 | inconclusive (fewer than 10 discordant cases) |
+| counterexample - resample | 0.444 [0.150, 0.741] | 6 | 1 | 7 | inconclusive (fewer than 10 discordant cases) |
+| bare - resample | 0.083 [0.000, 0.178] | 3 | 0 | 3 | inconclusive (fewer than 10 discordant cases) |
