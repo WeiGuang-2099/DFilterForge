@@ -24,7 +24,7 @@ import re
 import shutil
 import sys
 from types import ModuleType
-from typing import Any, Literal
+from typing import Any, get_args, Literal
 
 import pytest
 
@@ -2829,3 +2829,35 @@ def test_the_frontier_move_ruling_matches_its_evidence() -> None:
         f"it met {baseline_429_before_last} HTTP 429 responses before an"
         " item's last attempt" in locked
     )
+
+
+@pytest.mark.skipif(not (_ROOT / "docs" / "results").is_dir(), reason=_NO_DOCS)
+def test_the_pooled_unit_ruling_is_the_unit_the_pool_counts() -> None:
+    """OD9 is registered where the protocol and the note compare the arms.
+
+    The pooled comparisons count discordant cases, every model's items on a
+    case taken together, so the comparison schema holds that one unit.
+    """
+    protocol = " ".join(_read("docs/protocol.md").split())
+    assert (
+        "are secondary, and their unit is the case too (owner ruling OD9 of"
+        " 2026-10-05 in the [repair note](decisions/repair-round.md)): a case"
+        " is discordant when the two arms repaired a different number of its"
+        " items, the four models' taken together, and it counts for the arm"
+        " that repaired more, never once per model. The owner ruled it after"
+        " seeing the dev pool and before any test repair prompt was prepared."
+    ) in protocol
+    note = " ".join(_read(ra.NOTE).split())
+    _, section = note.split("## Owner decisions, 2026-10-05", 1)
+    section, _ = section.split(" ## ", 1)
+    assert (
+        "**OD9, by the owner: the pooled comparisons count discordant"
+        " cases.**" in section
+    )
+    assert (
+        "It was decided after the owner had seen the dev pool and before any"
+        " test repair prompt was prepared." in section
+    )
+    assert "Amended 2026-10-05 (OD9)." in note
+    unit = repair_summary.RepairComparisonV1.model_fields["unit"].annotation
+    assert get_args(unit) == ("cases",)

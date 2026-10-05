@@ -132,6 +132,38 @@ They are kept as evidence in `evidence/repair-arms/<run id>/`, are never
 published, and are replaced by the NextBit runs above. The frontier dev
 round's summary is written from the NextBit runs.
 
+## Owner decisions, 2026-10-05
+
+The owner took one decision on 2026-10-05, OD9. It was decided after the
+owner had seen the dev pool and before any test repair prompt was prepared.
+The protocol's Repair section states its unit with this date, and Comparisons
+below records it.
+
+- **OD9, by the owner: the pooled comparisons count discordant cases.** The
+  pooled secondary comparison of the repair arms counts discordant cases, not
+  model-case cells. For each canonical case, all four models' triggered items
+  are taken together. The case is discordant for a pair of arms when the two
+  arms repaired a different number of its items, and it counts for the arm
+  that repaired more. Fewer than 10 discordant cases is inconclusive. The
+  bootstrap is unchanged: each drawn case brings every model's items. The
+  per-model comparisons are unchanged.
+  - The defect the dev round showed: `repair-pool` counted the pooled
+    discordance on model-case cells, one per model and case, while the
+    protocol compares the arms by discordant cases. The cell count was
+    written in 1c7df3c on 2026-10-02 and merged with `repair-arms` in
+    bff373c. The dev pool committed in e93c39f read counterexample - bare
+    (15 cells, 13 against 2) and counterexample - resample (16 cells, 15
+    against 1) as conclusive. By case they are 8 (6 against 2) and 7 (6
+    against 1), and bare - resample is 3 (3 against 0) where it was 5 cells.
+    All three are inconclusive.
+  - The alternative was to register the cell unit as the code had it. The
+    owner chose the case unit when shown both counts on dev. It is the more
+    conservative of the two readings.
+  - The correction is 890a358, which names the defect and OD9 and derives
+    `docs/results/repair-pool/dev.{json,md}` again.
+  - On dev only 9 of the 12 ready cases trigger in any model, so no pooled
+    dev comparison can reach 10 discordant cases.
+
 ## What the protocol registers
 
 This section is a reading aid. The protocol text is the rule.
@@ -283,6 +315,14 @@ denominator.
   The difference is repair@1(a) - repair@1(b), on the same vectors.
 - The same three pairs pooled over the four models are secondary. There,
   each drawn case brings every model's cells.
+
+  Amended 2026-10-05 (OD9). As registered, this item named no unit for the
+  pooled discordance, and `repair-pool` counted model-case cells. The pooled
+  pairs are compared by discordant cases too, never by model-case cells. A
+  case is discordant when the two arms repaired a different number of its
+  items, the four models' taken together, and it counts for the arm that
+  repaired more. Fewer than 10 discordant cases is inconclusive. The
+  bootstrap and the per-model comparisons are unchanged.
 
 **Diagnostics** are reported but never count as outcomes:
 - transitions from pass outcome to arm outcome;
