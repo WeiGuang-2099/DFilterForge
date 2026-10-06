@@ -417,8 +417,9 @@ against that build. Last, it starts the Compose `site` service and expects a
 
 ### Deploy
 
-The `pages` job in `ci.yml` runs only on a push to `main`, after the
-python, web and containers jobs pass:
+The `pages` job in `ci.yml` runs only on a push to `main` of this
+repository, `WeiGuang-2099/DFilterForge`, after the python, web and
+containers jobs pass; a fork's push to its own `main` skips it:
 1. It fails at once when either Cloudflare secret is missing.
 2. It runs the composite action with `base-path: ''`: it builds `out/` for
    the domain root and runs typecheck, lint and the Playwright suite against

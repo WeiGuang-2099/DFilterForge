@@ -248,10 +248,14 @@ jobs:
 
   pages:
     name: Deploy the site to Cloudflare Pages
-    # Only a push to main deploys, and only after every gate passed. The job
-    # builds the site for the domain root through the same composite action,
-    # tests that build, and uploads those bytes.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Only a push to main of this repository deploys, and only after every
+    # gate passed; a fork's push to its own main (Sync fork) skips the job.
+    # The job builds the site for the domain root through the same composite
+    # action, tests that build, and uploads those bytes.
+    if: >-
+      github.repository == 'WeiGuang-2099/DFilterForge'
+      && github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
     needs: [python, web, containers]
     runs-on: ubuntu-24.04
     environment:
