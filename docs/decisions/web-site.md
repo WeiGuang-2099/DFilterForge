@@ -46,9 +46,18 @@ The site is a Next static export (`output: 'export'`, `trailingSlash`). Its
 URL prefix is resolved in one place, `apps/web/scripts/base_path.mjs`: it
 reads `PAGES_BASE_PATH` and defaults to `/DFilterForge`, the path of a GitHub
 project page. The build, `scripts/serve.mjs` and the Playwright config all
-import it. An empty value builds and serves the site at the domain root, as a
-host such as Cloudflare Pages needs, with no code change. Hosting is still
-undecided.
+import it. An empty value builds and serves the site at the domain root, with
+no code change.
+
+The host is Cloudflare Pages, project `dfilterforge`, and CI deploys to it
+by direct upload on each push to `main` (owner decision, 2026-10-01). Pages
+serves the site at the domain root, https://dfilterforge.pages.dev/, so the
+deploy builds with an empty base path; local Compose, the CI loopback probe
+and the tests keep `/DFilterForge`. Cloudflare's Git integration was not
+used: it would run `next build` in Cloudflare's build image, outside the
+`--network=none` Docker build, so the shipped bytes would not be the tested
+ones, and a project cannot switch between the two later. Deploy, under CI,
+has the job and the owner's setup.
 
 The default itself is written in four places, because three files cannot
 import the module:
@@ -61,12 +70,12 @@ import the module:
 
 `apps/web/tests/base-path.spec.ts` fails when any of the last three differs
 from the module's default, so a rename cannot leave CI green on the old
-prefix.
+prefix. The root is written once, as the `pages` job's `base-path: ''`.
 
 The site is built in Docker. `apps/web/Dockerfile` has six stages: `export`,
 `data`, `deps`, `build`, `out` and `site`. The exporter and `next build` each
 run under `RUN --network=none`. CI's web job builds through the composite
-action `.github/actions/web-site`, which the Pages workflow is meant to reuse.
+action `.github/actions/web-site`, and the `pages` job reuses it.
 The Compose `web` service serves the `site` stage on 127.0.0.1 only.
 
 ### Inputs
@@ -409,6 +418,49 @@ Dockerfile, then runs typecheck, lint and the Playwright suite on the runner
 against that build. Last, it starts the Compose `site` service and expects a
 200 on loopback.
 
+### Deploy
+
+The `pages` job in `ci.yml` runs only on a push to `main`, after the
+python, web and containers jobs pass:
+1. It fails at once when either Cloudflare secret is missing.
+2. It runs the composite action with `base-path: ''`: it builds `out/` for
+   the domain root and runs typecheck, lint and the Playwright suite against
+   that build. The runner keeps an explicit empty input and applies the
+   `/DFilterForge` default only to an input that is left out.
+3. It refuses an `out/index.html` that does not load `/_next/static/` from
+   the root, so a build that kept a prefix cannot ship.
+4. `cloudflare/wrangler-action@v3` uploads `apps/web/out` with Wrangler 4
+   (`pages deploy --project-name=dfilterforge --branch=main`). Wrangler is
+   installed with npm in a directory outside the pnpm workspace, because
+   `pnpm add` refuses a workspace root, and runs on Node 24, because
+   Wrangler 4 needs Node 22 or later.
+5. It fetches `https://dfilterforge.pages.dev/methodology/` until the page
+   links its sources at the pushed commit, then fetches one of its
+   `/_next/static/` assets.
+
+The job's environment, `cloudflare-pages`, shows the live URL on the
+repository page. On 1ec918c the root build has 29 files and 959,799 bytes
+and no `/DFilterForge` path; the step 3 guard passes on it and fails on the
+default build. Playwright on it: 151 passed and 1 skipped, the check that
+nothing outside the prefix is served. Served at the root, `/methodology/`
+and its 8 `/_next/static/` assets each return 200.
+
+The owner sets up, once, before the first push to `main` that carries the
+job:
+- a public repository: on the Free plan only a public repository can
+  configure environments, and the site's source links point into it;
+- a free Cloudflare account, and a Pages project `dfilterforge` with
+  production branch `main` (`npx --yes wrangler@4 login`, then
+  `npx --yes wrangler@4 pages project create dfilterforge
+  --production-branch=main`, or the dashboard);
+- a custom API token with the permission Account / Cloudflare Pages / Edit;
+- the GitHub Actions repository secrets `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID`;
+- after the first deploy, the repository's About > Website.
+
+If the `dfilterforge.pages.dev` name is taken, Cloudflare gives the project
+another subdomain, and the job's environment URL and probe change to it.
+
 ## Before and after
 
 Before is 86cd624, the base of this branch. After is 07d91ca, the commit
@@ -666,8 +718,9 @@ pnpm --filter @dfilterforge/web test:e2e
 - Base images are pinned by tag, not by digest.
 - `RUN --network=none` was verified only on Docker Desktop 29.7.2: the step
   saw only `lo`, and a connect failed with `ENETUNREACH`. The CI workflow and
-  the composite action have not run on GitHub yet; they pass actionlint
-  1.7.7, and each step was run locally.
+  the composite action run on every pull request and every push to `main`;
+  the owner reports hosted CI green on `main` at 1ec918c. The `pages` job
+  first runs on the push that merges it.
 - The consistency test does not sweep CSS `content:`, `<head>` meta, or the
   markers CSS numbers for a list without a `start`.
 - Next 16.3.4 on Windows writes nested segment-prefetch files into
