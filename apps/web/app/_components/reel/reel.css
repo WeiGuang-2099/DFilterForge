@@ -170,6 +170,13 @@
 }
 .act-h {margin-bottom: 6px; padding-top: 8px; border-top: 1px solid var(--ink); font: 600 11px/1.4 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2);}
 .card {margin: 4px 0 8px; padding: 7px 10px; border: 1px solid var(--line); background: var(--plate); font: 10.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;}
+/* The card's fields, one row each, one column per frame. */
+.cx {margin: 6px 0 4px; border-collapse: collapse; font: 12px/1.35 var(--mono); font-variant-numeric: tabular-nums;}
+.cx th, .cx td {padding: 3px 20px 3px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: baseline; white-space: nowrap;}
+.cx th {font-weight: 400; color: var(--ink-2);}
+.cx td {color: var(--ink);}
+.cx .cx-n th, .cx .cx-n td {border-bottom-color: var(--line-2); font-weight: 700; color: var(--ink);}
+.raw + .lab {margin-top: 10px;}
 .ans2 {display: block; margin: 1px 0 6px; font: 500 13.5px/1.35 var(--mono); overflow-wrap: anywhere;}
 .bars2 {display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none;}
 .bars2 li {display: grid; grid-template-columns: 96px max-content max-content; align-items: center; gap: 10px; font: 11.5px/1.3 var(--mono);}

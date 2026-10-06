@@ -2,8 +2,9 @@
  * @fileoverview The Reel's later scenes: the repair turn and the pool.
  *
  * Both are server-rendered from reel.json. The repair scene shows rule
- * reel-v1's step 5: the card the counterexample arm sent, verbatim, the
- * model's second answer and its probe bars. The pool scene shows the headline
+ * reel-v1's step 5: the card the counterexample arm sent, as a table of its
+ * fields with the verbatim JSON behind a disclosure, the model's second
+ * answer and its probe bars. The pool scene shows the headline
  * counts and one bar per pool run, in pool order and never ranked. A bar's
  * segments grow by the counts they stand for (flex-grow), so the page never
  * divides; the counts beside each bar are the sourced values.
@@ -15,6 +16,7 @@ import {roleLabel} from '@/lib/roles';
 import {fmt} from '@/lib/fmt';
 import {Num, Outcome, Str} from '@/lib/sourced';
 
+import {CardTable} from './card';
 import {ProbeBar} from './strips';
 
 type Turn = NonNullable<NonNullable<Reel['repair']>['turn']>;
@@ -35,10 +37,20 @@ export function RepairScene({repair}: {readonly repair: Reel['repair']}) {
             The card sent back: frames of the unscored feedback probe where the first answer and
             the labels disagree.
           </p>
-          {turn.card === null ? null : (
+          {turn.card === null ? null : turn.card_frames === null ? (
             <pre className="card">
               <Str node={turn.card} />
             </pre>
+          ) : (
+            <>
+              <CardTable frames={turn.card_frames} />
+              <details className="raw">
+                <summary>The card as sent, in JSON</summary>
+                <pre className="card">
+                  <Str node={turn.card} />
+                </pre>
+              </details>
+            </>
           )}
           <p className="lab">
             Second answer, <Outcome node={turn.outcome} />
