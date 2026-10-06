@@ -1,20 +1,18 @@
 # Implementation Progress
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 ## Current slice
 
-PR #22 merged `test-repair-round` into `main` as 1ec918c on 2026-10-06, and
-the owner reports hosted CI green on the PR and on `main`. Both halves of the
-locked test result are on `main`. The next slice is the hosted site (Planned
-next 2). Branch `site-deploy` adds the `pages` job to `ci.yml`: on a push to
-`main`, after every gate passes, it builds and tests the site under
-`/DFilterForge` and deploys it to GitHub Pages at
-https://weiguang-2099.github.io/DFilterForge/. Before it merges, the owner
-makes the repository public and sets its Pages source to GitHub Actions
-([web site note](decisions/web-site.md), Deploy). No page reads
-`board.json` or `reel.json` yet. Training data is built on CPU alongside the
-site; GPU spend waits until the site is live (Planned next 3).
+The site is live on GitHub Pages at
+https://weiguang-2099.github.io/DFilterForge/: PR #25 merged as 210e100 on
+2026-10-06, and the deployed methodology page links its sources at 210e100.
+It serves the Reel on `/` and `/methodology`. Branch `site-board` adds
+`/board`, the test repair round and the counted test passes, and has
+`main` merged in, so the board sits beside the Reel's ladder; the
+readability pass on the live pages goes on that branch too. Branch `sft`
+holds the SFT code on training set v1 (PR #24). GPU work comes next, on
+Modal (owner ruling), with Qwen/Qwen3-1.7B, thinking off (Planned next 3).
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -2532,6 +2530,39 @@ its pool: counterexample repair@1 0.467 [0.347, 0.590], 35/75, against bare
 of [`results/locked-test-v1.md`](results/locked-test-v1.md); and the
 exporter's Reel step 5 turn and methodology repair line.
 
+## PR #23 merged: 2026-10-06
+
+PR #23 merged `site-reel` into `main` as 5dd672f. The Reel on `/` draws
+the chosen prototype's ladder for each scored probe of the pick, with the
+cursor's packet-list row and the predicate trace there. The new evidence is
+`packets.json`, every curated frame's packet-list columns from the pinned
+tshark (139,563 bytes, 8 probes, 480 frames), and the pick's trace (5,856
+bytes). The Docker static export has 33 files in 5,514,918 bytes, and
+Playwright ran 164 tests in 17.6 s
+([web site note](decisions/web-site.md), Measured).
+
+## PR #24 merged: 2026-10-06
+
+PR #24 merged `train-data` into `main` as a686d29. It freezes training set
+v1: 1,299 rows, 1,088 ready and 211 asking for clarification, kept from
+2,400 sampled compositions of the dev and test gold's predicates, each
+labelled by the pinned tshark on three train-only probes
+([`data/train/v1/manifest.json`](../data/train/v1/manifest.json)).
+`tests/test_train_split.py` asserts that no row shares a canonical key,
+frame set or 8-word run with dev or test. `docs/protocol.md` records the
+small model, Qwen/Qwen3-1.7B with thinking off, and the label rules.
+
+## PR #25 merged: 2026-10-06
+
+PR #25 merged `site-deploy` into `main` as 210e100. The `pages` job in
+`ci.yml` builds and tests the site under `/DFilterForge` after every gate
+passes on a push to `main`, and deploys it to GitHub Pages, which replaces
+the Cloudflare Pages decision of 2026-10-01
+([web site note](decisions/web-site.md), Deploy). The site is live at
+https://weiguang-2099.github.io/DFilterForge/; on 2026-10-07 its
+methodology page links its sources at 210e100. The branch also drops the
+retired Go/No-Go gates from the pull request template and the docs.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2549,8 +2580,8 @@ where an item says it is the maintainer's order.
    as site work once it is live, in the maintainer's order; they do not
    gate item 3.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
-   scorer, at most 3 USD, only after item 2 is live. Where it is served and
-   trained is not decided yet (owner, 2026-10-06).
+   scorer, at most 3 USD, only after item 2 is live. GPU work runs on
+   Modal (owner ruling).
 4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
    verifier-labelled DPO and a continued-SFT control, three seeds each; the
    GRPO gate measured.
