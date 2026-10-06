@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type {ReactNode} from 'react';
 
 const navigation = [
-  {href: '/', label: 'Home'},
+  {href: '/', label: 'Reel'},
   {href: '/methodology', label: 'Methodology'},
 ] as const;
 
@@ -10,31 +10,27 @@ interface ShellProps {
   readonly children: ReactNode;
 }
 
+/** The page frame: a masthead in the manner of an RFC page header. */
 export function Shell({children}: ShellProps) {
   return (
-    <div className="app-shell">
-      <header className="mobile-header">
-        <Link className="brand" href="/">
-          DFilterForge
-        </Link>
-      </header>
-      <aside className="sidebar">
-        <Link className="brand" href="/">
-          DFilterForge
-        </Link>
-        <p className="brand-subtitle">Evidence before claims.</p>
-        <nav aria-label="Primary navigation">
+    <div className="page">
+      <header className="mast">
+        <div className="mast-id">
+          <Link className="mast-name" href="/">
+            DFilterForge
+          </Link>
+          <span>Wireshark display filter benchmark</span>
+        </div>
+        <nav aria-label="Primary navigation" className="mast-nav">
           {navigation.map((item) => (
-            <Link className="nav-link" href={item.href} key={item.href}>
+            <Link href={item.href} key={item.href}>
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="sidebar-footer">
-          <span>Recorded results only. This site never calls a model.</span>
-        </div>
-      </aside>
-      <main className="main-content">{children}</main>
+        <p className="mast-note">Recorded results only. This site never calls a model.</p>
+      </header>
+      <main>{children}</main>
     </div>
   );
 }

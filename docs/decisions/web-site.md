@@ -35,8 +35,24 @@ Data moves one way, through three layers:
    writes the file only when every capture hash matches three committed
    anchors: the test-freeze gate receipt, the scored specifications and the
    held-out freeze digests. The site therefore names frames without running
-   tshark or shipping packet bytes. Predicate traces for the Reel pool come
-   later, in the same directory.
+   tshark or shipping packet bytes.
+
+   Beside it, [`packets.json`](evidence/web/packets.json)
+   (`capture-packets/1.0`) holds each frame's packet-list columns as the
+   pinned tshark 4.6.8 prints them with name resolution off: number,
+   relative time, Source, Destination, Protocol, length and Info. It also
+   holds each probe's client address, the address seen in most frames
+   (ties to the lowest), and each frame's direction to it: `out`, `in` or
+   `other`. `export_web_evidence.py packets --write` runs tshark on the
+   same regenerated captures through `dfilterforge.packet_list`. Under
+   [`traces/`](evidence/web/traces/) sits the predicate trace of the Reel's
+   pick, `web-trace/1.0`. `export_web_evidence.py trace` writes it by
+   replaying the committed answer with the scorer's `replay_live`. It
+   records the receipt's path and SHA-256, and for each scored probe the
+   frames where the answer and the labels disagree, with each leaf of
+   both filters and the frames among those that tshark matched it on.
+   `check` rebuilds both files and compares them byte for byte, so it runs
+   in the test image, which has tshark and the frozen catalog.
 3. **`scripts/export_web_data.py`.** It uses the standard library only, starts
    no process, opens no socket and reads no clock, environment variable or git
    state. Its output in `apps/web/data/` is ignored by git and rebuilt for
@@ -197,7 +213,15 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   scored round it has `reason` `no_round` and a null `turn`; after, a null
   `reason` and the pick's counterexample turn: the card from the pass's
   plan, the arm run named by the round, and that run's outcome, filter,
-  capped raw answer and frame strips.
+  capped raw answer and frame strips. Each of the pick's own strips also
+  lists every frame of its capture, which the home page's ladder and
+  cursor read: number, kind and name from `captures.json`, and time,
+  source, destination, protocol, length, Info and direction from
+  `packets.json`, with the probe's client address. Receipts and cases list
+  only the frames that disagree. `trace` holds, per probe, the traced
+  frames and each filter and request leaf with the frames it matched, all
+  pointers into the committed trace; `pick.joins` holds the root operator
+  of each side's IR.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 
@@ -286,6 +310,11 @@ are:
   run's summary and `methodologyRound()` its round, and the consistency
   test checks that the built methodology page takes its statuses and its
   repair line from those files;
+- a `packets.json` row that names another capture than `captures.json`,
+  lists other frames or gives a direction outside `out`, `in` and `other`
+  (`packets_stale`);
+- a trace that names other receipt bytes, or whose probes or traced frames
+  are not the receipt's probes and disagreeing frames (`trace_stale`);
 - a pick without a counterexample turn in its pass's scored round
   (`repair_fallback_unbuilt`): the round exists, but the pick is not C4, is
   not one of the round's `items`, or its counterexample arm is missing from
@@ -310,11 +339,23 @@ sets and source ops before a page renders.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
-  a list of integers (`int`, `num`, `bool`, `ints`); the string-only kinds
-  `text`, `unmeasured` and `split` are excluded from its `kind` prop, and
-  `tests/fmt.spec.ts` fails typecheck when a kind added to `lib/fmt.ts` is
-  neither excluded there nor listed with a sample value in the spec.
+  a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`); the
+  string-only kinds `text`, `unmeasured`, `split` and `outcome` are
+  excluded from its `kind` prop, and `tests/fmt.spec.ts` fails typecheck
+  when a kind added to `lib/fmt.ts` is neither excluded there nor listed
+  with a sample value in the spec. `rate` shows three decimals and
+  `runtime` one; both round the committed decimal digits by string
+  arithmetic, a value exactly halfway away from zero, as
+  [`locked-test-v1.md`](../results/locked-test-v1.md) rounds, so 0.6375
+  shows as 0.638 where the binary float would give 0.637.
   `<Str>` renders a string the same way, without the link.
+  `<Outcome>` renders a scored outcome code as the protocol's words, with
+  `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and a code the
+  table does not list fails the build. `<Word>` does the same for two more
+  codes: a frame's kind in `captures.json` (`frame_kind`: "recipe" or
+  "witness") and an IR's root operator (`join`: `all` reads "every
+  leaf"). `<Num link={false}>` leaves out the link where numbers stand
+  close, as on the ladder's axis.
   `<Term>` renders a reviewed name that holds a digit; the list in
   `lib/terms.ts` is `IPv4` and `SHA-256`. `<Split>` renders a run's split
   as the word that names its round, with `data-fmt="split"`: `test` reads
@@ -365,6 +406,11 @@ sets and source ops before a page renders.
   hydration removes, reaches every visitor without JavaScript, every crawler
   and every first paint; a planted page proves the second pass catches it.
   Playwright 1.62.1 evaluates in a context with JavaScript disabled.
+  On `/` it also re-derives, for every frame of every probe, what the
+  Reel says in fixed words or draws, which no value check sees: each
+  ladder row's direction from `packets.json`; the readout's request and
+  filter words and its agree or disagree from the pick's receipt; and each
+  leaf's true, false or dash from the committed trace.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool,
@@ -396,7 +442,9 @@ The python job runs four steps after the re-score loop and the repair plan
 and pool checks, which leaves the frozen-prompt guard and the pylint line
 untouched:
 1. pylint on the two web scripts;
-2. `export_web_evidence.py check`, with `docs/` mounted read-only;
+2. `export_web_evidence.py check`, with `docs/` mounted read-only. It
+   regenerates `captures.json` in pure Python, and `packets.json` and
+   every committed trace with the image's tshark;
 3. the two scripts' tests, with `docs/` mounted, so the committed-tree cases
    run instead of skipping;
 4. two exports of the committed tree, compared with `diff -r`.
@@ -423,7 +471,7 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged) |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged); 160 at 7f4eb33 (61 registry, 41 lint-rule, 19 formatter, 15 consistency, 13 smoke, 4 Reel, 4 resolver, 3 base-path), 18.2 s on the Docker build; 164 at 54c056f (20 formatter, 7 Reel, the rest unchanged), 17.6 s on the Docker build |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured
@@ -456,6 +504,31 @@ export or the site:
   the 12 test prepares d95483a admitted in `held_out_freeze.json`, and 7
   are the repair line: its 8 values beside its split, less the status it
   replaces.
+- At 7f4eb33 on `site-reel` (2026-10-06), the pick's strips list every
+  frame and the home page renders the Reel. Two exports in the test image
+  are identical: 1,935 files in 27,479,337 bytes, `reel.json` 83,486 of
+  them. The Docker static export has 33 files in 2,286,305 bytes (5 HTML,
+  12 JS, 12 TXT, 2 CSS and the 2 committed fonts); `index.html` is 477,885
+  bytes, 29,908 gzipped, and renders 487 sourced values: 397 strings, 82
+  integers, 3 runtimes, 3 booleans and 2 outcomes. Most of them are the
+  readout: every frame of the three probes, with its kind and name. The
+  Docker `--target out` build took 16.3 s, export 2.8 s and `next build`
+  5.4 s; the test image ran the 185 exporter and evidence tests in
+  215.8 s.
+- At 54c056f on `site-reel` (2026-10-06), the Reel draws the ladder. The
+  new evidence is `packets.json`, 139,563 bytes for 8 probes and 480
+  frames, and the pick's trace, 5,856 bytes. In the test image, `check`
+  rebuilds them and `captures.json` in 7 s, and the 194 exporter,
+  evidence and packet-list tests pass in 83.6 s. An export with a 40-hex
+  source commit has 1,935 files in 27,623,230 bytes, `reel.json` 221,237
+  of them, and two exports in the test image are identical. The Docker
+  static export has 33 files in 5,514,918 bytes; `index.html` is
+  1,762,572 bytes, 86,365 after `gzip -9`, and renders 2,138 sourced
+  values: 1,243 strings, 693 integers, 185 frame kinds, 6 joins, 3
+  runtimes, 3 integer lists, 3 booleans and 2 outcomes. Most are the
+  readout's: each frame of the three probes has its number, kind, name
+  and packet-list row in the HTML. The Docker `--target out` build took
+  about 18 s, export 2.9 s and `next build` 6.7 s.
 
 The other figures below were not measured again.
 
@@ -578,7 +651,17 @@ names at `/arms/2/run`:
   of the three scored probes.
 
 The receipt panel's `repair` field is null now that pass A's round is
-scored. The trace reason is `not_traced` (Limits).
+scored.
+
+The pick's predicate trace is committed at
+[`traces/test-qwen3-32b-2026-09-26/C4/mei-1038.json`](evidence/web/traces/test-qwen3-32b-2026-09-26/C4/mei-1038.json).
+Steps 1 to 4 of `reel-v1` read no trace, so it was made after the pick
+and cannot move it. On semantic-37's frame 60, the filter's leaf
+`tcp.srcport == 443` is true and `tcp.completeness.fin == true` is false,
+so the filter does not select the frame. The request's leaves,
+`tcp.flags.fin == true` and `tcp.srcport == 443`, are both true. The
+other two probes trace alike at frames 59 and 66. The replay gave the
+receipt's frames exactly.
 
 On the committed dev data, before the test phase, the rule picked
 [`dev-qwen3-32b-2026-09-26` C4 `mei-0015`](../results/dev-qwen3-32b-2026-09-26/scored/receipts/C4/mei-0015.json):
@@ -628,18 +711,29 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## Limits
 
-- Only the methodology page renders values today. The board, case and receipt
-  pages and the Reel are the next two pull requests, and the home page is a
-  digit-free placeholder until the Reel lands.
+- The methodology page and the Reel on `/` render values today. The board,
+  case and receipt pages come next.
+- The Reel draws the chosen prototype's figure: one ladder diagram per
+  scored probe of the pick, with an arrow and the Info column per frame
+  and the witness tail collapsed below a break, the probe bars over it,
+  the draggable cursor, the packet-list row of the cursor's frame and the
+  predicate trace there. The branch's first Reel, 9343e3a, drew request
+  and filter lanes instead, for want of per-frame columns, which
+  `packets.json` now holds; the owner ruled on 2026-10-06 to restore the
+  ladder. The prototype's RFC header box is left out. The GIF is not encoded yet:
+  `apps/web/scripts/record_reel.mjs` records its frames, and two
+  recordings of one build are identical, but ffmpeg is not installed on
+  the development host.
+- The trace evaluates leaves only at the frames where the answer and the
+  labels disagree, as `dfilterforge.live` traces a counterexample, so on
+  every other frame the readout shows a leaf as a dash. Only the Reel's
+  pick is traced.
 - Rule `reel-v1` and the registry were committed before the first test
   request, so the test-phase pick predates the test data:
   `disproof-reel.md` in 6f2beb9, and `test-runs.json` with `test-runs.md`
   in 6819a52. Both are ancestors of 7aaade8, as
   `git merge-base --is-ancestor` confirms; 7aaade8 is the source revision
   that pass A's first invocation recorded, at 2026-10-01T18:45:12Z.
-- No predicate trace is committed yet. The Reel says "not traced" until the
-  Reel pool's C4 silent-wrong answers are traced offline; that pool is now
-  the four test passes.
 - `methodology.json` still takes its bootstrap block from the dev anchor's
   summary, in the test phase too. The methodology page says its intervals
   come from bootstrap resamples "as the anchor pass's summary records
@@ -652,13 +746,13 @@ pnpm --filter @dfilterforge/web test:e2e
 - Step 5 shows only the pick's own counterexample turn. The fallback repair
   trajectory `disproof-reel.md` registers for a pick without a repair row
   is not built: no committed data needs it, and the export stops
-  (`repair_fallback_unbuilt`) rather than drop it. No page renders
-  `reel.json` yet, so only the Python source check re-derives the turn's
-  values; the TypeScript resolver checks the choice alone.
+  (`repair_fallback_unbuilt`) rather than drop it. The consistency test
+  re-derives every value the home page shows from the committed files, the
+  turn's included.
 - The methodology page's repair line shows counts for the cited run's round
   only, pass A's in the test phase: repair@1, its interval and the other
-  passes' rounds wait for a rounding kind in `lib/fmt.ts` and a results page
-  on the site.
+  passes' rounds wait for a results page on the site; `lib/fmt.ts` has the
+  rounding kind they need.
 - The A/A pair is not wired in: `board.json` keeps `aa` null.
 - `site.json`'s `phase.repair` stays false and `board.json`'s `repair` stays
   null until the board pull request, although `reel.json` and
@@ -676,8 +770,9 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## What the next pages must do
 
-The board, case, receipt and Reel pages come in the next pull requests.
-These rules bind them. Only the first is enforced by a test today:
+The board, case and receipt pages come in the next pull requests. These
+rules bind them, as they bind the Reel. The first and the rounding are
+enforced by tests today:
 - **Not measured yet.** Until the pick's pass has a scored round,
   `reel.json`'s `receipt_panel.repair` holds the summary's status key,
   `not_run`; after, it is null. A page shows it through `<Unmeasured>` as
@@ -690,8 +785,8 @@ These rules bind them. Only the first is enforced by a test today:
   comparison also shows its A/A reading from the pair report, and the
   notes `locked-test-v1.md` attaches to it: the comparisons it marks
   confounded by rate limiting, and the items each pass lost to HTTP 429.
-- **Rounding.** `lib/fmt.ts` never rounds today. A rounded kind added for
-  rates or differences rounds a value exactly halfway away from zero, as
+- **Rounding.** A rate or difference is shown with `lib/fmt.ts`'s `rate`
+  kind, which rounds a value exactly halfway away from zero, as
   `locked-test-v1.md` does, so a shown rate matches its count.
 - **No ranking.** Test rows keep pool order. No page orders the models by a
   rate or presents the rows as a ranking: `locked-test-v1.md` reports the
@@ -699,4 +794,5 @@ These rules bind them. Only the first is enforced by a test today:
   pre-registered.
 - **Role labels.** `reel.json`'s pool, `site.json`'s runs and the board rows
   carry the registry's roles verbatim, with no slot field. Pages map a role
-  to its label in one table in `lib/`.
+  to its label with `lib/roles.ts`, the one table, which fails the build on
+  a role it does not know.

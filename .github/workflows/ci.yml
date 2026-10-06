@@ -183,7 +183,9 @@ jobs:
       - name: Check the committed web evidence
         # Regenerates captures.json in pure Python, compares it byte for
         # byte and matches every capture hash to the test-freeze gate
-        # receipt, the scored specifications and the held-out freeze record.
+        # receipt, the scored specifications and the held-out freeze record;
+        # then rebuilds packets.json and every committed predicate trace
+        # with the image's tshark and compares them byte for byte.
         run: >-
           docker compose --profile dev run --rm
           --volume "$PWD/docs:/workspace/docs:ro"

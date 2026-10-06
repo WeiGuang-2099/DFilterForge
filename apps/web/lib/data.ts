@@ -34,8 +34,8 @@ export interface NumNode {
 }
 
 /** Checks a parsed value and returns it typed, or throws naming the place. */
-type Guard<T> = (value: unknown, where: string) => T;
-type Guarded<G> = G extends Guard<infer T> ? T : never;
+export type Guard<T> = (value: unknown, where: string) => T;
+export type Guarded<G> = G extends Guard<infer T> ? T : never;
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -59,7 +59,7 @@ const COMMIT = /^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$/;
 
 class DataError extends Error {}
 
-function fail(where: string, problem: string): never {
+export function fail(where: string, problem: string): never {
   throw new DataError(`apps/web/data: ${where} ${problem}`);
 }
 
@@ -67,22 +67,22 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-const text: Guard<string> = (value, where) =>
+export const text: Guard<string> = (value, where) =>
   typeof value === 'string' ? value : fail(where, 'is not a string');
 
-const flag: Guard<boolean> = (value, where) =>
+export const flag: Guard<boolean> = (value, where) =>
   typeof value === 'boolean' ? value : fail(where, 'is not a boolean');
 
-function literal<T extends string>(expected: T): Guard<T> {
+export function literal<T extends string>(expected: T): Guard<T> {
   return (value, where) =>
     value === expected ? expected : fail(where, `is not ${JSON.stringify(expected)}`);
 }
 
-function nullable<T>(guard: Guard<T>): Guard<T | null> {
+export function nullable<T>(guard: Guard<T>): Guard<T | null> {
   return (value, where) => (value === null ? null : guard(value, where));
 }
 
-function array<T>(item: Guard<T>): Guard<readonly T[]> {
+export function array<T>(item: Guard<T>): Guard<readonly T[]> {
   return (value, where) =>
     Array.isArray(value)
       ? value.map((each: unknown, index) => item(each, `${where}[${index}]`))
@@ -90,7 +90,7 @@ function array<T>(item: Guard<T>): Guard<readonly T[]> {
 }
 
 /** An object with exactly the shape's keys, each checked by its guard. */
-function object<S extends Readonly<Record<string, Guard<unknown>>>>(
+export function object<S extends Readonly<Record<string, Guard<unknown>>>>(
   shape: S,
 ): Guard<{readonly [K in keyof S]: Guarded<S[K]>}> {
   const expected = Object.keys(shape).sort();
@@ -163,7 +163,7 @@ const cap: Guard<number> = (value, where) =>
   value === RAW_TEXT_CAP ? value : fail(where, `is not ${RAW_TEXT_CAP}`);
 
 /** A sourced string; a model answer carries the cap, and nothing else does. */
-const strNode: Guard<StrNode> = (value, where) => {
+export const strNode: Guard<StrNode> = (value, where) => {
   const node =
     isRecord(value) && 'cap' in value
       ? object({t: text, src, cap})(value, where)
@@ -178,7 +178,7 @@ const strNode: Guard<StrNode> = (value, where) => {
   return node;
 };
 
-const numNode: Guard<NumNode> = object({v: numValue, src});
+export const numNode: Guard<NumNode> = object({v: numValue, src});
 
 const commit: Guard<string> = (value, where) => {
   const found = text(value, where);
@@ -258,7 +258,7 @@ export type Methodology = Guarded<typeof METHODOLOGY>;
 
 const loaded = new Map<string, unknown>();
 
-function load<T>(name: string, guard: Guard<T>): T {
+export function load<T>(name: string, guard: Guard<T>): T {
   if (loaded.has(name)) {
     return loaded.get(name) as T;
   }

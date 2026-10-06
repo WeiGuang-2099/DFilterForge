@@ -10,7 +10,7 @@ import {basePath} from '../scripts/base_path.mjs';
 // Paths are relative so that they resolve under the base URL, which ends in
 // the base path and a slash.
 const PAGES = [
-  {path: './', status: 200, heading: 'Find the packet that disproves the filter.'},
+  {path: './', status: 200, heading: /^Frame [0-9]+ disproves \(/},
   {path: 'methodology/', status: 200, heading: 'Evidence has a boundary.'},
   {path: 'no-such-page/', status: 404, heading: 'This page does not exist.'},
 ] as const;
