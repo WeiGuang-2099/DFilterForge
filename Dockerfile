@@ -184,6 +184,9 @@ COPY pcap_lab ./pcap_lab
 COPY scripts ./scripts
 # The frozen training set, which tests/test_train_split.py checks.
 COPY data ./data
+# The hosted model run commands, which tests/test_model_run.py parses. The
+# rest of docs/ stays out, so the tests that read it still skip here.
+COPY docs/usage.md ./docs/usage.md
 
 RUN uv sync --frozen --extra dev
 
