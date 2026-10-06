@@ -127,6 +127,7 @@ interface Sourced {
   readonly kind: string | null;
   readonly cap: string | null;
   readonly text: string;
+  readonly title: string | null;
 }
 
 /** Deep equality with Object.is for every number, as the design asks. */
@@ -176,12 +177,44 @@ function isInconclusive(source: unknown): boolean {
   );
 }
 
+// A SHA-256 digest in lowercase hex, and how many of its digits a page
+// shows: written here apart from lib/fmt.ts, so the two must agree.
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+const DIGEST_SHOWN = 12;
+
+/**
+ * Lists what is wrong with how a value is shown as a digest, or not. A
+ * SHA-256 digest must be shown with the digest kind, and only one may be:
+ * a page shows its first twelve digits and keeps the whole digest in its
+ * title, as well as in data-v, so the full value is there to check.
+ */
+function digestMismatches(value: Sourced, expected: unknown): string[] {
+  const digest = typeof expected === 'string' && SHA256_HEX.test(expected);
+  if (digest !== (value.kind === 'digest')) {
+    return [
+      `${value.src}: data-fmt is ${JSON.stringify(value.kind)}; ` +
+        'a SHA-256 digest, and only one, is shown as a digest',
+    ];
+  }
+  if (!digest) {
+    return [];
+  }
+  const problems: string[] = [];
+  if (value.title !== expected) {
+    problems.push(`${value.src}: the title holds ${JSON.stringify(value.title)}, not the digest`);
+  }
+  if (value.text !== expected.slice(0, DIGEST_SHOWN)) {
+    problems.push(`${value.src}: the page shows ${JSON.stringify(value.text)}, not its first digits`);
+  }
+  return problems;
+}
+
 /**
  * Re-derives one sourced value and lists what does not match. The cut of
  * model text comes from the source, never from the page's data-cap, which
  * must agree with it. A not_measured status must be shown with the
  * unmeasured kind, and only it may be; so must a comparison's inconclusive
- * flag with the verdict kind.
+ * flag with the verdict kind, and a SHA-256 digest with the digest kind.
  */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
@@ -227,6 +260,10 @@ function mismatches(value: Sourced): string[] {
   }
   if (!sameValue(JSON.parse(value.v), expected)) {
     return [`${where}: the page holds ${value.v}; the files hold ${JSON.stringify(expected)}`];
+  }
+  const digest = digestMismatches(value, expected);
+  if (digest.length > 0) {
+    return digest;
   }
   const text = fmt(expected, value.kind);
   if (value.text !== text) {
@@ -281,6 +318,7 @@ function sourcedValues(): {values: Sourced[]; nested: (string | null)[]} {
       kind: element.getAttribute('data-fmt'),
       cap: element.getAttribute('data-cap'),
       text: element.textContent ?? '',
+      title: element.getAttribute('title'),
     })),
     nested: elements
       .filter((element) => element.parentElement?.closest('[data-src]'))
@@ -684,6 +722,7 @@ test('model text is cut only at the contract size and only where the exporter cu
       kind: 'text',
       cap: cap === null ? null : String(cap),
       text: fmt(text, 'text'),
+      title: null,
     };
   };
 
@@ -711,6 +750,7 @@ test('a not_measured status is shown as fixed words and never as its key', () =>
     kind,
     cap: null,
     text,
+    title: null,
   });
   const key = String(resolver.resolve(status));
 
@@ -729,7 +769,14 @@ test("a comparison's inconclusive flag is shown as its verdict, and nothing else
   const setting = ['ptr', summary, '/effective_settings/json_mode'];
   const shown = (source: readonly string[], kind: 'bool' | 'verdict'): Sourced => {
     const value = resolver.resolve(source);
-    return {src: JSON.stringify(source), v: JSON.stringify(value), kind, cap: null, text: fmt(value, kind)};
+    return {
+      src: JSON.stringify(source),
+      v: JSON.stringify(value),
+      kind,
+      cap: null,
+      text: fmt(value, kind),
+      title: null,
+    };
   };
 
   expect(resolver.resolve(flag)).toBe(false);
@@ -737,6 +784,41 @@ test("a comparison's inconclusive flag is shown as its verdict, and nothing else
   expect(mismatches(shown(flag, 'bool'))).toHaveLength(1);
   expect(mismatches(shown(setting, 'bool'))).toEqual([]);
   expect(mismatches(shown(setting, 'verdict'))).toHaveLength(1);
+});
+
+test('a SHA-256 digest shows its first twelve digits and keeps the whole digest', () => {
+  // A page shows a digest short, so the check must see that the short text
+  // is the start of the committed digest, that the whole digest is still in
+  // the markup, and that no digest is shown whole or as another kind.
+  const digest = ['ptr', 'src/dfilterforge/held_out_freeze.json', '/admitted_prepares/0'];
+  const run = resolver.shownRuns()[0] ?? '';
+  const label = ['ptr', `docs/results/${run}/prepare.json`, '/conditions/0/label'];
+  const shown = (
+    source: readonly string[],
+    kind: string,
+    text: string,
+    title: string | null,
+  ): Sourced => ({
+    src: JSON.stringify(source),
+    v: JSON.stringify(resolver.resolve(source)),
+    kind,
+    cap: null,
+    text,
+    title,
+  });
+  const full = String(resolver.resolve(digest));
+  const short = full.slice(0, 12);
+  const name = String(resolver.resolve(label));
+
+  expect(full).toMatch(/^[0-9a-f]{64}$/);
+  expect(mismatches(shown(digest, 'digest', short, full))).toEqual([]);
+  expect(mismatches(shown(digest, 'text', full, null))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', full, full))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', full.slice(0, 11), full))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', short, null))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', short, short))).toHaveLength(1);
+  expect(mismatches(shown(label, 'text', name, null))).toEqual([]);
+  expect(mismatches(shown(label, 'digest', name, name))).toHaveLength(1);
 });
 
 test('the sweep finds a number in any script, in a list start and outside the terms', async ({

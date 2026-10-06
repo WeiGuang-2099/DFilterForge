@@ -80,3 +80,6 @@ button {color: var(--ink); font-family: var(--sans);}
   .prose-page dl {grid-template-columns: minmax(0, 1fr); gap: 2px 0;}
   .prose-page dd {margin-bottom: 8px;}
 }
+
+/* A digest's leading digits; its title holds the whole digest. */
+code.dg {font-variant-numeric: tabular-nums; white-space: nowrap;}

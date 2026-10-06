@@ -4,7 +4,7 @@ import type {ReactNode} from 'react';
 
 import {loadMethodology} from '@/lib/data';
 import type {Methodology, NumNode, StrNode} from '@/lib/data';
-import {Num, repositoryFile, Split, Str, Term, Unmeasured} from '@/lib/sourced';
+import {Digest, Num, repositoryFile, Split, Str, Term, Unmeasured} from '@/lib/sourced';
 
 export const metadata: Metadata = {
   title: 'Methodology',
@@ -162,9 +162,7 @@ export default function MethodologyPage() {
                 <Count node={probe.frames} />
               </td>
               <td>
-                <code>
-                  <Str node={probe.capture_sha256} />
-                </code>
+                <Digest node={probe.capture_sha256} />
               </td>
             </tr>
           ))}
@@ -183,22 +181,16 @@ export default function MethodologyPage() {
           <Str node={data.environment.tshark_version} />
         </Fact>
         <Fact label={<>tshark executable <Term name="SHA-256" /></>}>
-          <code>
-            <Str node={data.environment.executable_sha256} />
-          </code>
+          <Digest node={data.environment.executable_sha256} />
         </Fact>
         <Fact label={<>Runner source <Term name="SHA-256" /></>}>
-          <code>
-            <Str node={data.environment.runner_source_sha256} />
-          </code>
+          <Digest node={data.environment.runner_source_sha256} />
         </Fact>
         <Fact label="Identity scope">
           <Str node={data.environment.identity_scope} />
         </Fact>
         <Fact label="Environment hash">
-          <code>
-            <Str node={data.environment.environment_hash} />
-          </code>
+          <Digest node={data.environment.environment_hash} />
         </Fact>
         <Fact label="Outside the environment identity">
           <Joined nodes={data.environment.unmeasured} />
@@ -331,9 +323,12 @@ export default function MethodologyPage() {
       <p>
         The <Term name="SHA-256" /> of every prepare manifest a test request may answer, as the
         held-out freeze record admits them:{' '}
-        <code>
-          <Joined nodes={data.admitted_prepares} />
-        </code>
+        {data.admitted_prepares.map((node, index) => (
+          <Fragment key={JSON.stringify(node.src)}>
+            {index > 0 ? ', ' : null}
+            <Digest node={node} />
+          </Fragment>
+        ))}
         .
       </p>
 

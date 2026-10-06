@@ -8,7 +8,7 @@ import {Controls, MiniMap, Stage} from '@/app/_components/reel/stage';
 import {count, DISAGREES, ProbeBar} from '@/app/_components/reel/strips';
 import {loadReel} from '@/lib/reel-data';
 import {roleLabel} from '@/lib/roles';
-import {Num, Outcome, Str, Term, Unmeasured} from '@/lib/sourced';
+import {Digest, Num, Outcome, Str, Term, Unmeasured} from '@/lib/sourced';
 
 import './_components/reel/reel.css';
 
@@ -179,11 +179,11 @@ export default function HomePage() {
             Receipt <Term name="SHA-256" />
           </dt>
           <dd>
-            <Str node={receipt.sha256} />
+            <Digest node={receipt.sha256} />
           </dd>
           <dt>Packet set hash</dt>
           <dd>
-            <Str node={receipt.packet_set_hash} />
+            <Digest node={receipt.packet_set_hash} />
           </dd>
           {receipt.repair === null ? null : (
             <>

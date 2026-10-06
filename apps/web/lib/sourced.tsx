@@ -40,8 +40,9 @@ function permalink(source: Src): string | null {
   return repositoryFile(file);
 }
 
-// The kinds that show a string code as fixed words.
-type WordKind = 'text' | 'unmeasured' | 'split' | 'outcome' | 'frame_kind' | 'join';
+// The kinds that show a string: as written, as fixed words for a code, or
+// as a digest's leading digits.
+type WordKind = 'text' | 'unmeasured' | 'split' | 'outcome' | 'frame_kind' | 'join' | 'digest';
 
 interface NumProps {
   readonly node: NumNode;
@@ -132,6 +133,34 @@ export function Outcome({node}: StrProps): ReactNode {
     <span data-fmt="outcome" data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
       {fmt(node.t, 'outcome')}
     </span>
+  );
+}
+
+/**
+ * Renders a SHA-256 digest as its first twelve hex digits in monospace
+ * (fmt's digest kind), linked to the file it comes from. The full digest
+ * stays in data-v and in the title, which a pointer shows on hover; the
+ * consistency test checks both against the file.
+ */
+export function Digest({node}: StrProps): ReactNode {
+  const value = (
+    <code
+      className="dg"
+      data-fmt="digest"
+      data-src={JSON.stringify(node.src)}
+      data-v={JSON.stringify(node.t)}
+      title={node.t}
+    >
+      {fmt(node.t, 'digest')}
+    </code>
+  );
+  const href = permalink(node.src);
+  return href === null ? (
+    value
+  ) : (
+    <a className="num" href={href}>
+      {value}
+    </a>
   );
 }
 

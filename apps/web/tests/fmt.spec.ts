@@ -170,6 +170,16 @@ test("verdict shows a comparison's inconclusive flag as the reading's word", () 
   }
 });
 
+test('digest shows the first twelve hex digits of a SHA-256 digest', () => {
+  const full = 'ea24123c93f8633d8b4167978c22433cc288f09496bb40d4b616fad576ac34eb';
+  expect(fmt(full, 'digest')).toBe('ea24123c93f8');
+  // A revision, an upper-case or cut digest and anything but a string are
+  // not SHA-256 digests in hex, so they fail the build.
+  for (const value of ['0623248', full.toUpperCase(), full.slice(1), `${full}0`, 3, null]) {
+    expect(() => fmt(value, 'digest'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -250,6 +260,7 @@ test('every kind is named', () => {
     'frame_kind',
     'join',
     'verdict',
+    'digest',
   ]);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);
@@ -266,7 +277,15 @@ test('Num accepts exactly the kinds that format a number node', () => {
     expect(() => fmt(NUM_KIND_SAMPLES[kind], kind), kind).not.toThrow();
   }
   const others = FMT_KINDS.filter((kind) => !isNumKind(kind));
-  expect(others).toEqual(['text', 'unmeasured', 'split', 'outcome', 'frame_kind', 'join']);
+  expect(others).toEqual([
+    'text',
+    'unmeasured',
+    'split',
+    'outcome',
+    'frame_kind',
+    'join',
+    'digest',
+  ]);
   for (const kind of others) {
     for (const value of Object.values(NUM_KIND_SAMPLES)) {
       expect(() => fmt(value, kind), `${kind} ${JSON.stringify(value)}`).toThrow(TypeError);
