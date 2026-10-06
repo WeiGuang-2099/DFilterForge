@@ -197,7 +197,10 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   scored round it has `reason` `no_round` and a null `turn`; after, a null
   `reason` and the pick's counterexample turn: the card from the pass's
   plan, the arm run named by the round, and that run's outcome, filter,
-  capped raw answer and frame strips.
+  capped raw answer and frame strips. Each of the pick's own strips also
+  lists every frame of its capture, number, kind and name from
+  `captures.json`, which the home page's cursor reads; receipts and cases
+  list only the frames that disagree.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 
@@ -310,11 +313,19 @@ sets and source ops before a page renders.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
-  a list of integers (`int`, `num`, `bool`, `ints`); the string-only kinds
-  `text`, `unmeasured` and `split` are excluded from its `kind` prop, and
-  `tests/fmt.spec.ts` fails typecheck when a kind added to `lib/fmt.ts` is
-  neither excluded there nor listed with a sample value in the spec.
+  a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`); the
+  string-only kinds `text`, `unmeasured`, `split` and `outcome` are
+  excluded from its `kind` prop, and `tests/fmt.spec.ts` fails typecheck
+  when a kind added to `lib/fmt.ts` is neither excluded there nor listed
+  with a sample value in the spec. `rate` shows three decimals and
+  `runtime` one; both round the committed decimal digits by string
+  arithmetic, a value exactly halfway away from zero, as
+  [`locked-test-v1.md`](../results/locked-test-v1.md) rounds, so 0.6375
+  shows as 0.638 where the binary float would give 0.637.
   `<Str>` renders a string the same way, without the link.
+  `<Outcome>` renders a scored outcome code as the protocol's words, with
+  `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and any other
+  code fails the build.
   `<Term>` renders a reviewed name that holds a digit; the list in
   `lib/terms.ts` is `IPv4` and `SHA-256`. `<Split>` renders a run's split
   as the word that names its round, with `data-fmt="split"`: `test` reads
@@ -365,6 +376,9 @@ sets and source ops before a page renders.
   hydration removes, reaches every visitor without JavaScript, every crawler
   and every first paint; a planted page proves the second pass catches it.
   Playwright 1.62.1 evaluates in a context with JavaScript disabled.
+  On `/` it also derives every frame state the Reel's readout shows, from
+  the pick's receipt and `captures.json`, since the readout says them in
+  fixed words that no value check sees.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool,
@@ -423,7 +437,7 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged) |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged); 160 at 7f4eb33 (61 registry, 41 lint-rule, 19 formatter, 15 consistency, 13 smoke, 4 Reel, 4 resolver, 3 base-path), 18.2 s on the Docker build |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured
@@ -456,6 +470,17 @@ export or the site:
   the 12 test prepares d95483a admitted in `held_out_freeze.json`, and 7
   are the repair line: its 8 values beside its split, less the status it
   replaces.
+- At 7f4eb33 on `site-reel` (2026-10-06), the pick's strips list every
+  frame and the home page renders the Reel. Two exports in the test image
+  are identical: 1,935 files in 27,479,337 bytes, `reel.json` 83,486 of
+  them. The Docker static export has 33 files in 2,286,305 bytes (5 HTML,
+  12 JS, 12 TXT, 2 CSS and the 2 committed fonts); `index.html` is 477,885
+  bytes, 29,908 gzipped, and renders 487 sourced values: 397 strings, 82
+  integers, 3 runtimes, 3 booleans and 2 outcomes. Most of them are the
+  readout: every frame of the three probes, with its kind and name. The
+  Docker `--target out` build took 16.3 s, export 2.8 s and `next build`
+  5.4 s; the test image ran the 185 exporter and evidence tests in
+  215.8 s.
 
 The other figures below were not measured again.
 
@@ -628,9 +653,14 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## Limits
 
-- Only the methodology page renders values today. The board, case and receipt
-  pages and the Reel are the next two pull requests, and the home page is a
-  digit-free placeholder until the Reel lands.
+- The methodology page and the Reel on `/` render values today. The board,
+  case and receipt pages come next.
+- The Reel shows each frame's number, kind and generator name and whether
+  the filter and the request select it. The prototype's packet columns,
+  header fields and predicate trace are left out: no committed evidence
+  holds them for the scored probes. The GIF is not encoded yet;
+  `apps/web/scripts/record_reel.mjs` records its frames, and ffmpeg is not
+  installed on the development host.
 - Rule `reel-v1` and the registry were committed before the first test
   request, so the test-phase pick predates the test data:
   `disproof-reel.md` in 6f2beb9, and `test-runs.json` with `test-runs.md`
@@ -652,13 +682,13 @@ pnpm --filter @dfilterforge/web test:e2e
 - Step 5 shows only the pick's own counterexample turn. The fallback repair
   trajectory `disproof-reel.md` registers for a pick without a repair row
   is not built: no committed data needs it, and the export stops
-  (`repair_fallback_unbuilt`) rather than drop it. No page renders
-  `reel.json` yet, so only the Python source check re-derives the turn's
-  values; the TypeScript resolver checks the choice alone.
+  (`repair_fallback_unbuilt`) rather than drop it. The consistency test
+  re-derives every value the home page shows from `reel.json`, the turn's
+  included.
 - The methodology page's repair line shows counts for the cited run's round
   only, pass A's in the test phase: repair@1, its interval and the other
-  passes' rounds wait for a rounding kind in `lib/fmt.ts` and a results page
-  on the site.
+  passes' rounds wait for a results page on the site; `lib/fmt.ts` has the
+  rounding kind they need.
 - The A/A pair is not wired in: `board.json` keeps `aa` null.
 - `site.json`'s `phase.repair` stays false and `board.json`'s `repair` stays
   null until the board pull request, although `reel.json` and
@@ -676,8 +706,9 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## What the next pages must do
 
-The board, case, receipt and Reel pages come in the next pull requests.
-These rules bind them. Only the first is enforced by a test today:
+The board, case and receipt pages come in the next pull requests. These
+rules bind them, as they bind the Reel. The first and the rounding are
+enforced by tests today:
 - **Not measured yet.** Until the pick's pass has a scored round,
   `reel.json`'s `receipt_panel.repair` holds the summary's status key,
   `not_run`; after, it is null. A page shows it through `<Unmeasured>` as
@@ -690,8 +721,8 @@ These rules bind them. Only the first is enforced by a test today:
   comparison also shows its A/A reading from the pair report, and the
   notes `locked-test-v1.md` attaches to it: the comparisons it marks
   confounded by rate limiting, and the items each pass lost to HTTP 429.
-- **Rounding.** `lib/fmt.ts` never rounds today. A rounded kind added for
-  rates or differences rounds a value exactly halfway away from zero, as
+- **Rounding.** A rate or difference is shown with `lib/fmt.ts`'s `rate`
+  kind, which rounds a value exactly halfway away from zero, as
   `locked-test-v1.md` does, so a shown rate matches its count.
 - **No ranking.** Test rows keep pool order. No page orders the models by a
   rate or presents the rows as a ranking: `locked-test-v1.md` reports the
@@ -699,4 +730,5 @@ These rules bind them. Only the first is enforced by a test today:
   pre-registered.
 - **Role labels.** `reel.json`'s pool, `site.json`'s runs and the board rows
   carry the registry's roles verbatim, with no slot field. Pages map a role
-  to its label in one table in `lib/`.
+  to its label with `lib/roles.ts`, the one table, which fails the build on
+  a role it does not know.
