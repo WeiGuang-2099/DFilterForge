@@ -856,13 +856,30 @@ export class Resolver {
   }
 
   /**
+   * Names the frontier slot's test pass, whose test plan disproof-reel.md's
+   * fallback repair trajectory comes from: the published winner_frontier
+   * run, else the published fallback_frontier run. Null in the dev phase.
+   */
+  private frontierPass(): string | null {
+    const settled = this.settled();
+    if (settled === null) {
+      return null;
+    }
+    const published = (role: string): string | undefined =>
+      settled.find((entry) => entry.role === role)?.runId;
+    return published('winner_frontier') ?? published('fallback_frontier') ?? null;
+  }
+
+  /**
    * Reads reel-v1 step 5 for the pick, as the exporter does: no_round before
-   * the pick's pass has a scored round; once it has one, the counterexample
-   * arm run the round names for the pick, an -r2 or -nb re-run included.
-   * Throws, as the exporter stops (repair_fallback_unbuilt), when the round
-   * exists but the pick is not C4, is not one of its items, or its
-   * counterexample arm did not run: disproof-reel.md's fallback trajectory
-   * would apply, and it is not built. Null with no pick.
+   * the pick's pass has a scored round, while the frontier pass has none
+   * either; once it has one, the counterexample arm run the round names for
+   * the pick, an -r2 or -nb re-run included. Throws, as the exporter stops
+   * (repair_fallback_unbuilt), when disproof-reel.md's fallback trajectory
+   * would apply, which is not built: the pick's pass has no round but the
+   * frontier pass has one, or the round exists but the pick is not C4, is
+   * not one of its items, or its counterexample arm did not run. Null with
+   * no pick.
    */
   reelRepair(): ReelRepair | null {
     const pick = this.reelPick();
@@ -871,6 +888,13 @@ export class Resolver {
     }
     const round = this.repairRound(pick.run);
     if (round === null) {
+      const fallback = this.repairRound(this.frontierPass());
+      if (fallback !== null) {
+        return refuse(
+          `${pick.run} has no scored repair round but ${fallback} holds one: ` +
+            'the fallback repair trajectory is not built',
+        );
+      }
       return {reason: 'no_round', run: null, item: null};
     }
     const run = pick.cond === 'C4' ? this.counterexample(round, pick.item) : null;

@@ -2973,6 +2973,46 @@ def test_only_the_picks_own_round_gives_the_reel_a_turn(
 
 
 @pytest.mark.parametrize(
+    "frontier",
+    [_TEST_FRONT, _tag(_TEST_FRONT, "fb")],
+    ids=["winner", "fallback"],
+)
+def test_a_frontier_round_without_the_picks_round_stops_the_export(
+    fixture: Fixture, frontier: str
+) -> None:
+    # The pick's pass has no round, so disproof-reel.md would show the
+    # frontier slot's repair trajectory from that slot's test round. It is
+    # not built, so the export stops rather than drop it.
+    _settled(fixture)
+    registration = _registration()
+    if frontier != _TEST_FRONT:
+        _stop(registration, _TEST_FRONT, "gate stop")
+        _publish(registration, frontier)
+    _register(
+        fixture,
+        registration,
+        _PASS_A,
+        _PASS_B,
+        _TEST_SMALL,
+        _TEST_MID,
+        frontier,
+    )
+    _round(fixture, frontier, ("i-1001",), _tag(frontier, "cx"))
+    root = fixture.build()
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "repair_fallback_unbuilt"
+
+    # Without the frontier round there is no trajectory to show.
+    (root / f"docs/results/{frontier}/repair/summary.json").unlink()
+    reel = _reel(root)
+
+    assert _picked(reel) == (_PASS_A, "C4", "i-1002")
+    assert reel["repair"] == {"reason": "no_round", "turn": None}
+
+
+@pytest.mark.parametrize(
     ("label", "items", "arm"),
     [
         ("C3", ("i-0001",), _tag(_ANCHOR, "cx")),

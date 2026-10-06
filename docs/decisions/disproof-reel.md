@@ -140,10 +140,16 @@ got code. It leaves the rule and "Repair trajectory" as registered.
 - **The turn.** The card comes from the pass's `repair/plan.json`. From the
   arm run come its completion, its outcome row and, for an executed answer,
   its receipt's filter and frame strips; never its `scored/summary.json`.
-- **The fallback trajectory is not built.** Before the pass's round exists
-  the Reel says no round is scored. Once it exists, a pick that is not C4 or
-  has no repair row stops the export (`repair_fallback_unbuilt`) rather than
-  drop the trajectory. No committed data needs it.
+- **The fallback trajectory is not built.** Wherever "Repair trajectory"
+  would show it, the export stops (`repair_fallback_unbuilt`) rather than
+  drop it. That is when the pick's pass has a scored round but the pick is
+  not C4 or has no repair row, and when the pick's pass has no scored round
+  but, in the test phase, the frontier slot's counted test pass (its
+  `winner_frontier` run, else its `fallback_frontier` run) has one. With
+  neither round the Reel says no round is scored. The dev phase reads no
+  frontier round, since the fallback names the frontier slot's test plan.
+  No committed data needs the fallback: all four test pool passes have
+  rounds.
 - **Today's pick.** Steps 1 to 4, which read no repair result, pick pass A's
   C4 `mei-1038`. Its row is item 15 of pass A's
   [`repair/plan.json`](../results/test-qwen3-32b-2026-09-26/repair/plan.json),

@@ -762,6 +762,38 @@ for (const {name, cond, items, cx} of UNBUILT) {
   });
 }
 
+// Before the pick's pass has a round, a scored round of the frontier slot's
+// test pass, its winner's or else its fallback's, calls for the fallback
+// trajectory, so it stops the Reel as it stops the exporter.
+for (const [role, frontier] of [
+  ['winner', FRONTIER],
+  ['fallback', tag(FRONTIER, 'fb')],
+] as const) {
+  test(`a round of the frontier ${role} without the pick's own round stops the Reel`, () => {
+    const runs = registry();
+    if (frontier !== FRONTIER) {
+      stop(runs, FRONTIER, 'gate stop');
+      publish(runs, frontier);
+    }
+    commit(runs);
+    answers(PASS_A, [['C4', 'mei-1001', 'ready', 'silent_wrong', 1]]);
+    for (const runId of [SMALL, MID, frontier]) {
+      answers(runId, [['C4', 'mei-1002', 'ready', 'silent_wrong', 2]]);
+    }
+    const file = repairRound(frontier, ['mei-1002'], tag(frontier, 'cx'));
+
+    expect(new Resolver(root).reelPick()).toEqual({run: PASS_A, cond: 'C4', item: 'mei-1001', candidates: 4});
+    expect(() => new Resolver(root).reelRepair()).toThrow(
+      'the fallback repair trajectory is not built',
+    );
+
+    // Without the frontier round there is no trajectory to show.
+    rmSync(path.join(root, ...file.split('/')));
+
+    expect(new Resolver(root).reelRepair()).toEqual({reason: 'no_round', run: null, item: null});
+  });
+}
+
 // The methodology page's repair line describes the repair round the site
 // reports, as the exporter's methodology.json does: the test round in the
 // test phase, from the first test pool run's summary, so a scored dev round

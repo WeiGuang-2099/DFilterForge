@@ -268,8 +268,9 @@ are:
 - a scored repair round that names another pass (`repair_inconsistent`):
   a `repair/summary.json` whose `base_run` or `split` is not that of the
   pass whose directory holds it, or a shown turn whose item the pass's
-  `repair/plan.json` or the arm run's completions lack. Two rounds are read:
-  the Reel pick's pass's, for step 5, and that of the run the methodology
+  `repair/plan.json` or the arm run's completions lack. The rounds read are
+  the Reel pick's pass's, for step 5, the frontier slot's test pass's when
+  the pick's pass has none (below), and that of the run the methodology
   page cites. The page's repair line describes the repair round the site
   reports, so the cited run depends on the phase:
   - in the test phase, the first test pool run: pass A whenever pass A is
@@ -288,7 +289,11 @@ are:
 - a pick without a counterexample turn in its pass's scored round
   (`repair_fallback_unbuilt`): the round exists, but the pick is not C4, is
   not one of the round's `items`, or its counterexample arm is missing from
-  `arms` or listed in `arms_not_run`. `disproof-reel.md` then shows the
+  `arms` or listed in `arms_not_run`. The same code stops a pick whose pass
+  has no scored round while, in the test phase, the frontier slot's test
+  pass (the pool's `winner_frontier` run, else its `fallback_frontier` run)
+  has one. With neither round, `repair` is `no_round`; the dev phase reads
+  no frontier round. In both stopped cases `disproof-reel.md` shows the
   frontier slot's repair trajectory instead. That fallback is not built and
   no committed data needs it, so the export stops rather than drop the
   trajectory. `reelRepair()` in `tests/support/resolve.ts` refuses the same

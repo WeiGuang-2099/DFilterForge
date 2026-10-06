@@ -68,12 +68,14 @@ the lower item id. Highlight: the second scored probe if it disagrees,
 else the first, else the third, and on it the lowest disagreeing frame.
 No repair outcome, feedback-probe result or trace is read before the pick.
 Step 5 reads the pick's pass's scored repair round, its repair/summary.json
-(repair-summary/1.0). With none, ``repair`` says so (``no_round``). With
-one, the pick must be a C4 item of the round whose counterexample arm ran,
-and ``repair`` holds that arm's turn on it, whatever it scored: the card
-from the pass's repair/plan.json, and from the arm run the round names its
-completion, its outcome row and, for an executed answer, its receipt's
-filter and frame strips. Any other pick stops the export
+(repair-summary/1.0). With none, ``repair`` says so (``no_round``), unless
+in the test phase the frontier slot's pass (winner_frontier, else
+fallback_frontier) has a round. With one, the pick must be a C4 item of the
+round whose counterexample arm ran, and ``repair`` holds that arm's turn on
+it, whatever it scored: the card from the pass's repair/plan.json, and from
+the arm run the round names its completion, its outcome row and, for an
+executed answer, its receipt's filter and frame strips. Any other pick, and
+a pick without a round while the frontier pass has one, stops the export
 (``repair_fallback_unbuilt``): the note's fallback trajectory is not built,
 and no committed data needs it.
 
@@ -2514,8 +2516,28 @@ def _repair_turn(
     }
 
 
+def frontier_pass(selection: Selection) -> Run | None:
+    """The frontier slot's test pass in the pool; None in the dev phase.
+
+    disproof-reel.md takes its fallback repair trajectory from the frontier
+    slot's test plan: the published winner_frontier run, else the published
+    fallback_frontier run. The dev phase has no such pass.
+    """
+    if not selection.test_phase:
+        return None
+    for role in ("winner_frontier", "fallback_frontier"):
+        for shown in selection.pool:
+            if shown.role == role:
+                return shown.run
+    return None
+
+
 def reel_repair(
-    repo: Repo, captures: Captures, run: Run, pick: Candidate
+    repo: Repo,
+    captures: Captures,
+    run: Run,
+    pick: Candidate,
+    frontier: Run | None,
 ) -> Node:
     """Step 5 of reel-v1: the pick's counterexample turn, whatever it scored.
 
@@ -2524,21 +2546,34 @@ def reel_repair(
         captures: The committed frame tables.
         run: The pick's pass.
         pick: The pick of steps 2 and 3, which nothing here moves.
+        frontier: The frontier slot's test pass, from ``frontier_pass``.
 
     Returns:
         ``reason`` ``no_round`` and no turn before the pass's round is
-        scored; else no reason and the turn.
+        scored, while the frontier pass has none either; else no reason
+        and the turn.
 
     Raises:
-        ContractError: With code ``repair_fallback_unbuilt`` once the round
-            exists but the pick is not C4, is not one of its items, or its
-            counterexample arm did not run: disproof-reel.md's fallback
-            trajectory would apply, and it is not built. As
+        ContractError: With code ``repair_fallback_unbuilt`` when
+            disproof-reel.md's fallback trajectory would apply, which is
+            not built: the pick's pass has no round but the frontier pass
+            has one, or the pass's round exists but the pick is not C4, is
+            not one of its items, or its counterexample arm did not run. As
             ``repair_round`` raises, and with code ``repair_inconsistent``
             when the plan or the arm run lacks the item.
     """
     summary = repair_round(repo, run)
     if summary is None:
+        fallback = repair_round(repo, frontier)
+        if fallback is not None:
+            raise ContractError(
+                "repair_fallback_unbuilt",
+                f"{run.run_id} has no scored repair round but {fallback} "
+                "holds one; the fallback repair trajectory of "
+                "docs/decisions/disproof-reel.md is not built, since no "
+                "committed data needs it, so the export stops rather than "
+                "drop the trajectory",
+            )
         return {"reason": "no_round", "turn": None}
     if pick.label != "C4" or (
         _counterexample_arm(repo, summary, pick.item_id) is None
@@ -2644,7 +2679,9 @@ def build_reel(
             pick = min(candidates)
             run = pool[pick.position].run
             document.update(_reel_pick(repo, captures, run, pick))
-            document["repair"] = reel_repair(repo, captures, run, pick)
+            document["repair"] = reel_repair(
+                repo, captures, run, pick, frontier_pass(selection)
+            )
     document["inputs_sha256"] = hashlib.sha256(
         render([[path, repo.inputs[path]] for path in sorted(used)])
     ).hexdigest()
