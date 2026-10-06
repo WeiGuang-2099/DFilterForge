@@ -351,7 +351,13 @@ projections, 3 epochs, learning rate 2e-4 with a cosine schedule, effective
 batch 16. For SFT the checkpoint is the adapter after the final epoch, for
 every seed, so no checkpoint is chosen on dev or test; this replaces
 "chosen on dev" above. Seeds 17, 42 and 2026 are each trained, scored on
-dev and test, and reported.
+dev and test, and reported. The base model (thinking off) and each seed's
+adapter answer the dev prompts and the frozen test prompts in all four
+conditions and are scored by the same scorer; the adapters trained on C4
+prompts only, so their C1 to C3 rows are marked as untrained conditions.
+The SFT headline is adapter C4 minus base C4 on strong exact, per seed and
+as the three-seed mean, with the case bootstrap; C4 against C2 is not read
+for adapters.
 
 ## Claim boundary
 
