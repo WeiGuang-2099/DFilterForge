@@ -656,11 +656,16 @@ pnpm --filter @dfilterforge/web test:e2e
 - The methodology page and the Reel on `/` render values today. The board,
   case and receipt pages come next.
 - The Reel shows each frame's number, kind and generator name and whether
-  the filter and the request select it. The prototype's packet columns,
-  header fields and predicate trace are left out: no committed evidence
-  holds them for the scored probes. The GIF is not encoded yet;
-  `apps/web/scripts/record_reel.mjs` records its frames, and ffmpeg is not
-  installed on the development host.
+  the filter and the request select it. The prototype's central figure, the
+  ladder diagram with one arrow and packet summary per frame, is replaced by
+  request and filter lanes on each capture strip, because `captures.json`
+  holds only each frame's number, kind and name, with no packet summary or
+  direction to draw an arrow from; on these lanes each of the pick's
+  disproving frames, 59, 60 and 66, is the last column of its strip. The
+  prototype's packet columns, header fields and predicate trace are left
+  out: no committed evidence holds them for the scored probes. The GIF is
+  not encoded yet; `apps/web/scripts/record_reel.mjs` records its frames,
+  and ffmpeg is not installed on the development host.
 - Rule `reel-v1` and the registry were committed before the first test
   request, so the test-phase pick predates the test data:
   `disproof-reel.md` in 6f2beb9, and `test-runs.json` with `test-runs.md`
