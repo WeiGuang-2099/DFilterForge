@@ -167,6 +167,7 @@ or `{"v": value, "src": op}` for a number, a boolean or an array of integers.
 | `["sum", [op]]` | the sum of integer operands |
 | `["sha256", path]` | the SHA-256 of the file's bytes |
 | `["input", path, item_id, pointer]` | the `INPUT_JSON` object of a prepared prompt's user message, then a pointer into it |
+| `["json", path, pointer, inner]` | the JSON text of the string at the pointer, parsed, then the pointer `inner` into it |
 
 The exporter gets each value by resolving its own `src`, so a value cannot
 drift from its source. The site never divides. Dev runs get counts only, per
@@ -191,7 +192,8 @@ allowed source:
 The output files use the schema family `web-*/1.0`. Each is written with
 sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
 - `site.json`: the source commit, every input with its SHA-256, the phase
-  flags and the run slugs.
+  flags and the run slugs. `phase.repair` is true when `board.json` holds
+  the test repair round.
 - `routes.json`: the parameters of every dynamic route.
 - `board.json`: the dev selection rows, `test_registered`, and a `test`
   block. The block is null until the test phase, and it is set now:
@@ -204,13 +206,22 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
     sourced `run_id` and `reason` pointers into the registry's
     `/runs/<i>`. An `unused` row is left out, because its condition never
     occurred. Today the list is empty;
-  - `aa` and `repair` stay null (Limits).
+  - `repair` is null until `docs/results/repair-pool/test.json` exists.
+    Then it holds the pool's arms (repair@1 with its interval, repaired
+    and triggered answers), its bootstrap settings and its three
+    comparisons by case, then each pool pass's arms, comparisons and any
+    arm the gate stopped, from its `repair/summary.json`, in pool order. A
+    pool file whose split is not `test` or that pools other passes than
+    the test pool, or a pool pass without a scored round, stops the export
+    (`repair_inconsistent`). The dev round is never read: it was a
+    pipeline check (protocol, Repair);
+  - `aa` stays null (Limits).
 - `methodology.json`: the prompt conditions, `top_k`, the bootstrap block
   and the scoring environment from the dev anchor, in both phases; the
   probes and witnesses from `captures.json`, the mutant counts and
   categories from the test-freeze gate receipt, the shortcut audit from
-  ablation 006's evidence and the admitted prepares from
-  `held_out_freeze.json`, none of them a run; and the `not_measured`
+  ablation 006's evidence and the admitted prepares and their count (a
+  `len` op) from `held_out_freeze.json`, none of them a run; and the `not_measured`
   statuses from the run its repair line cites (What fails), each with a
   `split` node that points at that run's summary `/split` and labels the
   line. Once that run's `repair/summary.json` exists, `repair_at_1` is left
@@ -221,8 +232,10 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   included. `repair` is null with no pick. Before the pick's pass has a
   scored round it has `reason` `no_round` and a null `turn`; after, a null
   `reason` and the pick's counterexample turn: the card from the pass's
-  plan, the arm run named by the round, and that run's outcome, filter,
-  capped raw answer and frame strips. Each of the pick's own strips also
+  plan, and for a frames card `card_frames`, each field's value a `json`
+  op into the card's text, one node per string of a list such as
+  `tcp.flags`; then the arm run named by the round, and that run's
+  outcome, filter, capped raw answer and frame strips. Each of the pick's own strips also
   lists every frame of its capture, which the home page's ladder and
   cursor read: number, kind and name from `captures.json`, and time,
   source, destination, protocol, length, Info and direction from
@@ -348,9 +361,11 @@ sets and source ops before a page renders.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
-  a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`); the
-  string-only kinds `text`, `unmeasured`, `split` and `outcome` are
-  excluded from its `kind` prop, and `tests/fmt.spec.ts` fails typecheck
+  a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`,
+  `verdict`); the string-only kinds `text`, `unmeasured`, `split`,
+  `outcome`, `frame_kind`, `join` and `digest` are excluded from its `kind`
+  prop, and
+  `tests/fmt.spec.ts` fails typecheck
   when a kind added to `lib/fmt.ts` is neither excluded there nor listed
   with a sample value in the spec. `rate` shows three decimals and
   `runtime` one; both round the committed decimal digits by string
@@ -358,6 +373,11 @@ sets and source ops before a page renders.
   [`locked-test-v1.md`](../results/locked-test-v1.md) rounds, so 0.6375
   shows as 0.638 where the binary float would give 0.637.
   `<Str>` renders a string the same way, without the link.
+  `<Digest>` renders a SHA-256 digest in hex as its first twelve digits
+  (`data-fmt="digest"`), as a short git revision is shown, linked to its
+  file, with the whole digest in `data-v` and in the `title`. Every page
+  shows every digest this way; a replay command keeps its revision
+  exact.
   `<Outcome>` renders a scored outcome code as the protocol's words, with
   `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and a code the
   table does not list fails the build. `<Word>` does the same for two more
@@ -366,9 +386,13 @@ sets and source ops before a page renders.
   leaf"). `<Num link={false}>` leaves out the link where numbers stand
   close, as on the ladder's axis.
   `<Term>` renders a reviewed name that holds a digit; the list in
-  `lib/terms.ts` is `IPv4` and `SHA-256`. `<Split>` renders a run's split
-  as the word that names its round, with `data-fmt="split"`: `test` reads
-  "Test" and `dev` reads "Dev", and any other split fails the build.
+  `lib/terms.ts` is `IPv4`, `SHA-256` and `repair@1`. `verdict` shows a
+  comparison's `inconclusive` flag as "inconclusive" or "conclusive", the
+  words of `locked-test-v1.md`; the consistency test fails the flag shown
+  any other way and the verdict words on any other value. `<Split>`
+  renders a run's split as the word that names its round, with
+  `data-fmt="split"`: `test` reads "Test" and `dev` reads "Dev", and any
+  other split fails the build.
 - **Not measured yet.** A scored summary's `not_measured` status, such as
   `repair_at_1`, is never shown as written. The scorer writes `not_run` for
   a measurement no round has made, and `docs/protocol.md` keeps "not run"
@@ -402,6 +426,9 @@ sets and source ops before a page renders.
   `apps/web/data`. The test fails on any of these:
   - a value or its formatted text that differs;
   - a `not_measured` status shown as anything but fixed words;
+  - a SHA-256 digest shown other than as a digest, or a digest whose text
+    is not the first twelve digits of the committed value or whose `title`
+    does not hold the whole of it, and the digest kind on any other value;
   - a Unicode number character outside a sourced value, a script, a style
     or a `<Term>`, in the text, a swept attribute (`start` included) or
     `document.title`;
@@ -516,7 +543,7 @@ that wired CI.
 | Routes | `/` redirects to `/evaluate` (the mock); `/methodology` | `/` (a placeholder until the Reel), `/methodology/`, a digit-free 404 |
 | Build | `output: 'standalone'` built on the runner; the Docker image ran the Next server | Static export built in Docker from the exported data; `serve.mjs` serves it under the base path |
 | Compose `web` port | `3000:3000`, every interface | `127.0.0.1:3000:3000` |
-| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged); 160 at 7f4eb33 (61 registry, 41 lint-rule, 19 formatter, 15 consistency, 13 smoke, 4 Reel, 4 resolver, 3 base-path), 18.2 s on the Docker build; 164 at 54c056f (20 formatter, 7 Reel, the rest unchanged), 17.6 s on the Docker build |
+| Web end-to-end tests | 2 | 57 (13 smoke, 11 formatter, 27 lint-rule, 6 consistency); 82 after the review fixes at a9f12d9 (13 smoke, 13 formatter, 41 lint-rule, 9 consistency, 3 resolver, 3 base-path); 142 at 69d237e, on the registered test runs (56 registry, 41 lint-rule, 14 formatter, 13 smoke, 11 consistency, 4 resolver, 3 base-path); 148 at d3ff716 (61 registry, 12 consistency, the rest unchanged); 152 at dfeaf11 (63 registry, 15 formatter, 13 consistency, the rest unchanged); 153 at 19dff88 (16 formatter, the rest unchanged); 160 at 7f4eb33 (61 registry, 41 lint-rule, 19 formatter, 15 consistency, 13 smoke, 4 Reel, 4 resolver, 3 base-path), 18.2 s on the Docker build; 164 at 54c056f (20 formatter, 7 Reel, the rest unchanged), 17.6 s on the Docker build (on `site-reel`); 168 at 0a1617c, with the board (61 registry, 41 lint-rule, 20 formatter, 19 consistency, 16 smoke, 4 Reel, 4 resolver, 3 base-path), 18.0 s on the Docker build (on `site-board`); 173 at 645e658, after `main` was merged in (61 registry, 41 lint-rule, 21 formatter, 19 consistency, 16 smoke, 8 Reel, 4 resolver, 3 base-path), 21.8 s on a host `next build`, with Docker Desktop not running |
 | CI checks of web data | None | The four python steps above and the Docker-built site under test |
 
 ## Measured
@@ -732,6 +759,46 @@ the rule had no code. Its registered text is left as it is; a dated line in
 its Limits now says steps 1 to 5 have code, and its "Reading step 5" section
 says how step 5 is read.
 
+### The board
+
+`/board/` opens with the test repair round's strongest number: after one
+structured counterexample, 35 of the 75 failed answers were repaired,
+against 21 after a bare turn and 4 on a resample. Then it shows:
+- the three pooled arms as bars, each with repair@1, its interval and the
+  pool's bootstrap settings;
+- the counted test passes in pool order, each with its C4 outcome bar and
+  its C4 strong-exact rate and interval;
+- the three pooled comparisons, labelled secondary;
+- each pool pass's arms and comparisons, with counterexample - bare
+  labelled primary.
+
+Each comparison shows its discordant cases and its verdict. A bar grows
+by counts: an outcome bar's segments by flex-grow, and a repair bar is a
+grid of one column per triggered answer whose fill spans the repaired
+ones. An interval is placed by its committed bounds.
+
+The board leaves out the comparisons between conditions and the A/A pair;
+it links `locked-test-v1.md` for them (Limits). It shows no dev bake-off
+count and no dev repair number. `tests/consistency.spec.ts` checks three
+things that the value checks cannot see:
+- its rows and its repair rounds are the Reel's pool in pool order;
+- its repair numbers come only from the pool file and the pool passes'
+  rounds;
+- only the per-model counterexample - bare comparison is labelled
+  primary.
+
+Measured at 0a1617c on `site-board` (2026-10-06):
+- Two exports in the test image are identical: 1,935 files in 27,510,508
+  bytes. `board.json` grows from 143,673 to 174,259 bytes, and only it and
+  `site.json` differ from 6434424's export.
+- The Docker static export has 39 files in 3,043,537 bytes: 6 HTML, 12 JS,
+  16 TXT, 3 CSS and the 2 committed fonts. `board/index.html` is 297,752
+  bytes, 18,515 gzipped, and renders 280 sourced values: 107 integers, 102
+  rates, 56 strings and 15 verdicts.
+- The Docker `--target out` build took 16 s with cached dependency layers.
+- The test image ran the 189 exporter and evidence tests in 92.9 s.
+- Playwright ran 168 tests on the Docker build in 18.0 s.
+
 ## Commands
 
 From the repository root in Git Bash. `MSYS_NO_PATHCONV=1` keeps Docker's
@@ -756,19 +823,26 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## Limits
 
-- The methodology page and the Reel on `/` render values today. The board,
-  case and receipt pages come next.
+- The methodology page, the Reel on `/` and the board render values today.
+  The case and receipt pages come next.
 - The Reel draws the chosen prototype's figure: one ladder diagram per
   scored probe of the pick, with an arrow and the Info column per frame
-  and the witness tail collapsed below a break, the probe bars over it,
+  and each run of agreeing witness frames collapsed into one break row,
+  the probe bars over it,
   the draggable cursor, the packet-list row of the cursor's frame and the
   predicate trace there. The branch's first Reel, 9343e3a, drew request
   and filter lanes instead, for want of per-frame columns, which
   `packets.json` now holds; the owner ruled on 2026-10-06 to restore the
-  ladder. The prototype's RFC header box is left out. The GIF is not encoded yet:
-  `apps/web/scripts/record_reel.mjs` records its frames, and two
-  recordings of one build are identical, but ffmpeg is not installed on
-  the development host.
+  ladder. The prototype's RFC header box is left out.
+- The README GIF, `docs/media/reel.gif`, is the home page in three scenes
+  of one frame size: the top of the page in a 1024 px window, the sweep
+  to the highlighted frame at 1280 px, where the readout sits beside the
+  ladder, and the repair turn at 1024 px.
+  `apps/web/scripts/record_reel.mjs` records its frames on the fake clock
+  and prints the ffmpeg command that encodes them. At c1f2fd1 three
+  recordings of the Docker build gave identical frames, and ffmpeg 7.1 in
+  Docker encoded them as 135 frames at 10 fps, 800x696 px, in 719,785
+  bytes.
 - The trace evaluates leaves only at the frames where the answer and the
   labels disagree, as `dfilterforge.live` traces a counterexample, so on
   every other frame the readout shows a leaf as a dash. Only the Reel's
@@ -782,8 +856,9 @@ pnpm --filter @dfilterforge/web test:e2e
 - `methodology.json` still takes its bootstrap block from the dev anchor's
   summary, in the test phase too. The methodology page says its intervals
   come from bootstrap resamples "as the anchor pass's summary records
-  them", so it stays true. Which pass it cites once the board renders test
-  intervals is left to the board pull request. Only the page's
+  them", so it stays true. The board states the bootstrap of its own
+  intervals beside them, from the repair pool file, so the methodology
+  page keeps the dev anchor's block. Only the page's
   `not_measured` statuses and its repair line follow the phase (What
   fails). Neither names its source run, but each label names the split of
   the run it cites: "Test repair round" in the test phase, "Dev repair
@@ -795,13 +870,12 @@ pnpm --filter @dfilterforge/web test:e2e
   re-derives every value the home page shows from the committed files, the
   turn's included.
 - The methodology page's repair line shows counts for the cited run's round
-  only, pass A's in the test phase: repair@1, its interval and the other
-  passes' rounds wait for a results page on the site; `lib/fmt.ts` has the
-  rounding kind they need.
-- The A/A pair is not wired in: `board.json` keeps `aa` null.
-- `site.json`'s `phase.repair` stays false and `board.json`'s `repair` stays
-  null until the board pull request, although `reel.json` and
-  `methodology.json` already carry the measured round.
+  only, pass A's in the test phase; the board shows repair@1, its
+  intervals and every pool pass's round.
+- The A/A pair is not wired in: `board.json` keeps `aa` null, and no
+  committed file holds the confound notes `locked-test-v1.md` attaches to
+  the comparisons between conditions. So the board leaves those
+  comparisons out and links that page for them.
 - Base images are pinned by tag, not by digest.
 - `RUN --network=none` was verified only on Docker Desktop 29.7.2: the step
   saw only `lo`, and a connect failed with `ENETUNREACH`. The CI workflow and
@@ -816,9 +890,9 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## What the next pages must do
 
-The board, case and receipt pages come in the next pull requests. These
-rules bind them, as they bind the Reel. The first and the rounding are
-enforced by tests today:
+The case and receipt pages come in the next pull requests. These rules
+bind them, as they bind the Reel and the board. The first and the rounding
+are enforced by tests today:
 - **Not measured yet.** Until the pick's pass has a scored round,
   `reel.json`'s `receipt_panel.repair` holds the summary's status key,
   `not_run`; after, it is null. A page shows it through `<Unmeasured>` as
@@ -831,6 +905,9 @@ enforced by tests today:
   comparison also shows its A/A reading from the pair report, and the
   notes `locked-test-v1.md` attaches to it: the comparisons it marks
   confounded by rate limiting, and the items each pass lost to HTTP 429.
+  The board shows only the repair arms' comparisons, which no A/A bound
+  reads (`locked-test-v1.md`, Limits); its Limits section says so and
+  carries the round's own notes.
 - **Rounding.** A rate or difference is shown with `lib/fmt.ts`'s `rate`
   kind, which rounds a value exactly halfway away from zero, as
   `locked-test-v1.md` does, so a shown rate matches its count.

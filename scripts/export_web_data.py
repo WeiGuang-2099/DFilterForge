@@ -16,6 +16,9 @@ as a sourced node: ``{"t": text, "src": op}`` for a string, or
 - ``["sha256", path]``: the SHA-256 of the file's bytes.
 - ``["input", path, item_id, pointer]``: the INPUT_JSON object of a
   prepared prompt's user message, then a pointer into it.
+- ``["json", path, pointer, inner]``: the JSON text a string at the pointer
+  holds, parsed, then the pointer ``inner`` into it, as for one value of a
+  repair plan's counterexample card.
 
 A raw model answer also carries ``"cap"``: its text is the resolved string
 cut to that many UTF-8 bytes at a character boundary. Paths are relative to
@@ -78,7 +81,8 @@ Step 5 reads the pick's pass's scored repair round, its repair/summary.json
 in the test phase the frontier slot's pass (winner_frontier, else
 fallback_frontier) has a round. With one, the pick must be a C4 item of the
 round whose counterexample arm ran, and ``repair`` holds that arm's turn on
-it, whatever it scored: the card from the pass's repair/plan.json, and from
+it, whatever it scored: the card from the pass's repair/plan.json, a frames
+card's values each as a ``json`` source into it, and from
 the arm run the round names its completion, its outcome row and, for an
 executed answer, its receipt's filter and frame strips. Any other pick, and
 a pick without a round while the frontier pass has one, stops the export
@@ -89,17 +93,25 @@ methodology.json takes its run values, the prompt conditions, top_k, the
 bootstrap block and the scoring environment, from the dev anchor in both
 phases. Its probes and witnesses come from the captures file, its mutant
 counts and categories from the test-freeze gate record, its shortcut audit
-from the shortcut-policy ablation evidence and its admitted prepares from
-the held-out freeze record. Its not_measured statuses describe the repair
-round the site reports: in the test phase they come from the first test
-pool run's summary, pass A whenever it is published, and are empty with an
-empty pool; else from the dev anchor's. Each carries that summary's split,
-which labels the page's line as the test or the dev round. The scorer keeps
-``repair_at_1: not_run`` after a round, so once that run's repair round
-summary exists the key is left out and ``repair`` holds the round's line:
-split, model, triggered items, each arm's repaired count and any arm the
-gate stopped. A round summary that names another pass or split stops the
-export (``repair_inconsistent``).
+from the shortcut-policy ablation evidence and its admitted prepares and
+their count from the held-out freeze record. Its not_measured statuses
+describe the repair round the site reports: in the test phase they come from
+the first test pool run's summary, pass A whenever it is published, and are
+empty with an empty pool; else from the dev anchor's. Each carries that
+summary's split, which labels the page's line as the test or the dev round.
+The scorer keeps ``repair_at_1: not_run`` after a round, so once that run's
+repair round summary exists the key is left out and ``repair`` holds the
+round's line: split, model, triggered items, each arm's repaired count and
+any arm the gate stopped. A round summary that names another pass or split
+stops the export (``repair_inconsistent``).
+
+board.json's ``test.repair`` holds the test repair round once
+docs/results/repair-pool/test.json exists: the pooled arms and
+comparisons, then each pool pass's arms and comparisons from its
+repair/summary.json, in pool order. A pool file that pools other passes, or
+a pool pass without a scored round, stops the export
+(``repair_inconsistent``). site.json's ``phase.repair`` says whether the
+block is there.
 
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
@@ -161,6 +173,8 @@ _PACKET_TEXTS = {
 GATE = "docs/decisions/evidence/test-freeze-gate.json"
 SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
+# The test repair round pooled over the test pool's passes (repair-pool/1.0).
+REPAIR_POOL = "docs/results/repair-pool/test.json"
 # The note that registers the test runs (protocol.md requires them in
 # writing before the first test request). Read only to check its Runs table
 # against test-runs.json; no sourced value ever points into it.
@@ -233,6 +247,8 @@ _MEAN_CHECKS = (
     ("strong_exact", "strong_exact"),
     ("silent_wrong_all", "silent_wrong"),
 )
+# The counts of a repair comparison, per pass or pooled by case.
+_REPAIR_COUNTS = ("discordant", "first_better", "second_better", "inconclusive")
 _ARITY = {
     "ptr": 3,
     "row": 4,
@@ -241,6 +257,7 @@ _ARITY = {
     "sum": 2,
     "sha256": 2,
     "input": 4,
+    "json": 4,
 }
 REEL_RULE = "reel-v1"
 # reel-v1 step 2: C4 first, then C3, C2 and C1.
@@ -709,6 +726,11 @@ class Repo:
             self.payload(_text(src[1], "path"), _text(src[2], "item_id")),
             _text(src[3], "pointer"),
         )
+
+    def _op_json(self, src: Src) -> object:
+        where = f"{src[1]} {src[2]}"
+        text = _text(self._op_ptr(src), where)
+        return pointer_get(parse_json(text, where), _text(src[3], "pointer"))
 
     def t(self, src: Src) -> Node:
         """Returns a sourced string node."""
@@ -1691,6 +1713,7 @@ def build_board(repo: Repo, selection: Selection) -> Document:
     row: locked-test-v1.md counts pass A and keeps pass B only as its rerun,
     so the published aa_pass_b run appears as ``rerun`` alone, null when it
     is not published. It stays a shown run with receipts and cases.
+    ``repair`` is the pooled test repair round (``build_repair``).
     """
     test: Node | None = None
     if selection.test_phase:
@@ -1714,7 +1737,7 @@ def build_board(repo: Repo, selection: Selection) -> Document:
                 for role, index in selection.not_run
             ],
             "aa": None,
-            "repair": None,
+            "repair": build_repair(repo, selection),
         }
     return {
         "schema": "web-board/1.0",
@@ -2280,18 +2303,27 @@ def _not_measured(repo: Repo, run: Run | None, measured: bool) -> list[Node]:
     ]
 
 
+def _not_run_arms(repo: Repo, path: str) -> list[Node]:
+    """A round's arms the gate stopped, each with its sourced reason."""
+    document = _obj(repo.json(path), path)
+    stopped = _obj(document.get("arms_not_run", {}), f"{path} arms_not_run")
+    return [
+        {"arm": arm, "reason": repo.t(ptr(path, "arms_not_run", arm))}
+        for arm in sorted(stopped)
+    ]
+
+
 def _repair_line(repo: Repo, path: str | None) -> Node | None:
     """A scored round's line: split, model, triggered items, arms' counts.
 
-    Counts only: the site never divides, and lib/fmt.ts has no rounding
-    kind for repair@1 yet. An arm the gate stopped is listed with its
-    reason, so the line never drops an arm unseen.
+    Counts only, as the methodology page shows them; the board shows the
+    rates. An arm the gate stopped is listed with its reason, so the line
+    never drops an arm unseen.
     """
     if path is None:
         return None
     document = _obj(repo.json(path), path)
     arms = _arr(document.get("arms"), f"{path} arms")
-    stopped = _obj(document.get("arms_not_run", {}), f"{path} arms_not_run")
     return {
         "split": repo.t(ptr(path, "split")),
         "model_id": repo.t(ptr(path, "model_id")),
@@ -2303,9 +2335,96 @@ def _repair_line(repo: Repo, path: str | None) -> Node | None:
             }
             for index in range(len(arms))
         ],
-        "not_run": [
-            {"arm": arm, "reason": repo.t(ptr(path, "arms_not_run", arm))}
-            for arm in sorted(stopped)
+        "not_run": _not_run_arms(repo, path),
+    }
+
+
+def _repair_arms(repo: Repo, path: str, triggered: Src | None) -> Node:
+    """The arms and comparisons of a pass's round or of the pool.
+
+    The pool lists each arm's triggered items; a pass's summary lists them
+    once, and ``triggered`` points there.
+    """
+    document = _obj(repo.json(path), path)
+    arms = _arr(document.get("arms"), f"{path} arms")
+    comparisons = _arr(document.get("comparisons"), f"{path} comparisons")
+    return {
+        "arms": [
+            {
+                "arm": repo.t(ptr(path, "arms", index, "arm")),
+                "repair_at_1": _interval(
+                    repo, path, "arms", index, "repair_at_1"
+                ),
+                "repaired": repo.v(ptr(path, "arms", index, "repaired")),
+                "triggered": repo.v(
+                    triggered or ptr(path, "arms", index, "triggered_items")
+                ),
+            }
+            for index in range(len(arms))
+        ],
+        "comparisons": [
+            {
+                **repo.texts(path, ("first", "second"), "comparisons", index),
+                "difference": _interval(
+                    repo, path, "comparisons", index, "difference"
+                ),
+                **repo.numbers(path, _REPAIR_COUNTS, "comparisons", index),
+            }
+            for index in range(len(comparisons))
+        ],
+    }
+
+
+def build_repair(repo: Repo, selection: Selection) -> Node | None:
+    """The board's test repair round: the pool, then each pool pass's round.
+
+    Every value points into REPAIR_POOL or a pool pass's repair/summary.json,
+    the two sources docs/decisions/disproof-reel.md allows for a repair
+    number; no arm run's scored/summary.json is read. The passes keep pool
+    order. None outside the test phase or before the pool file exists: the
+    dev round is a pipeline check, never reported (docs/protocol.md, Repair).
+
+    Raises:
+        ContractError: With code ``repair_inconsistent`` when the pool file
+            is not the test split's, pools other passes than the test pool,
+            or a pool pass has no scored round; and as ``repair_round``
+            raises.
+    """
+    if not (selection.test_phase and repo.exists(REPAIR_POOL)):
+        return None
+    pool = _obj(repo.json(REPAIR_POOL), REPAIR_POOL)
+    bases = sorted(
+        _text(_obj(base, REPAIR_POOL).get("run"), f"{REPAIR_POOL} base run")
+        for base in _arr(pool.get("bases"), f"{REPAIR_POOL} bases")
+    )
+    rounds = [repair_round(repo, shown.run) for shown in selection.pool]
+    paths = [path for path in rounds if path is not None]
+    if (
+        pool.get("split") != "test"
+        or bases != sorted(shown.run.run_id for shown in selection.pool)
+        or len(paths) != len(rounds)
+    ):
+        raise ContractError(
+            "repair_inconsistent",
+            f"{REPAIR_POOL} does not pool the test pool's scored rounds",
+        )
+    return {
+        **_repair_arms(repo, REPAIR_POOL, None),
+        "bootstrap": repo.numbers(
+            REPAIR_POOL,
+            ("cases", "resamples", "seed", "min_discordant_cases"),
+            "bootstrap",
+        ),
+        "models": [
+            {
+                "run": shown.run.slug,
+                "role": shown.role,
+                "model_id": repo.t(ptr(path, "model_id")),
+                **repo.numbers(path, ("triggered_items", "triggered_cases")),
+                **_repair_arms(repo, path, ptr(path, "triggered_items")),
+                "not_run": _not_run_arms(repo, path),
+            }
+            for shown, path in zip(selection.pool, paths, strict=True)
         ],
     }
 
@@ -2404,6 +2523,7 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
         "not_measured": not_measured,
         "repair": _repair_line(repo, measured),
         "admitted_prepares": repo.listed(FREEZE, "admitted_prepares"),
+        "admitted_count": repo.v(["len", FREEZE, "/admitted_prepares"]),
     }
 
 
@@ -2639,6 +2759,38 @@ def _arm_turn(
     }
 
 
+def _card_frames(repo: Repo, card: Src) -> list[list[Node]] | None:
+    """A frames card's frames, each field with its value as sourced nodes.
+
+    The card is JSON text in the plan, so every value is a ``json`` source
+    into it: one node for a number, a boolean or a string, and one per
+    string of a list, as tcp.flags holds. Fields keep the card's order. An
+    error card, or none, has no frames and gives None.
+    """
+    text = repo.resolve(card)
+    if text is None:
+        return None
+    where = f"{card[1]} {card[2]}"
+    frames = _obj(parse_json(_text(text, where), where), where).get("frames")
+    if frames is None:
+        return None
+    out: list[list[Node]] = []
+    for index, frame in enumerate(_arr(frames, f"{where} frames")):
+        fields: list[Node] = []
+        for name, value in _obj(frame, f"{where} frame").items():
+            at = ["json", card[1], card[2], pointer("frames", index, name)]
+            if isinstance(value, list):
+                nodes = [
+                    repo.t([*at[:3], pointer("frames", index, name, item)])
+                    for item in range(len(cast(list[object], value)))
+                ]
+            else:
+                nodes = [repo.t(at) if isinstance(value, str) else repo.v(at)]
+            fields.append({"name": name, "value": nodes})
+        out.append(fields)
+    return out
+
+
 def _repair_turn(
     repo: Repo, captures: Captures, run: Run, summary: str, item_id: str
 ) -> Node:
@@ -2668,6 +2820,7 @@ def _repair_turn(
         "base_outcome": repo.t(ptr(plan, "items", card, "base_outcome")),
         "card_kind": repo.t(ptr(plan, "items", card, "card_kind")),
         "card": repo.opt_t(ptr(plan, "items", card, "card")),
+        "card_frames": _card_frames(repo, ptr(plan, "items", card, "card")),
         **_arm_turn(
             repo,
             captures,
@@ -2865,7 +3018,8 @@ def build_site(
         "phase": {
             "dev": bool(selection.rows),
             "test": selection.test_phase,
-            "repair": False,
+            # The test round only, as board.json's repair block shows it.
+            "repair": selection.test_phase and repo.exists(REPAIR_POOL),
             "training": False,
             "aa": False,
         },

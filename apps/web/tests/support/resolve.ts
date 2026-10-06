@@ -3,7 +3,7 @@
  *
  * tests/consistency.spec.ts re-derives every rendered value from the
  * committed files with this module, never from apps/web/data. It shares no
- * code with scripts/export_web_data.py: the seven ops are written again here
+ * code with scripts/export_web_data.py: the eight ops are written again here
  * from their definitions, over the same allowed roots, so a defect in either
  * implementation shows up as a mismatch instead of agreeing with itself. The
  * shown runs, the Disproof Reel's pool, pick and repair turn, and the run
@@ -24,6 +24,8 @@
  * - ['sha256', path]: the SHA-256 of the file's bytes, in hex.
  * - ['input', path, item_id, pointer]: the INPUT_JSON object of a prepared
  *   prompt's user message, then a pointer into it.
+ * - ['json', path, pointer, inner]: the JSON text of the string at the
+ *   pointer, parsed, then the pointer inner into it.
  */
 
 import {createHash} from 'node:crypto';
@@ -57,6 +59,7 @@ const INDEX = /^(?:0|[1-9][0-9]*)$/;
 const ARITY: ReadonlyMap<string, number> = new Map([
   ['count', 4],
   ['input', 4],
+  ['json', 4],
   ['len', 3],
   ['ptr', 3],
   ['row', 4],
@@ -428,6 +431,12 @@ export class Resolver {
         return createHash('sha256')
           .update(this.data(string(op[1], 'path')))
           .digest('hex');
+      case 'json': {
+        const file = string(op[1], 'path');
+        const at = string(op[2], 'pointer');
+        const text = string(pointerGet(this.json(file), at), `${file} ${at}`);
+        return pointerGet(JSON.parse(text), string(op[3], 'pointer'));
+      }
       default:
         return pointerGet(
           this.payload(string(op[1], 'path'), string(op[2], 'item_id')),

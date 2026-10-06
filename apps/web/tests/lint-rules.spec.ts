@@ -252,7 +252,7 @@ test('the formatter and the tests may hold digits', async () => {
 test('the term list is closed and each term holds a letter', () => {
   // Changing this list is a reviewed change: a term is exempt from the
   // digit sweep wherever <Term> renders it.
-  expect([...TERMS]).toEqual(['IPv4', 'SHA-256']);
+  expect([...TERMS]).toEqual(['IPv4', 'SHA-256', 'repair@1']);
   for (const term of TERMS) {
     expect(term).toMatch(/[A-Za-z]/);
     expect(term).toMatch(/[0-9]/);

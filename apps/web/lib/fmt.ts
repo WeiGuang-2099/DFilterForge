@@ -28,6 +28,8 @@ export const FMT_KINDS = [
   'outcome',
   'frame_kind',
   'join',
+  'verdict',
+  'digest',
 ] as const;
 
 // What a scored summary's not_measured status keys say on a page. A key is
@@ -77,6 +79,13 @@ const JOINS: Readonly<Record<string, string>> = {
   not: 'the leaf negated',
   predicate: 'the leaf',
 };
+
+// A SHA-256 digest in lowercase hex, as every committed record writes one,
+// and how many of its leading digits a page shows: as many as a short git
+// revision often carries, so a reader can match it by eye while the full
+// value stays in the markup and in the file the digest links to.
+const DIGEST = /^[0-9a-f]{64}$/;
+const DIGEST_SHOWN = 12;
 
 // Decimal places of the rounded kinds: a rate, difference or bound as
 // locked-test-v1.md shows it, and a tshark runtime in milliseconds.
@@ -159,7 +168,9 @@ function rounded(value: unknown, places: number): string {
  *     duration in milliseconds to one decimal; outcome, a scored outcome
  *     code as the protocol's words; frame_kind, a frame's kind in
  *     captures.json as a word; join, an intent IR's root operator as the
- *     words that join its leaves.
+ *     words that join its leaves; verdict, a comparison's inconclusive
+ *     flag as inconclusive or conclusive; digest, a SHA-256 digest in hex
+ *     as its first twelve digits.
  * @return The text the page shows.
  * @throws TypeError When the value does not fit the kind, so a build fails
  *     rather than show a value in the wrong form.
@@ -201,5 +212,18 @@ export function fmt(value: unknown, kind: FmtKind): string {
       return word(value, FRAME_KINDS, 'frame kind');
     case 'join':
       return word(value, JOINS, 'join');
+    case 'verdict':
+      // A comparison's inconclusive flag, set when it has fewer discordant
+      // cases than the protocol needs for a reading, in the words of
+      // docs/results/locked-test-v1.md.
+      if (typeof value !== 'boolean') {
+        throw new TypeError(`fmt: ${JSON.stringify(value)} is not an inconclusive flag`);
+      }
+      return value ? 'inconclusive' : 'conclusive';
+    case 'digest':
+      if (typeof value !== 'string' || !DIGEST.test(value)) {
+        throw new TypeError(`fmt: ${JSON.stringify(value)} is not a SHA-256 digest in hex`);
+      }
+      return value.slice(0, DIGEST_SHOWN);
   }
 }

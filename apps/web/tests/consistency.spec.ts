@@ -127,6 +127,7 @@ interface Sourced {
   readonly kind: string | null;
   readonly cap: string | null;
   readonly text: string;
+  readonly title: string | null;
 }
 
 /** Deep equality with Object.is for every number, as the design asks. */
@@ -160,10 +161,60 @@ function isNotMeasured(source: unknown): boolean {
 }
 
 /**
+ * Whether a source names a comparison's inconclusive flag, in a scored
+ * summary, a repair round or the repair pool. A page shows one only as its
+ * verdict word (fmt's verdict kind): as yes or no it reads as the opposite
+ * of a conclusive reading, and the verdict words on any other flag would
+ * state a reading no comparison made.
+ */
+function isInconclusive(source: unknown): boolean {
+  if (!Array.isArray(source) || source[0] !== 'ptr' || source.length !== 3) {
+    return false;
+  }
+  const pointer: unknown = source[2];
+  return (
+    typeof pointer === 'string' && /^\/comparisons\/(?:0|[1-9][0-9]*)\/inconclusive$/.test(pointer)
+  );
+}
+
+// A SHA-256 digest in lowercase hex, and how many of its digits a page
+// shows: written here apart from lib/fmt.ts, so the two must agree.
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+const DIGEST_SHOWN = 12;
+
+/**
+ * Lists what is wrong with how a value is shown as a digest, or not. A
+ * SHA-256 digest must be shown with the digest kind, and only one may be:
+ * a page shows its first twelve digits and keeps the whole digest in its
+ * title, as well as in data-v, so the full value is there to check.
+ */
+function digestMismatches(value: Sourced, expected: unknown): string[] {
+  const digest = typeof expected === 'string' && SHA256_HEX.test(expected);
+  if (digest !== (value.kind === 'digest')) {
+    return [
+      `${value.src}: data-fmt is ${JSON.stringify(value.kind)}; ` +
+        'a SHA-256 digest, and only one, is shown as a digest',
+    ];
+  }
+  if (!digest) {
+    return [];
+  }
+  const problems: string[] = [];
+  if (value.title !== expected) {
+    problems.push(`${value.src}: the title holds ${JSON.stringify(value.title)}, not the digest`);
+  }
+  if (value.text !== expected.slice(0, DIGEST_SHOWN)) {
+    problems.push(`${value.src}: the page shows ${JSON.stringify(value.text)}, not its first digits`);
+  }
+  return problems;
+}
+
+/**
  * Re-derives one sourced value and lists what does not match. The cut of
  * model text comes from the source, never from the page's data-cap, which
  * must agree with it. A not_measured status must be shown with the
- * unmeasured kind, and only it may be.
+ * unmeasured kind, and only it may be; so must a comparison's inconclusive
+ * flag with the verdict kind, and a SHA-256 digest with the digest kind.
  */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
@@ -176,11 +227,13 @@ function mismatches(value: Sourced): string[] {
   let expected: unknown;
   let cap: number | null;
   let notMeasured: boolean;
+  let inconclusive: boolean;
   try {
     const source: unknown = JSON.parse(where);
     expected = resolver.resolve(source);
     cap = capFor(source);
     notMeasured = isNotMeasured(source);
+    inconclusive = isInconclusive(source);
   } catch (error) {
     return [`${where}: ${error instanceof Error ? error.message : String(error)}`];
   }
@@ -188,6 +241,12 @@ function mismatches(value: Sourced): string[] {
     return [
       `${where}: data-fmt is ${JSON.stringify(value.kind)}; ` +
         'a not_measured status, and only one, is shown as unmeasured',
+    ];
+  }
+  if (inconclusive !== (value.kind === 'verdict')) {
+    return [
+      `${where}: data-fmt is ${JSON.stringify(value.kind)}; ` +
+        "a comparison's inconclusive flag, and only one, is shown as a verdict",
     ];
   }
   if (value.cap !== (cap === null ? null : String(cap))) {
@@ -201,6 +260,10 @@ function mismatches(value: Sourced): string[] {
   }
   if (!sameValue(JSON.parse(value.v), expected)) {
     return [`${where}: the page holds ${value.v}; the files hold ${JSON.stringify(expected)}`];
+  }
+  const digest = digestMismatches(value, expected);
+  if (digest.length > 0) {
+    return digest;
   }
   const text = fmt(expected, value.kind);
   if (value.text !== text) {
@@ -232,12 +295,17 @@ function decodeEntities(text: string): string {
   );
 }
 
-/** The data-src values in server-rendered HTML, outside scripts, sorted. */
-function staticSources(html: string): string[] {
+/** The data-src values in server-rendered HTML, outside scripts, in order. */
+function markupSources(html: string): string[] {
   const markup = html.replace(/<script\b[\s\S]*?<\/script>/gi, '');
   return Array.from(markup.matchAll(/\sdata-src="([^"]*)"/g), (match) =>
     decodeEntities(match[1] ?? ''),
-  ).sort();
+  );
+}
+
+/** The data-src values in server-rendered HTML, outside scripts, sorted. */
+function staticSources(html: string): string[] {
+  return markupSources(html).sort();
 }
 
 /** Every [data-src] element of the page and any nested in another. */
@@ -250,6 +318,7 @@ function sourcedValues(): {values: Sourced[]; nested: (string | null)[]} {
       kind: element.getAttribute('data-fmt'),
       cap: element.getAttribute('data-cap'),
       text: element.textContent ?? '',
+      title: element.getAttribute('title'),
     })),
     nested: elements
       .filter((element) => element.parentElement?.closest('[data-src]'))
@@ -478,7 +547,10 @@ test('the methodology page names the round its repair line describes', async ({p
   const keys = statuses.filter((key) => !(measured && key === 'repair_at_1'));
 
   await page.goto('methodology/');
-  const labels = page.locator('h2:text-is("Not measured yet") + dl > dt');
+  const section = page.locator('section', {
+    has: page.getByRole('heading', {level: 2, name: 'Not measured yet', exact: true}),
+  });
+  const labels = section.locator('dl > dt');
   const sources = await labels
     .locator('[data-fmt="split"]')
     .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-src')));
@@ -490,6 +562,60 @@ test('the methodology page names the round its repair line describes', async ({p
   expect(sources.map((source): unknown => JSON.parse(source ?? 'null'))).toEqual(
     keys.map(() => ['ptr', summary, '/split']),
   );
+});
+
+test('the board shows the pool in its order and repair numbers from the allowed files', () => {
+  // A value read from another file passes the value checks. The board's
+  // passes must be the Reel's pool in pool order, never ranked, both as
+  // counted rows and as repair rounds, and a repair number may come only
+  // from the pool file or a pool pass's repair/summary.json, never from an
+  // arm run's scored summary (docs/decisions/web-site.md, Sourced values).
+  const html = readFileSync(path.join(OUT, 'board', 'index.html'), 'utf8');
+  const sources = markupSources(html).map(
+    (source) => JSON.parse(source) as readonly [string, string, unknown],
+  );
+  const runsOf = (suffix: string) =>
+    sources
+      .filter(([op, file, at]) => op === 'ptr' && file.endsWith(suffix) && at === '/model_id')
+      .map(([, file]) => file.split('/')[2]);
+  const pool = resolver.reelPool();
+  const rounds = pool.map((run) => `docs/results/${run}/repair/summary.json`);
+  const files = new Set(sources.map(([, file]) => file));
+
+  expect(runsOf('/scored/summary.json')).toEqual(pool);
+  expect(runsOf('/repair/summary.json')).toEqual(pool);
+  expect([...files].filter((file) => /-(?:cx|bare|res)(?:-r2)?-[0-9]{4}-/.test(file))).toEqual([]);
+  expect([...files].filter((file) => file.includes('/repair')).sort()).toEqual(
+    ['docs/results/repair-pool/test.json', ...rounds].sort(),
+  );
+});
+
+test('the board labels only the registered primary comparison primary', async ({page}) => {
+  // The label is fixed words, which no value check sees. Per model,
+  // counterexample against bare is primary (docs/protocol.md, Repair);
+  // pooled, every comparison is secondary.
+  await page.goto('board/');
+  const labelled = await page.locator('tr[data-label]').evaluateAll((rows) =>
+    rows.map((row) => [
+      row.getAttribute('data-label'),
+      ...Array.from(row.querySelectorAll('th [data-fmt="text"]'), (cell) => cell.textContent),
+      row.querySelector('.bd-tag')?.textContent ?? 'none',
+    ]),
+  );
+  const models = resolver.reelPool().length;
+  const pooled = ['secondary', 'secondary', 'secondary'];
+  const perModel = ['primary', 'none', 'none'];
+
+  expect(labelled.map(([label]) => label)).toEqual([
+    ...pooled,
+    ...Array.from({length: models}, () => perModel).flat(),
+  ]);
+  for (const [label, first, second, tag] of labelled) {
+    expect(tag).toBe(label);
+    expect(label === 'primary', `${first} - ${second}`).toBe(
+      first === 'counterexample' && second === 'bare' && label !== 'secondary',
+    );
+  }
 });
 
 interface TracedProbe {
@@ -599,6 +725,7 @@ test('model text is cut only at the contract size and only where the exporter cu
       kind: 'text',
       cap: cap === null ? null : String(cap),
       text: fmt(text, 'text'),
+      title: null,
     };
   };
 
@@ -626,6 +753,7 @@ test('a not_measured status is shown as fixed words and never as its key', () =>
     kind,
     cap: null,
     text,
+    title: null,
   });
   const key = String(resolver.resolve(status));
 
@@ -634,6 +762,66 @@ test('a not_measured status is shown as fixed words and never as its key', () =>
   expect(mismatches(shown(status, 'text', key))).toHaveLength(1);
   expect(mismatches(shown(status, 'unmeasured', key))).toHaveLength(1);
   expect(mismatches(shown(label, 'unmeasured', 'not measured yet'))).toHaveLength(1);
+});
+
+test("a comparison's inconclusive flag is shown as its verdict, and nothing else is", () => {
+  // As yes or no the flag reads as the opposite of a conclusive reading;
+  // the verdict words on another boolean would state a reading.
+  const summary = 'docs/results/test-qwen3-32b-2026-09-26/scored/summary.json';
+  const flag = ['ptr', 'docs/results/repair-pool/test.json', '/comparisons/0/inconclusive'];
+  const setting = ['ptr', summary, '/effective_settings/json_mode'];
+  const shown = (source: readonly string[], kind: 'bool' | 'verdict'): Sourced => {
+    const value = resolver.resolve(source);
+    return {
+      src: JSON.stringify(source),
+      v: JSON.stringify(value),
+      kind,
+      cap: null,
+      text: fmt(value, kind),
+      title: null,
+    };
+  };
+
+  expect(resolver.resolve(flag)).toBe(false);
+  expect(mismatches(shown(flag, 'verdict'))).toEqual([]);
+  expect(mismatches(shown(flag, 'bool'))).toHaveLength(1);
+  expect(mismatches(shown(setting, 'bool'))).toEqual([]);
+  expect(mismatches(shown(setting, 'verdict'))).toHaveLength(1);
+});
+
+test('a SHA-256 digest shows its first twelve digits and keeps the whole digest', () => {
+  // A page shows a digest short, so the check must see that the short text
+  // is the start of the committed digest, that the whole digest is still in
+  // the markup, and that no digest is shown whole or as another kind.
+  const digest = ['ptr', 'src/dfilterforge/held_out_freeze.json', '/admitted_prepares/0'];
+  const run = resolver.shownRuns()[0] ?? '';
+  const label = ['ptr', `docs/results/${run}/prepare.json`, '/conditions/0/label'];
+  const shown = (
+    source: readonly string[],
+    kind: string,
+    text: string,
+    title: string | null,
+  ): Sourced => ({
+    src: JSON.stringify(source),
+    v: JSON.stringify(resolver.resolve(source)),
+    kind,
+    cap: null,
+    text,
+    title,
+  });
+  const full = String(resolver.resolve(digest));
+  const short = full.slice(0, 12);
+  const name = String(resolver.resolve(label));
+
+  expect(full).toMatch(/^[0-9a-f]{64}$/);
+  expect(mismatches(shown(digest, 'digest', short, full))).toEqual([]);
+  expect(mismatches(shown(digest, 'text', full, null))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', full, full))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', full.slice(0, 11), full))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', short, null))).toHaveLength(1);
+  expect(mismatches(shown(digest, 'digest', short, short))).toHaveLength(1);
+  expect(mismatches(shown(label, 'text', name, null))).toEqual([]);
+  expect(mismatches(shown(label, 'digest', name, name))).toHaveLength(1);
 });
 
 test('the sweep finds a number in any script, in a list start and outside the terms', async ({

@@ -76,10 +76,11 @@ docker compose --profile dev run --rm --volume "${PWD}/artifacts:/workspace/arti
 docker compose --profile pilot run --rm lab ablation run --manifest /workspace/artifacts/runner-ablation.receipt.json
 ```
 
-See the README for `evaluate-live` and `replay-run` commands. The three
-production cases were each executed twice. Both runs and their environment
-sidecars are retained in `evidence/001-receipts/`; their hashes and repeated
-packet-set comparisons are in `evidence/001-pilot.json`.
+See [docs/usage.md](../usage.md#three-local-execution-cases) for
+`evaluate-live` and `replay-run` commands. The three production cases were
+each executed twice. Both runs and their environment sidecars are retained in
+`evidence/001-receipts/`; their hashes and repeated packet-set comparisons are
+in `evidence/001-pilot.json`.
 
 ## Results
 

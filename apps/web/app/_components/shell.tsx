@@ -3,6 +3,7 @@ import type {ReactNode} from 'react';
 
 const navigation = [
   {href: '/', label: 'Reel'},
+  {href: '/board', label: 'Board'},
   {href: '/methodology', label: 'Methodology'},
 ] as const;
 

@@ -3413,13 +3413,13 @@ def test_a_round_whose_second_turn_cannot_be_built_is_refused_at_every_arm(
     assert not list(tmp_path.glob(".*.partial"))
 
 
-_README = Path(__file__).parents[1] / "README.md"
+_README = Path(__file__).parents[1] / "docs" / "usage.md"
 _RESULTS = Path(__file__).parents[1] / "docs" / "results"
 _README_SECTION = "## Hosted model run"
 _README_RUN = re.compile(r"`RUN` below is `([a-z0-9.-]+)`")
 _README_REVISION = "0123abc"
 _README_PRICES = {"INPUT_PRICE": "0.1", "OUTPUT_PRICE": "0.3"}
-# The flags the README prints for each subcommand, as parser destinations;
+# The flags docs/usage.md prints for each subcommand, as parser destinations;
 # ``score`` is the dfilterforge CLI's, the others are the model-run script's.
 _README_FLAGS: dict[str, frozenset[str]] = {
     "prepare": frozenset({"catalog", "output_dir", "source_revision"}),
@@ -3457,7 +3457,7 @@ _SOURCE_MANIFEST: Callable[[], dict[str, str]] = getattr(
 
 
 class _Documented(NamedTuple):
-    """One command the README prints, as a reader would type it."""
+    """One command docs/usage.md prints, as a reader would type it."""
 
     row: int
     launcher: tuple[str, ...]
@@ -3466,7 +3466,7 @@ class _Documented(NamedTuple):
 
 
 def _readme_section() -> list[str]:
-    """Returns the lines of the README's hosted model run section."""
+    """Returns the lines of docs/usage.md's hosted model run section."""
     lines = _README.read_text(encoding="utf-8").splitlines()
     start = lines.index(_README_SECTION) + 1
     end = next(
@@ -3548,7 +3548,7 @@ def _readme_run_id(section: Sequence[str]) -> str:
 
 
 def test_readme_commands_match_the_parser() -> None:
-    """The run commands the README prints are the ones the CLI defines.
+    """The run commands docs/usage.md prints are the ones the CLI defines.
 
     A renamed or misspelled flag fails here instead of at argparse on the
     first paid run, each command must be typed where it can run, and the

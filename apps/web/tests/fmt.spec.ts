@@ -27,6 +27,7 @@ const NUM_KIND_SAMPLES: Readonly<Record<NumKind, NumNode['v']>> = {
   ints: [3, 9],
   rate: 0.6375,
   runtime: 60.32937800000582,
+  verdict: true,
 };
 
 function isNumKind(kind: FmtKind): kind is NumKind {
@@ -160,6 +161,25 @@ test('frame_kind and join show their codes as fixed words', () => {
   }
 });
 
+test("verdict shows a comparison's inconclusive flag as the reading's word", () => {
+  // The flag is true below the discordant cases a reading needs.
+  expect(fmt(true, 'verdict')).toBe('inconclusive');
+  expect(fmt(false, 'verdict')).toBe('conclusive');
+  for (const value of [0, 1, 'true', 'inconclusive', null]) {
+    expect(() => fmt(value, 'verdict'), String(value)).toThrow(TypeError);
+  }
+});
+
+test('digest shows the first twelve hex digits of a SHA-256 digest', () => {
+  const full = 'ea24123c93f8633d8b4167978c22433cc288f09496bb40d4b616fad576ac34eb';
+  expect(fmt(full, 'digest')).toBe('ea24123c93f8');
+  // A revision, an upper-case or cut digest and anything but a string are
+  // not SHA-256 digests in hex, so they fail the build.
+  for (const value of ['0623248', full.toUpperCase(), full.slice(1), `${full}0`, 3, null]) {
+    expect(() => fmt(value, 'digest'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -239,6 +259,8 @@ test('every kind is named', () => {
     'outcome',
     'frame_kind',
     'join',
+    'verdict',
+    'digest',
   ]);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);
@@ -255,7 +277,15 @@ test('Num accepts exactly the kinds that format a number node', () => {
     expect(() => fmt(NUM_KIND_SAMPLES[kind], kind), kind).not.toThrow();
   }
   const others = FMT_KINDS.filter((kind) => !isNumKind(kind));
-  expect(others).toEqual(['text', 'unmeasured', 'split', 'outcome', 'frame_kind', 'join']);
+  expect(others).toEqual([
+    'text',
+    'unmeasured',
+    'split',
+    'outcome',
+    'frame_kind',
+    'join',
+    'digest',
+  ]);
   for (const kind of others) {
     for (const value of Object.values(NUM_KIND_SAMPLES)) {
       expect(() => fmt(value, kind), `${kind} ${JSON.stringify(value)}`).toThrow(TypeError);

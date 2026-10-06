@@ -16,7 +16,7 @@ import path from 'node:path';
 
 /**
  * A source op naming committed bytes and the reading that yields a value;
- * scripts/export_web_data.py lists the seven ops.
+ * scripts/export_web_data.py lists the eight ops.
  */
 export type Src = readonly [string, ...unknown[]];
 
@@ -43,6 +43,7 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const OP_ARITY: ReadonlyMap<string, number> = new Map([
   ['count', 4],
   ['input', 4],
+  ['json', 4],
   ['len', 3],
   ['ptr', 3],
   ['row', 4],
@@ -248,6 +249,7 @@ const METHODOLOGY = object({
     }),
   ),
   admitted_prepares: array(strNode),
+  admitted_count: numNode,
 });
 
 /** site.json: the build's source commit, inputs, phases and run slugs. */

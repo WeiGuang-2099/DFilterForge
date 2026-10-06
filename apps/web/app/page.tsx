@@ -8,7 +8,7 @@ import {Controls, MiniMap, Stage} from '@/app/_components/reel/stage';
 import {count, DISAGREES, ProbeBar} from '@/app/_components/reel/strips';
 import {loadReel} from '@/lib/reel-data';
 import {roleLabel} from '@/lib/roles';
-import {Num, Outcome, Str, Term, Unmeasured} from '@/lib/sourced';
+import {Digest, Num, Outcome, Str, Term, Unmeasured} from '@/lib/sourced';
 
 import './_components/reel/reel.css';
 
@@ -151,9 +151,9 @@ export default function HomePage() {
                   Each probe capture is a ladder diagram. Time runs down, one row per frame. The
                   left line is the address seen in most of the probe&apos;s frames and the right
                   line is every other host. Recipe frames are the benchmark&apos;s packets; witness
-                  frames, the tail every capture ends in, are collapsed below the break unless they
-                  disagree. The bars above the ladder are the probes, each frame that disagrees in
-                  carmine. Choose one to draw it.
+                  frames, the tail every capture ends in, are collapsed into one break row unless
+                  they disagree. The bars above the ladder are the probes, each frame that
+                  disagrees in carmine. Choose one to draw it.
                 </p>
               </div>
             </div>
@@ -171,40 +171,42 @@ export default function HomePage() {
       <div className="after">
         <RepairScene repair={reel.repair} />
         <PoolScene reel={reel} />
+        <section aria-labelledby="replay-h" className="act replay">
+          <h2 className="act-h" id="replay-h">
+            Replay this verdict
+          </h2>
+          <dl className="rc">
+            <dt>
+              Receipt <Term name="SHA-256" />
+            </dt>
+            <dd>
+              <Digest node={receipt.sha256} />
+            </dd>
+            <dt>Packet set hash</dt>
+            <dd>
+              <Digest node={receipt.packet_set_hash} />
+            </dd>
+            {receipt.repair === null ? null : (
+              <>
+                <dt>Repair round</dt>
+                <dd>
+                  <Unmeasured node={receipt.repair} />
+                </dd>
+              </>
+            )}
+          </dl>
+          <p className="lab">Re-score the whole run offline from its committed answers</p>
+          <pre className="cmd">
+            {receipt.replay.map((part) =>
+              typeof part === 'string' ? part : <Str key={JSON.stringify(part.src)} node={part} />,
+            )}
+          </pre>
+          <p className="note">
+            The run needs no API key: the scorer replays every committed answer with the pinned
+            tshark build and compares the result with the committed receipts.
+          </p>
+        </section>
       </div>
-      <section aria-labelledby="replay-h" className="replay">
-        <h2 id="replay-h">Replay this verdict</h2>
-        <dl className="rc">
-          <dt>
-            Receipt <Term name="SHA-256" />
-          </dt>
-          <dd>
-            <Str node={receipt.sha256} />
-          </dd>
-          <dt>Packet set hash</dt>
-          <dd>
-            <Str node={receipt.packet_set_hash} />
-          </dd>
-          {receipt.repair === null ? null : (
-            <>
-              <dt>Repair round</dt>
-              <dd>
-                <Unmeasured node={receipt.repair} />
-              </dd>
-            </>
-          )}
-        </dl>
-        <p className="lab">Re-score the whole run offline from its committed answers</p>
-        <pre className="cmd">
-          {receipt.replay.map((part) =>
-            typeof part === 'string' ? part : <Str key={JSON.stringify(part.src)} node={part} />,
-          )}
-        </pre>
-        <p className="note">
-          The run needs no API key: the scorer replays every committed answer with the pinned
-          tshark build and compares the result with the committed receipts.
-        </p>
-      </section>
     </article>
   );
 }

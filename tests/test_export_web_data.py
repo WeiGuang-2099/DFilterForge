@@ -712,6 +712,9 @@ class Resolver:
             return sum(self.resolve(item) for item in rest[0])
         if op == "sha256":
             return hashlib.sha256(self._path(rest[0]).read_bytes()).hexdigest()
+        if op == "json":
+            path, at, inner = rest
+            return self.at(json.loads(self.at(self.json(path), at)), inner)
         assert op == "input", op
         path, item_id, pointer = rest
         (prompt,) = [
@@ -1028,6 +1031,10 @@ def test_methodology_sources_the_protocol_constants(fixture: Fixture) -> None:
     assert len(methodology["probes"]) == 8
     assert methodology["mutants"]["all"]["killed"]["v"] == 8
     assert methodology["not_measured"][0]["key"] == "repair_at_1"
+    assert methodology["admitted_count"] == {
+        "v": 1,
+        "src": ["len", _FREEZE, "/admitted_prepares"],
+    }
 
 
 def test_a_long_answer_is_capped_at_a_character_boundary(
@@ -3007,12 +3014,22 @@ def test_an_empty_test_pool_has_no_pick(fixture: Fixture) -> None:
     check_sources(root, {"reel.json": reel})
 
 
+# A frames card with a number, a boolean and a list of strings, as the
+# repair plan holds it: canonical JSON text.
+_CARD = {"frames": [{"frame": 5, "should_match": True, "tcp.flags": ["FIN"]}]}
+
+
 def _round(
-    fixture: Fixture, base: str, items: tuple[str, ...], arm: str | None
+    fixture: Fixture,
+    base: str,
+    items: tuple[str, ...],
+    arm: str | None,
+    card: Document | None = None,
 ) -> str:
     """Writes a pass's repair plan and scored round; returns the summary.
 
-    The round triggers ``items``, each with a frames card. Its arms are the
+    The round triggers ``items``, each with ``card``, by default a frames
+    card, as JSON text. Its arms are the
     resample and bare runs and the counterexample run ``arm``, which the
     fixture then writes in the pass's split; with ``arm`` None the gate
     stopped that arm, as arms_not_run records it.
@@ -3026,8 +3043,8 @@ def _round(
             "items": [
                 {
                     "base_outcome": "silent_wrong",
-                    "card": json.dumps({"frames": [{"frame": 5}]}),
-                    "card_kind": "frames",
+                    "card": json.dumps(card or _CARD, sort_keys=True),
+                    "card_kind": "frames" if card is None else "error",
                     "item_id": item_id,
                 }
                 for item_id in items
@@ -3090,10 +3107,25 @@ def test_the_reel_shows_the_picks_counterexample_turn_whatever_it_scored(
     turn = reel["repair"]["turn"]
     assert turn["item"] == "i-0001"
     assert turn["run_id"] == {"t": arm, "src": ["ptr", summary, "/arms/2/run"]}
-    assert turn["card"]["src"] == [
-        "ptr",
-        f"docs/results/{_ANCHOR}/repair/plan.json",
-        "/items/0/card",
+    plan = f"docs/results/{_ANCHOR}/repair/plan.json"
+    assert turn["card"]["src"] == ["ptr", plan, "/items/0/card"]
+    # Each value of the card is sourced inside its text, a list per string.
+    at = ["json", plan, "/items/0/card"]
+    assert turn["card_frames"] == [
+        [
+            {
+                "name": "frame",
+                "value": [{"v": 5, "src": [*at, "/frames/0/frame"]}],
+            },
+            {
+                "name": "should_match",
+                "value": [{"v": True, "src": [*at, "/frames/0/should_match"]}],
+            },
+            {
+                "name": "tcp.flags",
+                "value": [{"t": "FIN", "src": [*at, "/frames/0/tcp.flags/0"]}],
+            },
+        ]
     ]
     assert turn["outcome"] == {
         "t": answer.outcome,
@@ -3113,6 +3145,20 @@ def test_the_reel_shows_the_picks_counterexample_turn_whatever_it_scored(
     # The round's line replaces the scorer's not_run status.
     assert reel["receipt_panel"]["repair"] is None
     check_sources(root, {"reel.json": reel})
+
+
+def test_an_error_card_is_shown_whole_with_no_frames(fixture: Fixture) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    arm = _tag(_ANCHOR, "cx")
+    fixture.answers[(arm, "C4", "i-0001")] = Answer("strong_exact", _EXPECTED)
+    error = {"error": "unknown_field", "field": "dns.qtype"}
+    _round(fixture, _ANCHOR, ("i-0001",), arm, card=error)
+    root = fixture.build()
+
+    turn = _reel(root)["repair"]["turn"]
+
+    assert json.loads(turn["card"]["t"]) == error
+    assert turn["card_frames"] is None
 
 
 def test_only_the_picks_own_round_gives_the_reel_a_turn(
@@ -3376,6 +3422,147 @@ def test_repair_results_outside_the_pool_leave_the_export_alone(
     assert exporter.export(root, "abc1234") == before
 
 
+_REPAIR_POOL = "docs/results/repair-pool/test.json"
+_POOL_RUNS = (_PASS_A, _TEST_SMALL, _TEST_MID, _TEST_FRONT)
+
+
+def _rated(path: Path) -> None:
+    """Gives a written round the rates and comparisons the board reads."""
+
+    def rate(document: Document) -> None:
+        for arm in document["arms"]:
+            arm["repair_at_1"] = {"value": 0.5, "low": 0.25, "high": 0.75}
+        document["comparisons"] = [
+            {
+                "difference": {"value": 0.5, "low": -0.25, "high": 1.0},
+                "discordant": 3,
+                "first": "counterexample",
+                "first_better": 2,
+                "inconclusive": True,
+                "second": "bare",
+                "second_better": 1,
+            }
+        ]
+        document["triggered_cases"] = 1
+
+    _edit(path, rate)
+
+
+def _pool(*runs: str) -> Document:
+    """A repair-pool/1.0 file over the given passes, with one arm."""
+    return {
+        "arms": [
+            {
+                "arm": "bare",
+                "repair_at_1": {"value": 0.25, "low": 0.0, "high": 0.5},
+                "repaired": 1,
+                "triggered_items": 4,
+            }
+        ],
+        "bases": [{"run": run_id} for run_id in runs],
+        "bootstrap": {
+            "cases": 2,
+            "min_discordant_cases": 10,
+            "resamples": 1000,
+            "seed": 17,
+        },
+        "comparisons": [],
+        "schema_version": "repair-pool/1.0",
+        "split": "test",
+    }
+
+
+def _pooled_rounds(fixture: Fixture) -> Path:
+    """The test phase with every pool pass's round scored, none pooled.
+
+    Pass A's round holds the Reel pick's counterexample turn; the gate
+    stopped the other passes' counterexample arms.
+    """
+    _settled(fixture)
+    rounds = [_round(fixture, _PASS_A, ("i-1002",), _tag(_PASS_A, "cx"))]
+    rounds += [
+        _round(fixture, run_id, ("i-1001",), None) for run_id in _POOL_RUNS[1:]
+    ]
+    root = fixture.build()
+    for summary in rounds:
+        _rated(root / summary)
+    return root
+
+
+def test_the_pool_file_gives_the_board_the_test_repair_round(
+    fixture: Fixture,
+) -> None:
+    root = _pooled_rounds(fixture)
+    before = _documents(exporter.export(root, "abc1234"))
+    _write(root / _REPAIR_POOL, _pool(*reversed(_POOL_RUNS)))
+
+    documents = _documents(exporter.export(root, "abc1234"))
+
+    assert before["board.json"]["test"]["repair"] is None
+    assert before["site.json"]["phase"]["repair"] is False
+    assert documents["site.json"]["phase"]["repair"] is True
+    repair = documents["board.json"]["test"]["repair"]
+    assert repair["arms"][0]["triggered"]["src"] == [
+        "ptr",
+        _REPAIR_POOL,
+        "/arms/0/triggered_items",
+    ]
+    # Pool order, whatever order the pool file lists its passes in.
+    assert [
+        (item["role"], item["model_id"]["t"]) for item in repair["models"]
+    ] == [
+        (role, f"vendor/{run_id}")
+        for role, run_id in _PLANNED
+        if role != "aa_pass_b"
+    ]
+    first, small = repair["models"][:2]
+    summary = f"docs/results/{_PASS_A}/repair/summary.json"
+    assert [arm["arm"]["t"] for arm in first["arms"]] == [
+        "resample",
+        "bare",
+        "counterexample",
+    ]
+    assert first["arms"][2]["triggered"]["src"] == [
+        "ptr",
+        summary,
+        "/triggered_items",
+    ]
+    assert first["comparisons"][0]["inconclusive"] == {
+        "v": True,
+        "src": ["ptr", summary, "/comparisons/0/inconclusive"],
+    }
+    assert [arm["arm"] for arm in small["not_run"]] == ["counterexample"]
+    # The two sources disproof-reel.md allows; never an arm run's summary.
+    assert {node["src"][1] for node in _nodes(repair)} == {
+        _REPAIR_POOL,
+        *(
+            f"docs/results/{run_id}/repair/summary.json"
+            for run_id in _POOL_RUNS
+        ),
+    }
+    check_sources(root, documents)
+
+
+@pytest.mark.parametrize("change", ["pass_b", "dev_split", "no_round"])
+def test_a_pool_file_of_other_rounds_stops_the_export(
+    fixture: Fixture, change: str
+) -> None:
+    root = _pooled_rounds(fixture)
+    pool = _pool(*_POOL_RUNS)
+    if change == "pass_b":
+        # Pass B is never pooled.
+        pool["bases"][0]["run"] = _PASS_B
+    elif change == "dev_split":
+        pool["split"] = "dev"
+    else:
+        (root / f"docs/results/{_TEST_MID}/repair/summary.json").unlink()
+    _write(root / _REPAIR_POOL, pool)
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "repair_inconsistent"
+
+
 @pytest.mark.parametrize("phase", ["dev", "test"])
 def test_the_reel_hashes_the_ruling(fixture: Fixture, phase: str) -> None:
     _settled(fixture)
@@ -3476,6 +3663,39 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
         "test-qwen3-32b-passb-2026-09-26",
     )
     assert board["test"]["not_run"] == []
+    # The test repair round, pooled and per pass in pool order, as
+    # locked-test-v1.md reports it.
+    repair = board["test"]["repair"]
+    assert [
+        (arm["arm"]["t"], arm["repaired"]["v"], arm["triggered"]["v"])
+        for arm in repair["arms"]
+    ] == [("resample", 4, 75), ("bare", 21, 75), ("counterexample", 35, 75)]
+    assert [
+        (
+            item["first"]["t"],
+            item["second"]["t"],
+            item["first_better"]["v"],
+            item["second_better"]["v"],
+            item["discordant"]["v"],
+            item["inconclusive"]["v"],
+        )
+        for item in repair["comparisons"]
+    ] == [
+        ("counterexample", "bare", 12, 4, 16, False),
+        ("counterexample", "resample", 21, 2, 23, False),
+        ("bare", "resample", 13, 0, 13, False),
+    ]
+    assert [item["model_id"]["t"] for item in repair["models"]] == [
+        "qwen/qwen3-32b",
+        "qwen/qwen3.5-9b",
+        "qwen/qwen3.5-122b-a10b",
+        "deepseek/deepseek-v4-pro-0813",
+    ]
+    # The primary, counterexample against bare, reads for one model alone.
+    assert [
+        item["comparisons"][0]["inconclusive"]["v"] for item in repair["models"]
+    ] == [True, True, False, True]
+    assert documents["site.json"]["phase"]["repair"] is True
     # The repair line describes the test round, so it cites pass A, whose
     # scored round replaces the not_run status.
     methodology = documents["methodology.json"]
@@ -3557,6 +3777,27 @@ def test_the_committed_tree_picks_the_registered_reel() -> None:
         "silent_wrong",
         "frames",
     )
+    # The card's one frame, field by field, in the card's order.
+    (frame,) = turn["card_frames"]
+    assert [field["name"] for field in frame] == [
+        "answer_matched",
+        "frame",
+        "ip.dsfield.ecn",
+        "ip.dst",
+        "ip.src",
+        "ip.ttl",
+        "should_match",
+        "tcp.dstport",
+        "tcp.flags",
+        "tcp.len",
+        "tcp.srcport",
+    ]
+    values = {
+        field["name"]: [node.get("v", node.get("t")) for node in field["value"]]
+        for field in frame
+    }
+    assert values["frame"] == [63] and values["tcp.srcport"] == [443]
+    assert values["tcp.flags"] == ["FIN", "ACK"]
     assert turn["outcome"]["t"] == "strong_exact"
     assert turn["filter"]["t"] == (
         "(tcp.srcport == 443 && tcp.flags.fin == true)"
