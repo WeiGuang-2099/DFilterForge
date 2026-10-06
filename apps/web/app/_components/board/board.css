@@ -90,7 +90,10 @@
 .bd-pm-id {display: flex; flex-direction: column; gap: 6px; min-width: 0;}
 .bd-pm h4 {margin: 0; font: 600 14.5px/1.3 var(--mono); overflow-wrap: anywhere;}
 
-.bd-limits ul {max-width: 80ch; margin: 8px 0 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.55; color: var(--ink-2);}
+/* The limits read independently, so at desktop width they run in two
+   columns instead of leaving half the page empty. */
+.bd-limits ul {margin: 8px 0 0; padding-left: 1.1em; columns: 2 26rem; column-gap: 56px; font-size: 14px; line-height: 1.55; color: var(--ink-2);}
+.bd-limits li {margin-bottom: 8px; break-inside: avoid;}
 
 @media (min-width: 1080px) {
   .bd-pm {grid-template-columns: minmax(0, 23rem) minmax(0, 1fr); align-items: start;}
