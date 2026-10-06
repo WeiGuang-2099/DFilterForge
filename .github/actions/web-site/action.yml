@@ -13,8 +13,8 @@ inputs:
     default: ${{ github.sha }}
   base-path:
     description: >-
-      The URL prefix the site is built and served under. An explicit empty
-      value, as the pages job passes, serves it at the domain root.
+      The URL prefix the site is built and served under; empty serves it at
+      the domain root.
     required: false
     default: /DFilterForge
 
