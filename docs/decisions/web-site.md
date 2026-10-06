@@ -167,6 +167,7 @@ or `{"v": value, "src": op}` for a number, a boolean or an array of integers.
 | `["sum", [op]]` | the sum of integer operands |
 | `["sha256", path]` | the SHA-256 of the file's bytes |
 | `["input", path, item_id, pointer]` | the `INPUT_JSON` object of a prepared prompt's user message, then a pointer into it |
+| `["json", path, pointer, inner]` | the JSON text of the string at the pointer, parsed, then the pointer `inner` into it |
 
 The exporter gets each value by resolving its own `src`, so a value cannot
 drift from its source. The site never divides. Dev runs get counts only, per
@@ -219,8 +220,8 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   and the scoring environment from the dev anchor, in both phases; the
   probes and witnesses from `captures.json`, the mutant counts and
   categories from the test-freeze gate receipt, the shortcut audit from
-  ablation 006's evidence and the admitted prepares from
-  `held_out_freeze.json`, none of them a run; and the `not_measured`
+  ablation 006's evidence and the admitted prepares and their count (a
+  `len` op) from `held_out_freeze.json`, none of them a run; and the `not_measured`
   statuses from the run its repair line cites (What fails), each with a
   `split` node that points at that run's summary `/split` and labels the
   line. Once that run's `repair/summary.json` exists, `repair_at_1` is left
@@ -231,8 +232,10 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   included. `repair` is null with no pick. Before the pick's pass has a
   scored round it has `reason` `no_round` and a null `turn`; after, a null
   `reason` and the pick's counterexample turn: the card from the pass's
-  plan, the arm run named by the round, and that run's outcome, filter,
-  capped raw answer and frame strips. Each of the pick's own strips also
+  plan, and for a frames card `card_frames`, each field's value a `json`
+  op into the card's text, one node per string of a list such as
+  `tcp.flags`; then the arm run named by the round, and that run's
+  outcome, filter, capped raw answer and frame strips. Each of the pick's own strips also
   lists every frame of its capture, which the home page's ladder and
   cursor read: number, kind and name from `captures.json`, and time,
   source, destination, protocol, length, Info and direction from

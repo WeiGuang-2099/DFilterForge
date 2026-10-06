@@ -16,6 +16,9 @@ as a sourced node: ``{"t": text, "src": op}`` for a string, or
 - ``["sha256", path]``: the SHA-256 of the file's bytes.
 - ``["input", path, item_id, pointer]``: the INPUT_JSON object of a
   prepared prompt's user message, then a pointer into it.
+- ``["json", path, pointer, inner]``: the JSON text a string at the pointer
+  holds, parsed, then the pointer ``inner`` into it, as for one value of a
+  repair plan's counterexample card.
 
 A raw model answer also carries ``"cap"``: its text is the resolved string
 cut to that many UTF-8 bytes at a character boundary. Paths are relative to
@@ -78,7 +81,8 @@ Step 5 reads the pick's pass's scored repair round, its repair/summary.json
 in the test phase the frontier slot's pass (winner_frontier, else
 fallback_frontier) has a round. With one, the pick must be a C4 item of the
 round whose counterexample arm ran, and ``repair`` holds that arm's turn on
-it, whatever it scored: the card from the pass's repair/plan.json, and from
+it, whatever it scored: the card from the pass's repair/plan.json, a frames
+card's values each as a ``json`` source into it, and from
 the arm run the round names its completion, its outcome row and, for an
 executed answer, its receipt's filter and frame strips. Any other pick, and
 a pick without a round while the frontier pass has one, stops the export
@@ -89,17 +93,17 @@ methodology.json takes its run values, the prompt conditions, top_k, the
 bootstrap block and the scoring environment, from the dev anchor in both
 phases. Its probes and witnesses come from the captures file, its mutant
 counts and categories from the test-freeze gate record, its shortcut audit
-from the shortcut-policy ablation evidence and its admitted prepares from
-the held-out freeze record. Its not_measured statuses describe the repair
-round the site reports: in the test phase they come from the first test
-pool run's summary, pass A whenever it is published, and are empty with an
-empty pool; else from the dev anchor's. Each carries that summary's split,
-which labels the page's line as the test or the dev round. The scorer keeps
-``repair_at_1: not_run`` after a round, so once that run's repair round
-summary exists the key is left out and ``repair`` holds the round's line:
-split, model, triggered items, each arm's repaired count and any arm the
-gate stopped. A round summary that names another pass or split stops the
-export (``repair_inconsistent``).
+from the shortcut-policy ablation evidence and its admitted prepares and
+their count from the held-out freeze record. Its not_measured statuses
+describe the repair round the site reports: in the test phase they come from
+the first test pool run's summary, pass A whenever it is published, and are
+empty with an empty pool; else from the dev anchor's. Each carries that
+summary's split, which labels the page's line as the test or the dev round.
+The scorer keeps ``repair_at_1: not_run`` after a round, so once that run's
+repair round summary exists the key is left out and ``repair`` holds the
+round's line: split, model, triggered items, each arm's repaired count and
+any arm the gate stopped. A round summary that names another pass or split
+stops the export (``repair_inconsistent``).
 
 board.json's ``test.repair`` holds the test repair round once
 docs/results/repair-pool/test.json exists: the pooled arms and
@@ -253,6 +257,7 @@ _ARITY = {
     "sum": 2,
     "sha256": 2,
     "input": 4,
+    "json": 4,
 }
 REEL_RULE = "reel-v1"
 # reel-v1 step 2: C4 first, then C3, C2 and C1.
@@ -721,6 +726,11 @@ class Repo:
             self.payload(_text(src[1], "path"), _text(src[2], "item_id")),
             _text(src[3], "pointer"),
         )
+
+    def _op_json(self, src: Src) -> object:
+        where = f"{src[1]} {src[2]}"
+        text = _text(self._op_ptr(src), where)
+        return pointer_get(parse_json(text, where), _text(src[3], "pointer"))
 
     def t(self, src: Src) -> Node:
         """Returns a sourced string node."""
@@ -2513,6 +2523,7 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
         "not_measured": not_measured,
         "repair": _repair_line(repo, measured),
         "admitted_prepares": repo.listed(FREEZE, "admitted_prepares"),
+        "admitted_count": repo.v(["len", FREEZE, "/admitted_prepares"]),
     }
 
 
@@ -2748,6 +2759,38 @@ def _arm_turn(
     }
 
 
+def _card_frames(repo: Repo, card: Src) -> list[list[Node]] | None:
+    """A frames card's frames, each field with its value as sourced nodes.
+
+    The card is JSON text in the plan, so every value is a ``json`` source
+    into it: one node for a number, a boolean or a string, and one per
+    string of a list, as tcp.flags holds. Fields keep the card's order. An
+    error card, or none, has no frames and gives None.
+    """
+    text = repo.resolve(card)
+    if text is None:
+        return None
+    where = f"{card[1]} {card[2]}"
+    frames = _obj(parse_json(_text(text, where), where), where).get("frames")
+    if frames is None:
+        return None
+    out: list[list[Node]] = []
+    for index, frame in enumerate(_arr(frames, f"{where} frames")):
+        fields: list[Node] = []
+        for name, value in _obj(frame, f"{where} frame").items():
+            at = ["json", card[1], card[2], pointer("frames", index, name)]
+            if isinstance(value, list):
+                nodes = [
+                    repo.t([*at[:3], pointer("frames", index, name, item)])
+                    for item in range(len(cast(list[object], value)))
+                ]
+            else:
+                nodes = [repo.t(at) if isinstance(value, str) else repo.v(at)]
+            fields.append({"name": name, "value": nodes})
+        out.append(fields)
+    return out
+
+
 def _repair_turn(
     repo: Repo, captures: Captures, run: Run, summary: str, item_id: str
 ) -> Node:
@@ -2777,6 +2820,7 @@ def _repair_turn(
         "base_outcome": repo.t(ptr(plan, "items", card, "base_outcome")),
         "card_kind": repo.t(ptr(plan, "items", card, "card_kind")),
         "card": repo.opt_t(ptr(plan, "items", card, "card")),
+        "card_frames": _card_frames(repo, ptr(plan, "items", card, "card")),
         **_arm_turn(
             repo,
             captures,

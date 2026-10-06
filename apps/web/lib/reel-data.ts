@@ -117,6 +117,17 @@ const SEGMENTS = object({
   abstained: numNode,
 });
 
+// One field of a frames card: the card's key and its value, one node for a
+// number, a boolean or a string and one per string of a list (tcp.flags).
+const CARD_FIELD = object({
+  name: text,
+  value: array((value, where) =>
+    typeof value === 'object' && value !== null && 't' in value
+      ? strNode(value, where)
+      : numNode(value, where),
+  ),
+});
+
 const TURN = object({
   item: text,
   run_id: strNode,
@@ -125,6 +136,9 @@ const TURN = object({
   base_outcome: strNode,
   card_kind: strNode,
   card: nullable(strNode),
+  // A frames card's frames, each value sourced inside the card's text;
+  // null for an error card.
+  card_frames: nullable(array(array(CARD_FIELD))),
   outcome: strNode,
   filter: nullable(strNode),
   raw: nullable(strNode),

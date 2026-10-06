@@ -712,6 +712,9 @@ class Resolver:
             return sum(self.resolve(item) for item in rest[0])
         if op == "sha256":
             return hashlib.sha256(self._path(rest[0]).read_bytes()).hexdigest()
+        if op == "json":
+            path, at, inner = rest
+            return self.at(json.loads(self.at(self.json(path), at)), inner)
         assert op == "input", op
         path, item_id, pointer = rest
         (prompt,) = [
@@ -1028,6 +1031,10 @@ def test_methodology_sources_the_protocol_constants(fixture: Fixture) -> None:
     assert len(methodology["probes"]) == 8
     assert methodology["mutants"]["all"]["killed"]["v"] == 8
     assert methodology["not_measured"][0]["key"] == "repair_at_1"
+    assert methodology["admitted_count"] == {
+        "v": 1,
+        "src": ["len", _FREEZE, "/admitted_prepares"],
+    }
 
 
 def test_a_long_answer_is_capped_at_a_character_boundary(
@@ -3007,12 +3014,22 @@ def test_an_empty_test_pool_has_no_pick(fixture: Fixture) -> None:
     check_sources(root, {"reel.json": reel})
 
 
+# A frames card with a number, a boolean and a list of strings, as the
+# repair plan holds it: canonical JSON text.
+_CARD = {"frames": [{"frame": 5, "should_match": True, "tcp.flags": ["FIN"]}]}
+
+
 def _round(
-    fixture: Fixture, base: str, items: tuple[str, ...], arm: str | None
+    fixture: Fixture,
+    base: str,
+    items: tuple[str, ...],
+    arm: str | None,
+    card: Document | None = None,
 ) -> str:
     """Writes a pass's repair plan and scored round; returns the summary.
 
-    The round triggers ``items``, each with a frames card. Its arms are the
+    The round triggers ``items``, each with ``card``, by default a frames
+    card, as JSON text. Its arms are the
     resample and bare runs and the counterexample run ``arm``, which the
     fixture then writes in the pass's split; with ``arm`` None the gate
     stopped that arm, as arms_not_run records it.
@@ -3026,8 +3043,8 @@ def _round(
             "items": [
                 {
                     "base_outcome": "silent_wrong",
-                    "card": json.dumps({"frames": [{"frame": 5}]}),
-                    "card_kind": "frames",
+                    "card": json.dumps(card or _CARD, sort_keys=True),
+                    "card_kind": "frames" if card is None else "error",
                     "item_id": item_id,
                 }
                 for item_id in items
@@ -3090,10 +3107,25 @@ def test_the_reel_shows_the_picks_counterexample_turn_whatever_it_scored(
     turn = reel["repair"]["turn"]
     assert turn["item"] == "i-0001"
     assert turn["run_id"] == {"t": arm, "src": ["ptr", summary, "/arms/2/run"]}
-    assert turn["card"]["src"] == [
-        "ptr",
-        f"docs/results/{_ANCHOR}/repair/plan.json",
-        "/items/0/card",
+    plan = f"docs/results/{_ANCHOR}/repair/plan.json"
+    assert turn["card"]["src"] == ["ptr", plan, "/items/0/card"]
+    # Each value of the card is sourced inside its text, a list per string.
+    at = ["json", plan, "/items/0/card"]
+    assert turn["card_frames"] == [
+        [
+            {
+                "name": "frame",
+                "value": [{"v": 5, "src": [*at, "/frames/0/frame"]}],
+            },
+            {
+                "name": "should_match",
+                "value": [{"v": True, "src": [*at, "/frames/0/should_match"]}],
+            },
+            {
+                "name": "tcp.flags",
+                "value": [{"t": "FIN", "src": [*at, "/frames/0/tcp.flags/0"]}],
+            },
+        ]
     ]
     assert turn["outcome"] == {
         "t": answer.outcome,
@@ -3113,6 +3145,20 @@ def test_the_reel_shows_the_picks_counterexample_turn_whatever_it_scored(
     # The round's line replaces the scorer's not_run status.
     assert reel["receipt_panel"]["repair"] is None
     check_sources(root, {"reel.json": reel})
+
+
+def test_an_error_card_is_shown_whole_with_no_frames(fixture: Fixture) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    arm = _tag(_ANCHOR, "cx")
+    fixture.answers[(arm, "C4", "i-0001")] = Answer("strong_exact", _EXPECTED)
+    error = {"error": "unknown_field", "field": "dns.qtype"}
+    _round(fixture, _ANCHOR, ("i-0001",), arm, card=error)
+    root = fixture.build()
+
+    turn = _reel(root)["repair"]["turn"]
+
+    assert json.loads(turn["card"]["t"]) == error
+    assert turn["card_frames"] is None
 
 
 def test_only_the_picks_own_round_gives_the_reel_a_turn(
@@ -3731,6 +3777,27 @@ def test_the_committed_tree_picks_the_registered_reel() -> None:
         "silent_wrong",
         "frames",
     )
+    # The card's one frame, field by field, in the card's order.
+    (frame,) = turn["card_frames"]
+    assert [field["name"] for field in frame] == [
+        "answer_matched",
+        "frame",
+        "ip.dsfield.ecn",
+        "ip.dst",
+        "ip.src",
+        "ip.ttl",
+        "should_match",
+        "tcp.dstport",
+        "tcp.flags",
+        "tcp.len",
+        "tcp.srcport",
+    ]
+    values = {
+        field["name"]: [node.get("v", node.get("t")) for node in field["value"]]
+        for field in frame
+    }
+    assert values["frame"] == [63] and values["tcp.srcport"] == [443]
+    assert values["tcp.flags"] == ["FIN", "ACK"]
     assert turn["outcome"]["t"] == "strong_exact"
     assert turn["filter"]["t"] == (
         "(tcp.srcport == 443 && tcp.flags.fin == true)"
