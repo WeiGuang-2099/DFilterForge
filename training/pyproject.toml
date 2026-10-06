@@ -1,0 +1,49 @@
+# The training environment, kept apart from the evaluation package and its
+# lock so that nothing that scores a model installs torch. Linux x86_64
+# only. Install exactly one torch build through its extra: cpu for the
+# smoke and the parity test, cu126 on a CUDA host. bitsandbytes comes with
+# cu126 only, because the 4-bit path needs CUDA.
+[project]
+name = "dfilterforge-training"
+version = "0.1.0"
+description = "QLoRA SFT of Qwen/Qwen3-1.7B on the DFilterForge training set."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "accelerate==1.15.0",
+  "datasets==5.0.1",
+  "peft==0.21.2",
+  "transformers==5.18.0",
+  "trl==1.14.1",
+]
+
+[project.optional-dependencies]
+cpu = ["torch==2.14.1"]
+cu126 = ["bitsandbytes==0.50.2", "torch==2.14.1"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+conflicts = [[{ extra = "cpu" }, { extra = "cu126" }]]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu126", extra = "cu126" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]

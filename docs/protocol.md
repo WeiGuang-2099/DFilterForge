@@ -329,6 +329,36 @@ not_expressible test items are reported separately, as false-ready per gold
 status already is. `tests/test_train_split.py` asserts each rule on the
 committed set, and the wording rule on every clarification template.
 
+Amended 2026-10-06, before any training run: the SFT recipe and its
+checkpoint. Each row of `data/train/v1/sft.jsonl.gz` (built by
+`scripts/sft_dataset.py`) pairs the C4 request scoring prepares for that
+row, with the same system prompt, assumptions and top-16 retrieval, with
+the row's target envelope, which the scorer's parser reads back unchanged;
+`tests/test_sft_dataset.py` compares the prompts with `model_run.py
+prepare`. In 540 of the 1,088 ready rows the target uses a field the row's
+retrieved list leaves out (`ready_with_unretrieved_field` in
+`sft-manifest.json`), so the SFT targets override the C4 rule to use only
+the listed names; the base and adapter C4 scores are therefore each
+reported split by field coverage, over items with every gold field
+retrieved and over the rest. `training/train_sft.py` renders the rows with
+the Qwen3-1.7B chat template and thinking off, and puts the loss on
+completion tokens only;
+`training/tests/test_parity.py` checks every row's sequence against the
+served render. A served run must render prompts the same way, with thinking
+off by default on the server, because the client sends no switch. The
+recipe is fixed now: 4-bit nf4 QLoRA, r 16, alpha 32, all attention and MLP
+projections, 3 epochs, learning rate 2e-4 with a cosine schedule, effective
+batch 16. For SFT the checkpoint is the adapter after the final epoch, for
+every seed, so no checkpoint is chosen on dev or test; this replaces
+"chosen on dev" above. Seeds 17, 42 and 2026 are each trained, scored on
+dev and test, and reported. The base model (thinking off) and each seed's
+adapter answer the dev prompts and the frozen test prompts in all four
+conditions and are scored by the same scorer; the adapters trained on C4
+prompts only, so their C1 to C3 rows are marked as untrained conditions.
+The SFT headline is adapter C4 minus base C4 on strong exact, per seed and
+as the three-seed mean, with the case bootstrap; C4 against C2 is not read
+for adapters.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4

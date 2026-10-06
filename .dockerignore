@@ -24,3 +24,4 @@ pcap_lab/catalog/*.gz
 *.pcapng
 !pcap_lab/fixtures/*.pcap
 !pcap_lab/fixtures/*.pcapng
+training/.venv
