@@ -319,8 +319,13 @@ train-only probes (seeds 7001 to 7003, clients no other probe has), not a
 second semantics. Dropped: a canonical key (All and AnyOf flattened and
 sorted) or train-probe frames equal to a dev or test gold's, a shortcut hit,
 no frame or every frame, an 8-word run shared with a dev or test request.
-About 15 percent ask for clarification with one slot removed;
-`tests/test_train_split.py` asserts each rule on the committed set.
+About 15 percent ask for clarification with one slot removed. They use all
+six slots, which repeat across splits by design (see Splits); field and
+protocol are open in test cases only, in no dev case. The wording does not
+repeat: no clarification wording shares a 4-word run, other than one of
+numbers and protocol names alone, with a dev or test non-ready request.
+`tests/test_train_split.py` asserts each rule on the committed set, and the
+wording rule on every clarification template.
 
 ## Claim boundary
 

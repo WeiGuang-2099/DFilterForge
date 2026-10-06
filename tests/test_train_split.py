@@ -11,6 +11,7 @@ from collections.abc import Iterator
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 from types import ModuleType
 from typing import Any, cast
@@ -31,12 +32,15 @@ from dfilterforge.intent_ir import Not
 from dfilterforge.intent_ir import Operator
 from dfilterforge.intent_ir import Predicate
 from dfilterforge.intent_ir import walk_predicates
+from dfilterforge.model_cases import model_non_ready_cases
 from dfilterforge.model_split import copy_with_witnesses
 from dfilterforge.model_split import model_semantic_cases
 from dfilterforge.runner import TsharkRunner
 from dfilterforge.shortcuts import find_shortcuts
 from dfilterforge.shortcuts import references
+from dfilterforge.train_atoms import APPS
 from dfilterforge.train_atoms import ATOMS
+from dfilterforge.train_atoms import HOSTS
 from dfilterforge.train_combos import canonical_key
 from dfilterforge.train_combos import ngrams
 from dfilterforge.train_combos import summarize
@@ -53,6 +57,9 @@ _LINUX = pytest.mark.skipif(
 _OTHER_SEEDS = frozenset((*range(100, 150), 17, 42, 2026))
 # Candidates the prefix test labels again with tshark.
 _PREFIX = 40
+# Numbers and protocol names: words two requests share to name one field
+# or value, so a run of nothing else is not shared wording.
+_LITERAL = re.compile(r"[0-9]+|tcp|udp|dns|ipv4|ip|ttl")
 
 
 def _load() -> ModuleType:
@@ -157,6 +164,28 @@ def test_requests_share_no_8_word_run_with_dev_or_test() -> None:
     assert len(train_data.dev_test_requests()) == 152
     assert len(set(requests)) == len(requests)
     assert all(not ngrams(text) & gold for text in requests)
+
+
+def test_clarification_wordings_share_no_4_word_run_with_non_ready() -> None:
+    gold: set[tuple[str, ...]] = set()
+    for case in model_non_ready_cases():
+        for request in case.paraphrases:
+            gold |= ngrams(request, 4)
+    wordings = [
+        atom.vague.format(host=host, app=app)
+        for atom in ATOMS
+        if atom.slot is not None
+        for host in HOSTS
+        for app in APPS
+    ]
+    shared = {
+        run
+        for wording in wordings
+        for run in ngrams(wording, 4) & gold
+        if not all(_LITERAL.fullmatch(word) for word in run)
+    }
+
+    assert not shared
 
 
 def test_probe_seeds_clients_and_packets_are_disjoint_from_others(

@@ -249,12 +249,12 @@ def sample_combo(seed: int, index: int) -> TrainCombo:
     return TrainCombo(index, expression, request, target)
 
 
-def ngrams(text: str) -> set[tuple[str, ...]]:
-    """Returns the runs of ``NGRAM`` lowercase words and numbers in text."""
+def ngrams(text: str, size: int = NGRAM) -> set[tuple[str, ...]]:
+    """Returns the runs of ``size`` lowercase words and numbers in text."""
     words = re.findall(r"[a-z0-9]+", text.lower())
     return {
-        tuple(words[index : index + NGRAM])
-        for index in range(len(words) - NGRAM + 1)
+        tuple(words[index : index + size])
+        for index in range(len(words) - size + 1)
     }
 
 
