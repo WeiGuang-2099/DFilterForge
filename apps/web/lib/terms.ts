@@ -12,7 +12,8 @@
  */
 
 /** The reviewed names. */
-export const TERMS = ['IPv4', 'SHA-256'] as const;
+// repair@1 is the protocol's repair metric (docs/protocol.md, Repair).
+export const TERMS = ['IPv4', 'SHA-256', 'repair@1'] as const;
 
 /** One reviewed name. */
 export type TermName = (typeof TERMS)[number];
