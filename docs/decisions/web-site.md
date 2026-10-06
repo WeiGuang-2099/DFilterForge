@@ -3,10 +3,7 @@
 The site shows recorded results only and never calls a model. This note
 records how a value gets from a committed file onto a page, what fails when
 that path is bypassed, and the sizes and timings measured on the committed
-data: first on the dev passes alone, now in the test phase. The
-web track only consumes the runner, catalog, oracle, trace and replay code, so
-under AGENTS.md it gets a decision note with a measured before and after, not
-a Full-versus-Simplified ablation.
+data: first on the dev passes alone, now in the test phase.
 
 ## Question
 
