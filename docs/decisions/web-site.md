@@ -3,10 +3,7 @@
 The site shows recorded results only and never calls a model. This note
 records how a value gets from a committed file onto a page, what fails when
 that path is bypassed, and the sizes and timings measured on the committed
-data: first on the dev passes alone, now in the test phase. The
-web track only consumes the runner, catalog, oracle, trace and replay code, so
-under AGENTS.md it gets a decision note with a measured before and after, not
-a Full-versus-Simplified ablation.
+data: first on the dev passes alone, now in the test phase.
 
 ## Question
 
@@ -62,9 +59,19 @@ The site is a Next static export (`output: 'export'`, `trailingSlash`). Its
 URL prefix is resolved in one place, `apps/web/scripts/base_path.mjs`: it
 reads `PAGES_BASE_PATH` and defaults to `/DFilterForge`, the path of a GitHub
 project page. The build, `scripts/serve.mjs` and the Playwright config all
-import it. An empty value builds and serves the site at the domain root, as a
-host such as Cloudflare Pages needs, with no code change. Hosting is still
-undecided.
+import it. An empty value builds and serves the site at the domain root, with
+no code change.
+
+The host is GitHub Pages, at https://weiguang-2099.github.io/DFilterForge/.
+CI deploys it with `actions/deploy-pages` on each push to `main`. The owner
+decided this on 2026-10-06, with the ruling that the repository goes public;
+it replaces the Cloudflare Pages decision of 2026-10-01. GitHub Pages is
+free for a public repository and needs no secret. It serves the site under
+`/DFilterForge`, the default prefix that local Compose, the CI loopback
+probe and the tests already use, so the deployed build is the one CI tests.
+Its 1 GB site limit and lack of a file-count cap leave room for the receipt
+pages that come later. The Deploy section below has the job and the owner's
+setup.
 
 The default itself is written in four places, because three files cannot
 import the module:
@@ -77,12 +84,14 @@ import the module:
 
 `apps/web/tests/base-path.spec.ts` fails when any of the last three differs
 from the module's default, so a rename cannot leave CI green on the old
-prefix.
+prefix. The `pages` job's guard and live probe write the prefix again, as
+the path GitHub Pages serves this repository under, so a renamed default
+fails that guard on the push to `main`.
 
 The site is built in Docker. `apps/web/Dockerfile` has six stages: `export`,
 `data`, `deps`, `build`, `out` and `site`. The exporter and `next build` each
 run under `RUN --network=none`. CI's web job builds through the composite
-action `.github/actions/web-site`, which the Pages workflow is meant to reuse.
+action `.github/actions/web-site`, and the `pages` job reuses it.
 The Compose `web` service serves the `site` stage on 127.0.0.1 only.
 
 ### Inputs
@@ -457,6 +466,42 @@ Dockerfile, then runs typecheck, lint and the Playwright suite on the runner
 against that build. Last, it starts the Compose `site` service and expects a
 200 on loopback.
 
+### Deploy
+
+The `pages` job in `ci.yml` runs only on a push to `main` of this
+repository, `WeiGuang-2099/DFilterForge`, after the python, web and
+containers jobs pass; a fork's push to its own `main` skips it. It holds
+`pages: write` and `id-token: write`, deploys to the `github-pages`
+environment, whose URL is the deploy step's `page_url`, and runs in the
+concurrency group `pages`, which keeps two deploys from overlapping and
+cancels none; a newer push to `main` still cancels the whole older run
+through the workflow's group:
+1. It runs the composite action with the default base path: it builds
+   `out/` under `/DFilterForge` and runs typecheck, lint and the Playwright
+   suite against that build, the bytes it then ships.
+2. It refuses an `out/index.html` that does not load
+   `/DFilterForge/_next/static/`, so a build for another prefix cannot ship.
+3. `actions/configure-pages@v6`, `actions/upload-pages-artifact@v5` (path
+   `apps/web/out`) and `actions/deploy-pages@v5` publish it. The upload
+   leaves out dotfiles; the export has none.
+4. It fetches `https://weiguang-2099.github.io/DFilterForge/methodology/`
+   until the page links its sources at the pushed commit, for up to ten
+   minutes, longer than the `max-age=600` GitHub Pages sends. Then it
+   fetches one of the page's `/DFilterForge/_next/static/` assets.
+
+On a87f777 the build has 29 files and 962,772 bytes. The step 2 guard
+passes on it and fails on a build for the domain root. The upload's `tar`
+command keeps all 29 files. Served by `scripts/serve.mjs`, the step 4 probe
+passes when it expects a87f777 and, run with 1-second sleeps, fails after
+its 20 attempts when it expects 1ec918c.
+
+The owner sets up, once, before the merge that adds the job:
+- a public repository: on the Free plan GitHub Pages serves only a public
+  repository, and the site's source links point into it;
+- Settings > Pages > Build and deployment > Source: GitHub Actions; without
+  it `configure-pages` fails;
+- after the first deploy, the repository's About > Website.
+
 ## Before and after
 
 Before is 86cd624, the base of this branch. After is 07d91ca, the commit
@@ -760,8 +805,9 @@ pnpm --filter @dfilterforge/web test:e2e
 - Base images are pinned by tag, not by digest.
 - `RUN --network=none` was verified only on Docker Desktop 29.7.2: the step
   saw only `lo`, and a connect failed with `ENETUNREACH`. The CI workflow and
-  the composite action have not run on GitHub yet; they pass actionlint
-  1.7.7, and each step was run locally.
+  the composite action run on every pull request and every push to `main`;
+  the owner reports hosted CI green on `main` at 1ec918c. The `pages` job
+  first runs on the push that merges it.
 - The consistency test does not sweep CSS `content:`, `<head>` meta, or the
   markers CSS numbers for a list without a `start`.
 - Next 16.3.4 on Windows writes nested segment-prefetch files into

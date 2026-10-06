@@ -247,3 +247,66 @@ jobs:
           --profile web-local
           --profile public-demo
           config
+
+  pages:
+    name: Deploy the site to GitHub Pages
+    # Only a push to main of this repository deploys, and only after every
+    # gate passed; a fork's push to its own main (Sync fork) skips the job.
+    # The job builds the site under /DFilterForge through the same composite
+    # action, tests that build, and deploys those bytes.
+    if: >-
+      github.repository == 'WeiGuang-2099/DFilterForge'
+      && github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+    needs: [python, web, containers]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      # No two deploys overlap, and this group cancels none. A newer push
+      # to main still cancels this whole run through the workflow's group.
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and check the site under the project page prefix
+        uses: ./.github/actions/web-site
+      - name: Refuse a build without the /DFilterForge prefix
+        # GitHub Pages serves this project page under /DFilterForge; a build
+        # for any other prefix passes its own tests and 404s every asset.
+        run: grep -q '="/DFilterForge/_next/static/' apps/web/out/index.html
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/web/out
+      - name: Deploy the uploaded build
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Probe the live site
+        # Every page links its sources at the commit it was exported from,
+        # so the page names this push once the new deployment is served.
+        # Then one of its assets must load. The ten minutes of retries
+        # outlast the max-age of 600 seconds GitHub Pages sends; its CDN
+        # ignores a query string, so a cache-busting one would not help.
+        run: |
+          site=https://weiguang-2099.github.io
+          page="$RUNNER_TEMP/methodology.html"
+          for attempt in $(seq 20); do
+            if curl --fail --silent --show-error --output "$page" \
+                "$site/DFilterForge/methodology/" \
+                && grep -q "/blob/$GITHUB_SHA/" "$page"; then
+              break
+            fi
+            test "$attempt" -lt 20
+            sleep 30
+          done
+          asset="$(grep -o '="/DFilterForge/_next/static/[^"]*' "$page" \
+            | head -n 1 | cut -c 3-)"
+          test -n "$asset"
+          curl --fail --silent --show-error --head --output /dev/null \
+            "$site$asset"

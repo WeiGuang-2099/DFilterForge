@@ -3,7 +3,7 @@ description: >-
   Builds the static site inside apps/web/Dockerfile, which exports the data
   from committed files with no network and runs next build, then runs the web
   gates on the runner against that build: typecheck, lint and the Playwright
-  suite served from apps/web/out. The CI web job and the Pages workflow use
+  suite served from apps/web/out. The CI web job and the pages deploy job use
   this one path, so what is tested is what is deployed.
 
 inputs:
