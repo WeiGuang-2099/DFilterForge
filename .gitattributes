@@ -2,5 +2,6 @@
 *.pcap binary
 *.pcapng binary
 *.png binary
+*.gif binary
 *.jpg binary
 *.woff2 binary
