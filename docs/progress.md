@@ -13,8 +13,9 @@ It serves the Reel on `/` and `/methodology`. Branch `site-board` adds
 readability pass on the live pages is on that branch too: digests shown as
 twelve-digit prefixes, the methodology page in two columns, the Reel's
 witness tail as one break row and its repair card as a table. The README
-there opens with the pitch, the live URL, the GIF of the home page
-(`docs/media/reel.gif`) and the locked test repair number. Branch `sft`
+there is the owner's results page: the pitch, the live URL, the GIF of the
+home page (`docs/media/reel.gif`), the repair numbers and their limits; the
+run instructions moved to `docs/usage.md`. Branch `sft`
 holds the SFT code on training set v1 (PR #24). GPU work comes next, on
 Modal (owner ruling), with Qwen/Qwen3-1.7B, thinking off (Planned next 3).
 Reports under the ignored `artifacts/` are not project evidence.

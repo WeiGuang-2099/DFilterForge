@@ -3,7 +3,7 @@
 Run every command from the repository root; Docker must be in Linux container
 mode; in Git Bash prefix Docker commands with `MSYS_NO_PATHCONV=1`.
 
-## Development and the test suite
+## Development
 
 The reproducible entry point is Docker Compose:
 
