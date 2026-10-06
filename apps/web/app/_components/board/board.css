@@ -1,0 +1,111 @@
+/* The board, in the chosen Reel prototype's language: flat fills on the
+   ground, ink rules instead of cards, one carmine for what failed. Bars
+   grow by counts (marks.tsx); an interval is placed by its committed
+   bounds, read here from --lo, --hi and --v. */
+
+.board {padding-top: 40px;}
+.bd-head {display: flex; flex-direction: column; gap: 14px; max-width: 72rem;}
+.bd-h1 {max-width: 26ch; font: 600 clamp(30px, 3.6vw, 48px)/1.06 var(--sans); font-stretch: 106%; letter-spacing: -0.018em;}
+.bd-lede {max-width: 70ch; font-size: 16px; line-height: 1.6; color: var(--ink-2);}
+.bd-note {max-width: 80ch; margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--ink-2);}
+.bd-note .m, .bd-of {font-family: var(--mono);}
+.bd-sec {padding-top: 72px;}
+.bd-sec h2 {margin-bottom: 8px; font: 600 clamp(22px, 2.2vw, 28px)/1.15 var(--sans); font-stretch: 106%; letter-spacing: -0.01em;}
+.bd-sub {max-width: 76ch; margin-bottom: 12px; font-size: 14.5px; line-height: 1.6; color: var(--ink-2);}
+.bd-h3 {display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 36px 0 8px; padding-top: 8px; border-top: 1px solid var(--ink); font: 600 17px/1.3 var(--sans); font-stretch: 104%;}
+
+/* Registered labels: a flat chip, inked for the primary comparison. */
+.bd-tag {display: inline-block; padding: 2px 6px; border: 1px solid var(--ink); font: 600 10.5px/1.2 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; vertical-align: 1px;}
+.bd-tag-primary {background: var(--ink); color: var(--ground);}
+.bd-tag-secondary {border-color: var(--line-2); color: var(--ink-2);}
+
+/* A mark: a bar, and under it the interval on the same scale. */
+.bd-mark {display: flex; flex-direction: column; gap: 3px; min-width: 0;}
+.bd-span {position: relative; display: block; height: 7px;}
+.bd-span-ci {position: absolute; top: 0; bottom: 0; border: solid var(--ink); border-width: 0 1.5px;}
+.bd-span-ci::before {content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 1.5px; background: var(--ink);}
+.bd-span-rate .bd-span-ci {left: calc(var(--lo) * 100%); right: calc((1 - var(--hi)) * 100%);}
+
+/* A difference on minus one to one: zero at the middle, a square at the
+   value. */
+.bd-span-difference {height: 13px; min-width: 8rem;}
+.bd-span-difference::before {content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px dashed var(--line-2);}
+.bd-span-difference .bd-span-ci {top: 3px; bottom: 3px; left: calc((var(--lo) + 1) * 50%); right: calc((1 - var(--hi)) * 50%);}
+.bd-span-v {position: absolute; top: 3px; width: 7px; height: 7px; margin-left: -3.5px; left: calc((var(--v) + 1) * 50%); background: var(--ink);}
+.bd-faint .bd-span-ci, .bd-faint .bd-span-ci::before {border-color: var(--ink-3);}
+.bd-faint .bd-span-ci::before, .bd-faint .bd-span-v {background: var(--ink-3);}
+
+/* Repair bars: one grid column per failed answer, filled per repair. */
+.bd-arms {display: flex; flex-direction: column; gap: 14px; margin: 8px 0 0; padding: 0; list-style: none;}
+.bd-arms li {display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) minmax(0, 18rem); gap: 4px 20px; align-items: start;}
+.bd-arm {font: 600 14px/18px var(--mono);}
+.bd-track {display: grid; height: 18px; background: var(--plate); box-shadow: inset 0 0 0 1px var(--line-2);}
+.bd-fill {background: var(--ink);}
+.bd-arm-n {display: flex; flex-direction: column; gap: 1px; font: 13px/18px var(--mono);}
+.bd-arm-n [data-term] {font-family: var(--sans); color: var(--ink-2);}
+.bd-of {font-size: 12px; line-height: 1.45; color: var(--ink-2);}
+.bd-arms-compact {gap: 8px;}
+.bd-arms-compact li {grid-template-columns: 7.5rem minmax(0, 1fr);}
+.bd-arms-compact .bd-arm {font: 500 12px/12px var(--mono);}
+.bd-arms-compact .bd-track {height: 12px;}
+.bd-arms-compact .bd-arm-n {grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: 0 12px; font-size: 12px; line-height: 1.4;}
+.bd-arm-n > span {white-space: nowrap;}
+
+/* The counted passes: one ruled row per pass. */
+.bd-legend {display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 4px 0 14px; padding: 0; list-style: none; font-size: 12.5px; color: var(--ink-2);}
+.bd-legend li {display: inline-flex; align-items: center; gap: 8px;}
+.bd-sw {display: inline-block; width: 20px; height: 10px; flex: none;}
+.bd-sw-ci {position: relative; height: 7px; border: solid var(--ink); border-width: 0 1.5px;}
+.bd-sw-ci::before {content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 1.5px; background: var(--ink);}
+.bd-rh, .bd-row {display: grid; grid-template-columns: 10rem minmax(0, 14rem) minmax(0, 1fr) minmax(0, 17rem); gap: 4px 20px; align-items: center;}
+.bd-rh {padding-bottom: 8px; border-bottom: 1px solid var(--line-2); font-size: 12px; line-height: 1.35; color: var(--ink-2);}
+.bd-rows {margin: 0; padding: 0; list-style: none;}
+.bd-row {padding: 12px 0; border-bottom: 1px solid var(--line);}
+.bd-role {font-size: 13.5px; color: var(--ink-2);}
+.bd-model {font: 12.5px/1.3 var(--mono); overflow-wrap: anywhere;}
+.bd-row-n {display: flex; flex-direction: column; gap: 1px; font: 13px/1.4 var(--mono);}
+.bd-seg {display: flex; height: 14px;}
+.bd-seg > span {flex-basis: 0; min-width: 0;}
+.bd-seg > span + span {border-left: 1px solid var(--ground);}
+.bd-o-strong_exact {background: var(--ink);}
+.bd-o-shortcut {background: repeating-linear-gradient(45deg, var(--ink-2) 0 1px, var(--plate) 1px 4px); box-shadow: inset 0 0 0 1px var(--ink-2);}
+.bd-o-silent_wrong {background: repeating-linear-gradient(-45deg, var(--dis) 0 1.5px, var(--dis-wash) 1.5px 4.5px);}
+.bd-o-invalid {background: var(--dis-wash); box-shadow: inset 0 0 0 1.5px var(--dis);}
+.bd-o-other {background: var(--plate); box-shadow: inset 0 0 0 1px var(--line-2);}
+
+/* Comparison tables. */
+.bd-tw {max-width: 100%; overflow-x: auto;}
+.bd-cmp {width: 100%; border-collapse: collapse; font: 12.5px/1.35 var(--mono); font-variant-numeric: tabular-nums;}
+.bd-cmp th, .bd-cmp td {padding: 7px 14px 7px 0; border-bottom: 1px solid var(--line); text-align: right; vertical-align: middle; white-space: nowrap;}
+.bd-cmp thead th {border-bottom-color: var(--line-2); font: 500 12px/1.3 var(--sans); color: var(--ink-2); white-space: normal; vertical-align: bottom;}
+.bd-cmp th:first-child {text-align: left;}
+.bd-cmp tbody th {font-weight: 400;}
+.bd-cmp td.bd-c-span, .bd-cmp th.bd-c-span {width: 22%; min-width: 8rem; text-align: left;}
+.bd-cmp tr.bd-primary th, .bd-cmp tr.bd-primary td {font-weight: 600;}
+.bd-cmp tr.bd-primary th {box-shadow: inset 3px 0 0 var(--ink); padding-left: 9px;}
+.bd-cmp tr.bd-faint td:last-child {color: var(--ink-2);}
+
+/* Per model: the model and its arms beside its comparisons. */
+.bd-pm {display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 40px; padding: 16px 0 22px; border-bottom: 1px solid var(--line);}
+.bd-pm-id {display: flex; flex-direction: column; gap: 6px; min-width: 0;}
+.bd-pm h4 {margin: 0; font: 600 14.5px/1.3 var(--mono); overflow-wrap: anywhere;}
+
+.bd-limits ul {max-width: 80ch; margin: 8px 0 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.55; color: var(--ink-2);}
+
+@media (min-width: 1080px) {
+  .bd-pm {grid-template-columns: minmax(0, 23rem) minmax(0, 1fr); align-items: start;}
+}
+@media (max-width: 900px) {
+  .bd-rh {display: none;}
+  .bd-row {grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 14px;}
+  .bd-row .bd-mark {grid-column: 1 / -1;}
+  .bd-row-n {grid-column: 1 / -1;}
+  .bd-arms li {grid-template-columns: minmax(0, 1fr);}
+  .bd-arms-compact li {grid-template-columns: 7rem minmax(0, 1fr);}
+}
+@media (max-width: 640px) {
+  .board {padding-top: 24px;}
+  .bd-cmp .bd-c-span {display: none;}
+  .bd-cmp tbody th .bd-tag {display: table; margin-top: 3px;}
+  .bd-cmp th, .bd-cmp td {padding-right: 10px; font-size: 12px;}
+}

@@ -11,6 +11,11 @@ import {basePath} from '../scripts/base_path.mjs';
 // the base path and a slash.
 const PAGES = [
   {path: './', status: 200, heading: /^Frame [0-9]+ disproves \(/},
+  {
+    path: 'board/',
+    status: 200,
+    heading: /^After one structured counterexample, [0-9]+ of [0-9]+ failed test answers were repaired\.$/,
+  },
   {path: 'methodology/', status: 200, heading: 'Evidence has a boundary.'},
   {path: 'no-such-page/', status: 404, heading: 'This page does not exist.'},
 ] as const;
