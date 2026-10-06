@@ -56,6 +56,8 @@ button {color: var(--ink); font-family: var(--sans);}
 .mast-name {color: var(--ink); font-weight: 700; text-decoration: none;}
 .mast-nav {display: flex; gap: 16px;}
 .mast-nav a {color: var(--ink);}
+/* Each masthead link is a target at least 24 px tall (WCAG 2.5.8). */
+.mast-name, .mast-nav a {display: inline-flex; align-items: center; min-height: 24px;}
 .mast-note {flex: 1 1 auto; text-align: right;}
 
 /* Prose pages: methodology and not found. */
