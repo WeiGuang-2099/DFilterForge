@@ -1,0 +1,218 @@
+{
+  "receipt_file_sha256": "ea24123c93f8633d8b4167978c22433cc288f09496bb40d4b616fad576ac34eb",
+  "receipt_path": "docs/results/test-qwen3-32b-2026-09-26/scored/receipts/C4/mei-1038.json",
+  "result": {
+    "exact": true,
+    "trace": {
+      "probes": [
+        {
+          "candidate_predicates": [
+            {
+              "display_filter": "tcp.srcport == 443",
+              "matched_frames": [
+                59
+              ],
+              "node_path": [
+                0
+              ],
+              "predicate": {
+                "field": "tcp.srcport",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": 443
+              }
+            },
+            {
+              "display_filter": "tcp.completeness.fin == true",
+              "matched_frames": [],
+              "node_path": [
+                1
+              ],
+              "predicate": {
+                "field": "tcp.completeness.fin",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": true
+              }
+            }
+          ],
+          "canonical_predicates": [
+            {
+              "display_filter": "tcp.flags.fin == true",
+              "matched_frames": [
+                59
+              ],
+              "node_path": [
+                0
+              ],
+              "predicate": {
+                "field": "tcp.flags.fin",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": true
+              }
+            },
+            {
+              "display_filter": "tcp.srcport == 443",
+              "matched_frames": [
+                59
+              ],
+              "node_path": [
+                1
+              ],
+              "predicate": {
+                "field": "tcp.srcport",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": 443
+              }
+            }
+          ],
+          "counterexample_frames": [
+            59
+          ],
+          "probe_id": "semantic-31"
+        },
+        {
+          "candidate_predicates": [
+            {
+              "display_filter": "tcp.srcport == 443",
+              "matched_frames": [
+                60
+              ],
+              "node_path": [
+                0
+              ],
+              "predicate": {
+                "field": "tcp.srcport",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": 443
+              }
+            },
+            {
+              "display_filter": "tcp.completeness.fin == true",
+              "matched_frames": [],
+              "node_path": [
+                1
+              ],
+              "predicate": {
+                "field": "tcp.completeness.fin",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": true
+              }
+            }
+          ],
+          "canonical_predicates": [
+            {
+              "display_filter": "tcp.flags.fin == true",
+              "matched_frames": [
+                60
+              ],
+              "node_path": [
+                0
+              ],
+              "predicate": {
+                "field": "tcp.flags.fin",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": true
+              }
+            },
+            {
+              "display_filter": "tcp.srcport == 443",
+              "matched_frames": [
+                60
+              ],
+              "node_path": [
+                1
+              ],
+              "predicate": {
+                "field": "tcp.srcport",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": 443
+              }
+            }
+          ],
+          "counterexample_frames": [
+            60
+          ],
+          "probe_id": "semantic-37"
+        },
+        {
+          "candidate_predicates": [
+            {
+              "display_filter": "tcp.srcport == 443",
+              "matched_frames": [
+                66
+              ],
+              "node_path": [
+                0
+              ],
+              "predicate": {
+                "field": "tcp.srcport",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": 443
+              }
+            },
+            {
+              "display_filter": "tcp.completeness.fin == true",
+              "matched_frames": [],
+              "node_path": [
+                1
+              ],
+              "predicate": {
+                "field": "tcp.completeness.fin",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": true
+              }
+            }
+          ],
+          "canonical_predicates": [
+            {
+              "display_filter": "tcp.flags.fin == true",
+              "matched_frames": [
+                66
+              ],
+              "node_path": [
+                0
+              ],
+              "predicate": {
+                "field": "tcp.flags.fin",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": true
+              }
+            },
+            {
+              "display_filter": "tcp.srcport == 443",
+              "matched_frames": [
+                66
+              ],
+              "node_path": [
+                1
+              ],
+              "predicate": {
+                "field": "tcp.srcport",
+                "kind": "predicate",
+                "operator": "eq",
+                "value": 443
+              }
+            }
+          ],
+          "counterexample_frames": [
+            66
+          ],
+          "probe_id": "semantic-43"
+        }
+      ],
+      "run_id": "test-qwen3-32b-2026-09-26",
+      "schema_version": "predicate-trace/1.0"
+    }
+  },
+  "schema_version": "web-trace/1.0"
+}

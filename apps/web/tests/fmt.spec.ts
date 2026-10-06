@@ -150,6 +150,17 @@ test('outcome shows a scored outcome code as the protocol words it', () => {
   }
 });
 
+test('frame_kind and join show their codes as fixed words', () => {
+  expect(fmt('recipe', 'frame_kind')).toBe('recipe');
+  expect(fmt('witness', 'frame_kind')).toBe('witness');
+  expect(fmt('all', 'join')).toBe('every leaf');
+  expect(fmt('any', 'join')).toBe('any leaf');
+  for (const value of ['tail', 'Witness', '', 'toString', 3, null]) {
+    expect(() => fmt(value, 'frame_kind'), JSON.stringify(value)).toThrow(TypeError);
+    expect(() => fmt(value, 'join'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test("verdict shows a comparison's inconclusive flag as the reading's word", () => {
   // The flag is true below the discordant cases a reading needs.
   expect(fmt(true, 'verdict')).toBe('inconclusive');
@@ -236,6 +247,8 @@ test('every kind is named', () => {
     'rate',
     'runtime',
     'outcome',
+    'frame_kind',
+    'join',
     'verdict',
   ]);
   for (const kind of FMT_KINDS) {
@@ -253,7 +266,7 @@ test('Num accepts exactly the kinds that format a number node', () => {
     expect(() => fmt(NUM_KIND_SAMPLES[kind], kind), kind).not.toThrow();
   }
   const others = FMT_KINDS.filter((kind) => !isNumKind(kind));
-  expect(others).toEqual(['text', 'unmeasured', 'split', 'outcome']);
+  expect(others).toEqual(['text', 'unmeasured', 'split', 'outcome', 'frame_kind', 'join']);
   for (const kind of others) {
     for (const value of Object.values(NUM_KIND_SAMPLES)) {
       expect(() => fmt(value, kind), `${kind} ${JSON.stringify(value)}`).toThrow(TypeError);

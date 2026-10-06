@@ -79,6 +79,7 @@ _ALLOWED = (
     "docs/ablations/evidence/",
 )
 _FREEZE = "src/dfilterforge/held_out_freeze.json"
+_PACKETS = "docs/decisions/evidence/web/packets.json"
 # The contract for untrusted model text: a completion's response_text is cut
 # at 4 KiB of UTF-8, and no other string is cut.
 _RAW_TEXT_CAP = 4096
@@ -302,6 +303,25 @@ class Fixture:
                 "notes": [],
                 "probes": rows,
                 "schema_version": "capture-frames/1.0",
+            },
+        )
+        _write(
+            self.root / _PACKETS,
+            {
+                "notes": [],
+                "probes": [
+                    {
+                        "probe_id": row["probe_id"],
+                        "capture_sha256": row["capture_sha256"],
+                        "client": "192.0.2.1",
+                        "frames": [
+                            _packet(number) for number in range(1, _FRAMES + 1)
+                        ],
+                    }
+                    for row in rows
+                ],
+                "schema_version": "capture-packets/1.0",
+                "tshark_version": "4.6.8",
             },
         )
 
@@ -1911,6 +1931,67 @@ def _summary_run(root: Path) -> None:
     )
 
 
+def _packet(number: int) -> Document:
+    """One frame of the fixture's packet lists; frame 2 goes to the client."""
+    inbound = number == 2
+    return {
+        "n": number,
+        "time": f"0.{number:09d}",
+        "src": "198.51.100.9" if inbound else "192.0.2.1",
+        "dst": "192.0.2.1" if inbound else "198.51.100.9",
+        "protocol": "TCP",
+        "length": 60,
+        "info": f"41000 \u2192 443 [ACK] frame {number}",
+        "direction": "in" if inbound else "out",
+    }
+
+
+def _trace(root: Path, receipt: str, result: Document | None = None) -> str:
+    """Writes a trace of a receipt and returns its path.
+
+    Without a result the trace covers every disagreeing frame of each
+    probe, with one filter leaf that matched them and one request leaf that
+    matched none.
+    """
+    recorded = json.loads((root / receipt).read_text(encoding="utf-8"))
+    run_id, _, _, label, name = receipt.split("/")[2:]
+    path = f"docs/decisions/evidence/web/traces/{run_id}/{label}/{name}"
+    if result is None:
+        probes: list[Document] = []
+        for probe in recorded["probes"]:
+            frames = sorted(probe["candidate_only"] + probe["reference_only"])
+            probes.append(
+                {
+                    "probe_id": probe["probe_id"],
+                    "counterexample_frames": frames,
+                    "candidate_predicates": [
+                        {
+                            "display_filter": "ip.ttl == 64",
+                            "matched_frames": frames,
+                        }
+                    ],
+                    "canonical_predicates": [
+                        {
+                            "display_filter": "dns.qry.type == 28",
+                            "matched_frames": [],
+                        }
+                    ],
+                }
+            )
+        result = {"exact": True, "trace": {"probes": probes}}
+    _write(
+        root / path,
+        {
+            "receipt_file_sha256": hashlib.sha256(
+                (root / receipt).read_bytes()
+            ).hexdigest(),
+            "receipt_path": receipt,
+            "result": result,
+        },
+    )
+    return path
+
+
 def _stale_trace(root: Path) -> None:
     _write(
         root / f"docs/decisions/evidence/web/traces/{_MID}/C1/i-0001.json",
@@ -2320,39 +2401,45 @@ def test_an_unwritable_output_exits_two(
 
 
 def test_a_trace_is_linked_only_to_its_receipt_bytes(fixture: Fixture) -> None:
+    fixture.answers[(_MID, "C1", "i-0001")] = _wrong((2,), (1,), (4,))
     root = fixture.build()
     receipt = f"docs/results/{_MID}/scored/receipts/C1/i-0001.json"
-    trace = f"docs/decisions/evidence/web/traces/{_MID}/C1/i-0001.json"
-    limited = f"docs/decisions/evidence/web/traces/{_MID}/C1/i-0002.json"
-    _write(
-        root / trace,
-        {
-            "receipt_file_sha256": hashlib.sha256(
-                (root / receipt).read_bytes()
-            ).hexdigest(),
-            "receipt_path": receipt,
-            "result": {"exact": False},
-        },
-    )
-    other = receipt.replace("i-0001", "i-0002")
-    _write(
-        root / limited,
-        {
-            "receipt_file_sha256": hashlib.sha256(
-                (root / other).read_bytes()
-            ).hexdigest(),
-            "receipt_path": other,
-            "result": {"status": "trace_limit"},
-        },
+    trace = _trace(root, receipt)
+    _trace(
+        root,
+        receipt.replace("i-0001", "i-0002"),
+        {"status": "trace_limit"},
     )
 
     documents = _documents(exporter.export(root, "abc1234"))
 
     linked = documents["receipts/dev-mid-2026-01-01/C1/i-0001.json"]
     assert linked["trace"]["path"] == trace and linked["trace_reason"] is None
+    # Each probe's leaves, at the frames where the answer disagrees.
+    probes = linked["trace"]["probes"]
+    assert [probe["frames"]["v"] for probe in probes] == [[3], [], [5]]
+    assert probes[2]["filter"][0]["filter"]["t"] == "ip.ttl == 64"
+    assert probes[2]["filter"][0]["matched"]["v"] == [5]
+    assert probes[2]["request"][0]["matched"]["v"] == []
     capped = documents["receipts/dev-mid-2026-01-01/C1/i-0002.json"]
     assert capped["trace"] is None and capped["trace_reason"] == "trace_limit"
     check_sources(root, documents)
+
+
+def test_a_trace_of_other_frames_is_stale(fixture: Fixture) -> None:
+    fixture.answers[(_MID, "C1", "i-0001")] = _wrong((2,), (1,), (4,))
+    root = fixture.build()
+    trace = _trace(root, f"docs/results/{_MID}/scored/receipts/C1/i-0001.json")
+    _edit(
+        root / trace,
+        lambda value: value["result"]["trace"]["probes"][2].update(
+            counterexample_frames=[4]
+        ),
+    )
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "trace_stale"
 
 
 @pytest.mark.parametrize(
@@ -2717,8 +2804,43 @@ def test_reel_strips_name_every_frame_from_the_captures(
                 f"/probes/{row_index}/frames/2/name",
             ],
         }
+        # And the packet list's columns and direction from packets.json.
+        assert rows[1]["info"] == {
+            "t": "41000 \u2192 443 [ACK] frame 2",
+            "src": ["ptr", _PACKETS, f"/probes/{row_index}/frames/1/info"],
+        }
+        assert [row["dir"] for row in rows[:3]] == ["out", "in", "out"]
+        assert rows[0]["length"]["v"] == 60
+        assert strip["client"]["t"] == "192.0.2.1"
     assert all("frame_rows" not in probe for probe in receipt["probes"])
     check_sources(root, {"reel.json": reel})
+
+
+# Edits of the fixture's packets.json that no longer match captures.json.
+_STALE_PACKETS: dict[str, Callable[[Any], None]] = {
+    "other_capture": lambda value: value["probes"][1].update(
+        capture_sha256="0" * 64
+    ),
+    "missing_frame": lambda value: value["probes"][1]["frames"].pop(),
+    "unknown_direction": lambda value: value["probes"][1]["frames"][0].update(
+        direction="up"
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "edit", list(_STALE_PACKETS.values()), ids=list(_STALE_PACKETS)
+)
+def test_a_packet_list_that_disagrees_with_the_captures_is_stale(
+    fixture: Fixture, edit: Callable[[Any], None]
+) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    root = fixture.build()
+    _edit(root / _PACKETS, edit)
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "packets_stale"
 
 
 @pytest.mark.parametrize(
@@ -2778,19 +2900,12 @@ def test_repair_traces_and_feedback_do_not_move_the_pick(
     # Traces of both candidates, one refused by the trace budget.
     for run_id, item_id, result in (
         (_ANCHOR, "i-0002", {"status": "trace_limit"}),
-        (_MID, "i-0001", {"exact": False}),
+        (_MID, "i-0001", None),
     ):
-        receipt = f"docs/results/{run_id}/scored/receipts/C4/{item_id}.json"
-        _write(
-            root / f"docs/decisions/evidence/web/traces/{run_id}/C4/"
-            f"{item_id}.json",
-            {
-                "receipt_file_sha256": hashlib.sha256(
-                    (root / receipt).read_bytes()
-                ).hexdigest(),
-                "receipt_path": receipt,
-                "result": result,
-            },
+        _trace(
+            root,
+            f"docs/results/{run_id}/scored/receipts/C4/{item_id}.json",
+            result,
         )
     # The feedback probe's frames change.
     _edit(

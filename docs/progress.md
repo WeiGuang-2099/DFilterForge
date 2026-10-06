@@ -4,15 +4,17 @@ Last updated: 2026-10-06
 
 ## Current slice
 
-Both halves of the locked test result are measured. The baselines were
-scored on 2026-10-02, and the dev repair round, the dev pool and the test
-seeds are on `main` through PR #21 (97531b6). The owner sent the test repair
-round from the main checkout at 97531b6 on 2026-10-05. On `test-repair-round`
-it is published, scored, summarized and pooled, the repair half of
-[`results/locked-test-v1.md`](results/locked-test-v1.md) and the
-[repair note's](decisions/repair-round.md) After, test hold its numbers, and
-the web exporter reads the round. After that branch merges, the next step is
-the hosted site (Planned next 2).
+PR #22 merged `test-repair-round` into `main` as 1ec918c on 2026-10-06, and
+the owner reports hosted CI green on the PR and on `main`. Both halves of the
+locked test result are on `main`. The next slice is the hosted site (Planned
+next 2). Branch `site-deploy` adds the `pages` job to `ci.yml`: on a push to
+`main`, after every gate passes, it builds and tests the site under
+`/DFilterForge` and deploys it to GitHub Pages at
+https://weiguang-2099.github.io/DFilterForge/. Before it merges, the owner
+makes the repository public and sets its Pages source to GitHub Actions
+([web site note](decisions/web-site.md), Deploy). No page reads
+`board.json` or `reel.json` yet. Training data is built on CPU alongside the
+site; GPU spend waits until the site is live (Planned next 3).
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -2520,44 +2522,38 @@ and pools the round and writes it up.
   move the pick in either direction, and correct the wording of the results
   page, the README, the two web notes, the repair note and this entry.
 
+## PR #22 merged: 2026-10-06
+
+PR #22 merged `test-repair-round` into `main` as 1ec918c; the owner reports
+hosted CI green on the PR and on `main`. It adds the test repair round and
+its pool: counterexample repair@1 0.467 [0.347, 0.590], 35/75, against bare
+0.280 (21/75) and resample 0.053 (4/75)
+([`repair-pool/test.json`](results/repair-pool/test.json)); the repair half
+of [`results/locked-test-v1.md`](results/locked-test-v1.md); and the
+exporter's Reel step 5 turn and methodology repair line.
+
 ## Planned next
 
-1. The [repair round](decisions/repair-round.md) as registered and amended
-   (OD5 and OD9, the owner's rulings of 2026-10-04 and 2026-10-05; OD6 to
-   OD8, maintainer defaults the owner confirmed on 2026-10-05), in this
-   order; its "Commands" section gives each command. Steps 1 to 6 are done
-   (the sections above). PR #21 merged `dev-pool-test-seeds` into `main` as
-   97531b6 before the owner's test command.
-   1. **Done: the owner's dev frontier arms on NextBit.** The dev command
-      ran from the main checkout at 60d2421 on 2026-10-05 and answered all
-      three `-nb` arm runs, 11 of 11 each, with no outage re-run.
-   2. **Done: the maintainer's frontier dev round, then the dev pool.**
-      d32efb3 and e93c39f on `dev-pool-test-seeds`, each committed whole.
-   3. **Done: a correction for the defect the dev round showed.** OD5 took
-      the first one, the frontier arms' outage on DeepInfra (725bb5e,
-      c57142a and 1d07612, on `main`). The dev pool showed the second:
-      `repair-pool` counted model-case cells. The owner ruled OD9, and
-      890a358 and be9f611 correct and register it, before any test repair
-      prompt was prepared. No other correction is committed.
-   4. **Done: test seeds and admission.** The 12 test arm prompt sets are
-      seeded in `docs/results/<arm run id>/`, a pass's three in one commit
-      (e8f0ce9, 4ff9e99, fd9237e, b7a3e4e), the frontier's under their
-      registered ids (OD8). Their `prepare.json` digests are admitted in
-      `src/dfilterforge/held_out_freeze.json` in a commit of its own
-      (d95483a).
-   5. **Done: the owner's test round, then the maintainer's publish, score,
-      `repair` and pool for test.** `repair_arms.py --split test` ran from
-      the main checkout at 97531b6 on 2026-10-05, the frontier arms on the
-      NextBit config at the 0.50 cap under their registered ids (OD5, OD8),
-      with no outage re-run. ef9de37, c40108c, 093143a and 4fc589f on
-      `test-repair-round` commit each round whole, and 9d10c9d the pool.
-   6. **Done: the repair half of
-      [`results/locked-test-v1.md`](results/locked-test-v1.md),** which
-      discloses the move in its Limits, on `test-repair-round` in e0b1a65.
-2. The hosted static page generated from receipts, with its Disproof Reel
-   chosen by the registered rule `reel-v1`.
-3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
-   control, three seeds each; GRPO variance gate measured.
+The owner's rulings of 2026-10-06 fix three points of this order. The site
+is live when item 2 is deployed: the Reel on `/`, `/board`, `/methodology`
+and the README GIF; GPU spend waits until then. The small model is
+Qwen/Qwen3-1.7B, the hybrid model with thinking off. The training data is
+built on CPU alongside the site. The rest is the plan of record, except
+where an item says it is the maintainer's order.
+
+1. Done: the [repair round](decisions/repair-round.md), dev and test (PRs
+   #20 to #22).
+2. The hosted site: the Disproof Reel on `/`, chosen by the registered rule
+   `reel-v1`, `/board`, `/methodology` and the README GIF, deployed to
+   GitHub Pages by the `pages` job. The receipts and cases pages follow
+   as site work once it is live, in the maintainer's order; they do not
+   gate item 3.
+3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
+   scorer, at most 3 USD, only after item 2 is live. Where it is served and
+   trained is not decided yet (owner, 2026-10-06).
+4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
+   verifier-labelled DPO and a continued-SFT control, three seeds each; the
+   GRPO gate measured.
 
 ## Blocked or unverified
 
@@ -2567,23 +2563,13 @@ and pools the round and writes it up.
   partial measurements are not release evidence.
 - Dev has 12 ready cases, so every dev comparison is inconclusive. The test
   repair round is measured, but 9 of its 12 per-model comparisons are
-  inconclusive. SFT, DPO, GRPO and the Pilot Go/No-Go decision are
-  unmeasured.
+  inconclusive. SFT, DPO and GRPO are unmeasured.
 - The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
   page applies it to the other three models as a named extrapolation.
 - Only the baseline half of `docs/results/locked-test-v1.md` was generated,
   by a local, uncommitted script whose guards now refuse the committed repair
   runs; the repair half is typed. No CI check ties either half to its files;
-  CI checks the files themselves. PR #17 merged the `score-test-baselines`
-  branch into main (7a8ec03).
-- `repair-arms` was pushed and merged into `main` by PR #18 as bff373c. CI
-  runs on every pull request and every push to `main` (`ci.yml`), but no
-  result of it on PR #18 is recorded here. PR #20 merged `dev-repair-round`
-  into `main` as 60d2421. `dev-pool-test-seeds` was pushed on 2026-10-05, at
-  the owner's request, while Docker's engine did not answer. Its full suite
-  and docs-mounted steps ran in the test image at be9f611 and d95483a, and
-  its repair loops at d95483a; the four CI gates, the `uv.lock` comparison
-  and a score loop after e93c39f run only in CI on its pull request.
+  CI checks the files themselves.
 - `scripts/repair_arms.py` has sent paid calls three times: on the dev split,
   the owner's batch of 2026-10-04 ("Dev repair rounds published" above) and
   its re-run of 2026-10-05, whose committed runs are only the three frontier
@@ -2592,27 +2578,17 @@ and pools the round and writes it up.
   sending path is tested only against a scripted call step,
   its keyless path against the real call step, and its invoker's key
   withholding against a stub child.
-- The repair tooling records only gate stops as an arm not run
-  (`repair --not-run`, at most two arms). An arm not run after an outage on
-  its re-run or a refusal, or a round with no arm run, still has no record in
-  the tooling; the owner rules on it before that round's summary.
-  - The dev frontier outage: the six DeepInfra runs are reported not run
-    and kept as evidence. The owner's OD5 (725bb5e) moves the frontier arms
-    to NextBit. Replacing the six with the `-nb` runs rests on OD6, a
-    maintainer default the owner confirmed on 2026-10-05. The `-nb` runs
-    were sent on 2026-10-05 and replace the six in the frontier round
-    (d32efb3).
-  - The general gap remains. A second outage on NextBit, which OD7 leaves
-    not run, would again have no record in the tooling.
-- The Web remains recorded-only; Linux CI teardown and the production
-  container were not re-verified, so no live Web job boundary is enabled.
+- The repair tooling records only gate stops as not run; no further round
+  is planned, so the gap stays unfixed.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 
 ## Next verification
 
-1. Locked-test run replayed offline from a clean checkout without an API key.
-2. Web numbers checked against the scored summary by a CI test.
+1. The numbers of `results/locked-test-v1.md` tied to their files by a CI
+   check.
+2. New pages (the Reel, `/board`) render every number through the sourced
+   components, so `consistency.spec.ts` checks them.
 
 ## Web data path: 2026-10-01, branch web-data
 

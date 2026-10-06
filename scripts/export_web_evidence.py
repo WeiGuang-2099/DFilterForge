@@ -14,6 +14,12 @@ each capture hash against the committed anchors: the test-freeze adequacy
 receipt for all eight captures, every committed scored specification that
 names a probe, and the held-out freeze digests for the test captures.
 
+``packets`` records each capture's packet list as the pinned tshark shows
+it (``dfilterforge.packet_list``). ``trace`` replays one committed C3 or C4
+answer with the scorer's replay code and records its predicate trace, each
+leaf of both filters at every frame where they disagree. ``check`` rebuilds
+both and compares them byte for byte, so it needs the test image's tshark.
+
 Exit status: 0 when the file is written or every check holds, 1 when a check
 fails, 2 when the evidence cannot be built or an input cannot be read.
 """
@@ -26,26 +32,46 @@ fails, 2 when the evidence cannot be built or an input cannot be read.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 from tempfile import TemporaryDirectory
 from typing import cast, NoReturn
 
+from pydantic import ValidationError
+
 from dfilterforge.benchmark import BenchmarkProbe
 from dfilterforge.canonical import canonical_json
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.evaluation import EvaluationReceiptV1
+from dfilterforge.evaluation import SemanticSpecV1
+from dfilterforge.intent_ir import IntentIrV1
+from dfilterforge.live import LiveError
 from dfilterforge.model_feedback import FEEDBACK_PROBE_IDS
 from dfilterforge.model_feedback import generate_feedback_probes
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.model_split import ModelSplit
+from dfilterforge.packet_list import packet_table
+from dfilterforge.packet_list import PacketListRunner
+from dfilterforge.replay import replay_live
 from dfilterforge.witnesses import WITNESS_NAMES
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SCHEMA_VERSION = "capture-frames/1.0"
 CAPTURES_PATH = Path("docs/decisions/evidence/web/captures.json")
+PACKETS_PATH = Path("docs/decisions/evidence/web/packets.json")
+TRACES_PATH = Path("docs/decisions/evidence/web/traces")
+_PACKETS_SCHEMA = "capture-packets/1.0"
+_TRACE_SCHEMA = "web-trace/1.0"
+_RUN_ID = re.compile(
+    r"(dev|test)-[a-z0-9][a-z0-9.-]{0,31}-[0-9]{4}-[0-9]{2}-[0-9]{2}"
+)
+_CONDITION = re.compile(r"C[34]")
+_ITEM_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 GATE_PATH = Path("docs/decisions/evidence/test-freeze-gate.json")
 FREEZE_PATH = Path("src/dfilterforge/held_out_freeze.json")
 RESULTS_PATH = Path("docs/results")
@@ -63,6 +89,13 @@ _NOTES: tuple[str, ...] = (
     "witness frame belongs to the witness tail and is named by its witness.",
     "Built in pure Python by dfilterforge.model_split and "
     "dfilterforge.model_feedback; no tshark run and no packet bytes.",
+)
+_PACKET_NOTES: tuple[str, ...] = (
+    "Each frame's packet-list columns as the pinned tshark prints them with "
+    "name resolution off: frame.number, frame.time_relative, the Source, "
+    "Destination and Protocol columns, frame.len and the Info column.",
+    "client is the address seen in most frames as source or destination, "
+    "ties to the lowest; direction is out from it, in to it, or other.",
 )
 
 
@@ -159,14 +192,19 @@ def probe_row(
     }
 
 
-def build_captures() -> dict[str, object]:
-    """Regenerates the eight curated captures and returns their frame tables.
+Curated = list[tuple[BenchmarkProbe, str, str]]
+
+
+@contextmanager
+def curated() -> Generator[tuple[Curated, Path], None, None]:
+    """Regenerates the eight curated captures for one block of work.
 
     The scored probes come from the split generator and the feedback probes
     from the feedback generator, the same code that builds them for scoring
-    and for the repair round, so no probe ID is listed here. Rows run dev
-    then test; within a split, the scored probes in the split generator's
-    order, then the feedback probe.
+    and for the repair round, so no probe ID is listed here. Yields each
+    probe with its split and role, dev then test; within a split, the scored
+    probes in the split generator's order, then the feedback probe; and the
+    directory that holds the scored captures.
     """
     with TemporaryDirectory(prefix="dfilterforge-web-evidence-") as staging:
         split = generate_model_split(Path(staging))
@@ -177,22 +215,117 @@ def build_captures() -> dict[str, object]:
             for expected in case.spec.probes
         }
         feedback_by_id = {probe.probe_id: probe for probe in feedback.probes}
-        rows: list[dict[str, object]] = []
+        rows: Curated = []
         for name in _SPLITS:
             rows.extend(
-                probe_row(probe, name, "scored")
+                (probe, name, "scored")
                 for probe in split.probes
                 if scored_splits[probe.probe_id] == name
             )
             rows.append(
-                probe_row(
-                    feedback_by_id[FEEDBACK_PROBE_IDS[name]], name, "feedback"
-                )
+                (feedback_by_id[FEEDBACK_PROBE_IDS[name]], name, "feedback")
             )
+        yield rows, Path(staging) / "captures"
+
+
+def build_captures() -> dict[str, object]:
+    """Regenerates the eight curated captures and returns their frame tables."""
+    with curated() as (probes, _):
+        rows = [probe_row(*probe) for probe in probes]
     return {
         "schema_version": _SCHEMA_VERSION,
         "probes": rows,
         "notes": list(_NOTES),
+    }
+
+
+def build_packets(runner: PacketListRunner) -> dict[str, object]:
+    """The packet list of every curated capture, in captures.json's order."""
+    with curated() as (probes, _):
+        rows = [
+            {
+                "probe_id": probe.probe_id,
+                "capture_sha256": hashlib.sha256(
+                    probe.capture_path.read_bytes()
+                ).hexdigest(),
+                **packet_table(probe.capture_path, runner),
+            }
+            for probe, _, _ in probes
+        ]
+    return {
+        "schema_version": _PACKETS_SCHEMA,
+        "tshark_version": runner.version(),
+        "probes": rows,
+        "notes": list(_PACKET_NOTES),
+    }
+
+
+def trace_path(run_id: str, condition: str, item_id: str) -> Path:
+    """Where the trace of one answer is committed; refuses unsafe names."""
+    if not (
+        _RUN_ID.fullmatch(run_id)
+        and _CONDITION.fullmatch(condition)
+        and _ITEM_ID.fullmatch(item_id)
+    ):
+        raise EvidenceError("answer_unknown", "No such run, condition or item")
+    return TRACES_PATH / run_id / condition / f"{item_id}.json"
+
+
+def _case_id(outcomes: Path, condition: str, item_id: str) -> str:
+    """The case of one answer, from its run's outcome rows."""
+    for line in outcomes.read_text(encoding="utf-8").splitlines():
+        row = _mapping(json.loads(line), outcomes.name)
+        if (row.get("condition"), row.get("item_id")) == (condition, item_id):
+            return cast(str, row.get("case_id"))
+    raise EvidenceError("answer_unknown", f"{condition} {item_id} has no row")
+
+
+def build_trace(
+    repo: Path, target: Path, captures: Path, runner: PacketListRunner
+) -> dict[str, object]:
+    """Replays one typed answer and records its predicate trace.
+
+    The receipt, specification and intent are the committed ones of the
+    answer that ``target``, a path from ``trace_path``, names. The replay
+    must compile the intent to the receipt's filter and give its frames
+    again; the trace lists each leaf of both filters at every frame where
+    they disagree. A trace over the scorer's budget is recorded as refused.
+    """
+    run_id, condition, name = target.parts[-3:]
+    scored = RESULTS_PATH / run_id / "scored"
+    receipt = scored / "receipts" / condition / name
+    data = (repo / receipt).read_bytes()
+    case_id = _case_id(repo / scored / "outcomes.jsonl", condition, name[:-5])
+    try:
+        replay, _ = replay_live(
+            EvaluationReceiptV1.model_validate_json(data),
+            SemanticSpecV1.model_validate_json(
+                (repo / scored / "specs" / f"{case_id}.json").read_bytes()
+            ),
+            IntentIrV1.model_validate_json(
+                (repo / scored / "intents" / condition / name).read_bytes()
+            ),
+            captures,
+            runner=runner,
+        )
+        trace = replay.trace
+        result: dict[str, object] = {
+            "exact": replay.exact,
+            "trace": None if trace is None else trace.model_dump(mode="json"),
+        }
+    except ValidationError:
+        raise EvidenceError(
+            "schema_invalid", f"{receipt.as_posix()} cannot be replayed"
+        ) from None
+    except LiveError as error:
+        if error.code != "trace_limit":
+            raise
+        result = {"status": "trace_limit"}
+    return {
+        "schema_version": _TRACE_SCHEMA,
+        "receipt_path": receipt.as_posix(),
+        "receipt_file_sha256": hashlib.sha256(data).hexdigest(),
+        "result": result,
     }
 
 
@@ -313,11 +446,32 @@ def check(repo: Path, document: Mapping[str, object]) -> list[str]:
     return failures + anchor_failures(repo, document)
 
 
-def _summary(document: Mapping[str, object]) -> dict[str, object]:
+def tshark_failures(repo: Path, runner: PacketListRunner) -> list[str]:
+    """Rebuilds packets.json and every committed trace, and compares them."""
+    committed = repo / PACKETS_PATH
+    if not committed.is_file():
+        failures = [f"{PACKETS_PATH.as_posix()} is missing"]
+    elif committed.read_bytes() != render(build_packets(runner)):
+        failures = [f"{PACKETS_PATH.as_posix()} differs from a regeneration"]
+    else:
+        failures = []
+    with curated() as (_, captures):
+        for path in sorted((repo / TRACES_PATH).glob("*/*/*.json")):
+            run_id, condition, name = path.relative_to(repo).parts[-3:]
+            target = trace_path(run_id, condition, name.removesuffix(".json"))
+            rebuilt = build_trace(repo, target, captures, runner)
+            if path.read_bytes() != render(rebuilt):
+                failures.append(f"{target.as_posix()} differs from a replay")
+    return failures
+
+
+def _summary(
+    document: Mapping[str, object], path: Path = CAPTURES_PATH
+) -> dict[str, object]:
     data = render(document)
     rows = _rows(document)
     return {
-        "path": CAPTURES_PATH.as_posix(),
+        "path": path.as_posix(),
         "probes": len(rows),
         "frames": sum(
             len(_items(row["frames"], "frames")) for row in rows.values()
@@ -333,23 +487,49 @@ def _print_error(code: str, message: str) -> None:
     print(canonical_json(envelope), file=sys.stderr)
 
 
+def _write(repo: Path, path: Path, document: Mapping[str, object]) -> None:
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(render(document))
+
+
+def _tshark_run(repo: Path, arguments: argparse.Namespace) -> list[str]:
+    runner = PacketListRunner()
+    if arguments.command == "trace":
+        path = trace_path(arguments.run, arguments.condition, arguments.item)
+        with curated() as (_, captures):
+            _write(repo, path, build_trace(repo, path, captures, runner))
+        print(canonical_json({"path": path.as_posix()}))
+        return []
+    document = build_packets(runner)
+    committed = repo / PACKETS_PATH
+    if cast(bool, arguments.write):
+        _write(repo, PACKETS_PATH, document)
+    elif not committed.is_file() or committed.read_bytes() != render(document):
+        return [f"{PACKETS_PATH.as_posix()} differs from a regeneration"]
+    print(canonical_json(_summary(document, PACKETS_PATH)))
+    return []
+
+
 def _run(arguments: argparse.Namespace) -> int:
     repo = cast(Path, arguments.repo)
-    document = build_captures()
-    if cast(bool, getattr(arguments, "write", False)):
-        failures = anchor_failures(repo, document)
-        if not failures:
-            target = repo / CAPTURES_PATH
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(render(document))
+    if arguments.command in ("packets", "trace"):
+        failures = _tshark_run(repo, arguments)
     else:
-        failures = check(repo, document)
+        document = build_captures()
+        if cast(bool, getattr(arguments, "write", False)):
+            failures = anchor_failures(repo, document)
+            if not failures:
+                _write(repo, CAPTURES_PATH, document)
+        else:
+            failures = check(repo, document)
+        if arguments.command == "check":
+            failures += tshark_failures(repo, PacketListRunner())
+        if not failures:
+            print(canonical_json(_summary(document)))
     for failure in failures:
         _print_error("check_failed", failure)
-    if failures:
-        return _FAILED
-    print(canonical_json(_summary(document)))
-    return 0
+    return _FAILED if failures else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -376,7 +556,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode = captures.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--check", action="store_true")
-    commands.add_parser("check", help="check every committed web evidence")
+    packets = commands.add_parser(
+        "packets", help="write or check the packet lists, with tshark"
+    )
+    mode = packets.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--write", action="store_true")
+    mode.add_argument("--check", action="store_true")
+    trace = commands.add_parser(
+        "trace", help="write one typed answer's predicate trace, with tshark"
+    )
+    for name in ("run", "condition", "item"):
+        trace.add_argument(f"--{name}", required=True)
+    commands.add_parser(
+        "check", help="check every committed web evidence, with tshark"
+    )
     arguments = parser.parse_args(argv)
     try:
         return _run(arguments)

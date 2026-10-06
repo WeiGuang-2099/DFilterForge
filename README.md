@@ -144,8 +144,7 @@ An interrupted stability run can resume from a matching local checkpoint. Use
 
 CI runs the semantic oracle and mutation checks. The longer complete stability
 matrix is an explicit release measurement. Passing these synthetic gates does
-not measure model compile validity, silent-wrong rate, or the complete Pilot
-Go/No-Go decision.
+not measure model compile validity or silent-wrong rate.
 
 ## Hosted model run
 

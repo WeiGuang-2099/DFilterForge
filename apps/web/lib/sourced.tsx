@@ -40,23 +40,28 @@ function permalink(source: Src): string | null {
   return repositoryFile(file);
 }
 
+// The kinds that show a string code as fixed words.
+type WordKind = 'text' | 'unmeasured' | 'split' | 'outcome' | 'frame_kind' | 'join';
+
 interface NumProps {
   readonly node: NumNode;
   // Leaves out fmt's string-only kinds, which throw on every value a NumNode
   // holds. A kind added to FMT_KINDS fails typecheck in tests/fmt.spec.ts
   // until it is either excluded here or listed in NUM_KIND_SAMPLES there.
-  readonly kind: Exclude<FmtKind, 'text' | 'unmeasured' | 'split' | 'outcome'>;
+  readonly kind: Exclude<FmtKind, WordKind>;
+  /** False where many numbers stand close, as on the ladder's axis. */
+  readonly link?: boolean;
 }
 
 /** Renders a sourced number, boolean or integer list, linked to its file. */
-export function Num({node, kind}: NumProps): ReactNode {
+export function Num({node, kind, link = true}: NumProps): ReactNode {
   const json = JSON.stringify(node.v);
   const value = (
     <data data-fmt={kind} data-src={JSON.stringify(node.src)} data-v={json} value={json}>
       {fmt(node.v, kind)}
     </data>
   );
-  const href = permalink(node.src);
+  const href = link ? permalink(node.src) : null;
   return href === null ? (
     value
   ) : (
@@ -126,6 +131,24 @@ export function Outcome({node}: StrProps): ReactNode {
   return (
     <span data-fmt="outcome" data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
       {fmt(node.t, 'outcome')}
+    </span>
+  );
+}
+
+interface WordProps {
+  readonly node: StrNode;
+  readonly kind: 'frame_kind' | 'join';
+}
+
+/**
+ * Renders a code as the fixed words fmt() gives its kind: a frame's kind,
+ * or an IR's root operator. The node keeps the code in data-v, and a code
+ * fmt does not know fails the build.
+ */
+export function Word({node, kind}: WordProps): ReactNode {
+  return (
+    <span data-fmt={kind} data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
+      {fmt(node.t, kind)}
     </span>
   );
 }
