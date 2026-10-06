@@ -1,0 +1,4866 @@
+{
+  "notes": [
+    "Each frame's packet-list columns as the pinned tshark prints them with name resolution off: frame.number, frame.time_relative, the Source, Destination and Protocol columns, frame.len and the Info column.",
+    "client is the address seen in most frames as source or destination, ties to the lowest; direction is out from it, in to it, or other."
+  ],
+  "probes": [
+    {
+      "capture_sha256": "72c24cc3a61b0c0f5a2e9d80ada806fa0bb26443a40a7bd29bc3c58514ab8c9e",
+      "client": "192.0.2.111",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "41111 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 1,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "Standard query response 0x0070 A probe-110-2.example",
+          "length": 79,
+          "n": 2,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.3",
+          "info": "Standard query 0x0071 A probe-110-3.example",
+          "length": 79,
+          "n": 3,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.4",
+          "info": "Standard query 0x0072 A probe-110-4.example",
+          "length": 93,
+          "n": 4,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.5",
+          "info": "41115 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 5,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "41116 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 6,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41117 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 7,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "41118 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 8,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "41119 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 9,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "41120 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 10,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "41121 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "198.51.100.11",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41122 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 12,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.13",
+          "info": "41123 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 13,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "41124 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 14,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "41125 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 15,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "Standard query response 0x007e No such name A probe-110-16.example",
+          "length": 80,
+          "n": 16,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.17",
+          "info": "Standard query 0x007f AAAA probe-110-17.example",
+          "length": 80,
+          "n": 17,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.18",
+          "info": "Standard query 0x0080 A probe-110-18.example, \"QM\" question",
+          "length": 80,
+          "n": 18,
+          "protocol": "MDNS",
+          "src": "192.0.2.111",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.19",
+          "info": "41129 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 19,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "Standard query 0x0082 A probe-110-20.example",
+          "length": 80,
+          "n": 20,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "Standard query 0x0083 A probe-110-21.example",
+          "length": 80,
+          "n": 21,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "443 \u2192 41132 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 22,
+          "protocol": "TCP",
+          "src": "198.51.100.22",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "443 \u2192 41132 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 23,
+          "protocol": "TCP",
+          "src": "198.51.100.22",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.24",
+          "info": "41134 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 24,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.24",
+          "info": "41134 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 25,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "443 \u2192 41136 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 26,
+          "protocol": "TCP",
+          "src": "198.51.100.26",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.26",
+          "info": "41136 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 27,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.28",
+          "info": "41138 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 28,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41139 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41139 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "443 \u2192 41141 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "198.51.100.31",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.32",
+          "info": "41142 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "41143 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.34",
+          "info": "41144 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "192.0.2.111",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.35",
+          "info": "41145 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41146 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.37",
+          "info": "41147 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41148 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.39",
+          "info": "41149 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "Standard query 0x0096 MX witness-110-40.example",
+          "length": 82,
+          "n": 40,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "Standard query response 0x0097 Server failure A witness-110-41.example",
+          "length": 82,
+          "n": 41,
+          "protocol": "DNS",
+          "src": "198.51.100.41",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "Standard query response 0x0098 A witness-110-42.example",
+          "length": 82,
+          "n": 42,
+          "protocol": "DNS",
+          "src": "198.51.100.42",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "Standard query response 0x0099 A witness-110-43.example, \"QM\" question",
+          "length": 82,
+          "n": 43,
+          "protocol": "MDNS",
+          "src": "198.51.100.43",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "Standard query response 0x009a A witness-110-44.example",
+          "length": 82,
+          "n": 44,
+          "protocol": "DNS",
+          "src": "198.51.100.44",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "Standard query 0x009b A witness-110-45.example",
+          "length": 82,
+          "n": 45,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "Standard query 0x009c A witness-110-46.example",
+          "length": 82,
+          "n": 46,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41157 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 47,
+          "protocol": "UDP",
+          "src": "192.0.2.111",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.48",
+          "info": "41158 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 48,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41159 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 49,
+          "protocol": "TCP",
+          "src": "198.51.100.49",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00a0 A witness-110-50.example",
+          "length": 82,
+          "n": 50,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.51",
+          "info": "41161 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 51,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.52",
+          "info": "41162 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 52,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00a3 A witness-110-53.example",
+          "length": 82,
+          "n": 53,
+          "protocol": "DNS",
+          "src": "192.0.2.111",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.111",
+          "info": "443 \u2192 41164 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 54,
+          "protocol": "TCP",
+          "src": "198.51.100.54",
+          "time": "0.053000000"
+        }
+      ],
+      "probe_id": "semantic-11"
+    },
+    {
+      "capture_sha256": "f4845f3241c5ad7db760e73b9fbdc0da8e2268a34b3278f88d86b21abb6a7b57",
+      "client": "192.0.2.117",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "41117 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 1,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "Standard query response 0x0076 No such name A probe-116-2.example",
+          "length": 79,
+          "n": 2,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.3",
+          "info": "Standard query 0x0077 AAAA probe-116-3.example",
+          "length": 79,
+          "n": 3,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.4",
+          "info": "Standard query 0x0078 A probe-116-4.example, \"QM\" question",
+          "length": 79,
+          "n": 4,
+          "protocol": "MDNS",
+          "src": "192.0.2.117",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.5",
+          "info": "41121 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 5,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "Standard query 0x007a A probe-116-6.example",
+          "length": 79,
+          "n": 6,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41123 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 7,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "Standard query response 0x007c A probe-116-8.example",
+          "length": 79,
+          "n": 8,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "Standard query 0x007d A probe-116-9.example",
+          "length": 79,
+          "n": 9,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "Standard query 0x007e A probe-116-10.example",
+          "length": 94,
+          "n": 10,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.11",
+          "info": "41127 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.12",
+          "info": "41128 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 12,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.13",
+          "info": "41129 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 13,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "41130 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 14,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "41131 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 15,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "41132 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 16,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "41133 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 17,
+          "protocol": "TCP",
+          "src": "198.51.100.17",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41134 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 18,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.19",
+          "info": "41135 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 19,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "41136 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 20,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "41137 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 21,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.22",
+          "info": "41138 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 22,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "443 \u2192 41139 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 23,
+          "protocol": "TCP",
+          "src": "198.51.100.23",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "443 \u2192 41139 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 24,
+          "protocol": "TCP",
+          "src": "198.51.100.23",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "41141 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 25,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "41141 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 26,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "443 \u2192 41143 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 27,
+          "protocol": "TCP",
+          "src": "198.51.100.27",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.27",
+          "info": "41143 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 28,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41145 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.30",
+          "info": "41146 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.30",
+          "info": "41146 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "443 \u2192 41148 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "198.51.100.32",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "41149 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.34",
+          "info": "41150 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.35",
+          "info": "41151 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "192.0.2.117",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41152 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.37",
+          "info": "41153 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41154 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.39",
+          "info": "41155 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "41156 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "Standard query 0x009d MX witness-116-41.example",
+          "length": 82,
+          "n": 41,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "Standard query response 0x009e Server failure A witness-116-42.example",
+          "length": 82,
+          "n": 42,
+          "protocol": "DNS",
+          "src": "198.51.100.42",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "Standard query response 0x009f A witness-116-43.example",
+          "length": 82,
+          "n": 43,
+          "protocol": "DNS",
+          "src": "198.51.100.43",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "Standard query response 0x00a0 A witness-116-44.example, \"QM\" question",
+          "length": 82,
+          "n": 44,
+          "protocol": "MDNS",
+          "src": "198.51.100.44",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "Standard query response 0x00a1 A witness-116-45.example",
+          "length": 82,
+          "n": 45,
+          "protocol": "DNS",
+          "src": "198.51.100.45",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "Standard query 0x00a2 A witness-116-46.example",
+          "length": 82,
+          "n": 46,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.47",
+          "info": "Standard query 0x00a3 A witness-116-47.example",
+          "length": 82,
+          "n": 47,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41164 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 48,
+          "protocol": "UDP",
+          "src": "192.0.2.117",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.49",
+          "info": "41165 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 49,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41166 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 50,
+          "protocol": "TCP",
+          "src": "198.51.100.50",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00a7 A witness-116-51.example",
+          "length": 82,
+          "n": 51,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.52",
+          "info": "41168 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 52,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.53",
+          "info": "41169 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 53,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00aa A witness-116-54.example",
+          "length": 82,
+          "n": 54,
+          "protocol": "DNS",
+          "src": "192.0.2.117",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.117",
+          "info": "443 \u2192 41171 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 55,
+          "protocol": "TCP",
+          "src": "198.51.100.55",
+          "time": "0.054000000"
+        }
+      ],
+      "probe_id": "semantic-17"
+    },
+    {
+      "capture_sha256": "510cc21324a6c1439d01747bef6d35d20c55876e3ee06122d39759b7b2211a29",
+      "client": "192.0.2.123",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "41123 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 1,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "41124 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 2,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "41125 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 3,
+          "protocol": "TCP",
+          "src": "198.51.100.3",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41126 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 4,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.5",
+          "info": "41127 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 5,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "41128 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 6,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41129 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 7,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "Standard query response 0x0082 No such name A probe-122-8.example",
+          "length": 79,
+          "n": 8,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "Standard query 0x0083 AAAA probe-122-9.example",
+          "length": 79,
+          "n": 9,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "Standard query 0x0084 A probe-122-10.example, \"QM\" question",
+          "length": 80,
+          "n": 10,
+          "protocol": "MDNS",
+          "src": "192.0.2.123",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.11",
+          "info": "41133 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.12",
+          "info": "Standard query 0x0086 A probe-122-12.example",
+          "length": 80,
+          "n": 12,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.13",
+          "info": "41135 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 13,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "Standard query response 0x0088 A probe-122-14.example",
+          "length": 80,
+          "n": 14,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "Standard query 0x0089 A probe-122-15.example",
+          "length": 80,
+          "n": 15,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "Standard query 0x008a A probe-122-16.example",
+          "length": 94,
+          "n": 16,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.17",
+          "info": "41139 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 17,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.18",
+          "info": "41140 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 18,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.19",
+          "info": "41141 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 19,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "41142 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 20,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "41143 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 21,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.22",
+          "info": "41144 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 22,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.23",
+          "info": "41145 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 23,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.24",
+          "info": "41146 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 24,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "Standard query 0x0093 A probe-122-25.example",
+          "length": 94,
+          "n": 25,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.26",
+          "info": "Standard query 0x0094 A probe-122-26.example",
+          "length": 80,
+          "n": 26,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.27",
+          "info": "Standard query response 0x0095 A probe-122-27.example",
+          "length": 80,
+          "n": 27,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.28",
+          "info": "41150 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 28,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "443 \u2192 41151 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "198.51.100.29",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "443 \u2192 41151 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "198.51.100.29",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.31",
+          "info": "41153 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.31",
+          "info": "41153 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "443 \u2192 41155 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "198.51.100.33",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "41155 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.35",
+          "info": "41157 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41158 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41158 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "443 \u2192 41160 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "TCP",
+          "src": "198.51.100.38",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.39",
+          "info": "41161 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "41162 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41163 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 41,
+          "protocol": "TCP",
+          "src": "192.0.2.123",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.42",
+          "info": "41164 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 42,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.43",
+          "info": "41165 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 43,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.44",
+          "info": "41166 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 44,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "41167 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 45,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "41168 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 46,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.47",
+          "info": "Standard query 0x00a9 MX witness-122-47.example",
+          "length": 82,
+          "n": 47,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "Standard query response 0x00aa Server failure A witness-122-48.example",
+          "length": 82,
+          "n": 48,
+          "protocol": "DNS",
+          "src": "198.51.100.48",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "Standard query response 0x00ab A witness-122-49.example",
+          "length": 82,
+          "n": 49,
+          "protocol": "DNS",
+          "src": "198.51.100.49",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "Standard query response 0x00ac A witness-122-50.example, \"QM\" question",
+          "length": 82,
+          "n": 50,
+          "protocol": "MDNS",
+          "src": "198.51.100.50",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "Standard query response 0x00ad A witness-122-51.example",
+          "length": 82,
+          "n": 51,
+          "protocol": "DNS",
+          "src": "198.51.100.51",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.52",
+          "info": "Standard query 0x00ae A witness-122-52.example",
+          "length": 82,
+          "n": 52,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.53",
+          "info": "Standard query 0x00af A witness-122-53.example",
+          "length": 82,
+          "n": 53,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41176 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 54,
+          "protocol": "UDP",
+          "src": "192.0.2.123",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.55",
+          "info": "41177 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 55,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.054000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41178 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 56,
+          "protocol": "TCP",
+          "src": "198.51.100.56",
+          "time": "0.055000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00b3 A witness-122-57.example",
+          "length": 82,
+          "n": 57,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.056000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.58",
+          "info": "41180 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 58,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.057000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.59",
+          "info": "41181 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 59,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.058000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00b6 A witness-122-60.example",
+          "length": 82,
+          "n": 60,
+          "protocol": "DNS",
+          "src": "192.0.2.123",
+          "time": "0.059000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.123",
+          "info": "443 \u2192 41183 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 61,
+          "protocol": "TCP",
+          "src": "198.51.100.61",
+          "time": "0.060000000"
+        }
+      ],
+      "probe_id": "semantic-23"
+    },
+    {
+      "capture_sha256": "1a0ef0e69d85bf39f5f982261fa48822991d00e3c21ae0a26bd190d67c59ec1b",
+      "client": "192.0.2.129",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "Standard query 0x0081 A probe-128-1.example",
+          "length": 79,
+          "n": 1,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "Standard query 0x0082 A probe-128-2.example",
+          "length": 93,
+          "n": 2,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.3",
+          "info": "41131 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 3,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.4",
+          "info": "41132 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 4,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.5",
+          "info": "41133 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 5,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "41134 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 6,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41135 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 7,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "41136 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 8,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "41137 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 9,
+          "protocol": "TCP",
+          "src": "198.51.100.9",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41138 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 10,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.11",
+          "info": "41139 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 11,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.12",
+          "info": "41140 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 12,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.13",
+          "info": "41141 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 13,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "Standard query response 0x008e No such name A probe-128-14.example",
+          "length": 80,
+          "n": 14,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "Standard query 0x008f AAAA probe-128-15.example",
+          "length": 80,
+          "n": 15,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "Standard query 0x0090 A probe-128-16.example, \"QM\" question",
+          "length": 80,
+          "n": 16,
+          "protocol": "MDNS",
+          "src": "192.0.2.129",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.17",
+          "info": "41145 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 17,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.18",
+          "info": "Standard query 0x0092 A probe-128-18.example",
+          "length": 80,
+          "n": 18,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.19",
+          "info": "41147 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 19,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "Standard query response 0x0094 A probe-128-20.example",
+          "length": 80,
+          "n": 20,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "Standard query response 0x0095 A probe-128-21.example",
+          "length": 80,
+          "n": 21,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.22",
+          "info": "41150 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 22,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.23",
+          "info": "Standard query 0x0097 A probe-128-23.example",
+          "length": 80,
+          "n": 23,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.24",
+          "info": "41152 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 24,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "Standard query 0x0099 A probe-128-25.example, \"QM\" question",
+          "length": 80,
+          "n": 25,
+          "protocol": "MDNS",
+          "src": "192.0.2.129",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.26",
+          "info": "Standard query 0x009a AAAA probe-128-26.example",
+          "length": 80,
+          "n": 26,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.27",
+          "info": "Standard query response 0x009b No such name A probe-128-27.example",
+          "length": 80,
+          "n": 27,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.28",
+          "info": "41156 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 28,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41157 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "443 \u2192 41158 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "198.51.100.30",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "443 \u2192 41158 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "198.51.100.30",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.32",
+          "info": "41160 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.32",
+          "info": "41160 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "443 \u2192 41162 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "198.51.100.34",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.34",
+          "info": "41162 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41164 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.37",
+          "info": "41165 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.37",
+          "info": "41165 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "443 \u2192 41167 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "TCP",
+          "src": "198.51.100.39",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "41168 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41169 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 41,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.42",
+          "info": "41170 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 42,
+          "protocol": "TCP",
+          "src": "192.0.2.129",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.43",
+          "info": "41171 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 43,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.44",
+          "info": "41172 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 44,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "41173 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 45,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "41174 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 46,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.47",
+          "info": "41175 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 47,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.48",
+          "info": "Standard query 0x00b0 MX witness-128-48.example",
+          "length": 82,
+          "n": 48,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "Standard query response 0x00b1 Server failure A witness-128-49.example",
+          "length": 82,
+          "n": 49,
+          "protocol": "DNS",
+          "src": "198.51.100.49",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "Standard query response 0x00b2 A witness-128-50.example",
+          "length": 82,
+          "n": 50,
+          "protocol": "DNS",
+          "src": "198.51.100.50",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "Standard query response 0x00b3 A witness-128-51.example, \"QM\" question",
+          "length": 82,
+          "n": 51,
+          "protocol": "MDNS",
+          "src": "198.51.100.51",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "Standard query response 0x00b4 A witness-128-52.example",
+          "length": 82,
+          "n": 52,
+          "protocol": "DNS",
+          "src": "198.51.100.52",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.53",
+          "info": "Standard query 0x00b5 A witness-128-53.example",
+          "length": 82,
+          "n": 53,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.54",
+          "info": "Standard query 0x00b6 A witness-128-54.example",
+          "length": 82,
+          "n": 54,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41183 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 55,
+          "protocol": "UDP",
+          "src": "192.0.2.129",
+          "time": "0.054000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.56",
+          "info": "41184 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 56,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.055000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41185 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 57,
+          "protocol": "TCP",
+          "src": "198.51.100.57",
+          "time": "0.056000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00ba A witness-128-58.example",
+          "length": 82,
+          "n": 58,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.057000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.59",
+          "info": "41187 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 59,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.058000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.60",
+          "info": "41188 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 60,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.059000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00bd A witness-128-61.example",
+          "length": 82,
+          "n": 61,
+          "protocol": "DNS",
+          "src": "192.0.2.129",
+          "time": "0.060000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.129",
+          "info": "443 \u2192 41190 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 62,
+          "protocol": "TCP",
+          "src": "198.51.100.62",
+          "time": "0.061000000"
+        }
+      ],
+      "probe_id": "semantic-29"
+    },
+    {
+      "capture_sha256": "2e772681dff9db870f6763cece94ef37ce302cd277407106e848174cc0baf872",
+      "client": "192.0.2.131",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "41131 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 1,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "Standard query response 0x0084 A probe-130-2.example",
+          "length": 79,
+          "n": 2,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.3",
+          "info": "Standard query 0x0085 A probe-130-3.example",
+          "length": 79,
+          "n": 3,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.4",
+          "info": "Standard query 0x0086 A probe-130-4.example",
+          "length": 93,
+          "n": 4,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.5",
+          "info": "41135 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 5,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "41136 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 6,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41137 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 7,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "41138 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 8,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "41139 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 9,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "41140 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 10,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "41141 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "198.51.100.11",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41142 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 12,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.13",
+          "info": "41143 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 13,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "41144 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 14,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "41145 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 15,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "Standard query response 0x0092 No such name A probe-130-16.example",
+          "length": 80,
+          "n": 16,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.17",
+          "info": "Standard query 0x0093 AAAA probe-130-17.example",
+          "length": 80,
+          "n": 17,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.18",
+          "info": "Standard query 0x0094 A probe-130-18.example, \"QM\" question",
+          "length": 80,
+          "n": 18,
+          "protocol": "MDNS",
+          "src": "192.0.2.131",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.19",
+          "info": "41149 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 19,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "Standard query 0x0096 A probe-130-20.example",
+          "length": 80,
+          "n": 20,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "Standard query 0x0097 A probe-130-21.example",
+          "length": 80,
+          "n": 21,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.22",
+          "info": "41152 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 22,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.23",
+          "info": "Standard query 0x0099 A probe-130-23.example, \"QM\" question",
+          "length": 80,
+          "n": 23,
+          "protocol": "MDNS",
+          "src": "192.0.2.131",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.24",
+          "info": "Standard query 0x009a AAAA probe-130-24.example",
+          "length": 80,
+          "n": 24,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "Standard query response 0x009b No such name A probe-130-25.example",
+          "length": 80,
+          "n": 25,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.26",
+          "info": "41156 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 26,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "443 \u2192 41157 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 27,
+          "protocol": "TCP",
+          "src": "198.51.100.27",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "443 \u2192 41157 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 28,
+          "protocol": "TCP",
+          "src": "198.51.100.27",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41159 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41159 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "443 \u2192 41161 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "198.51.100.31",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.31",
+          "info": "41161 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "41163 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.34",
+          "info": "41164 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.34",
+          "info": "41164 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "443 \u2192 41166 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "TCP",
+          "src": "198.51.100.36",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.37",
+          "info": "41167 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41168 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.39",
+          "info": "41169 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "TCP",
+          "src": "192.0.2.131",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "41170 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41171 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 41,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.42",
+          "info": "41172 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 42,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.43",
+          "info": "41173 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 43,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.44",
+          "info": "41174 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 44,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "Standard query 0x00af MX witness-130-45.example",
+          "length": 82,
+          "n": 45,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "Standard query response 0x00b0 Server failure A witness-130-46.example",
+          "length": 82,
+          "n": 46,
+          "protocol": "DNS",
+          "src": "198.51.100.46",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "Standard query response 0x00b1 A witness-130-47.example",
+          "length": 82,
+          "n": 47,
+          "protocol": "DNS",
+          "src": "198.51.100.47",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "Standard query response 0x00b2 A witness-130-48.example, \"QM\" question",
+          "length": 82,
+          "n": 48,
+          "protocol": "MDNS",
+          "src": "198.51.100.48",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "Standard query response 0x00b3 A witness-130-49.example",
+          "length": 82,
+          "n": 49,
+          "protocol": "DNS",
+          "src": "198.51.100.49",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.50",
+          "info": "Standard query 0x00b4 A witness-130-50.example",
+          "length": 82,
+          "n": 50,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.51",
+          "info": "Standard query 0x00b5 A witness-130-51.example",
+          "length": 82,
+          "n": 51,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41182 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 52,
+          "protocol": "UDP",
+          "src": "192.0.2.131",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.53",
+          "info": "41183 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 53,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41184 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 54,
+          "protocol": "TCP",
+          "src": "198.51.100.54",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00b9 A witness-130-55.example",
+          "length": 82,
+          "n": 55,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.054000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.56",
+          "info": "41186 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 56,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.055000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.57",
+          "info": "41187 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 57,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.056000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00bc A witness-130-58.example",
+          "length": 82,
+          "n": 58,
+          "protocol": "DNS",
+          "src": "192.0.2.131",
+          "time": "0.057000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.131",
+          "info": "443 \u2192 41189 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 59,
+          "protocol": "TCP",
+          "src": "198.51.100.59",
+          "time": "0.058000000"
+        }
+      ],
+      "probe_id": "semantic-31"
+    },
+    {
+      "capture_sha256": "dd18bced698eef8ef38a69e6d09e67515b84f655192436a99751ee5267b3bfa8",
+      "client": "192.0.2.137",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "41137 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 1,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "Standard query response 0x008a No such name A probe-136-2.example",
+          "length": 79,
+          "n": 2,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.3",
+          "info": "Standard query 0x008b AAAA probe-136-3.example",
+          "length": 79,
+          "n": 3,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.4",
+          "info": "Standard query 0x008c A probe-136-4.example, \"QM\" question",
+          "length": 79,
+          "n": 4,
+          "protocol": "MDNS",
+          "src": "192.0.2.137",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.5",
+          "info": "41141 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 5,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "Standard query 0x008e A probe-136-6.example",
+          "length": 79,
+          "n": 6,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41143 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 7,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "Standard query response 0x0090 A probe-136-8.example",
+          "length": 79,
+          "n": 8,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "Standard query 0x0091 A probe-136-9.example",
+          "length": 79,
+          "n": 9,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "Standard query 0x0092 A probe-136-10.example",
+          "length": 94,
+          "n": 10,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.11",
+          "info": "41147 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.12",
+          "info": "41148 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 12,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.13",
+          "info": "41149 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 13,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "41150 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 14,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "41151 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 15,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "41152 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 16,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "41153 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 17,
+          "protocol": "TCP",
+          "src": "198.51.100.17",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41154 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 18,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.19",
+          "info": "41155 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 19,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "41156 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 20,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "41157 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 21,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.22",
+          "info": "41158 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 22,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41159 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 23,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "41160 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 24,
+          "protocol": "TCP",
+          "src": "198.51.100.24",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "41161 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 25,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.26",
+          "info": "41162 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 26,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.27",
+          "info": "41163 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 27,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "443 \u2192 41164 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 28,
+          "protocol": "TCP",
+          "src": "198.51.100.28",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "443 \u2192 41164 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "198.51.100.28",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.30",
+          "info": "41166 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.30",
+          "info": "41166 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "443 \u2192 41168 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "198.51.100.32",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.32",
+          "info": "41168 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.34",
+          "info": "41170 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.35",
+          "info": "41171 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.35",
+          "info": "41171 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "443 \u2192 41173 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "TCP",
+          "src": "198.51.100.37",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41174 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.39",
+          "info": "41175 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "41176 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "TCP",
+          "src": "192.0.2.137",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41177 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 41,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.42",
+          "info": "41178 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 42,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.43",
+          "info": "41179 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 43,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.44",
+          "info": "41180 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 44,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "41181 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 45,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "Standard query 0x00b6 MX witness-136-46.example",
+          "length": 82,
+          "n": 46,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "Standard query response 0x00b7 Server failure A witness-136-47.example",
+          "length": 82,
+          "n": 47,
+          "protocol": "DNS",
+          "src": "198.51.100.47",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "Standard query response 0x00b8 A witness-136-48.example",
+          "length": 82,
+          "n": 48,
+          "protocol": "DNS",
+          "src": "198.51.100.48",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "Standard query response 0x00b9 A witness-136-49.example, \"QM\" question",
+          "length": 82,
+          "n": 49,
+          "protocol": "MDNS",
+          "src": "198.51.100.49",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "Standard query response 0x00ba A witness-136-50.example",
+          "length": 82,
+          "n": 50,
+          "protocol": "DNS",
+          "src": "198.51.100.50",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.51",
+          "info": "Standard query 0x00bb A witness-136-51.example",
+          "length": 82,
+          "n": 51,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.52",
+          "info": "Standard query 0x00bc A witness-136-52.example",
+          "length": 82,
+          "n": 52,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41189 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 53,
+          "protocol": "UDP",
+          "src": "192.0.2.137",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.54",
+          "info": "41190 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 54,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41191 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 55,
+          "protocol": "TCP",
+          "src": "198.51.100.55",
+          "time": "0.054000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00c0 A witness-136-56.example",
+          "length": 82,
+          "n": 56,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.055000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.57",
+          "info": "41193 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 57,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.056000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.58",
+          "info": "41194 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 58,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.057000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00c3 A witness-136-59.example",
+          "length": 82,
+          "n": 59,
+          "protocol": "DNS",
+          "src": "192.0.2.137",
+          "time": "0.058000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.137",
+          "info": "443 \u2192 41196 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 60,
+          "protocol": "TCP",
+          "src": "198.51.100.60",
+          "time": "0.059000000"
+        }
+      ],
+      "probe_id": "semantic-37"
+    },
+    {
+      "capture_sha256": "2d68035f76b6e83fc0e92c728803966cc5f74001c22336e85879124f1162dbe1",
+      "client": "192.0.2.143",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "41143 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 1,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "41144 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 2,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "41145 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 3,
+          "protocol": "TCP",
+          "src": "198.51.100.3",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41146 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 4,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.5",
+          "info": "41147 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 5,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "41148 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 6,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "41149 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 7,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "Standard query response 0x0096 No such name A probe-142-8.example",
+          "length": 79,
+          "n": 8,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "Standard query 0x0097 AAAA probe-142-9.example",
+          "length": 79,
+          "n": 9,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "Standard query 0x0098 A probe-142-10.example, \"QM\" question",
+          "length": 80,
+          "n": 10,
+          "protocol": "MDNS",
+          "src": "192.0.2.143",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.11",
+          "info": "41153 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.12",
+          "info": "Standard query 0x009a A probe-142-12.example",
+          "length": 80,
+          "n": 12,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.13",
+          "info": "41155 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 13,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "Standard query response 0x009c A probe-142-14.example",
+          "length": 80,
+          "n": 14,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.15",
+          "info": "Standard query 0x009d A probe-142-15.example",
+          "length": 80,
+          "n": 15,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.16",
+          "info": "Standard query 0x009e A probe-142-16.example",
+          "length": 94,
+          "n": 16,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.17",
+          "info": "41159 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 17,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.18",
+          "info": "41160 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 18,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.19",
+          "info": "41161 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 19,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "41162 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 20,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "41163 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 21,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.22",
+          "info": "41164 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 22,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.23",
+          "info": "41165 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 23,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.24",
+          "info": "41166 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 24,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.25",
+          "info": "Standard query 0x00a7 A probe-142-25.example",
+          "length": 94,
+          "n": 25,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.26",
+          "info": "Standard query 0x00a8 A probe-142-26.example",
+          "length": 80,
+          "n": 26,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.27",
+          "info": "Standard query response 0x00a9 A probe-142-27.example",
+          "length": 80,
+          "n": 27,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.28",
+          "info": "41170 \u2192 9999 Len=16[Malformed Packet]",
+          "length": 60,
+          "n": 28,
+          "protocol": "MANOLITO",
+          "src": "192.0.2.143",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "Standard query 0x00ab A probe-142-29.example",
+          "length": 80,
+          "n": 29,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.30",
+          "info": "41172 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.31",
+          "info": "Standard query 0x00ad A probe-142-31.example, \"QM\" question",
+          "length": 80,
+          "n": 31,
+          "protocol": "MDNS",
+          "src": "192.0.2.143",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.32",
+          "info": "Standard query 0x00ae AAAA probe-142-32.example",
+          "length": 80,
+          "n": 32,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "Standard query response 0x00af No such name A probe-142-33.example",
+          "length": 80,
+          "n": 33,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "443 \u2192 41176 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "198.51.100.34",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "443 \u2192 41176 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "198.51.100.34",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41178 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.36",
+          "info": "41178 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "443 \u2192 41180 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "TCP",
+          "src": "198.51.100.38",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41180 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.40",
+          "info": "41182 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41183 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 41,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41183 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 42,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "443 \u2192 41185 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 43,
+          "protocol": "TCP",
+          "src": "198.51.100.43",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.44",
+          "info": "41186 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 44,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "41187 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 45,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "41188 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 46,
+          "protocol": "TCP",
+          "src": "192.0.2.143",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.47",
+          "info": "41189 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 47,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.48",
+          "info": "41190 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 48,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.49",
+          "info": "41191 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 49,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.50",
+          "info": "41192 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 50,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.51",
+          "info": "41193 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 51,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.52",
+          "info": "Standard query 0x00c2 MX witness-142-52.example",
+          "length": 82,
+          "n": 52,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "Standard query response 0x00c3 Server failure A witness-142-53.example",
+          "length": 82,
+          "n": 53,
+          "protocol": "DNS",
+          "src": "198.51.100.53",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "Standard query response 0x00c4 A witness-142-54.example",
+          "length": 82,
+          "n": 54,
+          "protocol": "DNS",
+          "src": "198.51.100.54",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "Standard query response 0x00c5 A witness-142-55.example, \"QM\" question",
+          "length": 82,
+          "n": 55,
+          "protocol": "MDNS",
+          "src": "198.51.100.55",
+          "time": "0.054000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "Standard query response 0x00c6 A witness-142-56.example",
+          "length": 82,
+          "n": 56,
+          "protocol": "DNS",
+          "src": "198.51.100.56",
+          "time": "0.055000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.57",
+          "info": "Standard query 0x00c7 A witness-142-57.example",
+          "length": 82,
+          "n": 57,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.056000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.58",
+          "info": "Standard query 0x00c8 A witness-142-58.example",
+          "length": 82,
+          "n": 58,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.057000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41201 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 59,
+          "protocol": "UDP",
+          "src": "192.0.2.143",
+          "time": "0.058000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.60",
+          "info": "41202 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 60,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.059000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41203 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 61,
+          "protocol": "TCP",
+          "src": "198.51.100.61",
+          "time": "0.060000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00cc A witness-142-62.example",
+          "length": 82,
+          "n": 62,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.061000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.63",
+          "info": "41205 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 63,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.062000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.64",
+          "info": "41206 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 64,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.063000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00cf A witness-142-65.example",
+          "length": 82,
+          "n": 65,
+          "protocol": "DNS",
+          "src": "192.0.2.143",
+          "time": "0.064000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.143",
+          "info": "443 \u2192 41208 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 66,
+          "protocol": "TCP",
+          "src": "198.51.100.66",
+          "time": "0.065000000"
+        }
+      ],
+      "probe_id": "semantic-43"
+    },
+    {
+      "capture_sha256": "3ca0673f7a0da4571cefa72360f2edbd657bf8b5c2042f26aacf24758b10f816",
+      "client": "192.0.2.135",
+      "frames": [
+        {
+          "direction": "out",
+          "dst": "198.51.100.1",
+          "info": "Standard query 0x0087 AAAA probe-134-1.example",
+          "length": 79,
+          "n": 1,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.000000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.2",
+          "info": "Standard query 0x0088 A probe-134-2.example, \"QM\" question",
+          "length": 79,
+          "n": 2,
+          "protocol": "MDNS",
+          "src": "192.0.2.135",
+          "time": "0.001000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.3",
+          "info": "41137 \u2192 80 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 3,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.002000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.4",
+          "info": "Standard query 0x008a A probe-134-4.example",
+          "length": 79,
+          "n": 4,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.003000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.5",
+          "info": "41139 \u2192 9999 Len=15",
+          "length": 60,
+          "n": 5,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.004000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.6",
+          "info": "Standard query response 0x008c A probe-134-6.example",
+          "length": 79,
+          "n": 6,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.005000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.7",
+          "info": "Standard query 0x008d A probe-134-7.example",
+          "length": 79,
+          "n": 7,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.006000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.8",
+          "info": "Standard query 0x008e A probe-134-8.example",
+          "length": 93,
+          "n": 8,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.007000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.9",
+          "info": "41143 \u2192 443 [FIN] Seq=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 9,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.008000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.10",
+          "info": "41144 \u2192 443 [RST, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 10,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.009000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.11",
+          "info": "41145 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 11,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.010000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.12",
+          "info": "41146 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 12,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.011000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.13",
+          "info": "41147 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 13,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.012000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.14",
+          "info": "41148 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 14,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.013000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "41149 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 15,
+          "protocol": "TCP",
+          "src": "198.51.100.15",
+          "time": "0.014000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41150 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 16,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.015000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.17",
+          "info": "41151 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 17,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.016000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.18",
+          "info": "41152 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 18,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.017000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.19",
+          "info": "41153 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 19,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.018000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.20",
+          "info": "Standard query response 0x009a No such name A probe-134-20.example",
+          "length": 80,
+          "n": 20,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.019000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.21",
+          "info": "Standard query response 0x009b No such name A probe-134-21.example",
+          "length": 80,
+          "n": 21,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.020000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.22",
+          "info": "41156 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 22,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.021000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.23",
+          "info": "41157 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 23,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.022000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.24",
+          "info": "41158 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 24,
+          "protocol": "UDP",
+          "src": "10.1.2.3",
+          "time": "0.023000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.1.2.3",
+          "info": "41159 \u2192 9999 Len=16",
+          "length": 60,
+          "n": 25,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.024000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "41160 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 26,
+          "protocol": "TCP",
+          "src": "198.51.100.26",
+          "time": "0.025000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.27",
+          "info": "41161 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 27,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.026000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.28",
+          "info": "41162 \u2192 443 [SYN, ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 28,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.027000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.29",
+          "info": "41163 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 29,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.028000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.30",
+          "info": "41164 \u2192 443 [SYN, ECE, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 30,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.029000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "443 \u2192 41165 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 31,
+          "protocol": "TCP",
+          "src": "198.51.100.31",
+          "time": "0.030000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "443 \u2192 41165 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 32,
+          "protocol": "TCP",
+          "src": "198.51.100.31",
+          "time": "0.031000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "41167 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 33,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.032000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.33",
+          "info": "41167 \u2192 443 [ACK] Seq=1 Ack=5000 Win=8192 Len=0",
+          "length": 60,
+          "n": 34,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.033000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "443 \u2192 41169 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 35,
+          "protocol": "TCP",
+          "src": "198.51.100.35",
+          "time": "0.034000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.35",
+          "info": "41169 \u2192 443 [ACK] Seq=0 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 36,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.035000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.37",
+          "info": "41171 \u2192 443 [ACK, ECE] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 37,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.036000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41172 \u2192 443 [SYN, CWR] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 38,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.037000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.38",
+          "info": "41172 \u2192 443 [RST, ECE] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 39,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.038000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "443 \u2192 41174 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 40,
+          "protocol": "TCP",
+          "src": "198.51.100.40",
+          "time": "0.039000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.41",
+          "info": "41175 \u2192 443 [SYN] Seq=0 Win=8192 Len=0",
+          "length": 60,
+          "n": 41,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.040000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.42",
+          "info": "41176 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 42,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.041000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.43",
+          "info": "41177 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 43,
+          "protocol": "TCP",
+          "src": "192.0.2.135",
+          "time": "0.042000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.44",
+          "info": "41178 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 44,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.043000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.45",
+          "info": "41179 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 45,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.044000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.46",
+          "info": "41180 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 46,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.045000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.47",
+          "info": "41181 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 47,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.046000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.48",
+          "info": "41182 \u2192 5354 Len=0",
+          "length": 60,
+          "n": 48,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.047000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.49",
+          "info": "Standard query 0x00b7 MX witness-134-49.example",
+          "length": 82,
+          "n": 49,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.048000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "Standard query response 0x00b8 Server failure A witness-134-50.example",
+          "length": 82,
+          "n": 50,
+          "protocol": "DNS",
+          "src": "198.51.100.50",
+          "time": "0.049000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "Standard query response 0x00b9 A witness-134-51.example",
+          "length": 82,
+          "n": 51,
+          "protocol": "DNS",
+          "src": "198.51.100.51",
+          "time": "0.050000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "Standard query response 0x00ba A witness-134-52.example, \"QM\" question",
+          "length": 82,
+          "n": 52,
+          "protocol": "MDNS",
+          "src": "198.51.100.52",
+          "time": "0.051000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "Standard query response 0x00bb A witness-134-53.example",
+          "length": 82,
+          "n": 53,
+          "protocol": "DNS",
+          "src": "198.51.100.53",
+          "time": "0.052000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.54",
+          "info": "Standard query 0x00bc A witness-134-54.example",
+          "length": 82,
+          "n": 54,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.053000000"
+        },
+        {
+          "direction": "out",
+          "dst": "198.51.100.55",
+          "info": "Standard query 0x00bd A witness-134-55.example",
+          "length": 82,
+          "n": 55,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.054000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.200.3.4",
+          "info": "41190 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 56,
+          "protocol": "UDP",
+          "src": "192.0.2.135",
+          "time": "0.055000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.57",
+          "info": "41191 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 57,
+          "protocol": "UDP",
+          "src": "10.200.3.4",
+          "time": "0.056000000"
+        },
+        {
+          "direction": "other",
+          "dst": "10.2.3.4",
+          "info": "41192 \u2192 6100 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 58,
+          "protocol": "TCP",
+          "src": "198.51.100.58",
+          "time": "0.057000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.5",
+          "info": "Standard query 0x00c1 A witness-134-59.example",
+          "length": 82,
+          "n": 59,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.058000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.60",
+          "info": "41194 \u2192 443 [ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 60,
+          "protocol": "TCP",
+          "src": "192.0.3.9",
+          "time": "0.059000000"
+        },
+        {
+          "direction": "other",
+          "dst": "198.51.100.61",
+          "info": "41195 \u2192 6100 Len=0",
+          "length": 60,
+          "n": 61,
+          "protocol": "UDP",
+          "src": "192.0.3.9",
+          "time": "0.060000000"
+        },
+        {
+          "direction": "out",
+          "dst": "10.2.3.6",
+          "info": "Standard query 0x00c4 A witness-134-62.example",
+          "length": 82,
+          "n": 62,
+          "protocol": "DNS",
+          "src": "192.0.2.135",
+          "time": "0.061000000"
+        },
+        {
+          "direction": "in",
+          "dst": "192.0.2.135",
+          "info": "443 \u2192 41197 [FIN, ACK] Seq=1 Ack=1 Win=8192 Len=0",
+          "length": 60,
+          "n": 63,
+          "protocol": "TCP",
+          "src": "198.51.100.63",
+          "time": "0.062000000"
+        }
+      ],
+      "probe_id": "semantic-35"
+    }
+  ],
+  "schema_version": "capture-packets/1.0",
+  "tshark_version": "4.6.8"
+}
