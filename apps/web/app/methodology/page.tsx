@@ -166,7 +166,7 @@ export default function MethodologyPage() {
           packets.
         </p>
         <div className="mth-tw">
-          <table>
+          <table className="mth-probes">
             <thead>
               <tr>
                 <th scope="col">Probe</th>

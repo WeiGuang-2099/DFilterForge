@@ -45,3 +45,15 @@
   .mth dd {margin-bottom: 8px;}
   .mth th, .mth td {padding-right: 12px;}
 }
+
+/* Six columns do not fit a phone, so each probe row sets its digest on a
+   second line under the other five, and the header row its label. Subgrid
+   keeps the five columns aligned from row to row. */
+@media (max-width: 640px) {
+  .mth-probes {display: grid; grid-template-columns: repeat(4, min-content) minmax(min-content, 1fr);}
+  .mth-probes thead, .mth-probes tbody, .mth-probes tr {display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;}
+  .mth-probes tr {border-bottom: 1px solid var(--line);}
+  .mth-probes thead tr {border-bottom-color: var(--line-2);}
+  .mth-probes th, .mth-probes td {padding: 6px 10px 2px 0; border-bottom: 0;}
+  .mth-probes tr > :last-child {grid-column: 1 / -1; padding: 0 0 6px;}
+}
