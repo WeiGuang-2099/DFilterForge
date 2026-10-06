@@ -2687,6 +2687,40 @@ def test_reel_falls_back_from_c4_through_c1(tmp_path: Path) -> None:
     assert nothing["headline"]["silent_wrong"]["v"] == 0
 
 
+def test_reel_strips_name_every_frame_from_the_captures(
+    fixture: Fixture,
+) -> None:
+    # The Reel's cursor shows any frame, so its strips list them all, each
+    # from captures.json; a receipt lists only the frames that disagree.
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    root = fixture.build()
+    files = exporter.export(root, "abc1234")
+
+    reel = json.loads(files["reel.json"])
+    receipt = json.loads(
+        files[f"receipts/{exporter.run_slug(_ANCHOR)}/C4/i-0001.json"]
+    )
+
+    # The dev probes are the first rows of the fixture's captures.json.
+    for row_index, strip in enumerate(reel["strips"]):
+        rows = strip["frame_rows"]
+        assert [row["n"]["v"] for row in rows] == list(range(1, _FRAMES + 1))
+        kinds = [row["kind"]["t"] for row in rows]
+        assert kinds == ["recipe"] * _BENCHMARK + ["witness"] * (
+            _FRAMES - _BENCHMARK
+        )
+        assert rows[2]["name"] == {
+            "t": "recipe-3",
+            "src": [
+                "ptr",
+                "docs/decisions/evidence/web/captures.json",
+                f"/probes/{row_index}/frames/2/name",
+            ],
+        }
+    assert all("frame_rows" not in probe for probe in receipt["probes"])
+    check_sources(root, {"reel.json": reel})
+
+
 @pytest.mark.parametrize(
     ("candidate", "probe", "frame", "side"),
     [

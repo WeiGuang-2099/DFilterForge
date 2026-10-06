@@ -1837,6 +1837,33 @@ def probe_nodes(
     ]
 
 
+def reel_strips(
+    repo: Repo, captures: Captures, receipt: str, spec: str
+) -> list[Node]:
+    """The pick's probes as ``probe_nodes`` gives them, with every frame.
+
+    The Reel's cursor reads one frame at a time, so each strip also lists
+    every frame of its capture in order: the number, kind and name that
+    captures.json records. Receipts and cases show only the disagreeing
+    frames and do without the list, which would multiply their size.
+    """
+    strips = probe_nodes(repo, captures, receipt, spec)
+    for strip in strips:
+        probe_id = _text(
+            cast(Node, strip["probe_id"])["t"], f"{receipt} probe_id"
+        )
+        row_index = captures.index(probe_id)
+        strip["frame_rows"] = [
+            {
+                "n": repo.v(frame_src(row_index, frame, "n")),
+                "kind": repo.t(frame_src(row_index, frame, "kind")),
+                "name": repo.t(frame_src(row_index, frame, "name")),
+            }
+            for frame in range(1, captures.frames[probe_id] + 1)
+        ]
+    return strips
+
+
 def trace_node(
     repo: Repo, run: Run, label: str, item_id: str
 ) -> tuple[Node | None, str | None]:
@@ -2383,7 +2410,7 @@ def _reel_pick(
             "outcome": repo.t(row(run.outcomes, keys, "outcome")),
             "disagreeing": repo.v(disagreeing_src(repo, receipt)),
         },
-        "strips": probe_nodes(repo, captures, receipt, run.spec(case_id)),
+        "strips": reel_strips(repo, captures, receipt, run.spec(case_id)),
         "highlight": highlight_node(repo, captures, receipt),
         "trace": trace,
         "trace_reason": reason,
