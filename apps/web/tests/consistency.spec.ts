@@ -90,10 +90,10 @@ function strayNumbers({terms, attributes}: Sweep): string[] {
   return found;
 }
 
-// Routes that hold no sourced value on purpose: the home page until the
-// Reel renders on it, and the not-found pages. A listed route must stay
-// free of data, so this list can only shrink as pages gain values.
-const DATA_FREE = new Set(['', '404/', '_not-found/', 'no-such-page/']);
+// Routes that hold no sourced value on purpose: the not-found pages. A
+// listed route must stay free of data, so this list can only shrink as
+// pages gain values.
+const DATA_FREE = new Set(['404/', '_not-found/', 'no-such-page/']);
 
 interface Route {
   readonly path: string;
@@ -490,6 +490,45 @@ test('the methodology page names the round its repair line describes', async ({p
   expect(sources.map((source): unknown => JSON.parse(source ?? 'null'))).toEqual(
     keys.map(() => ['ptr', summary, '/split']),
   );
+});
+
+test("the Reel's readout gives every frame the state its receipt records", async ({page}) => {
+  // The readout says in fixed words whether the filter and the request
+  // select each frame, from the exporter's frame states, which no value
+  // check sees. Here each state is derived again from the pick's receipt,
+  // and each probe must show every frame captures.json lists for it.
+  const pick = resolver.reelPick();
+  if (pick === null) {
+    throw new Error('the committed pool has a pick');
+  }
+  const receipt = `docs/results/${pick.run}/scored/receipts/${pick.cond}/${pick.item}.json`;
+  const probes = resolver.resolve(['ptr', receipt, '/probes']) as readonly {
+    readonly probe_id: string;
+    readonly expected_frames: readonly number[];
+    readonly candidate_frames: readonly number[];
+  }[];
+  const captures = 'docs/decisions/evidence/web/captures.json';
+  const rows = resolver.resolve(['ptr', captures, '/probes']) as readonly {probe_id: string}[];
+
+  await page.goto('./');
+  const shown = await page
+    .locator('[data-probe][data-state]')
+    .evaluateAll((cells) =>
+      cells.map((cell) => [cell.getAttribute('data-probe'), cell.getAttribute('data-at'), cell.getAttribute('data-state')]),
+    );
+
+  const expected = probes.flatMap((probe, index) => {
+    const row = rows.findIndex((each) => each.probe_id === probe.probe_id);
+    const frames = resolver.resolve(['len', captures, `/probes/${row}/frames`]) as number;
+    return Array.from({length: frames}, (_, column) => {
+      const selected = probe.candidate_frames.includes(column + 1);
+      const requested = probe.expected_frames.includes(column + 1);
+      const state = selected ? (requested ? 'tp' : 'fp') : requested ? 'fn' : 'tn';
+      return [String(index), String(column), state];
+    });
+  });
+  expect(shown).toEqual(expected);
+  expect(shown.filter(([, , state]) => state === 'fn' || state === 'fp')).not.toEqual([]);
 });
 
 test('model text is cut only at the contract size and only where the exporter cuts it', () => {
