@@ -8,12 +8,11 @@ PR #22 merged `test-repair-round` into `main` as 1ec918c on 2026-10-06, and
 the owner reports hosted CI green on the PR and on `main`. Both halves of the
 locked test result are on `main`. The next slice is the hosted site (Planned
 next 2). Branch `site-deploy` adds the `pages` job to `ci.yml`: on a push to
-`main`, after every gate passes, it builds the site for the domain root,
-tests that build and uploads it to Cloudflare Pages at
-https://dfilterforge.pages.dev/. The owner creates the Cloudflare project and
-two repository secrets before it merges
-([web site note](decisions/web-site.md), Deploy), and will make the
-repository public so the site's source links resolve. No page reads
+`main`, after every gate passes, it builds and tests the site under
+`/DFilterForge` and deploys it to GitHub Pages at
+https://weiguang-2099.github.io/DFilterForge/. Before it merges, the owner
+makes the repository public and sets its Pages source to GitHub Actions
+([web site note](decisions/web-site.md), Deploy). No page reads
 `board.json` or `reel.json` yet. Training data is built on CPU alongside the
 site; GPU spend waits until the site is live (Planned next 3).
 Reports under the ignored `artifacts/` are not project evidence.
@@ -2546,7 +2545,7 @@ where an item says it is the maintainer's order.
    #20 to #22).
 2. The hosted site: the Disproof Reel on `/`, chosen by the registered rule
    `reel-v1`, `/board`, `/methodology` and the README GIF, deployed to
-   Cloudflare Pages by the `pages` job. The receipts and cases pages follow
+   GitHub Pages by the `pages` job. The receipts and cases pages follow
    as site work once it is live, in the maintainer's order; they do not
    gate item 3.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
