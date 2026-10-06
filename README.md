@@ -6,7 +6,7 @@ An LLM writes a Wireshark display filter from a plain-English request. A pinned 
 
 [![The Disproof Reel: tshark sweeps a probe capture and stops at frame 60, which disproves the model's filter](docs/media/reel.gif)](https://weiguang-2099.github.io/DFilterForge/)
 
-On the frozen test split, four hosted models wrote 971 filters that compiled and ran, and **165 were silent-wrong** (counted by rule [`reel-v1`](docs/decisions/disproof-reel.md) over each pass's `scored/outcomes.jsonl`; per model [below](#results-per-model)). The 75 typed answers to ready gold that came back silent-wrong or invalid each got one more turn in three arms ([pool](docs/results/repair-pool/test.json)):
+On the frozen test split, four hosted models wrote 971 filters that compiled and ran, and **165 were silent-wrong** (counted by rule [`reel-v1`](docs/decisions/disproof-reel.md) over each pass's `scored/outcomes.jsonl`; per model [below](#results-per-model)). The 75 C4 answers (typed intent with field context) to ready gold that came back silent-wrong or invalid each got one more turn in three arms ([pool](docs/results/repair-pool/test.json)):
 
 | Second turn | Repaired | repair@1 [95% case bootstrap] |
 | --- | ---: | --- |
@@ -45,7 +45,7 @@ repair     (tcp.srcport == 443 && tcp.flags.fin == true)    strong exact on all 
 
 An anchor and the three slot winners of a [dev bake-off](docs/decisions/model-bakeoff.md), at temperature 0, on 40 ready and 16 non-ready test cases with two paraphrases each. First answers were sent on 2026-10-01 and repair turns on 2026-10-05. Rows keep pool order; they are not a ranking.
 
-| Model | C4 strong exact | Silent-wrong of ran, C1-C4 | C4 failed | Repaired: counterexample / bare / resample | Source |
+| Model | C4 strong exact | Silent-wrong of ran, C1-C4 | C4 silent-wrong or invalid | Repaired: counterexample / bare / resample | Source |
 | --- | ---: | ---: | ---: | ---: | --- |
 | qwen/qwen3-32b | 40/80 | 49/234 | 28 | 16 / 14 / 1 | [scored](docs/results/test-qwen3-32b-2026-09-26/scored/summary.json), [repair](docs/results/test-qwen3-32b-2026-09-26/repair/summary.json) |
 | qwen/qwen3.5-9b | 35/80 | 51/205 | 15 | 6 / 3 / 1 | [scored](docs/results/test-qwen3.5-9b-2026-09-26/scored/summary.json), [repair](docs/results/test-qwen3.5-9b-2026-09-26/repair/summary.json) |
@@ -64,7 +64,7 @@ Silent-wrong of ran sums C1 to C4 of the [compile validity table](docs/results/l
 - **Pinned tshark, no shell.** tshark is built from the official Wireshark 4.6.8 source after a SHA-256 check ([Dockerfile](Dockerfile)) and runs with no network, no Linux capabilities and no root. A filter reaches it as one argv element with `shell=False`, under time, output and frame limits ([runner](src/dfilterforge/runner.py)).
 - **Labels never come from a filter, and near misses get caught.** CI runs every single-site mutant of each gold filter on the probes and fails on any survivor without a written waiver ([gate](scripts/probe_adequacy.py)). The witness packets were added after three wrong answers in the first dev run scored strong exact ([ablation 005](docs/ablations/005-probe-witnesses.md)).
 - **Frozen before measured.** Test prompts, gold and captures were frozen on 2026-09-26 ([freeze record](src/dfilterforge/held_out_freeze.json)), and the client refuses any test request the record does not admit. Models were chosen on dev, and each metric and comparison was written into the [protocol](docs/protocol.md) before the test requests it reads.
-- **Replayable without a key.** Every answer is committed verbatim. CI re-scores every committed run and re-derives every repair round and pool, with no network and no API key ([CI](.github/workflows/ci.yml)).
+- **Replayable without a key.** Every answer is committed verbatim. CI re-scores every committed scored run (the 41 under `docs/results`) and re-derives every repair round and pool, with no network and no API key ([CI](.github/workflows/ci.yml)).
 - **A site that cannot drift.** The site is a static export of the committed files and never calls a model; a Playwright test re-derives each value it shows from those files ([web site note](docs/decisions/web-site.md)).
 
 ## Status
@@ -78,12 +78,13 @@ Docker in Linux container mode. No API key; nothing below calls a model. In Git 
 
 ```sh
 docker compose --profile pilot build lab
+docker compose --profile dev build test
 docker compose --profile pilot run --rm lab score --run-dir /workspace/results/test-qwen3-32b-2026-09-26 --check --code-revision "$(git rev-parse HEAD)"
 docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results --split test --check --code-revision "$(git rev-parse HEAD)"
 docker compose --profile dev run --rm test
 ```
 
-In order: build tshark from source into the no-network lab image; replay qwen/qwen3-32b's committed test answers through tshark and check them against the committed scores; derive the pooled repair numbers above again from the committed rounds; run the test suite. Single local cases, the field catalog, the semantic benchmark, a paid model run and the local site are in [docs/usage.md](docs/usage.md).
+In order: build tshark from source into the no-network lab image, and the test image; replay qwen/qwen3-32b's committed test answers through tshark and check them against the committed scores; derive the pooled repair numbers above again from the committed rounds; run the test suite. Single local cases, the field catalog, the semantic benchmark, a paid model run and the local site are in [docs/usage.md](docs/usage.md).
 
 ## Limits
 
