@@ -176,7 +176,8 @@
 .card {margin: 4px 0 8px; padding: 7px 10px; border: 1px solid var(--line); background: var(--plate); font: 10.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;}
 /* The card's fields, one row each, one column per frame. */
 .cx {margin: 6px 0 4px; border-collapse: collapse; font: 12px/1.35 var(--mono); font-variant-numeric: tabular-nums;}
-.cx th, .cx td {padding: 3px 20px 3px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: baseline; white-space: nowrap;}
+/* Rows 25 px apart, so each linked value has a 24 px target (WCAG 2.5.8). */
+.cx th, .cx td {padding: 4px 20px 4px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: baseline; white-space: nowrap;}
 .cx th {font-weight: 400; color: var(--ink-2);}
 .cx td {color: var(--ink);}
 .cx .cx-n th, .cx .cx-n td {border-bottom-color: var(--line-2); font-weight: 700; color: var(--ink);}
