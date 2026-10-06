@@ -224,7 +224,7 @@ function Limits(): ReactNode {
           and no arm run was repeated.
         </li>
         <li>
-          Another provider answered the frontier slot winner&apos;s arms than served its counted
+          The frontier slot winner&apos;s arms were answered by another provider than its counted
           pass, under an owner ruling the <a href={repositoryFile(REPAIR_NOTE)}>repair note</a>{' '}
           records. Its bare and counterexample turns put one provider&apos;s answer before
           another&apos;s correction, its resample also measures the provider change, and the pool
