@@ -10,9 +10,9 @@
  * frame where they disagree is drawn in carmine. Witness frames, the tail
  * every capture ends in, are collapsed into one short break row per run of
  * them, except one that disagrees, which keeps its full row. The cursor
- * still stops on each collapsed frame, a sliver of its break row. Geometry is in pixels down and in fractions of the
- * ladder's width across, so the SVG draws only lines and the numbers and
- * labels over it are sourced HTML.
+ * still stops on each collapsed frame, a sliver of its break row. Geometry
+ * is in pixels down and in fractions of the ladder's width across, so the
+ * SVG draws only lines and the numbers and labels over it are sourced HTML.
  */
 
 import type {PickStrip} from '@/lib/reel-data';

@@ -152,8 +152,8 @@ export default function HomePage() {
                   left line is the address seen in most of the probe&apos;s frames and the right
                   line is every other host. Recipe frames are the benchmark&apos;s packets; witness
                   frames, the tail every capture ends in, are collapsed into one break row unless
-                  they disagree. The bars above the ladder are the probes, each frame that disagrees in
-                  carmine. Choose one to draw it.
+                  they disagree. The bars above the ladder are the probes, each frame that
+                  disagrees in carmine. Choose one to draw it.
                 </p>
               </div>
             </div>
