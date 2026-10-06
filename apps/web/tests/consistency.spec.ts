@@ -90,10 +90,10 @@ function strayNumbers({terms, attributes}: Sweep): string[] {
   return found;
 }
 
-// Routes that hold no sourced value on purpose: the home page until the
-// Reel renders on it, and the not-found pages. A listed route must stay
-// free of data, so this list can only shrink as pages gain values.
-const DATA_FREE = new Set(['', '404/', '_not-found/', 'no-such-page/']);
+// Routes that hold no sourced value on purpose: the not-found pages. A
+// listed route must stay free of data, so this list can only shrink as
+// pages gain values.
+const DATA_FREE = new Set(['404/', '_not-found/', 'no-such-page/']);
 
 interface Route {
   readonly path: string;
@@ -490,6 +490,98 @@ test('the methodology page names the round its repair line describes', async ({p
   expect(sources.map((source): unknown => JSON.parse(source ?? 'null'))).toEqual(
     keys.map(() => ['ptr', summary, '/split']),
   );
+});
+
+interface TracedProbe {
+  readonly probe_id: string;
+  readonly counterexample_frames: readonly number[];
+  readonly candidate_predicates: readonly {readonly matched_frames: readonly number[]}[];
+  readonly canonical_predicates: readonly {readonly matched_frames: readonly number[]}[];
+}
+
+test("the Reel's ladder and readout say what the receipt, packets and trace hold", async ({
+  page,
+}) => {
+  // The readout says in fixed words whether the filter and the request
+  // select each frame and what each traced leaf gave, and the ladder draws
+  // each frame's direction: none of it is a sourced value, so no value
+  // check sees it. Here every word and direction is derived again from the
+  // pick's receipt, packets.json and the committed trace, for every frame
+  // of every probe.
+  const pick = resolver.reelPick();
+  if (pick === null) {
+    throw new Error('the committed pool has a pick');
+  }
+  const receipt = `docs/results/${pick.run}/scored/receipts/${pick.cond}/${pick.item}.json`;
+  const probes = resolver.resolve(['ptr', receipt, '/probes']) as readonly {
+    readonly probe_id: string;
+    readonly expected_frames: readonly number[];
+    readonly candidate_frames: readonly number[];
+  }[];
+  const packets = 'docs/decisions/evidence/web/packets.json';
+  const lists = resolver.resolve(['ptr', packets, '/probes']) as readonly {
+    readonly probe_id: string;
+    readonly frames: readonly {readonly direction: string}[];
+  }[];
+  const trace = `docs/decisions/evidence/web/traces/${pick.run}/${pick.cond}/${pick.item}.json`;
+  const traced = resolver.resolve(['ptr', trace, '/result/trace/probes']) as readonly TracedProbe[];
+
+  await page.goto('./');
+  const read = (selector: string, attribute: string) =>
+    page.locator(selector).evaluateAll(
+      (cells, name) =>
+        cells.map((cell) => [cell.getAttribute('data-at'), cell.getAttribute(name), cell.textContent]),
+      attribute,
+    );
+  const ladder = await read('.lad-tx .fr', 'data-dir');
+  const results = await read('.tr2-res [data-state]', 'data-state');
+  const roots = await read('.rt .at', 'data-at');
+  const leaves = await read('[data-leaf]', 'data-leaf');
+
+  const states = probes.map((probe) => {
+    const list = lists.find((each) => each.probe_id === probe.probe_id);
+    return (list?.frames ?? []).map((frame, row) => {
+      const selected = probe.candidate_frames.includes(row + 1);
+      const requested = probe.expected_frames.includes(row + 1);
+      const state = selected ? (requested ? 'tp' : 'fp') : requested ? 'fn' : 'tn';
+      return {at: `${probes.indexOf(probe)}-${row}`, state, selected, requested, dir: frame.direction};
+    });
+  });
+  const frames = states.flat();
+  expect(ladder.map(([at, dir]) => [at, dir])).toEqual(frames.map((f) => [f.at, f.dir]));
+  expect(results).toEqual(
+    frames.map((f) => [f.at, f.state, f.selected === f.requested ? 'agree' : 'disagree']),
+  );
+  // Each probe's request root, then its filter root.
+  expect(roots).toEqual(
+    states.flatMap((rows) => [
+      ...rows.map((f) => [f.at, f.at, f.requested ? 'should match' : 'should not match']),
+      ...rows.map((f) => [f.at, f.at, f.selected ? 'matched' : 'not matched']),
+    ]),
+  );
+  // Each request leaf, then each filter leaf: true or false where traced.
+  expect(leaves).toEqual(
+    states.flatMap((rows, index) => {
+      const probe = traced[index];
+      const sides = [
+        ['request', probe?.canonical_predicates ?? []],
+        ['filter', probe?.candidate_predicates ?? []],
+      ] as const;
+      return sides.flatMap(([side, list]) =>
+        list.flatMap((leaf, at) =>
+          rows.map((f, row) => [
+            f.at,
+            `${side}-${at}`,
+            probe?.counterexample_frames.includes(row + 1) === true
+              ? String(leaf.matched_frames.includes(row + 1))
+              : '-',
+          ]),
+        ),
+      );
+    }),
+  );
+  expect(frames.filter((f) => f.selected !== f.requested)).not.toEqual([]);
+  expect(leaves.filter(([, , word]) => word === 'false')).not.toEqual([]);
 });
 
 test('model text is cut only at the contract size and only where the exporter cuts it', () => {

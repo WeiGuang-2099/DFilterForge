@@ -67,6 +67,12 @@ reference_only over the scored probes, ties to the earlier pool run, then
 the lower item id. Highlight: the second scored probe if it disagrees,
 else the first, else the third, and on it the lowest disagreeing frame.
 No repair outcome, feedback-probe result or trace is read before the pick.
+Each of the pick's strips lists every frame: number, kind and name from
+captures.json, and the packet-list columns and direction from
+packets.json, which must name the same capture and frames. A committed
+trace of an answer, docs/decisions/evidence/web/traces/<run>/<condition>/
+<item>.json, must name its receipt's bytes, probes and disagreeing frames,
+and gives each leaf of both filters with the frames it matched.
 Step 5 reads the pick's pass's scored repair round, its repair/summary.json
 (repair-summary/1.0). With none, ``repair`` says so (``no_round``), unless
 in the test phase the frontier slot's pass (winner_frontier, else
@@ -138,7 +144,20 @@ REGISTRY_SCHEMA = "test-runs/1.0"
 # holds each slot winner's counted dev pass.
 RULING_SCHEMA = "bakeoff-ruling/1.0"
 CAPTURES = "docs/decisions/evidence/web/captures.json"
+PACKETS = "docs/decisions/evidence/web/packets.json"
 TRACES = "docs/decisions/evidence/web/traces"
+# A frame's direction in packets.json: from the probe's client address, to
+# it, or between two other hosts.
+_DIRECTIONS = ("out", "in", "other")
+# packets.json's text columns, under the names reel.json gives them; a
+# node's own "src" key is its source op, so no column takes that name.
+_PACKET_TEXTS = {
+    "time": "time",
+    "source": "src",
+    "destination": "dst",
+    "protocol": "protocol",
+    "info": "info",
+}
 GATE = "docs/decisions/evidence/test-freeze-gate.json"
 SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
@@ -1837,10 +1856,128 @@ def probe_nodes(
     ]
 
 
+def packet_row(repo: Repo, captures: Captures, probe_id: str) -> int:
+    """A probe's row of packets.json, once it agrees with captures.json.
+
+    Both files are regenerated from the same captures, so the row must name
+    the capture captures.json names and list the same frames, numbered from
+    1, each with a known direction.
+    """
+    rows = _arr(_obj(repo.json(PACKETS), PACKETS).get("probes"), PACKETS)
+    found = [
+        index
+        for index, item in enumerate(rows)
+        if _obj(item, f"{PACKETS} probe").get("probe_id") == probe_id
+    ]
+    listed = _obj(rows[found[0]], PACKETS) if len(found) == 1 else {}
+    frames = [
+        _obj(frame, f"{PACKETS} frame")
+        for frame in _arr(listed.get("frames", []), f"{PACKETS} frames")
+    ]
+    capture = ptr(
+        CAPTURES, "probes", captures.index(probe_id), "capture_sha256"
+    )
+    if (
+        listed.get("capture_sha256") != repo.resolve(capture)
+        or [frame.get("n") for frame in frames]
+        != list(range(1, captures.frames[probe_id] + 1))
+        or any(frame.get("direction") not in _DIRECTIONS for frame in frames)
+    ):
+        raise ContractError("packets_stale", f"{PACKETS} {probe_id} frames")
+    return found[0]
+
+
+def reel_strips(
+    repo: Repo, captures: Captures, receipt: str, spec: str
+) -> list[Node]:
+    """The pick's probes as ``probe_nodes`` gives them, with every frame.
+
+    The Reel's cursor reads one frame at a time, so each strip also lists
+    every frame of its capture in order: the number, kind and name that
+    captures.json records, and the packet-list columns and direction that
+    packets.json records, with the probe's client address. Receipts and
+    cases show only the disagreeing frames and do without the list, which
+    would multiply their size.
+    """
+    strips = probe_nodes(repo, captures, receipt, spec)
+    for strip in strips:
+        probe_id = _text(
+            cast(Node, strip["probe_id"])["t"], f"{receipt} probe_id"
+        )
+        row_index = captures.index(probe_id)
+        packets = ("probes", packet_row(repo, captures, probe_id))
+        strip["client"] = repo.t(ptr(PACKETS, *packets, "client"))
+        strip["frame_rows"] = [
+            {
+                "n": repo.v(frame_src(row_index, frame, "n")),
+                "kind": repo.t(frame_src(row_index, frame, "kind")),
+                "name": repo.t(frame_src(row_index, frame, "name")),
+                **{
+                    name: repo.t(
+                        ptr(PACKETS, *packets, "frames", frame - 1, key)
+                    )
+                    for name, key in _PACKET_TEXTS.items()
+                },
+                "length": repo.v(
+                    ptr(PACKETS, *packets, "frames", frame - 1, "length")
+                ),
+                "dir": repo.resolve(
+                    ptr(PACKETS, *packets, "frames", frame - 1, "direction")
+                ),
+            }
+            for frame in range(1, captures.frames[probe_id] + 1)
+        ]
+    return strips
+
+
+def _trace_probe(repo: Repo, path: str, index: int, recorded: object) -> Node:
+    """One probe of a trace: its frames and each leaf of both filters.
+
+    The trace must cover the receipt's probe: the same probe id, and as its
+    frames exactly the receipt's disagreeing frames.
+    """
+    at = ("result", "trace", "probes", index)
+    probe = _obj(repo.resolve(ptr(path, *at)), f"{path} probe")
+    receipt = _obj(recorded, f"{path} receipt probe")
+    if probe.get("probe_id") != receipt.get("probe_id") or sorted(
+        _ints(probe.get("counterexample_frames"), f"{path} frames")
+    ) != sorted(
+        _ints(receipt.get("candidate_only"), "candidate_only")
+        + _ints(receipt.get("reference_only"), "reference_only")
+    ):
+        raise ContractError("trace_stale", f"{path} traces other frames")
+    return {
+        "probe_id": repo.t(ptr(path, *at, "probe_id")),
+        "frames": repo.v(ptr(path, *at, "counterexample_frames")),
+        **{
+            side: [
+                {
+                    "filter": repo.t(
+                        ptr(path, *at, key, leaf, "display_filter")
+                    ),
+                    "matched": repo.v(
+                        ptr(path, *at, key, leaf, "matched_frames")
+                    ),
+                }
+                for leaf in range(len(_arr(probe.get(key), f"{path} {key}")))
+            ]
+            for side, key in (
+                ("filter", "candidate_predicates"),
+                ("request", "canonical_predicates"),
+            )
+        },
+    }
+
+
 def trace_node(
     repo: Repo, run: Run, label: str, item_id: str
 ) -> tuple[Node | None, str | None]:
-    """Links a committed predicate trace, or says why there is none."""
+    """A committed predicate trace's leaves, or why there is none.
+
+    Each probe lists the candidate's leaves (``filter``) and the reference's
+    (``request``), each with its tshark display filter and the frames it
+    matched among the probe's disagreeing frames, the only frames traced.
+    """
     path = f"{TRACES}/{run.run_id}/{label}/{item_id}.json"
     if not repo.exists(path):
         return None, "not_traced"
@@ -1850,12 +1987,24 @@ def trace_node(
         "receipt_file_sha256"
     ) != repo.resolve(["sha256", receipt]):
         raise ContractError("trace_stale", f"{path} names other receipt bytes")
-    result = document.get("result")
-    if isinstance(result, dict) and (
-        cast(dict[str, object], result).get("status") == "trace_limit"
-    ):
+    result = _obj(document.get("result"), f"{path} result")
+    if result.get("status") == "trace_limit":
         return None, "trace_limit"
-    return {"path": path, "sha256": repo.t(["sha256", path])}, None
+    traced = _arr(
+        _obj(result.get("trace"), f"{path} trace").get("probes"),
+        f"{path} probes",
+    )
+    recorded = _arr(_obj(repo.json(receipt), receipt).get("probes"), receipt)
+    if len(traced) != len(recorded):
+        raise ContractError("trace_stale", f"{path} traces other probes")
+    return {
+        "path": path,
+        "sha256": repo.t(["sha256", path]),
+        "probes": [
+            _trace_probe(repo, path, index, probe)
+            for index, probe in enumerate(recorded)
+        ],
+    }, None
 
 
 def replay_parts(repo: Repo, run: Run, receipt: str) -> list[object]:
@@ -2382,8 +2531,21 @@ def _reel_pick(
             "reference_filter": repo.t(ptr(receipt, "reference_filter")),
             "outcome": repo.t(row(run.outcomes, keys, "outcome")),
             "disagreeing": repo.v(disagreeing_src(repo, receipt)),
+            # The root operator of each side's IR, which joins its leaves.
+            "joins": {
+                "filter": (
+                    repo.t(
+                        ptr(run.intent(label, item_id), "expression", "kind")
+                    )
+                    if condition.typed
+                    else None
+                ),
+                "request": repo.t(
+                    ptr(run.spec(case_id), "canonical_ir", "expression", "kind")
+                ),
+            },
         },
-        "strips": probe_nodes(repo, captures, receipt, run.spec(case_id)),
+        "strips": reel_strips(repo, captures, receipt, run.spec(case_id)),
         "highlight": highlight_node(repo, captures, receipt),
         "trace": trace,
         "trace_reason": reason,

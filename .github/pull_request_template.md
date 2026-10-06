@@ -9,11 +9,14 @@ Describe the vertical slice and its observable acceptance criteria.
 - [ ] Docker or Compose contract is verified if runtime behavior changed.
 - [ ] Public schemas, hashes, and receipts remain explicit and versioned.
 
-## Ablation
+## Result
 
-Link `docs/ablations/<slice>-<name>.md` and summarize the Full versus
-Simplified decision. Production changes are incomplete without a real deletion,
-inlining, or bypass experiment on the largest new abstraction.
+The interviewer-visible result this PR serves: a number, a page, a demo, a
+trained checkpoint, or code that can be explained line by line.
+
+## Minor findings left open
+
+List the minor review findings this PR does not fix, or write "None".
 
 ## Safety and provenance
 

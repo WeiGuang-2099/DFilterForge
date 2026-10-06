@@ -15,7 +15,7 @@
 #     --build-arg SOURCE_COMMIT=$(git rev-parse HEAD) \
 #     --output type=local,dest=apps/web/out .
 #
-# Base images are pinned by tag; digest pins come with the Pages workflow.
+# Base images are pinned by tag, not by digest.
 
 ARG PYTHON_IMAGE=python:3.12.14-slim-bookworm
 ARG NODE_IMAGE=node:20.20.2-bookworm-slim

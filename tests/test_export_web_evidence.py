@@ -1,10 +1,11 @@
-"""The web capture evidence: frame tables, anchors and exit status.
+"""The web capture evidence: frame tables, packet lists, anchors, exits.
 
 Frame tables are regenerated from the split and feedback generators and
-checked against the benchmark recipes and the witness names directly. The
-anchor files of a temporary repository are written from the regenerated
-document, then edited to fail one check at a time. The test of the committed
-file skips where the test image carries no docs/ tree.
+checked against the benchmark recipes and the witness names directly; the
+packet lists come from the pinned tshark. The anchor files of a temporary
+repository are written from the regenerated documents, then edited to fail
+one check at a time. The test of the committed files, the Reel pick's
+predicate trace included, skips where the test image carries no docs/ tree.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import pytest
 from dfilterforge.benchmark import BenchmarkProbe
 from dfilterforge.benchmark import generate_benchmark
 from dfilterforge.model_split import generate_model_split
+from dfilterforge.packet_list import PacketListRunner
 from dfilterforge.witnesses import WITNESS_NAMES
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +44,7 @@ _GATE = Path("docs/decisions/evidence/test-freeze-gate.json")
 _FREEZE = Path("src/dfilterforge/held_out_freeze.json")
 _SPEC = Path("docs/results/dev-fixture-2026-01-01/scored/specs/case-a.json")
 _CAPTURES = Path("docs/decisions/evidence/web/captures.json")
+_PACKETS = Path("docs/decisions/evidence/web/packets.json")
 Document = dict[str, Any]
 
 
@@ -65,6 +68,11 @@ def fixture_document() -> Document:
     return evidence.build_captures()
 
 
+@pytest.fixture(name="packets", scope="module")
+def fixture_packets() -> Document:
+    return evidence.build_packets(PacketListRunner())
+
+
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
@@ -84,7 +92,7 @@ def _manifest_row(row: Document) -> Document:
 
 
 @pytest.fixture(name="repo")
-def fixture_repo(tmp_path: Path, document: Document) -> Path:
+def fixture_repo(tmp_path: Path, document: Document, packets: Document) -> Path:
     """A repository whose anchors all agree with the regenerated document."""
     rows: list[Document] = document["probes"]
     _write_json(
@@ -149,6 +157,7 @@ def fixture_repo(tmp_path: Path, document: Document) -> Path:
     )
     (tmp_path / _CAPTURES).parent.mkdir(parents=True)
     (tmp_path / _CAPTURES).write_bytes(evidence.render(document))
+    (tmp_path / _PACKETS).write_bytes(evidence.render(packets))
     return tmp_path
 
 
@@ -208,6 +217,70 @@ def test_capture_identities_match_the_gold_and_the_freeze(
             assert row["capture_sha256"] == gold[probe_id]
         if row["split"] == "test":
             assert row["capture_sha256"] == digests[probe_id]
+
+
+def test_packet_lists_follow_the_frame_tables_capture_by_capture(
+    document: Document, packets: Document
+) -> None:
+    assert packets["schema_version"] == "capture-packets/1.0"
+    assert packets["tshark_version"] == "4.6.8"
+    for frames, listed in zip(
+        document["probes"], packets["probes"], strict=True
+    ):
+        assert listed["probe_id"] == frames["probe_id"]
+        assert listed["capture_sha256"] == frames["capture_sha256"]
+        assert [row["n"] for row in listed["frames"]] == [
+            row["n"] for row in frames["frames"]
+        ]
+        assert {row["direction"] for row in listed["frames"]} <= {
+            "out",
+            "in",
+            "other",
+        }
+
+
+def test_a_stale_or_missing_packet_list_fails_and_write_restores_it(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    committed = (repo / _PACKETS).read_bytes()
+    (repo / _PACKETS).write_bytes(committed.replace(b"TCP", b"UDP", 1))
+
+    assert evidence.main(["--repo", str(repo), "packets", "--check"]) == 1
+    assert evidence.main(["--repo", str(repo), "check"]) == 1
+    (repo / _PACKETS).unlink()
+    assert evidence.main(["--repo", str(repo), "check"]) == 1
+    errors = [
+        json.loads(line)["error"]["message"]
+        for line in capsys.readouterr().err.splitlines()
+    ]
+    assert errors == [
+        f"{_PACKETS.as_posix()} differs from a regeneration",
+        f"{_PACKETS.as_posix()} differs from a regeneration",
+        f"{_PACKETS.as_posix()} is missing",
+    ]
+    assert evidence.main(["--repo", str(repo), "packets", "--write"]) == 0
+    assert (repo / _PACKETS).read_bytes() == committed
+    assert evidence.main(["--repo", str(repo), "check"]) == 0
+
+
+def test_a_trace_is_named_only_by_a_run_a_typed_condition_and_an_item(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert evidence.trace_path(
+        "test-qwen3-32b-2026-09-26", "C4", "mei-1038"
+    ) == Path(
+        "docs/decisions/evidence/web/traces/test-qwen3-32b-2026-09-26/C4/"
+        "mei-1038.json"
+    )
+    for run_id, condition, item_id in (
+        ("../docs", "C4", "mei-1038"),
+        ("test-qwen3-32b-2026-09-26", "C1", "mei-1038"),
+        ("test-qwen3-32b-2026-09-26", "C4", "../x"),
+    ):
+        arguments = ["trace", "--run", run_id, "--condition", condition]
+        assert evidence.main([*arguments, "--item", item_id]) == 2
+        error = json.loads(capsys.readouterr().err)["error"]
+        assert error["code"] == "answer_unknown"
 
 
 def test_render_is_sorted_indented_and_ends_in_one_lf(
@@ -463,3 +536,19 @@ def test_the_committed_frame_tables_match_a_regeneration_and_every_anchor(
     document: Document,
 ) -> None:
     assert evidence.check(_ROOT, document) == []
+    # packets.json and every committed trace, the Reel pick's among them,
+    # rebuild to the same bytes.
+    assert evidence.tshark_failures(_ROOT, PacketListRunner()) == []
+    trace = json.loads(
+        (
+            _ROOT
+            / evidence.trace_path("test-qwen3-32b-2026-09-26", "C4", "mei-1038")
+        ).read_text(encoding="utf-8")
+    )
+    probe = trace["result"]["trace"]["probes"][1]
+    assert probe["probe_id"] == "semantic-37"
+    assert probe["counterexample_frames"] == [60]
+    assert [
+        (leaf["display_filter"], leaf["matched_frames"])
+        for leaf in probe["candidate_predicates"]
+    ] == [("tcp.srcport == 443", [60]), ("tcp.completeness.fin == true", [])]
