@@ -171,40 +171,42 @@ export default function HomePage() {
       <div className="after">
         <RepairScene repair={reel.repair} />
         <PoolScene reel={reel} />
+        <section aria-labelledby="replay-h" className="act replay">
+          <h2 className="act-h" id="replay-h">
+            Replay this verdict
+          </h2>
+          <dl className="rc">
+            <dt>
+              Receipt <Term name="SHA-256" />
+            </dt>
+            <dd>
+              <Digest node={receipt.sha256} />
+            </dd>
+            <dt>Packet set hash</dt>
+            <dd>
+              <Digest node={receipt.packet_set_hash} />
+            </dd>
+            {receipt.repair === null ? null : (
+              <>
+                <dt>Repair round</dt>
+                <dd>
+                  <Unmeasured node={receipt.repair} />
+                </dd>
+              </>
+            )}
+          </dl>
+          <p className="lab">Re-score the whole run offline from its committed answers</p>
+          <pre className="cmd">
+            {receipt.replay.map((part) =>
+              typeof part === 'string' ? part : <Str key={JSON.stringify(part.src)} node={part} />,
+            )}
+          </pre>
+          <p className="note">
+            The run needs no API key: the scorer replays every committed answer with the pinned
+            tshark build and compares the result with the committed receipts.
+          </p>
+        </section>
       </div>
-      <section aria-labelledby="replay-h" className="replay">
-        <h2 id="replay-h">Replay this verdict</h2>
-        <dl className="rc">
-          <dt>
-            Receipt <Term name="SHA-256" />
-          </dt>
-          <dd>
-            <Digest node={receipt.sha256} />
-          </dd>
-          <dt>Packet set hash</dt>
-          <dd>
-            <Digest node={receipt.packet_set_hash} />
-          </dd>
-          {receipt.repair === null ? null : (
-            <>
-              <dt>Repair round</dt>
-              <dd>
-                <Unmeasured node={receipt.repair} />
-              </dd>
-            </>
-          )}
-        </dl>
-        <p className="lab">Re-score the whole run offline from its committed answers</p>
-        <pre className="cmd">
-          {receipt.replay.map((part) =>
-            typeof part === 'string' ? part : <Str key={JSON.stringify(part.src)} node={part} />,
-          )}
-        </pre>
-        <p className="note">
-          The run needs no API key: the scorer replays every committed answer with the pinned
-          tshark build and compares the result with the committed receipts.
-        </p>
-      </section>
     </article>
   );
 }
