@@ -323,9 +323,11 @@ About 15 percent ask for clarification with one slot removed. They use all
 six slots, which repeat across splits by design (see Splits); field and
 protocol are open in test cases only, in no dev case. The wording does not
 repeat: no clarification wording shares a 4-word run, other than one of
-numbers and protocol names alone, with a dev or test non-ready request.
-`tests/test_train_split.py` asserts each rule on the committed set, and the
-wording rule on every clarification template.
+numbers and protocol names alone, with a dev or test non-ready request. v1
+has no not_expressible rows, so fine-tuning on it never shows that status;
+not_expressible test items are reported separately, as false-ready per gold
+status already is. `tests/test_train_split.py` asserts each rule on the
+committed set, and the wording rule on every clarification template.
 
 ## Claim boundary
 
