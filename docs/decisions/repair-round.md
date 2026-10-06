@@ -813,10 +813,11 @@ Before, measured 2026-10-01:
 - **Triggered items.** The dev passes hold the 36 triggered items above, and
   the test passes the 75 counted on 2026-10-02.
 
-After, dev: measured on 2026-10-04 and 2026-10-05, below. After, test: not
-measured. As registered, the dev round fills it in: per model and arm, the
-repaired items, repair@1 with its strata, the transitions, `answer_unchanged`,
-`card_value_reuse` and spend, each linked to its `repair/summary.json`.
+After, dev: measured on 2026-10-04 and 2026-10-05, below. After, test:
+measured on 2026-10-05, below. As registered, the dev round fills it in: per
+model and arm, the repaired items, repair@1 with its strata, the transitions,
+`answer_unchanged`, `card_value_reuse` and spend, each linked to its
+`repair/summary.json`.
 
 Amended 2026-10-04 (OD5, OD6). As registered, the dev round fills in each
 model's After from its arm runs. The frontier After is measured on NextBit,
@@ -831,8 +832,8 @@ of them is a finding.
 
 - **Requests.** The 12 dev arm runs are complete. Their 108 requests, the
   36 triggered items in each of 3 arms, were all answered with HTTP 200. The
-  only other attempts were the 8B resample's 4 HTTP 429, each retried. No
-  test repair request has been sent.
+  only other attempts were the 8B resample's 4 HTTP 429, each retried. The
+  test round's requests are in the After, test below.
   - The anchor, 8B and 120B runs were sent on 2026-10-04 from bff373c and
     served by DeepInfra, DeepInfra and Novita. They are committed in
     8a6e90d, d070b56 and 389c8ed.
@@ -912,7 +913,63 @@ Pooled over the four models
 On dev no pooled comparison can reach 10 discordant cases, since only 9 of
 the 12 ready cases trigger in any model (OD9).
 
-## Receipts so far
+**After, test, filled in 2026-10-06.** Every figure below is read from
+committed files: the four test round summaries, the test pool, and the arm
+runs' manifests and attempt logs. The
+[locked test result](../results/locked-test-v1.md) reports them, with its
+Limits.
+
+- **Requests.** The 12 test arm runs are complete. Their 225 requests, the
+  75 triggered items in each of 3 arms, were sent on 2026-10-05 from 10:29
+  to 10:58 UTC from 97531b6, one invocation per run, and every one was
+  answered with HTTP 200 on its first attempt. DeepInfra served the anchor
+  and 8B runs, Novita the 120B runs and NextBit the frontier runs, under
+  their registered ids (OD5, OD8). Five answers, four of the 8B's and one of
+  the 120B's, stopped at the 2,048-token limit and scored malformed. The
+  rounds are committed in ef9de37, c40108c, 093143a and 4fc589f, and the
+  pool in 9d10c9d.
+- **Every test pass has a repair number** in its `repair/summary.json`. No
+  arm is recorded as not run, and no base outcome changed since its plan.
+
+| Model | Arm | repair@1 | Silent-wrong part | Invalid part | Repaired | Answer unchanged | Card value reuse | Charged USD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| [anchor](../results/test-qwen3-32b-2026-09-26/repair/summary.json) | resample | 0.036 [0.000, 0.115] | 0.040 [0.000, 0.130] | 0.000 [0.000, 0.000] | 1/28 | 16 | - | 0.005015 |
+| [anchor](../results/test-qwen3-32b-2026-09-26/repair/summary.json) | bare | 0.500 [0.292, 0.696] | 0.520 [0.280, 0.733] | 0.333 [0.000, 1.000] | 14/28 | 3 | - | 0.005585 |
+| [anchor](../results/test-qwen3-32b-2026-09-26/repair/summary.json) | counterexample | 0.571 [0.350, 0.759] | 0.600 [0.368, 0.792] | 0.333 [0.000, 1.000] | 16/28 | 3 | 11 | 0.006182 |
+| [8B](../results/test-qwen3.5-9b-2026-09-26/repair/summary.json) | resample | 0.067 [0.000, 0.214] | 0.091 [0.000, 0.250] | 0.000 [0.000, 0.000] | 1/15 | 5 | - | 0.002971 |
+| [8B](../results/test-qwen3.5-9b-2026-09-26/repair/summary.json) | bare | 0.200 [0.000, 0.455] | 0.273 [0.000, 0.625] | 0.000 [0.000, 0.000] | 3/15 | 0 | - | 0.003928 |
+| [8B](../results/test-qwen3.5-9b-2026-09-26/repair/summary.json) | counterexample | 0.400 [0.111, 0.714] | 0.364 [0.083, 0.667] | 0.500 [0.000, 1.000] | 6/15 | 0 | 2 | 0.003906 |
+| [120B](../results/test-qwen3.5-122b-a10b-2026-09-26/repair/summary.json) | resample | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0/20 | 15 | - | 0.031910 |
+| [120B](../results/test-qwen3.5-122b-a10b-2026-09-26/repair/summary.json) | bare | 0.100 [0.000, 0.250] | 0.143 [0.000, 0.400] | 0.000 [0.000, 0.000] | 2/20 | 8 | - | 0.030387 |
+| [120B](../results/test-qwen3.5-122b-a10b-2026-09-26/repair/summary.json) | counterexample | 0.450 [0.267, 0.667] | 0.571 [0.333, 0.800] | 0.167 [0.000, 0.500] | 9/20 | 2 | 6 | 0.036730 |
+| [frontier](../results/test-deepseek-v4-pro-0813-2026-09-26/repair/summary.json) | resample | 0.167 [0.000, 0.412] | 0.250 [0.000, 1.000] | 0.125 [0.000, 0.375] | 2/12 | 0 | - | 0.027693 |
+| [frontier](../results/test-deepseek-v4-pro-0813-2026-09-26/repair/summary.json) | bare | 0.167 [0.000, 0.500] | 0.500 [0.000, 1.000] | 0.000 [0.000, 0.000] | 2/12 | 1 | - | 0.029299 |
+| [frontier](../results/test-deepseek-v4-pro-0813-2026-09-26/repair/summary.json) | counterexample | 0.333 [0.083, 0.667] | 0.750 [0.000, 1.000] | 0.125 [0.000, 0.375] | 4/12 | 0 | 2 | 0.030227 |
+
+- **Per model.** The counterexample arm repaired the most items in each of
+  the four models. Three of the 12 comparisons are conclusive, and they are
+  the only findings: the 120B's primary, counterexample - bare, 0.350
+  [0.056, 0.636], 9 against 2 of 11 discordant cases; and the anchor's
+  counterexample - resample, 0.536 [0.333, 0.720], 12 against 0, and bare -
+  resample, 0.464 [0.259, 0.645], 10 against 0. The other nine have 2 to 9
+  discordant cases.
+- **Spend.** The 12 runs charged at most 0.213833 USD, against 2.70 USD of
+  caps: anchor 0.016782, 8B 0.010805, 120B 0.099027 and frontier 0.087219.
+  The providers reported 0.213721 USD.
+
+Pooled over the four models
+([`repair-pool/test.json`](../results/repair-pool/test.json),
+[`test.md`](../results/repair-pool/test.md)): resample 0.053 [0.014, 0.113],
+4/75; bare 0.280 [0.161, 0.435], 21/75; counterexample 0.467 [0.347, 0.590],
+35/75. Counted by case (OD9), all three pooled comparisons are conclusive.
+
+| Pooled comparison | Difference | First better | Second better | Discordant cases | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| counterexample - bare | 0.187 [0.056, 0.301] | 12 | 4 | 16 | conclusive |
+| counterexample - resample | 0.413 [0.277, 0.537] | 21 | 2 | 23 | conclusive |
+| bare - resample | 0.227 [0.115, 0.369] | 13 | 0 | 13 | conclusive |
+
+## Receipts
 
 - **The four dev passes.** Their `scored/summary.json` are linked in the
   table above.
@@ -920,6 +977,11 @@ the 12 ready cases trigger in any model (OD9).
   table, with its `summary.md`; the pool's `repair-pool/dev.json` and
   `dev.md`; and each arm run's `run_manifest.json`, `attempts/` and
   `scored/` under `docs/results/<arm run id>/`.
+- **The test round.** Each test pass's `repair/summary.json`, linked in the
+  After, test table, with its `summary.md`; the pool's `repair-pool/test.json`
+  and `test.md`; and each of the 12 arm runs' `run_manifest.json`,
+  `attempts/`, `completions/` and `scored/` under
+  `docs/results/<arm run id>/`.
 - **Feedback labels.**
   [`evidence/test-freeze-gate.json`](evidence/test-freeze-gate.json) records
   them in `measurement_identity.feedback_labels_sha256`: dev `be0c91824bb5`,
@@ -939,11 +1001,6 @@ the 12 ready cases trigger in any model (OD9).
     against 37 without addresses and 9 with membership facts only;
   - the largest frame entry is about 333 B, so three frames come to about
     1,014 B.
-- **Test spend.** The test figures in Caps above are design estimates. The
-  dev round's spend is measured in the After above.
-- **Repair behaviour on test.** How hosted models answer a test repair turn,
-  test repair@1, and the test arm comparisons. The dev round is measured in
-  the After above.
 - **Ablation 008** on counterexample facts: Full (decode plus tshark
   confirmation) against Simplified (tshark membership facts only).
 - **Running cost.** The runtime of the per-leaf `field` lookup, and the CI
@@ -951,11 +1008,13 @@ the 12 ready cases trigger in any model (OD9).
 
 ## Limits
 
-- **Comparisons will mostly be inconclusive.** Per-model comparisons on dev
-  are inconclusive by construction: each model has 6 or 7 triggered cases,
-  fewer than the 10 discordant cases a reading needs. They are likely
-  inconclusive on test too. The pooled comparison is the realistic chance of
-  a conclusive read.
+- **Per-model comparisons have little power.** A model's discordant cases
+  cannot exceed its triggered cases. On dev each model has 6 or 7, fewer
+  than the 10 a reading needs, so every dev comparison is inconclusive by
+  construction. On test the four have 20, 11, 16 and 9 (anchor, 8B, 120B,
+  frontier), so the frontier's could never be conclusive; 3 of the 12
+  per-model test comparisons are conclusive, and all three pooled ones
+  (After, test).
 - **The resample may repeat itself.** At temperature 0 it may return the
   counted answer; `answer_unchanged` shows this.
 - **Card values may be reused.** A value that no shortcut rule covers, such
@@ -978,8 +1037,10 @@ Added 2026-10-04 with the frontier arms' move to NextBit (OD5, OD6):
 - **A DeepInfra answer continued on NextBit.** The bare and counterexample
   arms put the answer DeepInfra served in the assistant turn and ask NextBit
   for the correction.
-- **NextBit is untried in a run.** NextBit never served a dev pass or a
-  two-turn smoke; the frontier smoke was served by DeepInfra.
+- **NextBit was untried before these rounds.** It served no dev pass and no
+  two-turn smoke; the frontier smoke was served by DeepInfra. It then served
+  the 33 dev `-nb` answers on 2026-10-05 and all 36 test frontier arm
+  answers, each with HTTP 200 on the first attempt.
 - **The pool mixes providers.** In the pooled comparison, the frontier slot's
   triggered items come from a DeepInfra pass and its arm answers from
   NextBit.
