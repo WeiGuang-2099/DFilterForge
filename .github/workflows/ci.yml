@@ -245,3 +245,78 @@ jobs:
           --profile web-local
           --profile public-demo
           config
+
+  pages:
+    name: Deploy the site to Cloudflare Pages
+    # Only a push to main deploys, and only after every gate passed. The job
+    # builds the site for the domain root through the same composite action,
+    # tests that build, and uploads those bytes.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [python, web, containers]
+    runs-on: ubuntu-24.04
+    environment:
+      name: cloudflare-pages
+      url: https://dfilterforge.pages.dev/
+    steps:
+      - name: Require the Cloudflare secrets
+        # Fails in seconds rather than after the build.
+        env:
+          API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$API_TOKEN" ] || [ -z "$ACCOUNT_ID" ]; then
+            echo '::error::Add the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.'
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Build and check the site for the domain root
+        uses: ./.github/actions/web-site
+        with:
+          # The runner keeps an explicit empty input; it applies the
+          # /DFilterForge default only to an input that is left out.
+          base-path: ''
+      - name: Refuse a build that kept a base path
+        # A /DFilterForge build passes its own tests and 404s every asset
+        # at the pages.dev root.
+        run: grep -q '="/_next/static/' apps/web/out/index.html
+      - name: Give wrangler a directory outside the pnpm workspace
+        # wrangler-action installs wrangler with the package manager whose
+        # lockfile it finds; at the root that is `pnpm add`, which refuses
+        # to add to a workspace root.
+        run: mkdir -p "$RUNNER_TEMP/wrangler"
+      - uses: actions/setup-node@v4
+        with:
+          # Wrangler 4 needs Node 22 or later; the action above set up 20.
+          node-version: 24
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # v3 defaults to Wrangler 3.90.0.
+          wranglerVersion: '4'
+          packageManager: npm
+          workingDirectory: ${{ runner.temp }}/wrangler
+          command: >-
+            pages deploy ${{ github.workspace }}/apps/web/out
+            --project-name=dfilterforge --branch=main
+            --commit-hash=${{ github.sha }}
+      - name: Probe the live site at the root
+        # Every page links its sources at the commit it was exported from,
+        # so the page names this push once the new deployment is live. Then
+        # one of its assets must load from the root.
+        run: |
+          site=https://dfilterforge.pages.dev
+          page="$RUNNER_TEMP/methodology.html"
+          for attempt in $(seq 12); do
+            if curl --fail --silent --show-error --output "$page" \
+                "$site/methodology/" \
+                && grep -q "/blob/$GITHUB_SHA/" "$page"; then
+              break
+            fi
+            test "$attempt" -lt 12
+            sleep 10
+          done
+          asset="$(grep -o '="/_next/static/[^"]*' "$page" | head -n 1 | cut -c 3-)"
+          test -n "$asset"
+          curl --fail --silent --show-error --head --output /dev/null \
+            "$site$asset"
