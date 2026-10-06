@@ -930,8 +930,11 @@ Limits.
   pool in 9d10c9d.
 - **Every test pass has a repair number** in its `repair/summary.json`. No
   arm is recorded as not run, and no base outcome changed since its plan.
+- **Transitions.** Each pass's `repair/summary.md`, beside the
+  `repair/summary.json` the table links, lists each arm's transitions from
+  the counted outcome and every item's outcomes.
 
-| Model | Arm | repair@1 | Silent-wrong part | Invalid part | Repaired | Answer unchanged | Card value reuse | Charged USD |
+| Model | Arm | repair@1 | Silent-wrong part | Invalid part | Repaired | Answer unchanged | Card value reuse | Charged at most (USD) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | [anchor](../results/test-qwen3-32b-2026-09-26/repair/summary.json) | resample | 0.036 [0.000, 0.115] | 0.040 [0.000, 0.130] | 0.000 [0.000, 0.000] | 1/28 | 16 | - | 0.005015 |
 | [anchor](../results/test-qwen3-32b-2026-09-26/repair/summary.json) | bare | 0.500 [0.292, 0.696] | 0.520 [0.280, 0.733] | 0.333 [0.000, 1.000] | 14/28 | 3 | - | 0.005585 |
@@ -1008,10 +1011,12 @@ Pooled over the four models
 
 ## Limits
 
-- **Per-model comparisons have little power.** A model's discordant cases
-  cannot exceed its triggered cases. On dev each model has 6 or 7, fewer
-  than the 10 a reading needs, so every dev comparison is inconclusive by
-  construction. On test the four have 20, 11, 16 and 9 (anchor, 8B, 120B,
+- **Comparisons will mostly be inconclusive.** Per-model comparisons on dev
+  are inconclusive by construction: each model has 6 or 7 triggered cases,
+  fewer than the 10 discordant cases a reading needs. They are likely
+  inconclusive on test too. The pooled comparison is the realistic chance of
+  a conclusive read. Measured 2026-10-06: a model's discordant cases cannot
+  exceed its triggered cases, 20, 11, 16 and 9 on test (anchor, 8B, 120B,
   frontier), so the frontier's could never be conclusive; 3 of the 12
   per-model test comparisons are conclusive, and all three pooled ones
   (After, test).
@@ -1037,10 +1042,8 @@ Added 2026-10-04 with the frontier arms' move to NextBit (OD5, OD6):
 - **A DeepInfra answer continued on NextBit.** The bare and counterexample
   arms put the answer DeepInfra served in the assistant turn and ask NextBit
   for the correction.
-- **NextBit was untried before these rounds.** It served no dev pass and no
-  two-turn smoke; the frontier smoke was served by DeepInfra. It then served
-  the 33 dev `-nb` answers on 2026-10-05 and all 36 test frontier arm
-  answers, each with HTTP 200 on the first attempt.
+- **NextBit is untried in a run.** NextBit never served a dev pass or a
+  two-turn smoke; the frontier smoke was served by DeepInfra.
 - **The pool mixes providers.** In the pooled comparison, the frontier slot's
   triggered items come from a DeepInfra pass and its arm answers from
   NextBit.
@@ -1050,3 +1053,7 @@ Added 2026-10-04 with the frontier arms' move to NextBit (OD5, OD6):
 - **A shared prepare id.** A moved run's `prepare_id` equals the replaced
   DeepInfra run's, its arm's registered first id, so only the run id and the
   run manifest's provider order tell the two apart.
+
+Measured 2026-10-05, after the block above: NextBit served the 33 dev `-nb`
+answers and all 36 test frontier arm answers, each with HTTP 200 on the
+first attempt.

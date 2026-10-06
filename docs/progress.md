@@ -12,7 +12,7 @@ it is published, scored, summarized and pooled, the repair half of
 [`results/locked-test-v1.md`](results/locked-test-v1.md) and the
 [repair note's](decisions/repair-round.md) After, test hold its numbers, and
 the web exporter reads the round. After that branch merges, the next step is
-the hosted site, week 4 of the v2 plan.
+the hosted site (Planned next 2).
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -2510,9 +2510,15 @@ and pools the round and writes it up.
   (0.350 [0.056, 0.636]). The anchor's two comparisons with resample are
   conclusive too; the other 9 of 12 are inconclusive.
 - Commits: ef9de37, c40108c, 093143a and 4fc589f, one round each (anchor, 8B,
-  120B, frontier); 9d10c9d, the pool. The commit that adds this section
-  writes the page's repair half, the note's After, test, the README line and
-  this file.
+  120B, frontier); 9d10c9d, the pool. b65fd84 makes the exporter and the site
+  read the round: the Reel's step 5 turn and the methodology page's Repair
+  round section. 3556939 records that in `decisions/web-site.md` and
+  `decisions/disproof-reel.md`. e0b1a65 writes the page's repair half and
+  the README line, and 73ac90c the repair note's After, test and this entry.
+  The review fixes that follow stop the export when the frontier slot's test
+  pass has a round but the pick's pass has none, test that a repair cannot
+  move the pick in either direction, and correct the wording of the results
+  page, the README, the two web notes, the repair note and this entry.
 
 ## Planned next
 
@@ -2547,8 +2553,7 @@ and pools the round and writes it up.
       `test-repair-round` commit each round whole, and 9d10c9d the pool.
    6. **Done: the repair half of
       [`results/locked-test-v1.md`](results/locked-test-v1.md),** which
-      discloses the move in its Limits, on `test-repair-round` in the commit
-      that adds the "Test repair round" section above.
+      discloses the move in its Limits, on `test-repair-round` in e0b1a65.
 2. The hosted static page generated from receipts, with its Disproof Reel
    chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT

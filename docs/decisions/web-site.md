@@ -445,14 +445,17 @@ export or the site:
   static export has 29 files in 924,010 bytes, `methodology/index.html`
   108,305 of them, and the page renders 139 sourced values: the 138 listed
   below and the split.
-- On `test-repair-round` (2026-10-06), over the committed test repair
-  rounds, `reel.json` gains step 5's turn and `methodology.json` the repair
-  line. A host export with `--source-commit abc1234` has 1,935 files in
-  27,420,742 bytes; `reel.json` is 24,885 bytes and `methodology.json`
+- At b65fd84 on `test-repair-round` (2026-10-06), over the committed test
+  repair rounds, `reel.json` gains step 5's turn and `methodology.json` the
+  repair line. A host export with `--source-commit abc1234` has 1,935 files
+  in 27,420,742 bytes; `reel.json` is 24,885 bytes and `methodology.json`
   18,933. The Docker static export has 29 files in 962,772 bytes,
   `methodology/index.html` 123,439 of them, and the page renders 158
   sourced values: 44 integers, 113 strings and 1 split, and no status
-  shown as "not measured yet".
+  shown as "not measured yet". Of the 19 values added since dfeaf11, 12 are
+  the 12 test prepares d95483a admitted in `held_out_freeze.json`, and 7
+  are the repair line: its 8 values beside its split, less the status it
+  replaces.
 
 The other figures below were not measured again.
 
@@ -567,7 +570,7 @@ Step 5 shows the pick's turn in pass A's counterexample arm run,
 `test-qwen3-32b-cx-2026-09-26`, which pass A's
 [`repair/summary.json`](../results/test-qwen3-32b-2026-09-26/repair/summary.json)
 names at `/arms/2/run`:
-- the card is item 15 of pass A's `repair/plan.json`, kind `frames`: frame
+- the card is `/items/15` of pass A's `repair/plan.json`, kind `frames`: frame
   63 of the feedback probe semantic-35, a FIN+ACK from source port 443 that
   the request selects and the first answer missed;
 - the second answer `(tcp.srcport == 443 && tcp.flags.fin == true)` scored
@@ -654,9 +657,12 @@ pnpm --filter @dfilterforge/web test:e2e
   values; the TypeScript resolver checks the choice alone.
 - The methodology page's repair line shows counts for the cited run's round
   only, pass A's in the test phase: repair@1, its interval and the other
-  passes' rounds wait for a rounding kind in `lib/fmt.ts` and the results
-  page.
+  passes' rounds wait for a rounding kind in `lib/fmt.ts` and a results page
+  on the site.
 - The A/A pair is not wired in: `board.json` keeps `aa` null.
+- `site.json`'s `phase.repair` stays false and `board.json`'s `repair` stays
+  null until the board pull request, although `reel.json` and
+  `methodology.json` already carry the measured round.
 - Base images are pinned by tag, not by digest.
 - `RUN --network=none` was verified only on Docker Desktop 29.7.2: the step
   saw only `lo`, and a connect failed with `ENETUNREACH`. The CI workflow and

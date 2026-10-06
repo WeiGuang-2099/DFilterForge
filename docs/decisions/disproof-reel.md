@@ -151,7 +151,7 @@ got code. It leaves the rule and "Repair trajectory" as registered.
   No committed data needs the fallback: all four test pool passes have
   rounds.
 - **Today's pick.** Steps 1 to 4, which read no repair result, pick pass A's
-  C4 `mei-1038`. Its row is item 15 of pass A's
+  C4 `mei-1038`. Its row is `/items/15` of pass A's
   [`repair/plan.json`](../results/test-qwen3-32b-2026-09-26/repair/plan.json),
   committed in b3a7d40 on 2026-10-02, before the first test repair request
   on 2026-10-05.
