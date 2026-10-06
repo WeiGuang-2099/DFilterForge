@@ -308,6 +308,20 @@ dev, never on test. GRPO is gated on a pre-registered measurement: the share of
 G=8 groups with non-zero reward variance on train prompts must exceed 30
 percent; the histogram is published anyway and GRPO is unfunded here.
 
+Amended 2026-10-06 (owner ruling). The local model is Qwen/Qwen3-1.7B, the
+hybrid release, with thinking off; "base" under Models means it before
+fine-tuning, not Qwen3-1.7B-Base. The SFT set (`data/train/v1`, built by
+`scripts/train_data.py`) samples one to three predicates at depth at most 2
+from exactly the 38 predicates the dev and test gold uses: unseen
+compositions in a closed world, not unseen fields, operators or values. Its
+labels are the frames pinned tshark selects with the gold IR itself on three
+train-only probes (seeds 7001 to 7003, clients no other probe has), not a
+second semantics. Dropped: a canonical key (All and AnyOf flattened and
+sorted) or train-probe frames equal to a dev or test gold's, a shortcut hit,
+no frame or every frame, an 8-word run shared with a dev or test request.
+About 15 percent ask for clarification with one slot removed;
+`tests/test_train_split.py` asserts each rule on the committed set.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
