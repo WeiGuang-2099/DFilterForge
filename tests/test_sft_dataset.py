@@ -23,6 +23,7 @@ from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
 from dfilterforge.generation import parse_typed_ir_response
 from dfilterforge.generation import PreparedBatchV1
 from dfilterforge.intent_ir import GenerationResultV1
+from dfilterforge.intent_ir import walk_predicates
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DATA = _ROOT / "data" / "train" / "v1"
@@ -72,6 +73,26 @@ def test_every_completion_is_its_rows_target_to_the_scorer() -> None:
             "schema_version",
             "status",
         ]
+
+
+def test_the_manifest_counts_ready_targets_past_the_field_list() -> None:
+    manifest = json.loads((_DATA / sft_dataset.MANIFEST).read_text("utf-8"))
+    rows = _jsonl(
+        gzip.decompress((_DATA / sft_dataset.DATA).read_bytes()).decode()
+    )
+    past = 0
+    for row in rows:
+        ir = parse_typed_ir_response(row["completion"]).intent_ir
+        if ir is None:
+            continue
+        shown = json.loads(row["messages"][1]["content"][len(_INPUT_PREFIX) :])
+        listed = {field["abbreviation"] for field in shown["retrieved_fields"]}
+        used = {
+            predicate.field for _, predicate in walk_predicates(ir.expression)
+        }
+        if not used <= listed:
+            past += 1
+    assert manifest["ready_with_unretrieved_field"] == past == 540
 
 
 @_IMAGE

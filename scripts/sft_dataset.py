@@ -11,6 +11,11 @@ under ``exists`` as the prompt asks. Every completion must parse back with
 the scorer's own parser to the row's target, and a ready one must compile
 against the pinned catalog to the row's filter.
 
+The prompt says to use only the retrieved field names, but a ready target
+keeps its gold IR whatever retrieval served, so where a gold field is not
+in the list the completion trains the model past that rule. The manifest
+counts those rows, because they change what an SFT C4 gain means.
+
 The rows are about 9 MB of text, mostly the repeated system prompt and
 field lists, so ``sft.jsonl.gz`` is committed (gzip, no timestamp) beside
 ``sft-manifest.json``, which records the digest of the uncompressed lines;
@@ -49,6 +54,7 @@ from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import prompt_versions
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.intent_ir import GenerationResultV1
+from dfilterforge.intent_ir import walk_predicates
 from dfilterforge.runner import TsharkRunner
 
 TRAIN_DIR = Path(__file__).resolve().parents[1] / "data" / "train" / "v1"
@@ -145,15 +151,17 @@ def completion_text(target: GenerationResultV1) -> str:
 
 def build_lines(
     rows: Sequence[dict[str, object]], runner: TsharkRunner
-) -> tuple[list[str], str | None]:
-    """Returns one SFT line per training row and the catalog hash.
+) -> tuple[list[str], str | None, int]:
+    """Returns one SFT line per training row, the catalog hash and a count.
 
     Args:
         rows: Rows of ``train.jsonl``, in file order.
         runner: The pinned tshark the catalog binding checks.
 
     Returns:
-        The canonical JSON lines and the bound catalog's hash.
+        The canonical JSON lines, the bound catalog's hash, and the number
+        of ready rows whose target uses a field the prompt's retrieved
+        list leaves out.
 
     Raises:
         SftDataError: If a completion does not parse to its target or a
@@ -166,14 +174,21 @@ def build_lines(
     requests = [(str(row["id"]), str(row["request"])) for row in rows]
     prompts = c4_prompts(requests, "train")
     lines: list[str] = []
+    unretrieved = 0
     for row, prompt, target in zip(rows, prompts, targets, strict=True):
         completion = completion_text(target)
         if parse_typed_ir_response(completion) != target:
             raise SftDataError("completion_mismatch", f"{row['id']} differs")
-        if target.intent_ir is not None and (
-            compile_intent(target.intent_ir, catalog) != row["filter"]
-        ):
-            raise SftDataError("filter_mismatch", f"{row['id']} differs")
+        if target.intent_ir is not None:
+            if compile_intent(target.intent_ir, catalog) != row["filter"]:
+                raise SftDataError("filter_mismatch", f"{row['id']} differs")
+            used = {
+                predicate.field
+                for _, predicate in walk_predicates(target.intent_ir.expression)
+            }
+            shown = {field.abbreviation for field in prompt.retrieved_fields}
+            if not used <= shown:
+                unretrieved += 1
         messages = [
             {"role": message.role, "content": message.content}
             for message in prompt.messages
@@ -188,7 +203,7 @@ def build_lines(
                 }
             )
         )
-    return lines, catalog.source_catalog_hash
+    return lines, catalog.source_catalog_hash, unretrieved
 
 
 def build(source: Path, directory: Path, runner: TsharkRunner) -> None:
@@ -198,7 +213,7 @@ def build(source: Path, directory: Path, runner: TsharkRunner) -> None:
         cast(dict[str, object], json.loads(line))
         for line in train.read_text("utf-8").splitlines()
     ]
-    lines, catalog_hash = build_lines(rows, runner)
+    lines, catalog_hash, unretrieved = build_lines(rows, runner)
     text = "".join(line + "\n" for line in lines).encode("utf-8")
     first = cast(dict[str, list[dict[str, str]]], json.loads(lines[0]))
     statuses = Counter(cast(str, json.loads(line)["status"]) for line in lines)
@@ -214,6 +229,7 @@ def build(source: Path, directory: Path, runner: TsharkRunner) -> None:
         "catalog": catalog_hash,
         "rows": len(lines),
         "status": dict(sorted(statuses.items())),
+        "ready_with_unretrieved_field": unretrieved,
         "completion": "prompt key order, compact JSON, no value under exists",
         "files": {LINES: hashlib.sha256(text).hexdigest()},
     }
