@@ -258,12 +258,17 @@ function decodeEntities(text: string): string {
   );
 }
 
-/** The data-src values in server-rendered HTML, outside scripts, sorted. */
-function staticSources(html: string): string[] {
+/** The data-src values in server-rendered HTML, outside scripts, in order. */
+function markupSources(html: string): string[] {
   const markup = html.replace(/<script\b[\s\S]*?<\/script>/gi, '');
   return Array.from(markup.matchAll(/\sdata-src="([^"]*)"/g), (match) =>
     decodeEntities(match[1] ?? ''),
-  ).sort();
+  );
+}
+
+/** The data-src values in server-rendered HTML, outside scripts, sorted. */
+function staticSources(html: string): string[] {
+  return markupSources(html).sort();
 }
 
 /** Every [data-src] element of the page and any nested in another. */
@@ -516,6 +521,60 @@ test('the methodology page names the round its repair line describes', async ({p
   expect(sources.map((source): unknown => JSON.parse(source ?? 'null'))).toEqual(
     keys.map(() => ['ptr', summary, '/split']),
   );
+});
+
+test('the board shows the pool in its order and repair numbers from the allowed files', () => {
+  // A value read from another file passes the value checks. The board's
+  // passes must be the Reel's pool in pool order, never ranked, both as
+  // counted rows and as repair rounds, and a repair number may come only
+  // from the pool file or a pool pass's repair/summary.json, never from an
+  // arm run's scored summary (docs/decisions/web-site.md, Sourced values).
+  const html = readFileSync(path.join(OUT, 'board', 'index.html'), 'utf8');
+  const sources = markupSources(html).map(
+    (source) => JSON.parse(source) as readonly [string, string, unknown],
+  );
+  const runsOf = (suffix: string) =>
+    sources
+      .filter(([op, file, at]) => op === 'ptr' && file.endsWith(suffix) && at === '/model_id')
+      .map(([, file]) => file.split('/')[2]);
+  const pool = resolver.reelPool();
+  const rounds = pool.map((run) => `docs/results/${run}/repair/summary.json`);
+  const files = new Set(sources.map(([, file]) => file));
+
+  expect(runsOf('/scored/summary.json')).toEqual(pool);
+  expect(runsOf('/repair/summary.json')).toEqual(pool);
+  expect([...files].filter((file) => /-(?:cx|bare|res)(?:-r2)?-[0-9]{4}-/.test(file))).toEqual([]);
+  expect([...files].filter((file) => file.includes('/repair')).sort()).toEqual(
+    ['docs/results/repair-pool/test.json', ...rounds].sort(),
+  );
+});
+
+test('the board labels only the registered primary comparison primary', async ({page}) => {
+  // The label is fixed words, which no value check sees. Per model,
+  // counterexample against bare is primary (docs/protocol.md, Repair);
+  // pooled, every comparison is secondary.
+  await page.goto('board/');
+  const labelled = await page.locator('tr[data-label]').evaluateAll((rows) =>
+    rows.map((row) => [
+      row.getAttribute('data-label'),
+      ...Array.from(row.querySelectorAll('th [data-fmt="text"]'), (cell) => cell.textContent),
+      row.querySelector('.bd-tag')?.textContent ?? 'none',
+    ]),
+  );
+  const models = resolver.reelPool().length;
+  const pooled = ['secondary', 'secondary', 'secondary'];
+  const perModel = ['primary', 'none', 'none'];
+
+  expect(labelled.map(([label]) => label)).toEqual([
+    ...pooled,
+    ...Array.from({length: models}, () => perModel).flat(),
+  ]);
+  for (const [label, first, second, tag] of labelled) {
+    expect(tag).toBe(label);
+    expect(label === 'primary', `${first} - ${second}`).toBe(
+      first === 'counterexample' && second === 'bare' && label !== 'secondary',
+    );
+  }
 });
 
 test("the Reel's readout gives every frame the state its receipt records", async ({page}) => {
