@@ -104,3 +104,39 @@ services:
     mem_limit: 512m
     ports:
       - "127.0.0.1:3000:3000"
+
+  train:
+    <<: *runtime-hardening
+    profiles:
+      - train
+    # The CPU smoke by default; the parity test is
+    # docker compose --profile train run --rm train python -m pytest -q
+    # -p no:cacheprovider training/tests. The image holds the pinned
+    # tokenizer and smoke model, so neither needs the network.
+    build:
+      context: .
+      dockerfile: training/Dockerfile
+      target: train
+    image: dfilterforge-train:0.1.0
+    command:
+      - python
+      - training/train_sft.py
+      - --cpu-smoke
+      - --output-dir
+      - /workspace/artifacts/sft-smoke
+    network_mode: none
+    cpus: 4.0
+    mem_limit: 6g
+    # PyTorch and the tokenizer count threads against this limit.
+    pids_limit: 256
+    environment:
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_CACHE: /tmp/hf-datasets
+      OMP_NUM_THREADS: "4"
+      TOKENIZERS_PARALLELISM: "false"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    volumes:
+      - type: bind
+        source: ./artifacts
+        target: /workspace/artifacts
