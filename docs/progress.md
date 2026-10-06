@@ -2549,7 +2549,8 @@ where an item says it is the maintainer's order.
    as site work once it is live, in the maintainer's order; they do not
    gate item 3.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
-   scorer on an A40, at most 3 USD, only after item 2 is live.
+   scorer, at most 3 USD, only after item 2 is live. Where it is served and
+   trained is not decided yet (owner, 2026-10-06).
 4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
    verifier-labelled DPO and a continued-SFT control, three seeds each; the
    GRPO gate measured.
