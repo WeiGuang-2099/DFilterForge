@@ -8,8 +8,9 @@
  * with tshark's Info column. The request column marks the frames the
  * labels select and the filter column the frames the answer selects; a
  * frame where they disagree is drawn in carmine. Witness frames, the tail
- * every capture ends in, are collapsed to ticks below a break, except one
- * that disagrees. Geometry is in pixels down and in fractions of the
+ * every capture ends in, are collapsed into one short break row per run of
+ * them, except one that disagrees, which keeps its full row. The cursor
+ * still stops on each collapsed frame, a sliver of its break row. Geometry is in pixels down and in fractions of the
  * ladder's width across, so the SVG draws only lines and the numbers and
  * labels over it are sourced HTML.
  */
@@ -28,8 +29,8 @@ const XR = 330;
 const XQ = 390;
 const XF = 438;
 const LOOP = 16;
-// Down: the host labels, the first row, a full and a collapsed row, the
-// break before the witness tail, an arrow's drop and the footer. An
+// Down: the host labels, the first row, a full row, the break row that a
+// run of collapsed witness frames shares, an arrow's drop and the footer. An
 // arrow's middle is 1 px below its row's middle and its label stands 3 px
 // above it, tilted to the arrow (reel.css .l-out and .l-in); a loop and
 // its label (.l-other) centre 2 px above the row's middle. A 24 px row
@@ -38,8 +39,7 @@ const LOOP = 16;
 const HOSTS = 14;
 const TOP = 24;
 const ROW = 24;
-const TICK = 7;
-const BREAK = 38;
+const BAND = 32;
 const SLOPE = 6;
 const FOOT = 34;
 
@@ -53,24 +53,45 @@ export interface Track {
 interface Row {
   readonly top: number;
   readonly h: number;
+  /** A collapsed witness frame: a sliver of its run's break row. */
   readonly tick: boolean;
 }
 
-function layout(strip: PickStrip): {rows: Row[]; brk: number | null; end: number} {
-  let y = TOP;
-  let brk: number | null = null;
-  const rows = strip.frame_rows.map((frame, row) => {
-    const witness = frame.kind.t === 'witness';
-    if (witness && brk === null && row > 0) {
-      brk = y;
-      y += BREAK;
+/** A run of collapsed witness frames: its break row's top and its rows. */
+interface Band {
+  top: number;
+  readonly first: number;
+  last: number;
+}
+
+function layout(strip: PickStrip): {rows: Row[]; bands: Band[]; end: number} {
+  const bands: Band[] = [];
+  strip.frame_rows.forEach((frame, row) => {
+    if (frame.kind.t !== 'witness' || DISAGREES.has(strip.states[row] ?? 'tn')) {
+      return;
     }
-    const tick = witness && !DISAGREES.has(strip.states[row] ?? 'tn');
-    const placed = {top: y, h: tick ? TICK : ROW, tick};
-    y += placed.h;
-    return placed;
+    const band = bands.at(-1);
+    if (band !== undefined && band.last === row - 1) {
+      band.last = row;
+    } else {
+      bands.push({top: 0, first: row, last: row});
+    }
   });
-  return {rows, brk, end: y};
+  let y = TOP;
+  const rows = strip.frame_rows.map((_, row) => {
+    const band = bands.find(({first, last}) => first <= row && row <= last);
+    if (band === undefined) {
+      y += ROW;
+      return {top: y - ROW, h: ROW, tick: false};
+    }
+    if (row === band.first) {
+      band.top = y;
+      y += BAND;
+    }
+    const h = BAND / (band.last - band.first + 1);
+    return {top: band.top + (row - band.first) * h, h, tick: true};
+  });
+  return {rows, bands, end: y};
 }
 
 /** Where each row of a strip's ladder lies, for the cursor. */
@@ -81,12 +102,11 @@ export function track(strip: PickStrip): Track {
 
 const across = (x: number) => `${(x * 100) / W}%`;
 
-/** A row's arrow, loop or tick, in viewBox units. */
+/** A row's arrow or loop, in viewBox units; a collapsed row draws none. */
 function stroke(dir: string, {top, h, tick}: Row): string {
   const mid = top + h / 2;
   if (tick) {
-    const [from, to] = dir === 'out' ? [XL, XL + 6] : dir === 'in' ? [XR - 6, XR] : [XR, XR + 6];
-    return `M${from} ${mid}H${to}`;
+    return '';
   }
   if (dir === 'other') {
     const loop = mid - 2 - SLOPE / 2;
@@ -119,35 +139,31 @@ function bars(rows: readonly Row[], states: readonly string[], on: ReadonlySet<s
   return out.join('');
 }
 
-/** A lifeline, broken where the witness tail starts. */
-function life(x: number, brk: number | null, end: number): string {
-  const top = `M${x} ${HOSTS + 7}`;
-  if (brk === null) {
-    return `${top}V${end + 4}`;
+/** A lifeline, broken across each break row. */
+function life(x: number, bands: readonly Band[], end: number): string {
+  const parts = [`M${x} ${HOSTS + 7}`];
+  for (const {top} of bands) {
+    const mid = top + BAND / 2;
+    parts.push(
+      `V${mid - 4}`,
+      `M${x - 6} ${mid - 2}L${x + 6} ${mid - 7}M${x - 6} ${mid + 7}L${x + 6} ${mid + 2}`,
+      `M${x} ${mid + 4}`,
+    );
   }
-  const mid = brk + BREAK / 2;
-  const marks = `M${x - 6} ${mid - 2}L${x + 6} ${mid - 7}M${x - 6} ${mid + 7}L${x + 6} ${mid + 2}`;
-  return `${top}V${mid - 4}M${x} ${mid + 4}V${end + 4}${marks}`;
+  return `${parts.join('')}V${end + 4}`;
 }
 
 /** What each row draws, worked out before any markup. */
 function draw(strip: PickStrip, rows: readonly Row[]) {
-  let axis = -Infinity;
   return strip.frame_rows.map((frame, row) => {
     const place = rows[row] ?? {top: 0, h: 0, tick: true};
     const state = strip.states[row] ?? 'tn';
     const mid = place.top + place.h / 2;
-    const edge = row === 0 || row === rows.length - 1 || rows[row - 1]?.tick !== true;
-    const numbered = !place.tick || (((row + 1) % 5 === 0 || edge) && mid - axis >= 12);
-    if (numbered) {
-      axis = mid;
-    }
     const miss = state === 'fn' ? XF : state === 'fp' ? XQ : null;
     return {
       frame,
       place,
       state,
-      numbered,
       cls: `fr${SELECTED.has(state) ? ' sel' : ''}${DISAGREES.has(state) ? ' dis' : ''}`,
       path: stroke(frame.dir, place),
       miss: miss === null ? null : {x: miss - 3.5, y: mid - 3.5, width: 7, height: 7},
@@ -162,14 +178,12 @@ interface LadderProps {
 
 /** One probe's ladder: lines in SVG, then its numbers and labels. */
 export function Ladder({strip, probe}: LadderProps) {
-  const {rows, brk, end} = layout(strip);
+  const {rows, bands, end} = layout(strip);
   const height = end + FOOT;
   const drawn = draw(strip, rows);
   const frames = strip.frame_rows;
-  const witness = frames.find((frame, row) => row > 0 && frame.kind.t === 'witness');
-  const last = frames[frames.length - 1];
-  const caps = [XL, XR].map((x) => ({x, cap: x - 5, d: life(x, brk, end)}));
-  const top = {cap: HOSTS + 4, brk: (brk ?? 0) + BREAK / 2, foot: end + 14};
+  const caps = [XL, XR].map((x) => ({x, cap: x - 5, d: life(x, bands, end)}));
+  const top = {cap: HOSTS + 4, foot: end + 14};
   return (
     <div className="lad-p" data-p={probe} style={{height}}>
       <svg
@@ -209,7 +223,7 @@ export function Ladder({strip, probe}: LadderProps) {
         <span className="l-col" style={{left: across(XF), top: HOSTS}}>
           filter
         </span>
-        {drawn.map(({frame, place, state, numbered, cls}, row) => (
+        {drawn.map(({frame, place, state, cls}, row) => (
           <div
             className={cls}
             data-at={`${probe}-${row}`}
@@ -218,23 +232,34 @@ export function Ladder({strip, probe}: LadderProps) {
             key={row}
             style={{top: place.top, height: place.h}}
           >
-            {numbered ? (
-              <span className="l-ax" style={{right: across(W - AXIS)}}>
-                <Num kind="int" link={false} node={frame.n} />
-              </span>
-            ) : null}
             {place.tick ? null : (
-              <span className={`l-lab l-${frame.dir}`}>
-                <Str node={frame.info} />
-              </span>
+              <>
+                <span className="l-ax" style={{right: across(W - AXIS)}}>
+                  <Num kind="int" link={false} node={frame.n} />
+                </span>
+                <span className={`l-lab l-${frame.dir}`}>
+                  <Str node={frame.info} />
+                </span>
+              </>
             )}
           </div>
         ))}
-        {brk === null || witness === undefined || last === undefined ? null : (
-          <span className="l-brk" style={{top: top.brk}}>
-            witness frames <Num kind="int" node={witness.n} /> to <Num kind="int" node={last.n} />
-          </span>
-        )}
+        {bands.map(({top: at, first, last}) => {
+          const [from, to] = [frames[first], frames[last]];
+          return from === undefined || to === undefined ? null : (
+            <span className="l-brk" key={first} style={{top: at + BAND / 2}}>
+              {first === last ? (
+                <>
+                  witness frame <Num kind="int" node={from.n} />
+                </>
+              ) : (
+                <>
+                  witness frames <Num kind="int" node={from.n} /> to <Num kind="int" node={to.n} />
+                </>
+              )}
+            </span>
+          );
+        })}
         <span className="l-foot" style={{top: top.foot}}>
           <Num kind="int" node={strip.frames} /> frames
           {strip.runtime_ms === null ? null : (
