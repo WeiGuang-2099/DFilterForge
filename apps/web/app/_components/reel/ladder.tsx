@@ -29,13 +29,18 @@ const XQ = 390;
 const XF = 438;
 const LOOP = 16;
 // Down: the host labels, the first row, a full and a collapsed row, the
-// break before the witness tail, an arrow's drop and the footer.
+// break before the witness tail, an arrow's drop and the footer. An
+// arrow's middle is 1 px below its row's middle and its label stands 3 px
+// above it, tilted to the arrow (reel.css .l-out and .l-in); a loop and
+// its label (.l-other) centre 2 px above the row's middle. A 24 px row
+// holds a 13 px label tilted to a 6 px drop clear of the next row's label
+// and of the arrows beside it.
 const HOSTS = 14;
 const TOP = 24;
-const ROW = 20;
+const ROW = 24;
 const TICK = 7;
 const BREAK = 38;
-const SLOPE = 12;
+const SLOPE = 6;
 const FOOT = 34;
 
 /** The rows of one ladder, in pixels from its top. */
@@ -83,12 +88,13 @@ function stroke(dir: string, {top, h, tick}: Row): string {
     const [from, to] = dir === 'out' ? [XL, XL + 6] : dir === 'in' ? [XR - 6, XR] : [XR, XR + 6];
     return `M${from} ${mid}H${to}`;
   }
-  const y = top + (h - SLOPE) / 2 + 1;
   if (dir === 'other') {
-    const [end, tip] = [y + SLOPE, XR + 7];
+    const loop = mid - 2 - SLOPE / 2;
+    const [end, tip] = [loop + SLOPE, XR + 7];
     const head = `M${tip} ${end - 2.6}L${XR} ${end}L${tip} ${end + 2.6}Z`;
-    return `M${XR} ${y}h${LOOP}v${SLOPE}H${tip}${head}`;
+    return `M${XR} ${loop}h${LOOP}v${SLOPE}H${tip}${head}`;
   }
+  const y = top + (h - SLOPE) / 2 + 1;
   const [from, to] = dir === 'out' ? [XL, XR] : [XR, XL];
   const back = dir === 'out' ? -7 : 7;
   const [end, tip] = [y + SLOPE, to + back];

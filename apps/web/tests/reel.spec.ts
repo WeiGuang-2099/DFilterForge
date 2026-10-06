@@ -96,6 +96,44 @@ test('the clock sweeps the ladder down to the frame that disproves', async ({pag
   await expect(page.getByRole('button', {name: 'Play the sweep'})).toBeVisible();
 });
 
+test('labels on neighbouring ladder rows do not overlap, on any probe, wide or narrow', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({width, height: 900});
+    await page.goto('./');
+    const probes = page.locator('.ps');
+    const count = await probes.count();
+    for (let probe = 0; probe < count; probe += 1) {
+      await probes.nth(probe).click();
+      const ladder = page.locator(`.lad-p[data-p="${probe}"]`);
+      await expect(ladder).toBeVisible();
+      // Each row's label bounds, which hold a tilted label whole, or null
+      // for a collapsed witness row, which has no label.
+      const boxes = await ladder.locator('.lad-tx .fr').evaluateAll((rows) =>
+        rows.map((row) => {
+          const box = row.querySelector('.l-lab')?.getBoundingClientRect();
+          return box === undefined
+            ? null
+            : {left: box.left, right: box.right, top: box.top, bottom: box.bottom};
+        }),
+      );
+      const overlaps = boxes.flatMap((box, row) => {
+        const next = boxes[row + 1] ?? null;
+        const hit =
+          box !== null &&
+          next !== null &&
+          box.left < next.right &&
+          next.left < box.right &&
+          box.top < next.bottom &&
+          next.top < box.bottom;
+        return hit ? [`probe ${probe}, frames ${row + 1} and ${row + 2}, ${width} px wide`] : [];
+      });
+      expect(overlaps).toEqual([]);
+    }
+  }
+});
+
 test('a drag of the flag moves the cursor and the readout with it', async ({page}) => {
   // Tall enough that the whole ladder is in view.
   await page.setViewportSize({width: 1280, height: 1500});

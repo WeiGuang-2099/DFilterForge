@@ -83,9 +83,12 @@
 .l-ax a.num {text-decoration: none;}
 .lad-tx .fr.dis .l-ax {color: var(--dis); font-weight: 700;}
 .l-lab {position: absolute; max-width: calc(50cqw - 18px); overflow: hidden; font-size: 11px; line-height: 13px; color: var(--ink-2); white-space: nowrap; text-overflow: ellipsis; --h: var(--halo, var(--ground)); text-shadow: 0 0 2px var(--h), 1px 0 1px var(--h), -1px 0 1px var(--h), 0 1px 1px var(--h), 0 -1px 1px var(--h);}
-.l-out, .l-in {left: 46.74%; top: 8px; transform-origin: 50% 100%; transform: translate(-50%, -100%) rotate(atan2(12px, 50cqw));}
-.l-in {transform: translate(-50%, -100%) rotate(atan2(-12px, 50cqw));}
-.l-other {right: calc(28.26% + 8px); top: 3px; max-width: 40cqw;}
+/* Row geometry from ladder.tsx: a 24 px row whose arrow drops 6 px across
+   50cqw, its middle 13 px down; a label stands 3 px above its arrow, and a
+   loop's label centres on the loop, 10 px down. */
+.l-out, .l-in {left: 46.74%; top: 10px; transform-origin: 50% 100%; transform: translate(-50%, -100%) rotate(atan2(6px, 50cqw));}
+.l-in {transform: translate(-50%, -100%) rotate(atan2(-6px, 50cqw));}
+.l-other {right: calc(28.26% + 8px); top: 10px; max-width: 40cqw; transform: translateY(-50%);}
 .lad-tx .fr.sel .l-lab {color: var(--ink);}
 .lad-tx .fr.dis .l-lab {color: var(--dis);}
 .l-brk, .l-foot {position: absolute; font-size: 11px; color: var(--ink-2); white-space: nowrap;}
