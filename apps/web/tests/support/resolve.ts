@@ -6,11 +6,11 @@
  * code with scripts/export_web_data.py: the seven ops are written again here
  * from their definitions, over the same allowed roots, so a defect in either
  * implementation shows up as a mismatch instead of agreeing with itself. The
- * shown runs, the Disproof Reel's pool and pick, and the run whose summary
- * the methodology page's repair line cites, with the split that labels the
- * line, are written again the same way, from rule reel-v1 in
- * docs/decisions/disproof-reel.md and the test-run registry described in
- * docs/decisions/test-runs.md.
+ * shown runs, the Disproof Reel's pool, pick and repair turn, and the run
+ * whose summary the methodology page's repair line cites, with the split
+ * that labels the line and the scored round it reads, are written again the
+ * same way, from rule reel-v1 in docs/decisions/disproof-reel.md and the
+ * test-run registry described in docs/decisions/test-runs.md.
  *
  * Ops (paths are relative to the repository root):
  * - ['ptr', path, pointer]: an RFC 6901 pointer into a JSON file.
@@ -110,6 +110,17 @@ export interface ReelPick {
   readonly cond: string;
   readonly item: string;
   readonly candidates: number;
+}
+
+/**
+ * The Reel's repair turn by reel-v1 step 5: no_round with no run before the
+ * pick's pass has a scored round, else the counterexample arm run the round
+ * names and the pick's item.
+ */
+export interface ReelRepair {
+  readonly reason: 'no_round' | null;
+  readonly run: string | null;
+  readonly item: string | null;
 }
 
 /** What test-runs.json registers: its rows and the ruling's slot winners. */
@@ -722,14 +733,10 @@ export class Resolver {
    * anchor, then each slot winner's dev pass, slots.<slot>.winner.run_id of
    * the ruling test-runs.json names or, with no registry, the ranking's
    * provisional_winner, a slot without one skipped. Pass B is never pooled.
-   * Throws, as the exporter stops, once scored repair results exist for the
-   * pool (refuseUnreadRepair).
    */
   reelPool(): string[] {
     const settled = this.settled();
-    const pool = settled === null ? this.devPool() : this.testPool(settled);
-    this.refuseUnreadRepair(pool, settled === null ? 'dev' : 'test');
-    return pool;
+    return settled === null ? this.devPool() : this.testPool(settled);
   }
 
   private testPool(settled: readonly TestRun[]): string[] {
@@ -759,42 +766,13 @@ export class Resolver {
   }
 
   /**
-   * Refuses scored repair results while reel-v1 step 5 is not built: once
-   * repair runs are scored, the Reel shows the pick's counterexample-arm
-   * turn, which neither the exporter nor this resolver reads yet. Throws
-   * when the pool split's docs/results/repair-pool/<split>.json exists, or
-   * for a pool run its repair/summary.json, or the scored summary of its
-   * -cx arm run or that arm's -r2 re-run, named as repair-round.md names
-   * them: the tag before the date, -r2 after the tag.
-   */
-  private refuseUnreadRepair(pool: readonly string[], split: string): void {
-    const files = [`docs/results/repair-pool/${split}.json`];
-    for (const runId of pool) {
-      const parts = runId.split('-');
-      const stem = parts.slice(0, -3).join('-');
-      const date = parts.slice(-3).join('-');
-      files.push(
-        `docs/results/${runId}/repair/summary.json`,
-        `docs/results/${stem}-cx-${date}/scored/summary.json`,
-        `docs/results/${stem}-cx-r2-${date}/scored/summary.json`,
-      );
-    }
-    for (const file of files) {
-      if (this.exists(file)) {
-        refuse(`${file} holds scored repair results, which reel-v1 step 5 would show`);
-      }
-    }
-  }
-
-  /**
    * Names the scored summary whose not_measured statuses the methodology
    * page shows. Its repair line describes the repair round the site
    * reports: in the test phase the test round, so the first test pool run's
    * summary, pass A's whenever pass A is published, and none with an empty
-   * pool; otherwise the dev round, so the dev anchor's. Throws, as the
-   * exporter stops, when that run's repair/summary.json exists: the scorer
-   * keeps not_measured.repair_at_1 at not_run after a round, so the page
-   * would call a measured round not measured yet.
+   * pool; otherwise the dev round, so the dev anchor's. The scorer keeps
+   * not_measured.repair_at_1 at not_run after a round, so once
+   * methodologyRound() names the run's round the page drops that status.
    */
   repairStatusSummary(): string | null {
     const runId = this.repairStatusRun();
@@ -823,21 +801,110 @@ export class Resolver {
     return split;
   }
 
-  /** The run repairStatusSummary() cites; throws once its round is scored. */
+  /** The run repairStatusSummary() cites. */
   private repairStatusRun(): string | null {
     const settled = this.settled();
     const runId =
       settled === null
         ? string(record(this.ranking()['anchor'], 'anchor')['run_id'], 'anchor run')
         : this.testPool(settled).at(0);
-    if (runId === undefined) {
+    return runId ?? null;
+  }
+
+  /**
+   * Names a pass's scored repair round, docs/results/<pass>/repair/summary.json,
+   * or null before one exists. Throws, as the exporter stops
+   * (repair_inconsistent), when the summary names another base run or split.
+   */
+  repairRound(runId: string | null): string | null {
+    if (runId === null) {
       return null;
     }
-    const repair = `docs/results/${runId}/repair/summary.json`;
-    if (this.exists(repair)) {
-      refuse(`${repair} holds a scored repair round, which the methodology would call unmeasured`);
+    const file = `docs/results/${runId}/repair/summary.json`;
+    if (!this.exists(file)) {
+      return null;
     }
-    return runId;
+    const summary = record(this.json(file), file);
+    if (summary['base_run'] !== runId || summary['split'] !== runId.split('-')[0]) {
+      refuse(`${file} names another pass`);
+    }
+    return file;
+  }
+
+  /** The round the methodology page's repair line reads: the cited run's. */
+  methodologyRound(): string | null {
+    return this.repairRound(this.repairStatusRun());
+  }
+
+  /**
+   * The counterexample arm run a round names for an item, or null when the
+   * round did not trigger the item, lists no such arm, or the gate stopped it.
+   */
+  private counterexample(file: string, item: string): string | null {
+    const summary = record(this.json(file), file);
+    const stopped = record(summary['arms_not_run'] ?? {}, `${file} arms_not_run`);
+    const arm = list(summary['arms'], `${file} arms`)
+      .map((each) => record(each, `${file} arm`))
+      .find((each) => each['arm'] === 'counterexample');
+    const triggered = list(summary['items'], `${file} items`).some(
+      (each) => record(each, `${file} item`)['item_id'] === item,
+    );
+    if (arm === undefined || Object.hasOwn(stopped, 'counterexample') || !triggered) {
+      return null;
+    }
+    return string(arm['run'], `${file} counterexample run`);
+  }
+
+  /**
+   * Names the frontier slot's test pass, whose test plan disproof-reel.md's
+   * fallback repair trajectory comes from: the published winner_frontier
+   * run, else the published fallback_frontier run. Null in the dev phase.
+   */
+  private frontierPass(): string | null {
+    const settled = this.settled();
+    if (settled === null) {
+      return null;
+    }
+    const published = (role: string): string | undefined =>
+      settled.find((entry) => entry.role === role)?.runId;
+    return published('winner_frontier') ?? published('fallback_frontier') ?? null;
+  }
+
+  /**
+   * Reads reel-v1 step 5 for the pick, as the exporter does: no_round before
+   * the pick's pass has a scored round, while the frontier pass has none
+   * either; once it has one, the counterexample arm run the round names for
+   * the pick, an -r2 or -nb re-run included. Throws, as the exporter stops
+   * (repair_fallback_unbuilt), when disproof-reel.md's fallback trajectory
+   * would apply, which is not built: the pick's pass has no round but the
+   * frontier pass has one, or the round exists but the pick is not C4, is
+   * not one of its items, or its counterexample arm did not run. Null with
+   * no pick.
+   */
+  reelRepair(): ReelRepair | null {
+    const pick = this.reelPick();
+    if (pick === null) {
+      return null;
+    }
+    const round = this.repairRound(pick.run);
+    if (round === null) {
+      const fallback = this.repairRound(this.frontierPass());
+      if (fallback !== null) {
+        return refuse(
+          `${pick.run} has no scored repair round but ${fallback} holds one: ` +
+            'the fallback repair trajectory is not built',
+        );
+      }
+      return {reason: 'no_round', run: null, item: null};
+    }
+    const run = pick.cond === 'C4' ? this.counterexample(round, pick.item) : null;
+    if (run === null) {
+      return refuse(
+        `${round} holds no counterexample turn for ${pick.cond} ${pick.item}: ` +
+          'the fallback repair trajectory is not built',
+      );
+    }
+    return {reason: null, run, item: pick.item};
   }
 
   /**

@@ -1,20 +1,18 @@
 # Implementation Progress
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 ## Current slice
 
-The baseline test passes are sent, published and scored, and every hosted
-test-run registry row is final. The dev repair round is complete. The owner's
-batch of 2026-10-04 at bff373c gave the anchor, 8B and 120B rounds, which are
-on `main` through PR #20 (60d2421). The frontier arms, which got only HTTP 429
-on their DeepInfra-pinned route, moved to NextBit by the owner's ruling OD5.
-The owner's re-run of 2026-10-05 at 60d2421 answered them there (OD6). On
-`dev-pool-test-seeds` the frontier round, the dev pool, the correction the
-pool showed (OD9) and the 12 test arm seeds with their admission are
-committed, and the [repair note's](decisions/repair-round.md) After holds
-the dev numbers. The owner's test round comes next, once that branch is on
-`main`.
+Both halves of the locked test result are measured. The baselines were
+scored on 2026-10-02, and the dev repair round, the dev pool and the test
+seeds are on `main` through PR #21 (97531b6). The owner sent the test repair
+round from the main checkout at 97531b6 on 2026-10-05. On `test-repair-round`
+it is published, scored, summarized and pooled, the repair half of
+[`results/locked-test-v1.md`](results/locked-test-v1.md) and the
+[repair note's](decisions/repair-round.md) After, test hold its numbers, and
+the web exporter reads the round. After that branch merges, the next step is
+the hosted site (Planned next 2).
 Reports under the ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
@@ -2495,14 +2493,41 @@ was sent, no command set the key variable, and nothing was pushed.
   4. Then the maintainer's publish, score, `repair` and pool for test, as
      Planned next 1.5 and 1.6 say.
 
+## Test repair round: 2026-10-06, branch test-repair-round
+
+The owner sent the test round from the main checkout at 97531b6 on
+2026-10-05, 10:29 to 10:58 UTC: 12 arm runs, 225 requests, all HTTP 200 on
+the first attempt, at most 0.2139 USD against 2.70 USD of caps. NextBit
+answered the frontier arms (OD5). The branch publishes, scores, summarizes
+and pools the round and writes it up.
+
+- Pooled repair@1 ([`repair-pool/test.json`](results/repair-pool/test.json)):
+  counterexample 0.467 [0.347, 0.590], 35/75; bare 0.280 [0.161, 0.435],
+  21/75; resample 0.053 [0.014, 0.113], 4/75. By case (OD9) all three pooled
+  comparisons are conclusive: 12 against 4, 21 against 2 and 13 against 0.
+- Per model (each pass's `repair/summary.json`): the primary,
+  counterexample against bare, is conclusive only for the 120B, 9 against 2
+  (0.350 [0.056, 0.636]). The anchor's two comparisons with resample are
+  conclusive too; the other 9 of 12 are inconclusive.
+- Commits: ef9de37, c40108c, 093143a and 4fc589f, one round each (anchor, 8B,
+  120B, frontier); 9d10c9d, the pool. b65fd84 makes the exporter and the site
+  read the round: the Reel's step 5 turn and the methodology page's Repair
+  round section. 3556939 records that in `decisions/web-site.md` and
+  `decisions/disproof-reel.md`. e0b1a65 writes the page's repair half and
+  the README line, and 73ac90c the repair note's After, test and this entry.
+  The review fixes that follow stop the export when the frontier slot's test
+  pass has a round but the pick's pass has none, test that a repair cannot
+  move the pick in either direction, and correct the wording of the results
+  page, the README, the two web notes, the repair note and this entry.
+
 ## Planned next
 
 1. The [repair round](decisions/repair-round.md) as registered and amended
    (OD5 and OD9, the owner's rulings of 2026-10-04 and 2026-10-05; OD6 to
    OD8, maintainer defaults the owner confirmed on 2026-10-05), in this
-   order; its "Commands" section gives each command. Steps 1 to 4 are done
-   (the sections above). `dev-pool-test-seeds` merges before the next owner
-   command, so that it runs from the main checkout on `main`.
+   order; its "Commands" section gives each command. Steps 1 to 6 are done
+   (the sections above). PR #21 merged `dev-pool-test-seeds` into `main` as
+   97531b6 before the owner's test command.
    1. **Done: the owner's dev frontier arms on NextBit.** The dev command
       ran from the main checkout at 60d2421 on 2026-10-05 and answered all
       three `-nb` arm runs, 11 of 11 each, with no outage re-run.
@@ -2520,15 +2545,15 @@ was sent, no command set the key variable, and nothing was pushed.
       registered ids (OD8). Their `prepare.json` digests are admitted in
       `src/dfilterforge/held_out_freeze.json` in a commit of its own
       (d95483a).
-   5. **Owner: the test round,** once `dev-pool-test-seeds` is on `main`:
-      `repair_arms.py --split test`, the same way. The frontier arms send
-      the NextBit config at the 0.50 cap under their registered ids (OD5,
-      OD8). Then the maintainer's publish, score, `repair` and pool for test.
-   6. **The repair half of
+   5. **Done: the owner's test round, then the maintainer's publish, score,
+      `repair` and pool for test.** `repair_arms.py --split test` ran from
+      the main checkout at 97531b6 on 2026-10-05, the frontier arms on the
+      NextBit config at the 0.50 cap under their registered ids (OD5, OD8),
+      with no outage re-run. ef9de37, c40108c, 093143a and 4fc589f on
+      `test-repair-round` commit each round whole, and 9d10c9d the pool.
+   6. **Done: the repair half of
       [`results/locked-test-v1.md`](results/locked-test-v1.md),** which
-      discloses the move. The frontier arms' answers come from NextBit while
-      the frontier pass's counted first turns are the ones DeepInfra served,
-      as the Limits the repair note added on 2026-10-04 say.
+      discloses the move in its Limits, on `test-repair-round` in e0b1a65.
 2. The hosted static page generated from receipts, with its Disproof Reel
    chosen by the registered rule `reel-v1`.
 3. Qwen3-1.7B base, QLoRA-SFT, verifier-labelled DPO and continued-SFT
@@ -2540,13 +2565,17 @@ was sent, no command set the key variable, and nothing was pushed.
   standalone hash-validation phase was intentionally not run; the stopped local
   run reached 28 captures and 4,200 exact pairs without a difference, but
   partial measurements are not release evidence.
-- Dev has 12 ready cases, so every dev comparison is inconclusive. Test-split
-  repair, SFT, DPO, GRPO and the Pilot Go/No-Go decision are unmeasured.
+- Dev has 12 ready cases, so every dev comparison is inconclusive. The test
+  repair round is measured, but 9 of its 12 per-model comparisons are
+  inconclusive. SFT, DPO, GRPO and the Pilot Go/No-Go decision are
+  unmeasured.
 - The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
   page applies it to the other three models as a named extrapolation.
-- `docs/results/locked-test-v1.md` is generated by a local, uncommitted
-  script, so no CI check ties the page to its files yet. PR #17 merged the
-  `score-test-baselines` branch into main (7a8ec03).
+- Only the baseline half of `docs/results/locked-test-v1.md` was generated,
+  by a local, uncommitted script whose guards now refuse the committed repair
+  runs; the repair half is typed. No CI check ties either half to its files;
+  CI checks the files themselves. PR #17 merged the `score-test-baselines`
+  branch into main (7a8ec03).
 - `repair-arms` was pushed and merged into `main` by PR #18 as bff373c. CI
   runs on every pull request and every push to `main` (`ci.yml`), but no
   result of it on PR #18 is recorded here. PR #20 merged `dev-repair-round`
@@ -2555,11 +2584,12 @@ was sent, no command set the key variable, and nothing was pushed.
   and docs-mounted steps ran in the test image at be9f611 and d95483a, and
   its repair loops at d95483a; the four CI gates, the `uv.lock` comparison
   and a score loop after e93c39f run only in CI on its pull request.
-- `scripts/repair_arms.py` has sent paid calls twice, both on the dev split:
-  the owner's dev batch of 2026-10-04 ("Dev repair rounds published" above)
-  and its re-run of 2026-10-05, whose committed runs are only the three
-  frontier `-nb` runs. Its test split has sent nothing. Apart from those
-  batches, its sending path is tested only against a scripted call step,
+- `scripts/repair_arms.py` has sent paid calls three times: on the dev split,
+  the owner's batch of 2026-10-04 ("Dev repair rounds published" above) and
+  its re-run of 2026-10-05, whose committed runs are only the three frontier
+  `-nb` runs; on the test split, the owner's batch of 2026-10-05 (225
+  requests, "Test repair round" above). Apart from those batches, its
+  sending path is tested only against a scripted call step,
   its keyless path against the real call step, and its invoker's key
   withholding against a stub child.
 - The repair tooling records only gate stops as an arm not run

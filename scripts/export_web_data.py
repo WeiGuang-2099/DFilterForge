@@ -67,10 +67,17 @@ reference_only over the scored probes, ties to the earlier pool run, then
 the lower item id. Highlight: the second scored probe if it disagrees,
 else the first, else the third, and on it the lowest disagreeing frame.
 No repair outcome, feedback-probe result or trace is read before the pick.
-Step 5, the pick's counterexample-arm turn once repair runs are scored, is
-not built: the export stops instead (``repair_unread``) once a pool run's
-repair round summary or scored -cx arm run, or the pool split's
-repair-pool file, is committed.
+Step 5 reads the pick's pass's scored repair round, its repair/summary.json
+(repair-summary/1.0). With none, ``repair`` says so (``no_round``), unless
+in the test phase the frontier slot's pass (winner_frontier, else
+fallback_frontier) has a round. With one, the pick must be a C4 item of the
+round whose counterexample arm ran, and ``repair`` holds that arm's turn on
+it, whatever it scored: the card from the pass's repair/plan.json, and from
+the arm run the round names its completion, its outcome row and, for an
+executed answer, its receipt's filter and frame strips. Any other pick, and
+a pick without a round while the frontier pass has one, stops the export
+(``repair_fallback_unbuilt``): the note's fallback trajectory is not built,
+and no committed data needs it.
 
 methodology.json takes its run values, the prompt conditions, top_k, the
 bootstrap block and the scoring environment, from the dev anchor in both
@@ -81,9 +88,12 @@ the held-out freeze record. Its not_measured statuses describe the repair
 round the site reports: in the test phase they come from the first test
 pool run's summary, pass A whenever it is published, and are empty with an
 empty pool; else from the dev anchor's. Each carries that summary's split,
-which labels the page's line as the test or the dev round. A repair round
-summary of that run stops the export (``repair_unread``), since the scorer
-keeps ``repair_at_1: not_run`` after a round.
+which labels the page's line as the test or the dev round. The scorer keeps
+``repair_at_1: not_run`` after a round, so once that run's repair round
+summary exists the key is left out and ``repair`` holds the round's line:
+split, model, triggered items, each arm's repaired count and any arm the
+gate stopped. A round summary that names another pass or split stops the
+export (``repair_inconsistent``).
 
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
@@ -2068,14 +2078,37 @@ def repair_status_run(selection: Selection) -> Run | None:
     return selection.pool[0].run if selection.pool else None
 
 
-def _not_measured(repo: Repo, run: Run | None) -> list[Node]:
+def repair_round(repo: Repo, run: Run | None) -> str | None:
+    """The path of a pass's scored repair round; None before one exists.
+
+    docs/decisions/repair-round.md writes each pass's round to
+    repair/summary.json (repair-summary/1.0) beside its plan.
+
+    Raises:
+        ContractError: With code ``repair_inconsistent`` when the summary
+            names another base run or split than the pass it sits in.
+    """
+    if run is None:
+        return None
+    path = f"{run.base}/repair/summary.json"
+    if not repo.exists(path):
+        return None
+    document = _obj(repo.json(path), path)
+    if document.get("base_run") != run.run_id or (
+        document.get("split") != run.split
+    ):
+        raise ContractError("repair_inconsistent", f"{path} names another pass")
+    return path
+
+
+def _not_measured(repo: Repo, run: Run | None, measured: bool) -> list[Node]:
     """A run's not_measured statuses by key; none without a run.
 
     The page shows each as "not measured yet". The scorer keeps writing
     ``repair_at_1: not_run`` there after a repair round, whose numbers go to
     the pass's repair/summary.json instead (docs/decisions/repair-round.md),
-    so that summary's existence stops the export (``repair_unread``) rather
-    than let the page call a measured round unmeasured.
+    so once the round is ``measured`` the key is left out and the page shows
+    the round's line instead.
 
     Each status carries the split the run's summary records, which the
     page's label names ("Test repair round" or "Dev repair round"): once
@@ -2084,13 +2117,6 @@ def _not_measured(repo: Repo, run: Run | None) -> list[Node]:
     """
     if run is None:
         return []
-    repair = f"{RESULTS}/{run.run_id}/repair/summary.json"
-    if repo.exists(repair):
-        raise ContractError(
-            "repair_unread",
-            f"{repair} holds a scored repair round, which the not_measured "
-            f"of {run.summary} would still call not measured",
-        )
     statuses = _obj(
         repo.resolve(ptr(run.summary, "not_measured")), "not_measured"
     )
@@ -2101,7 +2127,38 @@ def _not_measured(repo: Repo, run: Run | None) -> list[Node]:
             "value": repo.t(ptr(run.summary, "not_measured", key)),
         }
         for key in sorted(statuses)
+        if not (measured and key == "repair_at_1")
     ]
+
+
+def _repair_line(repo: Repo, path: str | None) -> Node | None:
+    """A scored round's line: split, model, triggered items, arms' counts.
+
+    Counts only: the site never divides, and lib/fmt.ts has no rounding
+    kind for repair@1 yet. An arm the gate stopped is listed with its
+    reason, so the line never drops an arm unseen.
+    """
+    if path is None:
+        return None
+    document = _obj(repo.json(path), path)
+    arms = _arr(document.get("arms"), f"{path} arms")
+    stopped = _obj(document.get("arms_not_run", {}), f"{path} arms_not_run")
+    return {
+        "split": repo.t(ptr(path, "split")),
+        "model_id": repo.t(ptr(path, "model_id")),
+        "triggered_items": repo.v(ptr(path, "triggered_items")),
+        "arms": [
+            {
+                "arm": repo.t(ptr(path, "arms", index, "arm")),
+                "repaired": repo.v(ptr(path, "arms", index, "repaired")),
+            }
+            for index in range(len(arms))
+        ],
+        "not_run": [
+            {"arm": arm, "reason": repo.t(ptr(path, "arms_not_run", arm))}
+            for arm in sorted(stopped)
+        ],
+    }
 
 
 def build_methodology(repo: Repo, selection: Selection) -> Document:
@@ -2109,12 +2166,15 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
 
     The conditions, top_k, bootstrap and environment come from the dev
     anchor in either phase, and the not_measured statuses, each with its
-    split, from ``repair_status_run``. The rest comes from no run: probes
-    and witnesses from CAPTURES, mutants and their categories from GATE,
-    shortcuts from SHORTCUTS and admitted prepares from FREEZE.
+    split, and the repair line from ``repair_status_run`` and its round.
+    The rest comes from no run: probes and witnesses from CAPTURES, mutants
+    and their categories from GATE, shortcuts from SHORTCUTS and admitted
+    prepares from FREEZE.
     """
     anchor = selection.rows[0].run
-    not_measured = _not_measured(repo, repair_status_run(selection))
+    cited = repair_status_run(selection)
+    measured = repair_round(repo, cited)
+    not_measured = _not_measured(repo, cited, measured is not None)
     frames = _arr(repo.resolve(ptr(CAPTURES, "probes", 0, "frames")), "frames")
     probes = _arr(repo.resolve(ptr(CAPTURES, "probes")), "probes")
     return {
@@ -2193,6 +2253,7 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
             )
         },
         "not_measured": not_measured,
+        "repair": _repair_line(repo, measured),
         "admitted_prepares": repo.listed(FREEZE, "admitted_prepares"),
     }
 
@@ -2335,6 +2396,7 @@ def _reel_pick(
             "repair": (
                 repo.t(ptr(run.summary, "not_measured", "repair_at_1"))
                 if "repair_at_1" in not_measured
+                and repair_round(repo, run) is None
                 else None
             ),
         },
@@ -2342,56 +2404,192 @@ def _reel_pick(
     }
 
 
-def _arm_runs(run_id: str, tag: str) -> tuple[str, str]:
-    """Names a pass's arm run and the arm's outage re-run.
+def _entry(repo: Repo, path: str, key: str, item_id: str) -> int | None:
+    """The position of an item's one entry in the array at ``key``."""
+    items = _arr(_obj(repo.json(path), path).get(key), f"{path} {key}")
+    found = [
+        index
+        for index, item in enumerate(items)
+        if _obj(item, f"{path} {key}").get("item_id") == item_id
+    ]
+    if len(found) > 1:
+        raise ContractError("row_not_unique", f"{path}: {item_id} repeats")
+    return found[0] if found else None
 
-    docs/decisions/repair-round.md puts the arm's tag before the date, and
-    a re-run's -r2 after the tag: test-x-cx-2026-09-26, then
-    test-x-cx-r2-2026-09-26.
+
+def _counterexample_arm(repo: Repo, summary: str, item_id: str) -> int | None:
+    """The counterexample arm's position in a round that triggered an item.
+
+    None when the item is not in the round's items, or the arm is not among
+    its arms or the gate stopped it.
     """
-    stem, year, month, day = run_id.rsplit("-", 3)
-    date = f"{year}-{month}-{day}"
-    return f"{stem}-{tag}-{date}", f"{stem}-{tag}-r2-{date}"
+    document = _obj(repo.json(summary), summary)
+    arms = [
+        _obj(arm, f"{summary} arm").get("arm")
+        for arm in _arr(document.get("arms"), f"{summary} arms")
+    ]
+    stopped = _obj(document.get("arms_not_run", {}), f"{summary} arms_not_run")
+    if (
+        "counterexample" not in arms
+        or "counterexample" in stopped
+        or _entry(repo, summary, "items", item_id) is None
+    ):
+        return None
+    return arms.index("counterexample")
 
 
-def check_repair_unread(repo: Repo, selection: Selection) -> None:
-    """Refuses scored repair results while reel-v1 step 5 is not built.
+def _arm_turn(
+    repo: Repo, captures: Captures, arm: str, item_id: str, case_id: str
+) -> Node:
+    """An arm run's second answer to one item, whatever it scored.
 
-    Once repair runs are scored, step 5 shows the pick's
-    structured-counterexample turn, the -cx arm run of the pick's pass,
-    and the repair round's numbers come from its summaries
-    (docs/decisions/disproof-reel.md). The exporter reads none of them yet,
-    so it stops rather than export reel.json with no repair turn and every
-    repair status at its default. Existence alone is checked; nothing is
-    read.
+    Its completion's text, its outcome row and, for an executed answer, its
+    receipt's filter and frame strips. The arm run's scored/summary.json is
+    never read: the repair note calls it a scoring record.
+    """
+    folder = f"{RESULTS}/{check_run_id(arm)}"
+    completions = f"{folder}/completions/C4.json"
+    outcomes = f"{folder}/scored/outcomes.jsonl"
+    keys = {"condition": "C4", "item_id": item_id}
+    answered = _entry(repo, completions, "completions", item_id)
+    if answered is None:
+        raise ContractError("repair_inconsistent", f"{arm} lacks {item_id}")
+    text_src = ptr(completions, "completions", answered, "response_text")
+    raw, truncated = (
+        (None, False) if repo.resolve(text_src) is None else repo.raw(text_src)
+    )
+    receipt = f"{folder}/scored/receipts/C4/{item_id}.json"
+    executed = repo.find_row(outcomes, keys).get("outcome") in _EXECUTED
+    return {
+        "outcome": repo.t(row(outcomes, keys, "outcome")),
+        "filter": (
+            repo.t(ptr(receipt, "candidate_filter")) if executed else None
+        ),
+        "raw": raw,
+        "raw_truncated": truncated,
+        "strips": (
+            probe_nodes(
+                repo, captures, receipt, f"{folder}/scored/specs/{case_id}.json"
+            )
+            if executed
+            else []
+        ),
+    }
+
+
+def _repair_turn(
+    repo: Repo, captures: Captures, run: Run, summary: str, item_id: str
+) -> Node:
+    """The pick's counterexample-arm turn, from its pass's plan and round.
+
+    The card comes from the pass's repair/plan.json and the turn from the
+    arm run the round summary names, an -r2 or -nb re-run included.
+    """
+    arm = ptr(
+        summary,
+        "arms",
+        cast(int, _counterexample_arm(repo, summary, item_id)),
+        "run",
+    )
+    plan = f"{run.base}/repair/plan.json"
+    card = _entry(repo, plan, "items", item_id)
+    if card is None:
+        raise ContractError("repair_inconsistent", f"{plan} lacks {item_id}")
+    case_id = _text(run.rows[("C4", item_id)].get("case_id"), "case_id")
+    return {
+        "item": item_id,
+        "run_id": repo.t(arm),
+        "model_id": repo.t(ptr(summary, "model_id")),
+        "request": repo.t(
+            ["input", run.condition("C4").prepared, item_id, "/intent"]
+        ),
+        "base_outcome": repo.t(ptr(plan, "items", card, "base_outcome")),
+        "card_kind": repo.t(ptr(plan, "items", card, "card_kind")),
+        "card": repo.opt_t(ptr(plan, "items", card, "card")),
+        **_arm_turn(
+            repo,
+            captures,
+            _text(repo.resolve(arm), "arm run"),
+            item_id,
+            case_id,
+        ),
+    }
+
+
+def frontier_pass(selection: Selection) -> Run | None:
+    """The frontier slot's test pass in the pool; None in the dev phase.
+
+    disproof-reel.md takes its fallback repair trajectory from the frontier
+    slot's test plan: the published winner_frontier run, else the published
+    fallback_frontier run. The dev phase has no such pass.
+    """
+    if not selection.test_phase:
+        return None
+    for role in ("winner_frontier", "fallback_frontier"):
+        for shown in selection.pool:
+            if shown.role == role:
+                return shown.run
+    return None
+
+
+def reel_repair(
+    repo: Repo,
+    captures: Captures,
+    run: Run,
+    pick: Candidate,
+    frontier: Run | None,
+) -> Node:
+    """Step 5 of reel-v1: the pick's counterexample turn, whatever it scored.
 
     Args:
         repo: The repository.
-        selection: The shown runs and the pool, from ``select``.
+        captures: The committed frame tables.
+        run: The pick's pass.
+        pick: The pick of steps 2 and 3, which nothing here moves.
+        frontier: The frontier slot's test pass, from ``frontier_pass``.
+
+    Returns:
+        ``reason`` ``no_round`` and no turn before the pass's round is
+        scored, while the frontier pass has none either; else no reason
+        and the turn.
 
     Raises:
-        ContractError: With code ``repair_unread`` when the pool split's
-            docs/results/repair-pool/<split>.json exists, or for a pool run
-            its docs/results/<run>/repair/summary.json, or the
-            scored/summary.json of its -cx arm run or that arm's -r2
-            re-run.
+        ContractError: With code ``repair_fallback_unbuilt`` when
+            disproof-reel.md's fallback trajectory would apply, which is
+            not built: the pick's pass has no round but the frontier pass
+            has one, or the pass's round exists but the pick is not C4, is
+            not one of its items, or its counterexample arm did not run. As
+            ``repair_round`` raises, and with code ``repair_inconsistent``
+            when the plan or the arm run lacks the item.
     """
-    split = "test" if selection.test_phase else "dev"
-    paths = [f"{RESULTS}/repair-pool/{split}.json"]
-    for shown in selection.pool:
-        run_id = shown.run.run_id
-        paths.append(f"{RESULTS}/{run_id}/repair/summary.json")
-        paths.extend(
-            f"{RESULTS}/{arm}/scored/summary.json"
-            for arm in _arm_runs(run_id, "cx")
-        )
-    for path in paths:
-        if repo.exists(path):
+    summary = repair_round(repo, run)
+    if summary is None:
+        fallback = repair_round(repo, frontier)
+        if fallback is not None:
             raise ContractError(
-                "repair_unread",
-                f"{path} holds scored repair results, which the exporter "
-                "does not read until reel-v1 step 5 is built",
+                "repair_fallback_unbuilt",
+                f"{run.run_id} has no scored repair round but {fallback} "
+                "holds one; the fallback repair trajectory of "
+                "docs/decisions/disproof-reel.md is not built, since no "
+                "committed data needs it, so the export stops rather than "
+                "drop the trajectory",
             )
+        return {"reason": "no_round", "turn": None}
+    if pick.label != "C4" or (
+        _counterexample_arm(repo, summary, pick.item_id) is None
+    ):
+        raise ContractError(
+            "repair_fallback_unbuilt",
+            f"{summary} holds no counterexample turn for the pick "
+            f"{pick.label} {pick.item_id}; the fallback repair trajectory "
+            "of docs/decisions/disproof-reel.md is not built, since no "
+            "committed data needs it, so the export stops rather than drop "
+            "the trajectory",
+        )
+    return {
+        "reason": None,
+        "turn": _repair_turn(repo, captures, run, summary, pick.item_id),
+    }
 
 
 def build_reel(
@@ -2405,16 +2603,16 @@ def build_reel(
         selection: The shown runs and the pool, from ``select``.
 
     Returns:
-        The rule id, the pool, the pick with its strips, highlight, trace
-        and receipt panel (or no pick when no pool answer is silent-wrong),
-        one bar per pool run, the headline counts and ``inputs_sha256``,
-        the SHA-256 of every input path and digest the Reel touched.
+        The rule id, the pool, the pick with its strips, highlight, trace,
+        receipt panel and repair turn (or no pick when no pool answer is
+        silent-wrong), one bar per pool run, the headline counts and
+        ``inputs_sha256``, the SHA-256 of every input path and digest the
+        Reel touched.
 
     Raises:
-        ContractError: As ``check_repair_unread`` raises, before anything
-            is built, and for an input that breaks the contract.
+        ContractError: As ``reel_repair`` raises, and for an input that
+            breaks the contract.
     """
-    check_repair_unread(repo, selection)
     with repo.scope() as used:
         repo.json(selection.ranking)
         # The 2026-10-01 check read test-runs.json and the ruling it names
@@ -2479,8 +2677,10 @@ def build_reel(
         }
         if candidates:
             pick = min(candidates)
-            document.update(
-                _reel_pick(repo, captures, pool[pick.position].run, pick)
+            run = pool[pick.position].run
+            document.update(_reel_pick(repo, captures, run, pick))
+            document["repair"] = reel_repair(
+                repo, captures, run, pick, frontier_pass(selection)
             )
     document["inputs_sha256"] = hashlib.sha256(
         render([[path, repo.inputs[path]] for path in sorted(used)])

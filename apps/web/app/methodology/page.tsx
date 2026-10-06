@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 const SHORTCUT_ABLATION = 'docs/ablations/006-shortcut-policy.md';
+const REPAIR_NOTE = 'docs/decisions/repair-round.md';
 
 // Names for the scored summary's not_measured keys. Each follows the split
 // that summary records, "Test repair round" or "Dev repair round", so the
@@ -278,21 +279,53 @@ export default function MethodologyPage() {
         </Fact>
       </dl>
 
-      <h2>Not measured yet</h2>
-      <dl>
-        {data.not_measured.map((entry) => (
-          <Fact
-            key={entry.key}
-            label={
-              <>
-                <Split node={entry.split} /> {notMeasuredName(entry.key)}
-              </>
-            }
-          >
-            <Unmeasured node={entry.value} />
-          </Fact>
-        ))}
-      </dl>
+      {data.repair === null ? null : (
+        <>
+          <h2>Repair round</h2>
+          <p>
+            A repair round gives each silent-wrong or invalid answer of the typed, retrieval-backed
+            condition one more turn in each arm the{' '}
+            <a href={repositoryFile(REPAIR_NOTE)}>repair note</a> defines. An answer counts as
+            repaired only when that turn scores strong exact.
+          </p>
+          <p>
+            <Split node={data.repair.split} /> repair round of <Str node={data.repair.model_id} />:{' '}
+            <Count node={data.repair.triggered_items} /> answers triggered.
+          </p>
+          <dl>
+            {data.repair.arms.map((arm) => (
+              <Fact key={arm.arm.t} label={<Str node={arm.arm} />}>
+                <Count node={arm.repaired} /> repaired
+              </Fact>
+            ))}
+            {data.repair.not_run.map((arm) => (
+              <Fact key={arm.arm} label={arm.arm}>
+                not run: <Str node={arm.reason} />
+              </Fact>
+            ))}
+          </dl>
+        </>
+      )}
+
+      {data.not_measured.length === 0 ? null : (
+        <>
+          <h2>Not measured yet</h2>
+          <dl>
+            {data.not_measured.map((entry) => (
+              <Fact
+                key={entry.key}
+                label={
+                  <>
+                    <Split node={entry.split} /> {notMeasuredName(entry.key)}
+                  </>
+                }
+              >
+                <Unmeasured node={entry.value} />
+              </Fact>
+            ))}
+          </dl>
+        </>
+      )}
 
       <h2>Held-out freeze</h2>
       <p>
