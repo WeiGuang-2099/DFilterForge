@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.dstport","kind":"predicate","operator":"eq","value":443},{"field":"tcp.flags.syn","kind":"predicate","operator":"ne","value":true}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
