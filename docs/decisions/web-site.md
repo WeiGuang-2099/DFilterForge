@@ -157,7 +157,9 @@ allowed source:
   [`disproof-reel.md`](disproof-reel.md) ("Repair trajectory") allows;
 - never an arm run's (`-res`, `-bare` or `-cx`) `scored/summary.json`. The
   [repair note](repair-round.md) calls that file a scoring record, never a
-  reported number.
+  reported number. The Reel's repair turn reads the pass's
+  `repair/plan.json` and `repair/summary.json`, and of the `-cx` arm run only
+  its completion, outcome row, receipt and specification.
 
 ### Outputs
 
@@ -186,8 +188,16 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   `held_out_freeze.json`, none of them a run; and the `not_measured`
   statuses from the run its repair line cites (What fails), each with a
   `split` node that points at that run's summary `/split` and labels the
-  line.
-- `reel.json`: the Disproof Reel projected by rule `reel-v1`.
+  line. Once that run's `repair/summary.json` exists, `repair_at_1` is left
+  out of `not_measured`, and `repair` holds the round's line: split, model,
+  triggered items, each arm's repaired count and any arm the gate stopped,
+  all pointers into that summary. Before, `repair` is null.
+- `reel.json`: the Disproof Reel projected by rule `reel-v1`, step 5
+  included. `repair` is null with no pick. Before the pick's pass has a
+  scored round it has `reason` `no_round` and a null `turn`; after, a null
+  `reason` and the pick's counterexample turn: the card from the pass's
+  plan, the arm run named by the round, and that run's outcome, filter,
+  capped raw answer and frame strips.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 
@@ -255,34 +265,34 @@ are:
   tests. `tests/support/resolve.ts` refuses the same registry, note and
   ruling shapes, and `tests/registry.spec.ts` checks those refusals against
   it case by case;
-- scored repair results for the Reel's pool (`repair_unread`): a pool run's
-  `repair/summary.json`, the scored summary of its `-cx` arm run or that
-  arm's `-r2` re-run, or the pool split's `repair-pool/<split>.json`. Step 5
-  of `reel-v1` is not built, so the export stops rather than drop the
-  repair turn. `tests/support/resolve.ts` refuses exactly these files in
-  `reelPool()`, for the pool of the current phase;
-- a scored repair round of the run the methodology page cites
-  (`repair_unread`): that run's `repair/summary.json`. The page shows the
-  run's `not_measured` statuses as "not measured yet", and the scorer keeps
-  `repair_at_1: not_run` there after a round. The page's repair line
-  describes the repair round the site reports, so the run depends on the
-  phase:
+- a scored repair round that names another pass (`repair_inconsistent`):
+  a `repair/summary.json` whose `base_run` or `split` is not that of the
+  pass whose directory holds it, or a shown turn whose item the pass's
+  `repair/plan.json` or the arm run's completions lack. Two rounds are read:
+  the Reel pick's pass's, for step 5, and that of the run the methodology
+  page cites. The page's repair line describes the repair round the site
+  reports, so the cited run depends on the phase:
   - in the test phase, the first test pool run: pass A whenever pass A is
     published, else the published winner or fallback of the first of the
     small, mid and frontier slots that has one, and no run when the pool is
-    empty, in which case the page lists no status;
+    empty, in which case the page lists no status and no round;
   - in the dev phase, with no registry or before every registry row is
     final, the dev anchor.
 
   So in the test phase the dev anchor's `repair/summary.json`, the dev
-  repair round, stops nothing. `tests/support/resolve.ts` refuses exactly
-  one file in `repairStatusSummary()`, the cited run's
-  `repair/summary.json`: in the test phase the first test pool run's, pass
-  A's whenever pass A is published, and none with an empty pool; in the
-  dev phase the dev anchor's. It returns the cited summary, and the
-  consistency test checks that the built methodology page takes its
-  statuses from that summary. Building step 5 does not lift this stop: the
-  methodology page must first read the round's summary.
+  repair round, is not read. `tests/support/resolve.ts` refuses the same
+  summaries in `repairRound()`; `repairStatusSummary()` names the cited
+  run's summary and `methodologyRound()` its round, and the consistency
+  test checks that the built methodology page takes its statuses and its
+  repair line from those files;
+- a pick without a counterexample turn in its pass's scored round
+  (`repair_fallback_unbuilt`): the round exists, but the pick is not C4, is
+  not one of the round's `items`, or its counterexample arm is missing from
+  `arms` or listed in `arms_not_run`. `disproof-reel.md` then shows the
+  frontier slot's repair trajectory instead. That fallback is not built and
+  no committed data needs it, so the export stops rather than drop the
+  trajectory. `reelRepair()` in `tests/support/resolve.ts` refuses the same
+  picks.
 
 It exits 2 when an input cannot be read, a flag is invalid or the output
 directory is not empty. That includes a registry whose schema tag is not
@@ -308,8 +318,9 @@ sets and source ops before a page renders.
   `repair_at_1`, is never shown as written. The scorer writes `not_run` for
   a measurement no round has made, and `docs/protocol.md` keeps "not run"
   for a run ruled not run. `<Unmeasured>` shows it as fixed words with
-  `data-fmt="unmeasured"`: `not_run` reads "not measured yet"
-  (`docs/results/locked-test-v1.md`), and any other status fails the build.
+  `data-fmt="unmeasured"`: `not_run` reads "not measured yet", the heading
+  the [repair note](repair-round.md) gives what no round has measured, and
+  any other status fails the build.
   The consistency test fails a `not_measured` value shown with any other
   kind, and the unmeasured kind on any other value. The methodology page
   uses it now; a page in the next pull requests that shows the Reel's
@@ -317,7 +328,11 @@ sets and source ops before a page renders.
   status with `<Split>` over the cited summary's `/split`, "Test repair
   round" or "Dev repair round", so that once the dev round is merged
   beside the test round the line still says which round it describes. With
-  an empty test pool it lists no status and no label.
+  an empty test pool it lists no status and no label. Once the cited run's
+  round is scored the page drops the "Not measured yet" section, which has
+  no other status today, and shows a "Repair round" section: the round's
+  split through `<Split>`, its model, its triggered items and each arm's
+  repaired count, all from that round's `repair/summary.json`.
 - **The digit lint.** ESLint fails on a digit in JSX text, as a literal JSX
   child or in a text-bearing attribute, and in a page title or description.
   A digit here is any Unicode number character (`\p{N}`): ASCII, fullwidth
@@ -347,11 +362,14 @@ sets and source ops before a page renders.
   Playwright 1.62.1 evaluates in a context with JavaScript disabled.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
-  registry and of rule `reel-v1` gives other shown runs, another Reel pool
-  or another pick than the ones it pins for the committed tree, and when
-  the built methodology page takes its `not_measured` statuses from another
-  summary than the one `repairStatusSummary()` names. The value checks
-  alone cannot tell: every summary still says `not_run` after a round. It
+  registry and of rule `reel-v1` gives other shown runs, another Reel pool,
+  another pick or another step 5 choice than the ones it pins for the
+  committed tree, and when the built methodology page takes its
+  `not_measured` statuses from another summary than the one
+  `repairStatusSummary()` names, shows one once `methodologyRound()` names
+  a scored round, or reads any `repair/summary.json` value from another
+  round. The value checks alone cannot tell: every summary still says
+  `not_run` after a round. It
   also fails when a "Not measured yet" label is not the split's word and
   "repair round", or when its `<Split>` does not point at that summary's
   `/split`: a split from another run's summary or from a probe capture,
@@ -362,7 +380,8 @@ sets and source ops before a page renders.
 - **The Python side.** `tests/test_export_web_data.py` holds a second
   independent resolver and an AST allowlist that keeps the exporter on the
   standard library. Its committed-tree tests export the committed files and
-  pin the test-phase Reel pick, and
+  pin the test-phase Reel pick, its step 5 turn and the methodology's
+  repair line, and
   `test_the_committed_dev_pool_picks_the_registered_dev_reel` repeats the
   dev check that `disproof-reel.md` recorded (Measured).
 
@@ -406,7 +425,7 @@ that wired CI.
 
 Two exports are measured. The dev data was exported at 07d91ca, before this
 branch had a test-run registry. The test phase is exported at 69d237e, the
-code these figures describe. Of the commits after it, two change the
+code these figures describe. Of the commits after it, three change the
 export or the site:
 - At d3ff716 `methodology.json` takes its `not_measured` status from pass
   A's summary instead of the dev anchor's, which adds 1 byte. The export
@@ -421,6 +440,14 @@ export or the site:
   static export has 29 files in 924,010 bytes, `methodology/index.html`
   108,305 of them, and the page renders 139 sourced values: the 138 listed
   below and the split.
+- On `test-repair-round` (2026-10-06), over the committed test repair
+  rounds, `reel.json` gains step 5's turn and `methodology.json` the repair
+  line. A host export with `--source-commit abc1234` has 1,935 files in
+  27,420,742 bytes; `reel.json` is 24,885 bytes and `methodology.json`
+  18,933. The Docker static export has 29 files in 962,772 bytes,
+  `methodology/index.html` 123,439 of them, and the page renders 158
+  sourced values: 44 integers, 113 strings and 1 split, and no status
+  shown as "not measured yet".
 
 The other figures below were not measured again.
 
@@ -531,9 +558,19 @@ In the test phase, rule `reel-v1` picks
 - the highlight is semantic-37, frame 60, `server-fin-ack`;
 - the headline counts M = 971 and N = 165.
 
-The receipt panel's `repair` field holds pass A's
-`not_measured.repair_at_1`, which is `not_run`. `reel.json` keeps `repair`
-null, and its trace reason is `not_traced` (Limits).
+Step 5 shows the pick's turn in pass A's counterexample arm run,
+`test-qwen3-32b-cx-2026-09-26`, which pass A's
+[`repair/summary.json`](../results/test-qwen3-32b-2026-09-26/repair/summary.json)
+names at `/arms/2/run`:
+- the card is item 15 of pass A's `repair/plan.json`, kind `frames`: frame
+  63 of the feedback probe semantic-35, a FIN+ACK from source port 443 that
+  the request selects and the first answer missed;
+- the second answer `(tcp.srcport == 443 && tcp.flags.fin == true)` scored
+  `strong_exact`, and its receipt agrees with the reference on every frame
+  of the three scored probes.
+
+The receipt panel's `repair` field is null now that pass A's round is
+scored. The trace reason is `not_traced` (Limits).
 
 On the committed dev data, before the test phase, the rule picked
 [`dev-qwen3-32b-2026-09-26` C4 `mei-0015`](../results/dev-qwen3-32b-2026-09-26/scored/receipts/C4/mei-0015.json):
@@ -554,9 +591,10 @@ rows have no summary and the phase stays dev even without that edit; with
 the five test runs copied in and the edit dropped, the phase moves to test
 and the test fails. `test_the_committed_tree_picks_the_registered_reel`
 pins the test-phase pick, and `tests/consistency.spec.ts` derives it again
-in TypeScript. `disproof-reel.md` still says that the rule has no code.
-That was true when the note was registered, and this branch leaves the
-registered note as it is.
+in TypeScript, with its step 5 choice. `disproof-reel.md` registered that
+the rule had no code. Its registered text is left as it is; a dated line in
+its Limits now says steps 1 to 5 have code, and its "Reading step 5" section
+says how step 5 is read.
 
 ## Commands
 
@@ -599,14 +637,20 @@ pnpm --filter @dfilterforge/web test:e2e
   come from bootstrap resamples "as the anchor pass's summary records
   them", so it stays true. Which pass it cites once the board renders test
   intervals is left to the board pull request. Only the page's
-  `not_measured` statuses follow the phase (What fails). Its "Not measured
-  yet" section names no source run, but each line's label names the split
-  of the run it cites: "Test repair round" in the test phase, "Dev repair
+  `not_measured` statuses and its repair line follow the phase (What
+  fails). Neither names its source run, but each label names the split of
+  the run it cites: "Test repair round" in the test phase, "Dev repair
   round" in the dev phase.
-- Step 5 of `reel-v1` is not built. No test `-cx` arm run is scored and no
-  `repair-pool` file exists, so no repair row exists yet, and `reel.json`
-  keeps `repair` null. The export stops with `repair_unread` once one
-  exists (What fails), so a repair turn cannot go missing unseen.
+- Step 5 shows only the pick's own counterexample turn. The fallback repair
+  trajectory `disproof-reel.md` registers for a pick without a repair row
+  is not built: no committed data needs it, and the export stops
+  (`repair_fallback_unbuilt`) rather than drop it. No page renders
+  `reel.json` yet, so only the Python source check re-derives the turn's
+  values; the TypeScript resolver checks the choice alone.
+- The methodology page's repair line shows counts for the cited run's round
+  only, pass A's in the test phase: repair@1, its interval and the other
+  passes' rounds wait for a rounding kind in `lib/fmt.ts` and the results
+  page.
 - The A/A pair is not wired in: `board.json` keeps `aa` null.
 - Base images are pinned by tag, not by digest.
 - `RUN --network=none` was verified only on Docker Desktop 29.7.2: the step
@@ -623,13 +667,14 @@ pnpm --filter @dfilterforge/web test:e2e
 
 The board, case, receipt and Reel pages come in the next pull requests.
 These rules bind them. Only the first is enforced by a test today:
-- **Not measured yet.** `reel.json`'s `receipt_panel.repair` holds the
-  summary's status key, `not_run`. A page shows it through `<Unmeasured>`
-  as "not measured yet", the words of
-  [`locked-test-v1.md`](../results/locked-test-v1.md), and never renders
-  the raw node: the protocol keeps "not run" for a run that ended without a
-  result. The consistency test fails a `not_measured` value shown with any
-  other kind.
+- **Not measured yet.** Until the pick's pass has a scored round,
+  `reel.json`'s `receipt_panel.repair` holds the summary's status key,
+  `not_run`; after, it is null. A page shows it through `<Unmeasured>` as
+  "not measured yet", the words of the [repair note](repair-round.md), and
+  never renders the raw node: the protocol keeps "not run" for a run that
+  ended without a result. The consistency test fails a `not_measured`
+  value shown with any other kind. A page shows `repair.reason` as fixed
+  words too, never the code.
 - **The A/A reading and the confounds.** A page that shows a test
   comparison also shows its A/A reading from the pair report, and the
   notes `locked-test-v1.md` attaches to it: the comparisons it marks

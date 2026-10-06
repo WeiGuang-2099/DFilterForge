@@ -129,10 +129,35 @@ repeat the check.
 - **Highlight.** The highlight is semantic-17, the second probe, at frame 3.
 - **Headline.** Over the dev pool, M is 284 and N is 65.
 
+## Reading step 5 (2026-10-06)
+
+This reading was written after the test repair round was scored, when step 5
+got code. It leaves the rule and "Repair trajectory" as registered.
+- **A repair row.** The picked item is in the `items` of its pass's
+  `repair/summary.json`, and the round's `arms` list the counterexample arm,
+  which `arms_not_run` does not stop. The arm run id is the one that arm
+  names in the summary, so an `-r2` or `-nb` re-run needs no name rule.
+- **The turn.** The card comes from the pass's `repair/plan.json`. From the
+  arm run come its completion, its outcome row and, for an executed answer,
+  its receipt's filter and frame strips; never its `scored/summary.json`.
+- **The fallback trajectory is not built.** Before the pass's round exists
+  the Reel says no round is scored. Once it exists, a pick that is not C4 or
+  has no repair row stops the export (`repair_fallback_unbuilt`) rather than
+  drop the trajectory. No committed data needs it.
+- **Today's pick.** Steps 1 to 4, which read no repair result, pick pass A's
+  C4 `mei-1038`. Its row is item 15 of pass A's
+  [`repair/plan.json`](../results/test-qwen3-32b-2026-09-26/repair/plan.json),
+  committed in b3a7d40 on 2026-10-02, before the first test repair request
+  on 2026-10-05.
+
 ## Limits
 
 - **The rule has no code yet.** `scripts/export_web_data.py` does not exist
   yet; the web track's exporter implements the rule and tests it on fixtures.
+  Amended 2026-10-06: steps 1 to 5 have code, `build_reel` and
+  `reel_repair` in `scripts/export_web_data.py`, derived again in
+  `apps/web/tests/support/resolve.ts`; the fallback repair trajectory has
+  none (Reading step 5).
 - **The pick depends on gold.** A gold correction that re-scores the pool
   runs can change it, and the rule then picks again by the same steps.
 - **The pool changes at the test phase.** Once every registered test run is
