@@ -149,7 +149,15 @@ TRACES = "docs/decisions/evidence/web/traces"
 # A frame's direction in packets.json: from the probe's client address, to
 # it, or between two other hosts.
 _DIRECTIONS = ("out", "in", "other")
-_PACKET_TEXTS = ("time", "src", "dst", "protocol", "info")
+# packets.json's text columns, under the names reel.json gives them; a
+# node's own "src" key is its source op, so no column takes that name.
+_PACKET_TEXTS = {
+    "time": "time",
+    "source": "src",
+    "destination": "dst",
+    "protocol": "protocol",
+    "info": "info",
+}
 GATE = "docs/decisions/evidence/test-freeze-gate.json"
 SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
@@ -1905,10 +1913,10 @@ def reel_strips(
                 "kind": repo.t(frame_src(row_index, frame, "kind")),
                 "name": repo.t(frame_src(row_index, frame, "name")),
                 **{
-                    key: repo.t(
+                    name: repo.t(
                         ptr(PACKETS, *packets, "frames", frame - 1, key)
                     )
-                    for key in _PACKET_TEXTS
+                    for name, key in _PACKET_TEXTS.items()
                 },
                 "length": repo.v(
                     ptr(PACKETS, *packets, "frames", frame - 1, "length")

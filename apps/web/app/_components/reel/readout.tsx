@@ -158,8 +158,8 @@ export function Readout({strips, trace, joins, untraced}: ReadoutProps) {
               <tr>
                 <td><Num kind="int" node={frame.n} /></td>
                 <td className="c-time"><Str node={frame.time} /></td>
-                <td><Str node={frame.src} /></td>
-                <td><Str node={frame.dst} /></td>
+                <td><Str node={frame.source} /></td>
+                <td><Str node={frame.destination} /></td>
                 <td><Str node={frame.protocol} /></td>
                 <td><Num kind="int" node={frame.length} /></td>
               </tr>
