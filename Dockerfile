@@ -182,6 +182,8 @@ COPY src ./src
 COPY tests ./tests
 COPY pcap_lab ./pcap_lab
 COPY scripts ./scripts
+# The frozen training set, which tests/test_train_split.py checks.
+COPY data ./data
 
 RUN uv sync --frozen --extra dev
 
