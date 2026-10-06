@@ -32,7 +32,9 @@
   .side {align-self: stretch;}
   .figrow {grid-template-columns: 212px max-content; grid-template-rows: auto 1fr; grid-template-areas: "ctl lad" "notes lad"; gap: 26px 28px;}
   .ctl {flex-direction: column; align-items: stretch; gap: 8px;}
-  .hint {flex: none; padding-top: 4px;}
+  /* In the column the hint is as tall as its text; the base rule's
+     14rem basis, written later, would stand it 224 px tall. */
+  .ctl .hint {flex: none; padding-top: 4px;}
 }
 .btn {display: inline-flex; align-items: center; gap: 9px; min-height: 36px; padding: 0 14px; border: 1px solid var(--ink); border-radius: 0; background: transparent; font: 600 13px/1 var(--sans); font-stretch: 106%; cursor: pointer; white-space: nowrap;}
 .btn:hover {background: var(--ink); color: var(--ground);}
