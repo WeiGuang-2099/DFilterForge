@@ -170,6 +170,24 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "The training grammar never reads evaluator gold"
+type = "forbidden"
+source_modules = [
+  "dfilterforge.train_atoms",
+  "dfilterforge.train_combos",
+]
+forbidden_modules = [
+  "dfilterforge.benchmark",
+  "dfilterforge.evaluation",
+  "dfilterforge.fixtures",
+  "dfilterforge.model_cases",
+  "dfilterforge.model_dev_cases",
+  "dfilterforge.model_feedback",
+  "dfilterforge.model_split",
+  "dfilterforge.model_test_cases",
+]
+
+[[tool.importlinter.contracts]]
 name = "Scoring never sees the feedback probe"
 type = "forbidden"
 source_modules = [
