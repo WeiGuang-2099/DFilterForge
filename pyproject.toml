@@ -55,6 +55,7 @@ include = [
   "scripts/repair_arms.py",
   "scripts/retrieval_recall.py",
   "scripts/test_passes.py",
+  "scripts/train_data.py",
   "scripts/two_turn_smoke.py",
 ]
 pythonVersion = "3.12"
