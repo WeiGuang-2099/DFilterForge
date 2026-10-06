@@ -329,6 +329,24 @@ not_expressible test items are reported separately, as false-ready per gold
 status already is. `tests/test_train_split.py` asserts each rule on the
 committed set, and the wording rule on every clarification template.
 
+Amended 2026-10-06, before any training run: the SFT recipe and its
+checkpoint. Each row of `data/train/v1/sft.jsonl.gz` (built by
+`scripts/sft_dataset.py`) pairs the C4 request scoring prepares for that
+row, with the same system prompt, assumptions and top-16 retrieval, with
+the row's target envelope, which the scorer's parser reads back unchanged;
+`tests/test_sft_dataset.py` compares the prompts with `model_run.py
+prepare`. `training/train_sft.py` renders them with the Qwen3-1.7B chat
+template and thinking off, and puts the loss on completion tokens only;
+`training/tests/test_parity.py` checks every row's sequence against the
+served render. A served run must render prompts the same way, with thinking
+off by default on the server, because the client sends no switch. The
+recipe is fixed now: 4-bit nf4 QLoRA, r 16, alpha 32, all attention and MLP
+projections, 3 epochs, learning rate 2e-4 with a cosine schedule, effective
+batch 16. For SFT the checkpoint is the adapter after the final epoch, for
+every seed, so no checkpoint is chosen on dev or test; this replaces
+"chosen on dev" above. Seeds 17, 42 and 2026 are each trained, scored on
+dev and test, and reported.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
