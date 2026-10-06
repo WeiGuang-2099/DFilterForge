@@ -833,10 +833,16 @@ pnpm --filter @dfilterforge/web test:e2e
   predicate trace there. The branch's first Reel, 9343e3a, drew request
   and filter lanes instead, for want of per-frame columns, which
   `packets.json` now holds; the owner ruled on 2026-10-06 to restore the
-  ladder. The prototype's RFC header box is left out. The GIF is not encoded yet:
-  `apps/web/scripts/record_reel.mjs` records its frames, and two
-  recordings of one build are identical, but ffmpeg is not installed on
-  the development host.
+  ladder. The prototype's RFC header box is left out.
+- The README GIF, `docs/media/reel.gif`, is the home page in three scenes
+  of one frame size: the top of the page in a 1024 px window, the sweep
+  to the highlighted frame at 1280 px, where the readout sits beside the
+  ladder, and the repair turn at 1024 px.
+  `apps/web/scripts/record_reel.mjs` records its frames on the fake clock
+  and prints the ffmpeg command that encodes them. At c1f2fd1 three
+  recordings of the Docker build gave identical frames, and ffmpeg 7.1 in
+  Docker encoded them as 135 frames at 10 fps, 800x696 px, in 719,785
+  bytes.
 - The trace evaluates leaves only at the frames where the answer and the
   labels disagree, as `dfilterforge.live` traces a counterexample, so on
   every other frame the readout shows a leaf as a dash. Only the Reel's
