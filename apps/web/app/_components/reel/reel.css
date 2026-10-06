@@ -84,7 +84,7 @@
 .reel[data-mode="sweep"] .m-sweep, .reel[data-mode="drag"] .m-drag {display: inline;}
 .ro-ctx {font: 400 11.5px/1.4 var(--mono); letter-spacing: 0; text-transform: none;}
 .ro-h {margin: 0 0 6px; font: 600 19px/1.2 var(--sans); font-stretch: 104%;}
-.ro-grid {display: grid; grid-template-columns: 6rem 4rem minmax(0, 1fr) 4.25rem 4.75rem 4.25rem; font: 12px/1.4 var(--mono);}
+.ro-grid {display: grid; grid-template-columns: 6rem 4.75rem minmax(0, 1fr) 4.25rem 4.75rem 4.25rem; font: 12px/1.4 var(--mono);}
 .ro-th {align-self: end; padding: 0 6px 4px 0; border-bottom: 1px solid var(--line-2); font: 500 11px/1.25 var(--sans); color: var(--ink-2);}
 .ro-probe {grid-column: 1; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--line); font-weight: 600;}
 .ro-cells {grid-column: 2 / -1; display: grid; grid-template-columns: subgrid; border-bottom: 1px solid var(--line);}
