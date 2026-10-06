@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.ack","kind":"predicate","operator":"exists","value":null},{"field":"tcp.segment_data","kind":"predicate","operator":"eq","value":0}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
