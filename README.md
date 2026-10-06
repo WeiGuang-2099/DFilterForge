@@ -12,9 +12,13 @@ proof.
 
 The local CLI connects the typed compiler to a bounded tshark 4.6.8 runner,
 synthetic multi-probe captures, packet diffs, predicate traces, executable
-replay, and measured receipts. One model, qwen/qwen3-32b, has been evaluated
-twice on the 8 ready dev cases that existed then, under all four prompt
-conditions, and nothing has been trained; [what the first run shows and what it does not](docs/decisions/first-dev-run.md)
+replay, and measured receipts. Four hosted models have been scored on the
+frozen test split, and one feedback turn carrying a counterexample repaired
+35 of their 75 silent-wrong or invalid typed answers, against 21 for a bare
+"your filter was incorrect" turn and 4 for a resample
+([locked test result](docs/results/locked-test-v1.md)); nothing has been
+trained. For qwen/qwen3-32b's first two dev runs, on the 8 ready dev cases that
+existed then, [what the first run shows and what it does not](docs/decisions/first-dev-run.md)
 is written down, including a typed-IR prompt gap that the
 [second run](docs/decisions/typed-ir-prompt-v2.md) measured closed. Three of its answers first
 passed as strong exact because no probe packet separated them from the gold;
