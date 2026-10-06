@@ -9,8 +9,10 @@ https://weiguang-2099.github.io/DFilterForge/: PR #25 merged as 210e100 on
 2026-10-06, and the deployed methodology page links its sources at 210e100.
 It serves the Reel on `/` and `/methodology`. Branch `site-board` adds
 `/board`, the test repair round and the counted test passes, and has
-`main` merged in, so the board sits beside the Reel's ladder; the
-readability pass on the live pages goes on that branch too. Branch `sft`
+`main` merged in, so the board sits beside the Reel's ladder. The
+readability pass on the live pages is on that branch too: digests shown as
+twelve-digit prefixes, the methodology page in two columns, the Reel's
+witness tail as one break row and its repair card as a table. Branch `sft`
 holds the SFT code on training set v1 (PR #24). GPU work comes next, on
 Modal (owner ruling), with Qwen/Qwen3-1.7B, thinking off (Planned next 3).
 Reports under the ignored `artifacts/` are not project evidence.

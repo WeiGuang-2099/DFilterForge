@@ -363,7 +363,8 @@ sets and source ops before a page renders.
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
   a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`,
   `verdict`); the string-only kinds `text`, `unmeasured`, `split`,
-  `outcome`, `frame_kind` and `join` are excluded from its `kind` prop, and
+  `outcome`, `frame_kind`, `join` and `digest` are excluded from its `kind`
+  prop, and
   `tests/fmt.spec.ts` fails typecheck
   when a kind added to `lib/fmt.ts` is neither excluded there nor listed
   with a sample value in the spec. `rate` shows three decimals and
@@ -372,6 +373,11 @@ sets and source ops before a page renders.
   [`locked-test-v1.md`](../results/locked-test-v1.md) rounds, so 0.6375
   shows as 0.638 where the binary float would give 0.637.
   `<Str>` renders a string the same way, without the link.
+  `<Digest>` renders a SHA-256 digest in hex as its first twelve digits
+  (`data-fmt="digest"`), as a short git revision is shown, linked to its
+  file, with the whole digest in `data-v` and in the `title`. Every page
+  shows every digest this way; a replay command keeps its revision
+  exact.
   `<Outcome>` renders a scored outcome code as the protocol's words, with
   `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and a code the
   table does not list fails the build. `<Word>` does the same for two more
@@ -420,6 +426,9 @@ sets and source ops before a page renders.
   `apps/web/data`. The test fails on any of these:
   - a value or its formatted text that differs;
   - a `not_measured` status shown as anything but fixed words;
+  - a SHA-256 digest shown other than as a digest, or a digest whose text
+    is not the first twelve digits of the committed value or whose `title`
+    does not hold the whole of it, and the digest kind on any other value;
   - a Unicode number character outside a sourced value, a script, a style
     or a `<Term>`, in the text, a swept attribute (`start` included) or
     `document.title`;
@@ -818,7 +827,8 @@ pnpm --filter @dfilterforge/web test:e2e
   The case and receipt pages come next.
 - The Reel draws the chosen prototype's figure: one ladder diagram per
   scored probe of the pick, with an arrow and the Info column per frame
-  and the witness tail collapsed below a break, the probe bars over it,
+  and each run of agreeing witness frames collapsed into one break row,
+  the probe bars over it,
   the draggable cursor, the packet-list row of the cursor's frame and the
   predicate trace there. The branch's first Reel, 9343e3a, drew request
   and filter lanes instead, for want of per-frame columns, which
