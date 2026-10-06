@@ -45,7 +45,7 @@ interface NumProps {
   // Leaves out fmt's string-only kinds, which throw on every value a NumNode
   // holds. A kind added to FMT_KINDS fails typecheck in tests/fmt.spec.ts
   // until it is either excluded here or listed in NUM_KIND_SAMPLES there.
-  readonly kind: Exclude<FmtKind, 'text' | 'unmeasured' | 'split'>;
+  readonly kind: Exclude<FmtKind, 'text' | 'unmeasured' | 'split' | 'outcome'>;
 }
 
 /** Renders a sourced number, boolean or integer list, linked to its file. */
@@ -112,6 +112,20 @@ export function Split({node}: StrProps): ReactNode {
   return (
     <span data-fmt="split" data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
       {fmt(node.t, 'split')}
+    </span>
+  );
+}
+
+/**
+ * Renders a scored outcome code, such as silent_wrong, as the protocol's
+ * words (fmt's outcome kind). The node keeps the code in data-v, so the
+ * consistency test re-derives it, and a code fmt does not know fails the
+ * build.
+ */
+export function Outcome({node}: StrProps): ReactNode {
+  return (
+    <span data-fmt="outcome" data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
+      {fmt(node.t, 'outcome')}
     </span>
   );
 }

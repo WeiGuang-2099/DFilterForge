@@ -25,6 +25,8 @@ const NUM_KIND_SAMPLES: Readonly<Record<NumKind, NumNode['v']>> = {
   num: 0.5,
   bool: true,
   ints: [3, 9],
+  rate: 0.6375,
+  runtime: 60.32937800000582,
 };
 
 function isNumKind(kind: FmtKind): kind is NumKind {
@@ -102,6 +104,51 @@ test('split shows a run split as the word that names its round', () => {
   }
 });
 
+test('rate rounds the committed decimal to three places, halves away from zero', () => {
+  // The cases locked-test-v1.md shows: a summary's six places, rounded on
+  // the decimal digits, never on the binary float, which toFixed would.
+  expect(fmt(0.6375, 'rate')).toBe('0.638');
+  expect(fmt(0.8125, 'rate')).toBe('0.813');
+  expect(fmt(-0.0625, 'rate')).toBe('-0.063');
+  expect(fmt(0.347, 'rate')).toBe('0.347');
+  expect(fmt(1.0005, 'rate')).toBe('1.001');
+  expect(fmt(0.9995, 'rate')).toBe('1.000');
+  expect(fmt(0.30000000000000004, 'rate')).toBe('0.300');
+  expect(fmt(1, 'rate')).toBe('1.000');
+  expect(fmt(0, 'rate')).toBe('0.000');
+  expect(fmt(-0, 'rate')).toBe('0.000');
+  expect(fmt(0.0004, 'rate')).toBe('0.000');
+  expect(fmt(-0.0004, 'rate')).toBe('-0.000');
+  expect(fmt(5e-4, 'rate')).toBe('0.001');
+  expect(fmt(1e-7, 'rate')).toBe('0.000');
+  expect(fmt(1.5e21, 'rate')).toBe('1500000000000000000000.000');
+  for (const value of [Number.NaN, Infinity, '0.5', true, null, [1]]) {
+    expect(() => fmt(value, 'rate'), String(value)).toThrow(TypeError);
+  }
+});
+
+test('runtime shows milliseconds to one decimal, never the raw float', () => {
+  expect(fmt(60.32937800000582, 'runtime')).toBe('60.3');
+  expect(fmt(60.89140100000634, 'runtime')).toBe('60.9');
+  expect(fmt(7077.999999994063, 'runtime')).toBe('7078.0');
+  expect(fmt(99.95, 'runtime')).toBe('100.0');
+  expect(fmt(0.05, 'runtime')).toBe('0.1');
+  expect(fmt(12, 'runtime')).toBe('12.0');
+  for (const value of [Number.NaN, -Infinity, '60', null]) {
+    expect(() => fmt(value, 'runtime'), String(value)).toThrow(TypeError);
+  }
+});
+
+test('outcome shows a scored outcome code as the protocol words it', () => {
+  expect(fmt('strong_exact', 'outcome')).toBe('strong exact');
+  expect(fmt('silent_wrong', 'outcome')).toBe('silent-wrong');
+  expect(fmt('provider_failed', 'outcome')).toBe('provider failed');
+  expect(fmt('false_ready', 'outcome')).toBe('false ready');
+  for (const value of ['exact', 'silent-wrong', '', 'toString', 3, null]) {
+    expect(() => fmt(value, 'outcome'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -168,7 +215,18 @@ test('visible shows C1 controls and lone surrogates by code point', () => {
 });
 
 test('every kind is named', () => {
-  expect([...FMT_KINDS]).toEqual(['int', 'num', 'bool', 'ints', 'text', 'unmeasured', 'split']);
+  expect([...FMT_KINDS]).toEqual([
+    'int',
+    'num',
+    'bool',
+    'ints',
+    'text',
+    'unmeasured',
+    'split',
+    'rate',
+    'runtime',
+    'outcome',
+  ]);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);
   }
@@ -184,7 +242,7 @@ test('Num accepts exactly the kinds that format a number node', () => {
     expect(() => fmt(NUM_KIND_SAMPLES[kind], kind), kind).not.toThrow();
   }
   const others = FMT_KINDS.filter((kind) => !isNumKind(kind));
-  expect(others).toEqual(['text', 'unmeasured', 'split']);
+  expect(others).toEqual(['text', 'unmeasured', 'split', 'outcome']);
   for (const kind of others) {
     for (const value of Object.values(NUM_KIND_SAMPLES)) {
       expect(() => fmt(value, kind), `${kind} ${JSON.stringify(value)}`).toThrow(TypeError);
