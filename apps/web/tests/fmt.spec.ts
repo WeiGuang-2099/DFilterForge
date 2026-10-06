@@ -27,6 +27,7 @@ const NUM_KIND_SAMPLES: Readonly<Record<NumKind, NumNode['v']>> = {
   ints: [3, 9],
   rate: 0.6375,
   runtime: 60.32937800000582,
+  verdict: true,
 };
 
 function isNumKind(kind: FmtKind): kind is NumKind {
@@ -149,6 +150,15 @@ test('outcome shows a scored outcome code as the protocol words it', () => {
   }
 });
 
+test("verdict shows a comparison's inconclusive flag as the reading's word", () => {
+  // The flag is true below the discordant cases a reading needs.
+  expect(fmt(true, 'verdict')).toBe('inconclusive');
+  expect(fmt(false, 'verdict')).toBe('conclusive');
+  for (const value of [0, 1, 'true', 'inconclusive', null]) {
+    expect(() => fmt(value, 'verdict'), String(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -226,6 +236,7 @@ test('every kind is named', () => {
     'rate',
     'runtime',
     'outcome',
+    'verdict',
   ]);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);

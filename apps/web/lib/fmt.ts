@@ -26,6 +26,7 @@ export const FMT_KINDS = [
   'rate',
   'runtime',
   'outcome',
+  'verdict',
 ] as const;
 
 // What a scored summary's not_measured status keys say on a page. A key is
@@ -138,7 +139,8 @@ function rounded(value: unknown, places: number): string {
  *     split, a run's split as the capitalized word that names its round;
  *     rate, a rate, difference or bound to three decimals; runtime, a
  *     duration in milliseconds to one decimal; outcome, a scored outcome
- *     code as the protocol's words.
+ *     code as the protocol's words; verdict, a comparison's inconclusive
+ *     flag as inconclusive or conclusive.
  * @return The text the page shows.
  * @throws TypeError When the value does not fit the kind, so a build fails
  *     rather than show a value in the wrong form.
@@ -176,5 +178,13 @@ export function fmt(value: unknown, kind: FmtKind): string {
       return rounded(value, PLACES[kind]);
     case 'outcome':
       return word(value, OUTCOMES, 'outcome');
+    case 'verdict':
+      // A comparison's inconclusive flag, set when it has fewer discordant
+      // cases than the protocol needs for a reading, in the words of
+      // docs/results/locked-test-v1.md.
+      if (typeof value !== 'boolean') {
+        throw new TypeError(`fmt: ${JSON.stringify(value)} is not an inconclusive flag`);
+      }
+      return value ? 'inconclusive' : 'conclusive';
   }
 }

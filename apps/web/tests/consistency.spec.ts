@@ -160,10 +160,28 @@ function isNotMeasured(source: unknown): boolean {
 }
 
 /**
+ * Whether a source names a comparison's inconclusive flag, in a scored
+ * summary, a repair round or the repair pool. A page shows one only as its
+ * verdict word (fmt's verdict kind): as yes or no it reads as the opposite
+ * of a conclusive reading, and the verdict words on any other flag would
+ * state a reading no comparison made.
+ */
+function isInconclusive(source: unknown): boolean {
+  if (!Array.isArray(source) || source[0] !== 'ptr' || source.length !== 3) {
+    return false;
+  }
+  const pointer: unknown = source[2];
+  return (
+    typeof pointer === 'string' && /^\/comparisons\/(?:0|[1-9][0-9]*)\/inconclusive$/.test(pointer)
+  );
+}
+
+/**
  * Re-derives one sourced value and lists what does not match. The cut of
  * model text comes from the source, never from the page's data-cap, which
  * must agree with it. A not_measured status must be shown with the
- * unmeasured kind, and only it may be.
+ * unmeasured kind, and only it may be; so must a comparison's inconclusive
+ * flag with the verdict kind.
  */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
@@ -176,11 +194,13 @@ function mismatches(value: Sourced): string[] {
   let expected: unknown;
   let cap: number | null;
   let notMeasured: boolean;
+  let inconclusive: boolean;
   try {
     const source: unknown = JSON.parse(where);
     expected = resolver.resolve(source);
     cap = capFor(source);
     notMeasured = isNotMeasured(source);
+    inconclusive = isInconclusive(source);
   } catch (error) {
     return [`${where}: ${error instanceof Error ? error.message : String(error)}`];
   }
@@ -188,6 +208,12 @@ function mismatches(value: Sourced): string[] {
     return [
       `${where}: data-fmt is ${JSON.stringify(value.kind)}; ` +
         'a not_measured status, and only one, is shown as unmeasured',
+    ];
+  }
+  if (inconclusive !== (value.kind === 'verdict')) {
+    return [
+      `${where}: data-fmt is ${JSON.stringify(value.kind)}; ` +
+        "a comparison's inconclusive flag, and only one, is shown as a verdict",
     ];
   }
   if (value.cap !== (cap === null ? null : String(cap))) {
@@ -581,6 +607,24 @@ test('a not_measured status is shown as fixed words and never as its key', () =>
   expect(mismatches(shown(status, 'text', key))).toHaveLength(1);
   expect(mismatches(shown(status, 'unmeasured', key))).toHaveLength(1);
   expect(mismatches(shown(label, 'unmeasured', 'not measured yet'))).toHaveLength(1);
+});
+
+test("a comparison's inconclusive flag is shown as its verdict, and nothing else is", () => {
+  // As yes or no the flag reads as the opposite of a conclusive reading;
+  // the verdict words on another boolean would state a reading.
+  const summary = 'docs/results/test-qwen3-32b-2026-09-26/scored/summary.json';
+  const flag = ['ptr', 'docs/results/repair-pool/test.json', '/comparisons/0/inconclusive'];
+  const setting = ['ptr', summary, '/effective_settings/json_mode'];
+  const shown = (source: readonly string[], kind: 'bool' | 'verdict'): Sourced => {
+    const value = resolver.resolve(source);
+    return {src: JSON.stringify(source), v: JSON.stringify(value), kind, cap: null, text: fmt(value, kind)};
+  };
+
+  expect(resolver.resolve(flag)).toBe(false);
+  expect(mismatches(shown(flag, 'verdict'))).toEqual([]);
+  expect(mismatches(shown(flag, 'bool'))).toHaveLength(1);
+  expect(mismatches(shown(setting, 'bool'))).toEqual([]);
+  expect(mismatches(shown(setting, 'verdict'))).toHaveLength(1);
 });
 
 test('the sweep finds a number in any script, in a list start and outside the terms', async ({
