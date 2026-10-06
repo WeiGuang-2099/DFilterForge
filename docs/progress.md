@@ -2535,18 +2535,25 @@ exporter's Reel step 5 turn and methodology repair line.
 
 ## Planned next
 
-The owner's rulings of 2026-10-06 set this order. The site is live when item
-2 is deployed: the Reel on `/`, `/board`, `/methodology` and the README GIF.
+The owner's rulings of 2026-10-06 fix three points of this order. The site
+is live when item 2 is deployed: the Reel on `/`, `/board`, `/methodology`
+and the README GIF; GPU spend waits until then. The small model is
+Qwen/Qwen3-1.7B, the hybrid model with thinking off. The training data is
+built on CPU alongside the site. The rest is the plan of record, except
+where an item says it is the maintainer's order.
 
 1. Done: the [repair round](decisions/repair-round.md), dev and test (PRs
    #20 to #22).
 2. The hosted site: the Disproof Reel on `/`, chosen by the registered rule
    `reel-v1`, `/board`, `/methodology` and the README GIF, deployed to
-   Cloudflare Pages by the `pages` job.
+   Cloudflare Pages by the `pages` job. The receipts and cases pages follow
+   as site work once it is live, in the maintainer's order; they do not
+   gate item 3.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
    scorer on an A40, at most 3 USD, only after item 2 is live.
-4. Training data, built on CPU alongside item 2; then SFT, three seeds.
-5. The receipts and cases pages.
+4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
+   verifier-labelled DPO and a continued-SFT control, three seeds each; the
+   GRPO gate measured.
 
 ## Blocked or unverified
 
