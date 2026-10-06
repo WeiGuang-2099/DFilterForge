@@ -95,6 +95,14 @@ split, model, triggered items, each arm's repaired count and any arm the
 gate stopped. A round summary that names another pass or split stops the
 export (``repair_inconsistent``).
 
+board.json's ``test.repair`` holds the test repair round once
+docs/results/repair-pool/test.json exists: the pooled arms and
+comparisons, then each pool pass's arms and comparisons from its
+repair/summary.json, in pool order. A pool file that pools other passes, or
+a pool pass without a scored round, stops the export
+(``repair_inconsistent``). site.json's ``phase.repair`` says whether the
+block is there.
+
 The exporter imports only the standard library, never runs a process, never
 opens a socket and reads no clock, environment variable or git state, so
 the same files and flags give the same bytes.
@@ -142,6 +150,8 @@ TRACES = "docs/decisions/evidence/web/traces"
 GATE = "docs/decisions/evidence/test-freeze-gate.json"
 SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
+# The test repair round pooled over the test pool's passes (repair-pool/1.0).
+REPAIR_POOL = "docs/results/repair-pool/test.json"
 # The note that registers the test runs (protocol.md requires them in
 # writing before the first test request). Read only to check its Runs table
 # against test-runs.json; no sourced value ever points into it.
@@ -214,6 +224,8 @@ _MEAN_CHECKS = (
     ("strong_exact", "strong_exact"),
     ("silent_wrong_all", "silent_wrong"),
 )
+# The counts of a repair comparison, per pass or pooled by case.
+_REPAIR_COUNTS = ("discordant", "first_better", "second_better", "inconclusive")
 _ARITY = {
     "ptr": 3,
     "row": 4,
@@ -1672,6 +1684,7 @@ def build_board(repo: Repo, selection: Selection) -> Document:
     row: locked-test-v1.md counts pass A and keeps pass B only as its rerun,
     so the published aa_pass_b run appears as ``rerun`` alone, null when it
     is not published. It stays a shown run with receipts and cases.
+    ``repair`` is the pooled test repair round (``build_repair``).
     """
     test: Node | None = None
     if selection.test_phase:
@@ -1695,7 +1708,7 @@ def build_board(repo: Repo, selection: Selection) -> Document:
                 for role, index in selection.not_run
             ],
             "aa": None,
-            "repair": None,
+            "repair": build_repair(repo, selection),
         }
     return {
         "schema": "web-board/1.0",
@@ -2158,18 +2171,27 @@ def _not_measured(repo: Repo, run: Run | None, measured: bool) -> list[Node]:
     ]
 
 
+def _not_run_arms(repo: Repo, path: str) -> list[Node]:
+    """A round's arms the gate stopped, each with its sourced reason."""
+    document = _obj(repo.json(path), path)
+    stopped = _obj(document.get("arms_not_run", {}), f"{path} arms_not_run")
+    return [
+        {"arm": arm, "reason": repo.t(ptr(path, "arms_not_run", arm))}
+        for arm in sorted(stopped)
+    ]
+
+
 def _repair_line(repo: Repo, path: str | None) -> Node | None:
     """A scored round's line: split, model, triggered items, arms' counts.
 
-    Counts only: the site never divides, and lib/fmt.ts has no rounding
-    kind for repair@1 yet. An arm the gate stopped is listed with its
-    reason, so the line never drops an arm unseen.
+    Counts only, as the methodology page shows them; the board shows the
+    rates. An arm the gate stopped is listed with its reason, so the line
+    never drops an arm unseen.
     """
     if path is None:
         return None
     document = _obj(repo.json(path), path)
     arms = _arr(document.get("arms"), f"{path} arms")
-    stopped = _obj(document.get("arms_not_run", {}), f"{path} arms_not_run")
     return {
         "split": repo.t(ptr(path, "split")),
         "model_id": repo.t(ptr(path, "model_id")),
@@ -2181,9 +2203,96 @@ def _repair_line(repo: Repo, path: str | None) -> Node | None:
             }
             for index in range(len(arms))
         ],
-        "not_run": [
-            {"arm": arm, "reason": repo.t(ptr(path, "arms_not_run", arm))}
-            for arm in sorted(stopped)
+        "not_run": _not_run_arms(repo, path),
+    }
+
+
+def _repair_arms(repo: Repo, path: str, triggered: Src | None) -> Node:
+    """The arms and comparisons of a pass's round or of the pool.
+
+    The pool lists each arm's triggered items; a pass's summary lists them
+    once, and ``triggered`` points there.
+    """
+    document = _obj(repo.json(path), path)
+    arms = _arr(document.get("arms"), f"{path} arms")
+    comparisons = _arr(document.get("comparisons"), f"{path} comparisons")
+    return {
+        "arms": [
+            {
+                "arm": repo.t(ptr(path, "arms", index, "arm")),
+                "repair_at_1": _interval(
+                    repo, path, "arms", index, "repair_at_1"
+                ),
+                "repaired": repo.v(ptr(path, "arms", index, "repaired")),
+                "triggered": repo.v(
+                    triggered or ptr(path, "arms", index, "triggered_items")
+                ),
+            }
+            for index in range(len(arms))
+        ],
+        "comparisons": [
+            {
+                **repo.texts(path, ("first", "second"), "comparisons", index),
+                "difference": _interval(
+                    repo, path, "comparisons", index, "difference"
+                ),
+                **repo.numbers(path, _REPAIR_COUNTS, "comparisons", index),
+            }
+            for index in range(len(comparisons))
+        ],
+    }
+
+
+def build_repair(repo: Repo, selection: Selection) -> Node | None:
+    """The board's test repair round: the pool, then each pool pass's round.
+
+    Every value points into REPAIR_POOL or a pool pass's repair/summary.json,
+    the two sources docs/decisions/disproof-reel.md allows for a repair
+    number; no arm run's scored/summary.json is read. The passes keep pool
+    order. None outside the test phase or before the pool file exists: the
+    dev round is a pipeline check, never reported (docs/protocol.md, Repair).
+
+    Raises:
+        ContractError: With code ``repair_inconsistent`` when the pool file
+            is not the test split's, pools other passes than the test pool,
+            or a pool pass has no scored round; and as ``repair_round``
+            raises.
+    """
+    if not (selection.test_phase and repo.exists(REPAIR_POOL)):
+        return None
+    pool = _obj(repo.json(REPAIR_POOL), REPAIR_POOL)
+    bases = sorted(
+        _text(_obj(base, REPAIR_POOL).get("run"), f"{REPAIR_POOL} base run")
+        for base in _arr(pool.get("bases"), f"{REPAIR_POOL} bases")
+    )
+    rounds = [repair_round(repo, shown.run) for shown in selection.pool]
+    paths = [path for path in rounds if path is not None]
+    if (
+        pool.get("split") != "test"
+        or bases != sorted(shown.run.run_id for shown in selection.pool)
+        or len(paths) != len(rounds)
+    ):
+        raise ContractError(
+            "repair_inconsistent",
+            f"{REPAIR_POOL} does not pool the test pool's scored rounds",
+        )
+    return {
+        **_repair_arms(repo, REPAIR_POOL, None),
+        "bootstrap": repo.numbers(
+            REPAIR_POOL,
+            ("cases", "resamples", "seed", "min_discordant_cases"),
+            "bootstrap",
+        ),
+        "models": [
+            {
+                "run": shown.run.slug,
+                "role": shown.role,
+                "model_id": repo.t(ptr(path, "model_id")),
+                **repo.numbers(path, ("triggered_items", "triggered_cases")),
+                **_repair_arms(repo, path, ptr(path, "triggered_items")),
+                "not_run": _not_run_arms(repo, path),
+            }
+            for shown, path in zip(selection.pool, paths, strict=True)
         ],
     }
 
@@ -2730,7 +2839,8 @@ def build_site(
         "phase": {
             "dev": bool(selection.rows),
             "test": selection.test_phase,
-            "repair": False,
+            # The test round only, as board.json's repair block shows it.
+            "repair": selection.test_phase and repo.exists(REPAIR_POOL),
             "training": False,
             "aa": False,
         },
