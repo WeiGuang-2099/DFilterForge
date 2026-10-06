@@ -547,7 +547,10 @@ test('the methodology page names the round its repair line describes', async ({p
   const keys = statuses.filter((key) => !(measured && key === 'repair_at_1'));
 
   await page.goto('methodology/');
-  const labels = page.locator('h2:text-is("Not measured yet") + dl > dt');
+  const section = page.locator('section', {
+    has: page.getByRole('heading', {level: 2, name: 'Not measured yet', exact: true}),
+  });
+  const labels = section.locator('dl > dt');
   const sources = await labels
     .locator('[data-fmt="split"]')
     .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-src')));
