@@ -4,9 +4,10 @@
  * scripts/export_web_data.py projects the Reel (docs/decisions/
  * disproof-reel.md); this module checks the document as lib/data.ts checks
  * the others: its schema id and a closed key set at every level. The codes
- * the page shows as words, a strip's frame states, the trace reason and the
- * repair reason, are checked against closed lists here, so an unknown code
- * fails the build instead of reaching a page.
+ * the page shows as words or draws, a strip's frame states, a frame's
+ * direction, the trace reason and the repair reason, are checked against
+ * closed lists here, so an unknown code fails the build instead of reaching
+ * a page.
  */
 
 import 'server-only';
@@ -21,22 +22,34 @@ import type {Guard, Guarded} from './data';
  */
 export type FrameState = 'tp' | 'fp' | 'fn' | 'tn';
 
-const STATES: ReadonlySet<string> = new Set(['tp', 'fp', 'fn', 'tn']);
+/** Where a frame goes from the probe's client address (packets.json). */
+export type Direction = 'out' | 'in' | 'other';
 
-const state: Guard<FrameState> = (value, where) =>
-  typeof value === 'string' && STATES.has(value)
-    ? (value as FrameState)
-    : fail(where, 'is not a frame state');
+/** A guard for one of a closed list of codes. */
+function oneOf<T extends string>(codes: readonly T[], name: string): Guard<T> {
+  return (value, where) =>
+    codes.includes(value as T) ? (value as T) : fail(where, `is not a ${name}`);
+}
+
+const state = oneOf<FrameState>(['tp', 'fp', 'fn', 'tn'], 'frame state');
+const direction = oneOf<Direction>(['out', 'in', 'other'], 'direction');
 
 const index: Guard<number> = (value, where) =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
     ? value
     : fail(where, 'is not an index');
 
-// No predicate trace is committed yet (docs/decisions/web-site.md, Limits),
-// so a trace node fails the build until the page can show one.
-const noTrace: Guard<null> = (value, where) =>
-  value === null ? null : fail(where, 'is a trace, which this page does not show yet');
+// A predicate trace: per probe, the frames it traced, those where the
+// answer and the labels disagree, and each leaf of both filters with the
+// traced frames tshark matched it on.
+const LEAF = object({filter: strNode, matched: numNode});
+const TRACE = object({
+  path: text,
+  sha256: strNode,
+  probes: array(
+    object({probe_id: strNode, frames: numNode, filter: array(LEAF), request: array(LEAF)}),
+  ),
+});
 
 // Why the Reel shows no trace, and why it shows no repair turn, as the
 // fixed words a page shows for each code.
@@ -69,10 +82,26 @@ const PROBE = {
 
 const STRIP = object(PROBE);
 
-// The pick's strips also list every frame, which the cursor reads.
+// The pick's strips also list every frame, which the cursor reads: its
+// number, kind and name from captures.json and its packet-list columns
+// and direction from packets.json.
 const PICK_STRIP = object({
   ...PROBE,
-  frame_rows: array(object({n: numNode, kind: strNode, name: strNode})),
+  client: strNode,
+  frame_rows: array(
+    object({
+      n: numNode,
+      kind: strNode,
+      name: strNode,
+      time: strNode,
+      src: strNode,
+      dst: strNode,
+      protocol: strNode,
+      length: numNode,
+      info: strNode,
+      dir: direction,
+    }),
+  ),
 });
 
 const HEADER = {model_id: strNode, run: text, run_id: strNode};
@@ -123,6 +152,7 @@ const REEL = object({
       reference_filter: strNode,
       outcome: strNode,
       disagreeing: numNode,
+      joins: object({filter: nullable(strNode), request: strNode}),
     }),
   ),
   strips: array(PICK_STRIP),
@@ -137,7 +167,7 @@ const REEL = object({
       request_selects: flag,
     }),
   ),
-  trace: noTrace,
+  trace: nullable(TRACE),
   trace_reason: nullable(words(TRACE_REASONS, 'trace reason')),
   receipt_panel: nullable(
     object({
@@ -166,6 +196,9 @@ export type PickStrip = Reel['strips'][number];
 /** One strip of the repair turn's answer. */
 export type TurnStrip = Guarded<typeof STRIP>;
 
+/** The pick's predicate trace, one entry per strip. */
+export type Trace = Guarded<typeof TRACE>;
+
 /** Returns reel.json, checked, with each strip's frames in order. */
 export function loadReel(): Reel {
   const reel = load('reel.json', REEL);
@@ -176,5 +209,8 @@ export function loadReel(): Reel {
       fail(where, 'does not list its frames in order, one per state');
     }
   });
+  if (reel.trace !== null && reel.trace.probes.length !== reel.strips.length) {
+    fail('reel.json.trace', 'does not trace each strip');
+  }
   return reel;
 }

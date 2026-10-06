@@ -26,6 +26,8 @@ export const FMT_KINDS = [
   'rate',
   'runtime',
   'outcome',
+  'frame_kind',
+  'join',
 ] as const;
 
 // What a scored summary's not_measured status keys say on a page. A key is
@@ -57,6 +59,23 @@ const OUTCOMES: Readonly<Record<string, string>> = {
   provider_failed: 'provider failed',
   abstained: 'abstained',
   false_ready: 'false ready',
+};
+
+// What captures.json's frame kinds say on a page: a recipe frame is one of
+// the benchmark's packets, a witness frame one of the tail every capture
+// ends in (docs/decisions/evidence/web/captures.json, notes).
+const FRAME_KINDS: Readonly<Record<string, string>> = {
+  recipe: 'recipe',
+  witness: 'witness',
+};
+
+// What the root operator of an intent IR says about its leaves, as the
+// trace table joins them.
+const JOINS: Readonly<Record<string, string>> = {
+  all: 'every leaf',
+  any: 'any leaf',
+  not: 'the leaf negated',
+  predicate: 'the leaf',
 };
 
 // Decimal places of the rounded kinds: a rate, difference or bound as
@@ -138,7 +157,9 @@ function rounded(value: unknown, places: number): string {
  *     split, a run's split as the capitalized word that names its round;
  *     rate, a rate, difference or bound to three decimals; runtime, a
  *     duration in milliseconds to one decimal; outcome, a scored outcome
- *     code as the protocol's words.
+ *     code as the protocol's words; frame_kind, a frame's kind in
+ *     captures.json as a word; join, an intent IR's root operator as the
+ *     words that join its leaves.
  * @return The text the page shows.
  * @throws TypeError When the value does not fit the kind, so a build fails
  *     rather than show a value in the wrong form.
@@ -176,5 +197,9 @@ export function fmt(value: unknown, kind: FmtKind): string {
       return rounded(value, PLACES[kind]);
     case 'outcome':
       return word(value, OUTCOMES, 'outcome');
+    case 'frame_kind':
+      return word(value, FRAME_KINDS, 'frame kind');
+    case 'join':
+      return word(value, JOINS, 'join');
   }
 }

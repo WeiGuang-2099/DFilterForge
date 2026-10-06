@@ -3,30 +3,24 @@
  *
  * Both are server-rendered from reel.json. The repair scene shows rule
  * reel-v1's step 5: the card the counterexample arm sent, verbatim, the
- * model's second answer and its strips. The pool scene shows the headline
+ * model's second answer and its probe bars. The pool scene shows the headline
  * counts and one bar per pool run, in pool order and never ranked. A bar's
  * segments grow by the counts they stand for (flex-grow), so the page never
  * divides; the counts beside each bar are the sourced values.
  */
 
-import type {CSSProperties} from 'react';
-
 import type {NumNode} from '@/lib/data';
 import type {Reel} from '@/lib/reel-data';
 import {roleLabel} from '@/lib/roles';
+import {fmt} from '@/lib/fmt';
 import {Num, Outcome, Str} from '@/lib/sourced';
 
-import {Strips} from './strips';
+import {ProbeBar} from './strips';
 
 type Turn = NonNullable<NonNullable<Reel['repair']>['turn']>;
 
-interface RepairProps {
-  readonly repair: Reel['repair'];
-  readonly columns: number;
-}
-
 /** Step 5: the counterexample turn for the picked answer. */
-export function RepairScene({repair, columns}: RepairProps) {
+export function RepairScene({repair}: {readonly repair: Reel['repair']}) {
   const turn: Turn | null = repair?.turn ?? null;
   return (
     <section aria-labelledby="act-repair" className="act act-repair">
@@ -37,7 +31,10 @@ export function RepairScene({repair, columns}: RepairProps) {
         <p className="note">{repair?.reason ?? 'this answer has no repair turn'}</p>
       ) : (
         <>
-          <p className="note">The card sent back: a missed frame of the unscored feedback probe.</p>
+          <p className="note">
+            The card sent back: frames of the unscored feedback probe where the first answer and
+            the labels disagree.
+          </p>
           {turn.card === null ? null : (
             <pre className="card">
               <Str node={turn.card} />
@@ -51,15 +48,19 @@ export function RepairScene({repair, columns}: RepairProps) {
               <Str node={turn.filter} />
             </code>
           )}
-          <Strips columns={columns} compact strips={turn.strips} />
-          {turn.raw === null ? null : (
-            <details className="raw">
-              <summary>The second answer as the model wrote it</summary>
-              <pre className="answer">
-                <Str node={turn.raw} />
-              </pre>
-            </details>
-          )}
+          <ul className="bars2">
+            {turn.strips.map((strip) => (
+              <li key={JSON.stringify(strip.probe_id.src)}>
+                <code>
+                  <Str node={strip.probe_id} />
+                </code>
+                <ProbeBar strip={strip} />
+                <span className="lab">
+                  exact <Num kind="bool" node={strip.exact} />
+                </span>
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </section>
@@ -90,8 +91,8 @@ export function PoolScene({reel}: {readonly reel: Reel}) {
         were silent-wrong.
       </p>
       <ol className="bars">
-        {reel.board.map((row, index) => (
-          <li key={row.run} style={{'--row': index} as CSSProperties}>
+        {reel.board.map((row) => (
+          <li key={row.run}>
             <span className="bar-id">
               <Str node={row.model_id} /> <span className="bar-role">{roleLabel(row.role)}</span>
             </span>
@@ -112,22 +113,12 @@ export function PoolScene({reel}: {readonly reel: Reel}) {
         ))}
       </ol>
       <ul aria-label="Bar legend" className="legend">
-        <li>
-          <span aria-hidden="true" className="sw o-strong_exact" />
-          strong exact
-        </li>
-        <li>
-          <span aria-hidden="true" className="sw o-shortcut" />
-          shortcut
-        </li>
-        <li>
-          <span aria-hidden="true" className="sw o-silent_wrong" />
-          silent-wrong
-        </li>
-        <li>
-          <span aria-hidden="true" className="sw o-other" />
-          did not run
-        </li>
+        {[...OWN, 'other'].map((kind) => (
+          <li key={kind}>
+            <span aria-hidden="true" className={`sw o-${kind}`} />
+            {kind === 'other' ? 'did not run' : fmt(kind, 'outcome')}
+          </li>
+        ))}
       </ul>
     </section>
   );
