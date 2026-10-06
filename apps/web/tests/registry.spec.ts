@@ -9,8 +9,9 @@ import {Resolver} from './support/resolve';
 // The resolver reads the test-run registry (test-runs/1.0) the way the
 // exporter does, from docs/decisions/disproof-reel.md and
 // docs/decisions/test-runs.md: which test runs are shown, when the test
-// phase starts, which runs the Reel pools and whose summary the methodology
-// page's repair line cites. Each case builds a scratch
+// phase starts, which runs the Reel pools, whose summary the methodology
+// page's repair line cites, and which scored repair rounds the Reel's step 5
+// and that line read. Each case builds a scratch
 // tree with a bake-off ranking, the ruling and a registry; the exporter's
 // fixture tests in tests/test_export_web_data.py cover the same cases.
 
@@ -684,50 +685,82 @@ for (const noted of NOTED) {
   });
 }
 
-// reel-v1 step 5 is not built, so scored repair results for the pool stop
-// the Reel, as they stop the exporter: a pool run's round summary, its
-// scored counterexample arm or that arm's re-run, or the split's pool file.
-const REPAIRED: readonly {readonly phase: string; readonly file: string}[] = [
-  {phase: 'test', file: `docs/results/${PASS_A}/repair/summary.json`},
-  {phase: 'test', file: `docs/results/test-pass-a-cx-${DATE}/scored/summary.json`},
-  {phase: 'test', file: `docs/results/test-frontier-cx-r2-${DATE}/scored/summary.json`},
-  {phase: 'test', file: 'docs/results/repair-pool/test.json'},
-  {phase: 'dev', file: `docs/results/${ANCHOR}/repair/summary.json`},
-  {phase: 'dev', file: `docs/results/dev-mid-cx-${DATE}/scored/summary.json`},
-  {phase: 'dev', file: 'docs/results/repair-pool/dev.json'},
-];
-
-for (const {phase, file} of REPAIRED) {
-  test(`scored repair results in ${file} stop the ${phase}-phase Reel`, () => {
-    const runs = registry();
-    if (phase === 'dev') {
-      at(runs, FRONTIER).status = 'registered';
-    }
-    commit(runs);
-
-    expect(new Resolver(root).reelPool()).toHaveLength(4);
-
-    put(file, {schema: 'repair-summary/1.0'});
-
-    expect(() => new Resolver(root).reelPool()).toThrow(`${file} holds scored repair results`);
+/**
+ * Commits a pass's scored repair round as repair-round.md writes it: the
+ * items it triggered and the resample, bare and counterexample arm runs it
+ * names. With cx null the gate stopped the counterexample arm, as
+ * arms_not_run records it. Returns the summary's path.
+ */
+function repairRound(runId: string, items: readonly string[], cx: string | null): string {
+  const file = `docs/results/${runId}/repair/summary.json`;
+  put(file, {
+    base_run: runId,
+    split: runId.split('-')[0],
+    items: items.map((item) => ({item_id: item})),
+    arms: [
+      {arm: 'resample', run: tag(runId, 'res')},
+      {arm: 'bare', run: tag(runId, 'bare')},
+      ...(cx === null ? [] : [{arm: 'counterexample', run: cx}]),
+    ],
+    arms_not_run: cx === null ? {counterexample: 'thinking_not_honoured'} : {},
   });
+  return file;
 }
 
-test('repair results outside the pool leave the Reel alone', () => {
+test("the Reel reads the counterexample turn from the pick's own round", () => {
   commit(registry());
-  for (const file of [
-    // Pass B is never pooled.
-    `docs/results/${PASS_B}/repair/summary.json`,
-    `docs/results/test-pass-b-cx-${DATE}/scored/summary.json`,
-    // A dev pass and the dev split, in the test phase.
-    `docs/results/${DEV_MID}/repair/summary.json`,
-    'docs/results/repair-pool/dev.json',
-  ]) {
-    put(file, {schema: 'repair-summary/1.0'});
+  answers(PASS_A, [['C4', 'mei-1001', 'ready', 'silent_wrong', 1]]);
+  for (const runId of [SMALL, MID, FRONTIER]) {
+    answers(runId, [['C4', 'mei-1002', 'ready', 'silent_wrong', 2]]);
   }
+  const pick = {run: PASS_A, cond: 'C4', item: 'mei-1001', candidates: 4};
+  const none = {reason: 'no_round', run: null, item: null};
 
-  expect(new Resolver(root).reelPool()).toEqual([PASS_A, SMALL, MID, FRONTIER]);
+  expect(new Resolver(root).reelRepair()).toEqual(none);
+
+  // Another pool run's round is not the pick's.
+  repairRound(SMALL, ['mei-1002'], tag(SMALL, 'cx'));
+
+  expect(new Resolver(root).reelRepair()).toEqual(none);
+
+  // The round names the arm run, an outage re-run here; nothing guesses it.
+  repairRound(PASS_A, ['mei-1001'], tag(PASS_A, 'cx-r2'));
+  const resolver = new Resolver(root);
+
+  expect(resolver.reelRepair()).toEqual({reason: null, run: tag(PASS_A, 'cx-r2'), item: 'mei-1001'});
+  expect(resolver.reelPick()).toEqual(pick);
 });
+
+// Once the pick's pass has a scored round, a pick without a counterexample
+// turn in it stops the Reel, as it stops the exporter
+// (repair_fallback_unbuilt): the fallback trajectory of disproof-reel.md is
+// not built.
+const UNBUILT: readonly {
+  readonly name: string;
+  readonly cond: string;
+  readonly items: readonly string[];
+  readonly cx: string | null;
+}[] = [
+  {name: 'a pick that is not C4', cond: 'C3', items: ['mei-1001'], cx: tag(PASS_A, 'cx')},
+  {name: 'a pick it did not trigger', cond: 'C4', items: ['mei-1002'], cx: tag(PASS_A, 'cx')},
+  {name: 'its counterexample arm stopped', cond: 'C4', items: ['mei-1001'], cx: null},
+];
+
+for (const {name, cond, items, cx} of UNBUILT) {
+  test(`a scored round with ${name} stops the Reel`, () => {
+    commit(registry());
+    answers(PASS_A, [[cond, 'mei-1001', 'ready', 'silent_wrong', 1]]);
+    for (const runId of [SMALL, MID, FRONTIER]) {
+      answers(runId, []);
+    }
+    repairRound(PASS_A, items, cx);
+
+    expect(new Resolver(root).reelPick()).toEqual({run: PASS_A, cond, item: 'mei-1001', candidates: 1});
+    expect(() => new Resolver(root).reelRepair()).toThrow(
+      'the fallback repair trajectory is not built',
+    );
+  });
+}
 
 // The methodology page's repair line describes the repair round the site
 // reports, as the exporter's methodology.json does: the test round in the
@@ -756,33 +789,38 @@ for (const {name, stopped, cited} of CITED) {
       cited === null ? null : `docs/results/${cited}/scored/summary.json`,
     );
     expect(new Resolver(root).repairStatusSplit()).toBe(cited === null ? null : 'test');
+    expect(new Resolver(root).methodologyRound()).toBeNull();
   });
 }
 
-// In the dev phase the line describes the dev round, from the anchor. A
-// scored round of the cited run stops it in either phase: the scorer keeps
-// its repair_at_1 at not_run after a round.
+// In the dev phase the line describes the dev round, from the anchor. In
+// either phase a scored round of the cited run is the round the line reads:
+// the scorer keeps its repair_at_1 at not_run after a round.
 for (const {phase, cited} of [
   {phase: 'test', cited: PASS_A},
   {phase: 'dev', cited: ANCHOR},
 ]) {
-  test(`a scored round of the ${phase}-phase methodology's run stops it`, () => {
+  test(`a scored round of the ${phase}-phase methodology's run is its round`, () => {
     const runs = registry();
     if (phase === 'dev') {
       at(runs, FRONTIER).status = 'registered';
     }
     commit(runs);
 
+    expect(new Resolver(root).methodologyRound()).toBeNull();
+
+    const file = repairRound(cited, ['mei-1001'], tag(cited, 'cx'));
+
+    expect(new Resolver(root).methodologyRound()).toBe(file);
     expect(new Resolver(root).repairStatusSummary()).toBe(
       `docs/results/${cited}/scored/summary.json`,
     );
 
-    const file = `docs/results/${cited}/repair/summary.json`;
-    put(file, {schema: 'repair-summary/1.0'});
+    // A round that names another pass, which the exporter refuses
+    // (repair_inconsistent), would give the line another pass's counts.
+    put(file, {base_run: tag(cited, 'other'), split: phase});
 
-    expect(() => new Resolver(root).repairStatusSummary()).toThrow(
-      `${file} holds a scored repair round`,
-    );
+    expect(() => new Resolver(root).methodologyRound()).toThrow(`${file} names another pass`);
   });
 }
 

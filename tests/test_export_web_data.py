@@ -2632,7 +2632,8 @@ def test_reel_picks_the_fewest_disagreeing_frames(fixture: Fixture) -> None:
     assert highlight["kind"]["t"] == "witness"
     assert highlight["request_selects"] and not highlight["filter_selects"]
     assert reel["strips"][2]["states"] == ["tn", "tn", "tn", "tp", "fn", "tn"]
-    assert reel["repair_applies"] is True and reel["repair"] is None
+    assert reel["repair_applies"] is True
+    assert reel["repair"] == {"reason": "no_round", "turn": None}
     assert reel["receipt_panel"]["repair"]["t"] == "not_run"
     assert reel["receipt_panel"]["replay"][1]["t"] == _SMALL
     assert reel["trace"] is None and reel["trace_reason"] == "not_traced"
@@ -2682,6 +2683,7 @@ def test_reel_falls_back_from_c4_through_c1(tmp_path: Path) -> None:
     assert nothing["candidates"]["v"] == 0
     assert nothing["pick"] is None and nothing["highlight"] is None
     assert nothing["strips"] == [] and nothing["receipt_panel"] is None
+    assert nothing["repair"] is None
     assert nothing["headline"]["silent_wrong"]["v"] == 0
 
 
@@ -2723,20 +2725,14 @@ def test_repair_traces_and_feedback_do_not_move_the_pick(
     root = fixture.build()
     before = _reel(root)
 
-    # A repair pass that would repair the pick and fail the other one.
-    repair = root / f"docs/results/dev-anchor-repair-{_DATE}/scored"
-    repair.mkdir(parents=True)
-    (repair / "outcomes.jsonl").write_text(
-        json.dumps(
-            {"condition": "C4", "item_id": "i-0002", "outcome": "strong_exact"}
-        )
-        + "\n",
-        encoding="utf-8",
+    # Scored rounds whose counterexample arms repair the pick and fail the
+    # other candidate.
+    _round(fixture, _ANCHOR, ("i-0002",), _tag(_ANCHOR, "cx"))
+    _round(fixture, _MID, ("i-0001",), _tag(_MID, "cx"))
+    fixture.answers[(_tag(_MID, "cx"), "C4", "i-0001")] = _wrong(
+        (2,), (), (4, 5)
     )
-    _edit(
-        root / f"docs/results/{_ANCHOR}/scored/summary.json",
-        lambda value: value["not_measured"].update(repair_at_1="scored"),
-    )
+    fixture.build()
     # Traces of both candidates, one refused by the trace budget.
     for run_id, item_id, result in (
         (_ANCHOR, "i-0002", {"status": "trace_limit"}),
@@ -2763,8 +2759,8 @@ def test_repair_traces_and_feedback_do_not_move_the_pick(
 
     assert _picked(before) == (_ANCHOR, "C4", "i-0002")
     assert _choice(after) == _choice(before)
+    assert after["repair"]["turn"]["outcome"]["t"] == "strong_exact"
     assert after["trace_reason"] == "trace_limit"
-    assert after["receipt_panel"]["repair"]["t"] == "scored"
     assert after["inputs_sha256"] != before["inputs_sha256"]
 
 
@@ -2852,35 +2848,151 @@ def test_an_empty_test_pool_has_no_pick(fixture: Fixture) -> None:
     check_sources(root, {"reel.json": reel})
 
 
-@pytest.mark.parametrize(
-    ("phase", "path"),
-    [
-        ("test", f"docs/results/{_PASS_A}/repair/summary.json"),
-        ("test", f"docs/results/test-anchor-cx-{_DATE}/scored/summary.json"),
-        ("test", f"docs/results/test-front-cx-r2-{_DATE}/scored/summary.json"),
-        ("test", "docs/results/repair-pool/test.json"),
-        ("dev", f"docs/results/{_ANCHOR}/repair/summary.json"),
-        ("dev", f"docs/results/dev-mid-cx-{_DATE}/scored/summary.json"),
-        ("dev", "docs/results/repair-pool/dev.json"),
-    ],
-)
-def test_scored_repair_results_stop_the_export_until_step_5_is_built(
-    fixture: Fixture, phase: str, path: str
-) -> None:
-    if phase == "test":
-        _settled(fixture)
-    root = fixture.build()
-    reel = _reel(root)
-    assert reel["phase"] == phase and reel["repair"] is None
+def _round(
+    fixture: Fixture, base: str, items: tuple[str, ...], arm: str | None
+) -> str:
+    """Writes a pass's repair plan and scored round; returns the summary.
 
-    # A pool run's round summary, its scored counterexample arm or that
-    # arm's re-run, or the split's pooled comparison: step 5 would apply.
-    _write(root / path, {"schema": "repair-summary/1.0"})
+    The round triggers ``items``, each with a frames card. Its arms are the
+    resample and bare runs and the counterexample run ``arm``, which the
+    fixture then writes in the pass's split; with ``arm`` None the gate
+    stopped that arm, as arms_not_run records it.
+    """
+    split = base.split("-", 1)[0]
+    repair = f"docs/results/{base}/repair"
+    _write(
+        fixture.root / repair / "plan.json",
+        {
+            "base_run": base,
+            "items": [
+                {
+                    "base_outcome": "silent_wrong",
+                    "card": json.dumps({"frames": [{"frame": 5}]}),
+                    "card_kind": "frames",
+                    "item_id": item_id,
+                }
+                for item_id in items
+            ],
+            "split": split,
+        },
+    )
+    arms = {"resample": _tag(base, "res"), "bare": _tag(base, "bare")}
+    if arm is not None:
+        arms["counterexample"] = arm
+        if split == "dev":
+            fixture.dev_runs += (arm,)
+        else:
+            fixture.test_runs += (arm,)
+    _write(
+        fixture.root / repair / "summary.json",
+        {
+            "arms": [
+                {"arm": name, "repaired": index, "run": run_id}
+                for index, (name, run_id) in enumerate(arms.items())
+            ],
+            "arms_not_run": (
+                {}
+                if arm is not None
+                else {"counterexample": "thinking_not_honoured"}
+            ),
+            "base_run": base,
+            "items": [{"item_id": item_id} for item_id in items],
+            "model_id": f"vendor/{base}",
+            "schema_version": "repair-summary/1.0",
+            "split": split,
+            "triggered_items": len(items),
+        },
+    )
+    return f"{repair}/summary.json"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        Answer("strong_exact", _EXPECTED),
+        Answer("invalid", error_code="filter_unknown_field"),
+    ],
+    ids=["strong_exact", "invalid"],
+)
+def test_the_reel_shows_the_picks_counterexample_turn_whatever_it_scored(
+    fixture: Fixture, answer: Answer
+) -> None:
+    fixture.answers[(_ANCHOR, "C4", "i-0001")] = _wrong((2,), (1,), (4, 5))
+    # An outage re-run of the arm: the round names it, nothing guesses it.
+    arm = _tag(_ANCHOR, "cx-r2")
+    fixture.answers[(arm, "C4", "i-0001")] = answer
+    summary = _round(fixture, _ANCHOR, ("i-0001",), arm)
+    root = fixture.build()
+
+    reel = _reel(root)
+
+    assert _picked(reel) == (_ANCHOR, "C4", "i-0001")
+    assert reel["repair"]["reason"] is None
+    turn = reel["repair"]["turn"]
+    assert turn["item"] == "i-0001"
+    assert turn["run_id"] == {"t": arm, "src": ["ptr", summary, "/arms/2/run"]}
+    assert turn["card"]["src"] == [
+        "ptr",
+        f"docs/results/{_ANCHOR}/repair/plan.json",
+        "/items/0/card",
+    ]
+    assert turn["outcome"] == {
+        "t": answer.outcome,
+        "src": [
+            "row",
+            f"docs/results/{arm}/scored/outcomes.jsonl",
+            {"condition": "C4", "item_id": "i-0001"},
+            "/outcome",
+        ],
+    }
+    assert turn["raw"]["cap"] == 4096 and turn["raw_truncated"] is False
+    if answer.outcome == "strong_exact":
+        assert turn["filter"]["t"] == "filter for i-0001"
+        assert [strip["disagree"] for strip in turn["strips"]] == [[], [], []]
+    else:
+        assert turn["filter"] is None and turn["strips"] == []
+    # The round's line replaces the scorer's not_run status.
+    assert reel["receipt_panel"]["repair"] is None
+    check_sources(root, {"reel.json": reel})
+
+
+def test_only_the_picks_own_round_gives_the_reel_a_turn(
+    fixture: Fixture,
+) -> None:
+    _settled(fixture)
+    # Another pool run's round, with its counterexample arm run.
+    _round(fixture, _TEST_SMALL, ("i-1001",), _tag(_TEST_SMALL, "cx"))
+    root = fixture.build()
+
+    reel = _reel(root)
+
+    assert _picked(reel) == (_PASS_A, "C4", "i-1002")
+    assert reel["repair"] == {"reason": "no_round", "turn": None}
+    assert reel["receipt_panel"]["repair"]["t"] == "not_run"
+    check_sources(root, {"reel.json": reel})
+
+
+@pytest.mark.parametrize(
+    ("label", "items", "arm"),
+    [
+        ("C3", ("i-0001",), _tag(_ANCHOR, "cx")),
+        ("C4", ("i-0002",), _tag(_ANCHOR, "cx")),
+        ("C4", ("i-0001",), None),
+    ],
+    ids=["not_c4", "item_not_in_round", "arm_not_run"],
+)
+def test_a_round_without_the_picks_counterexample_turn_stops_the_export(
+    fixture: Fixture, label: str, items: tuple[str, ...], arm: str | None
+) -> None:
+    # disproof-reel.md would show the frontier slot's repair trajectory
+    # instead. It is not built, so the export stops rather than drop it.
+    fixture.answers[(_ANCHOR, label, "i-0001")] = _wrong((2,), (1,), (4, 5))
+    _round(fixture, _ANCHOR, items, arm)
+    root = fixture.build()
 
     with pytest.raises(exporter.ContractError) as caught:
         exporter.export(root, "abc1234")
-    assert caught.value.code == "repair_unread"
-    assert path in str(caught.value)
+    assert caught.value.code == "repair_fallback_unbuilt"
 
 
 def _statuses(run_id: str) -> list[Document]:
@@ -2921,7 +3033,7 @@ def test_the_test_phase_methodology_cites_the_first_pool_run(
 ) -> None:
     # The page's repair line describes the round the site reports, which in
     # the test phase is the test round, so a scored dev round of the anchor
-    # stops nothing.
+    # changes nothing.
     _settled(fixture)
     registration = _registration()
     for run_id in stopped:
@@ -2944,6 +3056,7 @@ def test_the_test_phase_methodology_cites_the_first_pool_run(
     assert methodology["not_measured"] == (
         [] if cited is None else _statuses(cited)
     )
+    assert methodology["repair"] is None
     # Everything else stays the dev anchor's.
     assert methodology["bootstrap"]["seed"]["src"] == [
         "ptr",
@@ -2954,27 +3067,69 @@ def test_the_test_phase_methodology_cites_the_first_pool_run(
 
 
 @pytest.mark.parametrize(
-    ("phase", "cited"), [("test", _PASS_A), ("dev", _ANCHOR)]
+    ("phase", "cited", "item_id", "arm"),
+    [
+        ("test", _PASS_A, "i-1002", _tag(_PASS_A, "cx")),
+        # A round whose counterexample arm the gate stopped.
+        ("dev", _ANCHOR, "i-0001", None),
+    ],
 )
-def test_a_scored_round_of_the_cited_run_stops_the_methodology(
-    fixture: Fixture, phase: str, cited: str
+def test_a_scored_round_gives_the_methodology_its_repair_line(
+    fixture: Fixture, phase: str, cited: str, item_id: str, arm: str | None
 ) -> None:
     # The scorer leaves the cited run's repair_at_1 at not_run after a
-    # round, so the page would call a measured round not measured yet. The
-    # Reel's pool guard stops the export for the same file; the methodology
-    # does not lean on it.
+    # round, so the status gives way to the round's own line.
     if phase == "test":
         _settled(fixture)
+    summary = _round(fixture, cited, (item_id,), arm)
     root = fixture.build()
-    assert _methodology(root)["not_measured"] == _statuses(cited)
 
-    path = f"docs/results/{cited}/repair/summary.json"
-    _write(root / path, {"schema": "repair-summary/1.0"})
+    methodology = _methodology(root)
+
+    assert methodology["not_measured"] == []
+    line = methodology["repair"]
+    assert line["split"] == {"t": phase, "src": ["ptr", summary, "/split"]}
+    assert line["model_id"]["t"] == f"vendor/{cited}"
+    assert line["triggered_items"]["v"] == 1
+    assert [
+        (each["arm"]["t"], each["repaired"]["v"]) for each in line["arms"]
+    ] == [
+        ("resample", 0),
+        ("bare", 1),
+        *([] if arm is None else [("counterexample", 2)]),
+    ]
+    assert line["not_run"] == (
+        []
+        if arm is not None
+        else [
+            {
+                "arm": "counterexample",
+                "reason": {
+                    "t": "thinking_not_honoured",
+                    "src": ["ptr", summary, "/arms_not_run/counterexample"],
+                },
+            }
+        ]
+    )
+    check_sources(root, {"methodology.json": methodology})
+
+
+@pytest.mark.parametrize(
+    ("key", "value"), [("base_run", _PASS_B), ("split", "dev")]
+)
+def test_a_round_that_names_another_pass_is_refused(
+    fixture: Fixture, key: str, value: str
+) -> None:
+    _settled(fixture)
+    summary = _round(fixture, _PASS_A, ("i-1002",), _tag(_PASS_A, "cx"))
+    _edit(
+        fixture.root / summary, lambda document: document.update({key: value})
+    )
+    root = fixture.build()
 
     with pytest.raises(exporter.ContractError) as caught:
-        _methodology(root)
-    assert caught.value.code == "repair_unread"
-    assert path in str(caught.value)
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "repair_inconsistent"
 
 
 @pytest.mark.parametrize(
@@ -3122,10 +3277,29 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
         "test-qwen3-32b-passb-2026-09-26",
     )
     assert board["test"]["not_run"] == []
-    # The repair line describes the test round, so it cites pass A.
-    assert documents["methodology.json"]["not_measured"] == _statuses(
-        "test-qwen3-32b-2026-09-26"
+    # The repair line describes the test round, so it cites pass A, whose
+    # scored round replaces the not_run status.
+    methodology = documents["methodology.json"]
+    assert methodology["not_measured"] == []
+    line = methodology["repair"]
+    assert line["split"]["src"] == [
+        "ptr",
+        "docs/results/test-qwen3-32b-2026-09-26/repair/summary.json",
+        "/split",
+    ]
+    assert (line["split"]["t"], line["model_id"]["t"]) == (
+        "test",
+        "qwen/qwen3-32b",
     )
+    assert line["triggered_items"]["v"] == 28
+    assert [
+        (arm["arm"]["t"], arm["repaired"]["v"]) for arm in line["arms"]
+    ] == [
+        ("resample", 1),
+        ("bare", 14),
+        ("counterexample", 16),
+    ]
+    assert line["not_run"] == []
     assert check_sources(_ROOT, documents) > 150_000
 
 
@@ -3163,6 +3337,33 @@ def test_the_committed_tree_picks_the_registered_reel() -> None:
     assert highlight["name"]["t"] == "server-fin-ack"
     assert reel["headline"]["compiled"]["v"] == 971
     assert reel["headline"]["silent_wrong"]["v"] == 165
+    # Step 5: the pick's turn in pass A's counterexample arm, item 15 of the
+    # pass's repair plan, which repaired it.
+    assert reel["repair"]["reason"] is None
+    turn = reel["repair"]["turn"]
+    assert turn["run_id"] == {
+        "t": "test-qwen3-32b-cx-2026-09-26",
+        "src": [
+            "ptr",
+            "docs/results/test-qwen3-32b-2026-09-26/repair/summary.json",
+            "/arms/2/run",
+        ],
+    }
+    assert turn["card"]["src"] == [
+        "ptr",
+        "docs/results/test-qwen3-32b-2026-09-26/repair/plan.json",
+        "/items/15/card",
+    ]
+    assert (turn["base_outcome"]["t"], turn["card_kind"]["t"]) == (
+        "silent_wrong",
+        "frames",
+    )
+    assert turn["outcome"]["t"] == "strong_exact"
+    assert turn["filter"]["t"] == (
+        "(tcp.srcport == 443 && tcp.flags.fin == true)"
+    )
+    assert [strip["disagree"] for strip in turn["strips"]] == [[], [], []]
+    assert reel["receipt_panel"]["repair"] is None
     check_sources(_ROOT, {"reel.json": reel})
 
 

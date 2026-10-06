@@ -17,8 +17,9 @@ export const FMT_KINDS = ['int', 'num', 'bool', 'ints', 'text', 'unmeasured', 's
 // What a scored summary's not_measured status keys say on a page. A key is
 // never shown as written: the scorer writes not_run for a measurement no
 // round has made yet, while docs/protocol.md reserves "not run" for a run
-// ruled not run, so the words are the ones docs/results/locked-test-v1.md
-// uses. A status not listed here fails the build.
+// ruled not run, so the words are those of the "Not measured yet" section
+// of docs/decisions/repair-round.md. A status not listed here fails the
+// build.
 const UNMEASURED: Readonly<Record<string, string>> = {
   not_run: 'not measured yet',
 };

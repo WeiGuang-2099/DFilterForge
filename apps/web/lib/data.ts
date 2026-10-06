@@ -78,6 +78,10 @@ function literal<T extends string>(expected: T): Guard<T> {
     value === expected ? expected : fail(where, `is not ${JSON.stringify(expected)}`);
 }
 
+function nullable<T>(guard: Guard<T>): Guard<T | null> {
+  return (value, where) => (value === null ? null : guard(value, where));
+}
+
 function array<T>(item: Guard<T>): Guard<readonly T[]> {
   return (value, where) =>
     Array.isArray(value)
@@ -233,6 +237,16 @@ const METHODOLOGY = object({
     answers_flagged: numNode,
   }),
   not_measured: array(object({key: text, split: strNode, value: strNode})),
+  // The cited run's scored repair round, null before one exists.
+  repair: nullable(
+    object({
+      split: strNode,
+      model_id: strNode,
+      triggered_items: numNode,
+      arms: array(object({arm: strNode, repaired: numNode})),
+      not_run: array(object({arm: text, reason: strNode})),
+    }),
+  ),
   admitted_prepares: array(strNode),
 });
 

@@ -411,26 +411,53 @@ test('the committed registry shows and pools the published test runs', () => {
   });
   expect(resolver.executedRoutes()).toHaveLength(1854);
   expect(resolver.caseIds()).toHaveLength(76);
-  // The methodology's repair line describes the test round: pass A's.
+  // Step 5: the pick's turn in pass A's counterexample arm run.
+  expect(resolver.reelRepair()).toEqual({
+    reason: null,
+    run: 'test-qwen3-32b-cx-2026-09-26',
+    item: 'mei-1038',
+  });
+  // The methodology's repair line describes the test round: pass A's, now
+  // scored.
   expect(resolver.repairStatusSummary()).toBe(
     'docs/results/test-qwen3-32b-2026-09-26/scored/summary.json',
   );
   expect(resolver.repairStatusSplit()).toBe('test');
+  expect(resolver.methodologyRound()).toBe(
+    'docs/results/test-qwen3-32b-2026-09-26/repair/summary.json',
+  );
 });
 
 test('the methodology page shows the repair status of the run the phase names', () => {
   // A status the page takes from another summary would pass the value
-  // checks: every summary still says not_run after a scored round. The
-  // resolver throws, as the exporter stops, once the named run's round is
-  // scored. The server-rendered HTML holds the hydrated page's sources.
+  // checks: every summary still says not_run after a scored round, so once
+  // the named run's round is scored the page shows no status at all. The
+  // server-rendered HTML holds the hydrated page's sources.
   const html = readFileSync(path.join(OUT, 'methodology', 'index.html'), 'utf8');
   const files = staticSources(html)
     .map((source): unknown => JSON.parse(source))
     .filter(isNotMeasured)
     .map((source) => (source as readonly unknown[])[1]);
   const summary = resolver.repairStatusSummary();
+  const measured = resolver.methodologyRound() !== null;
 
-  expect([...new Set(files)]).toEqual(summary === null ? [] : [summary]);
+  expect([...new Set(files)]).toEqual(summary === null || measured ? [] : [summary]);
+});
+
+test("the methodology page's repair round reads the cited run's round", () => {
+  // A line from another pass's round would pass the value checks. Every
+  // value of the page read from a repair/summary.json, the round's split
+  // that labels the line included, must come from methodologyRound().
+  const html = readFileSync(path.join(OUT, 'methodology', 'index.html'), 'utf8');
+  const files = staticSources(html)
+    .map((source) => (JSON.parse(source) as readonly unknown[])[1])
+    .filter((file) => typeof file === 'string' && file.endsWith('/repair/summary.json'));
+  const round = resolver.methodologyRound();
+
+  expect([...new Set(files)]).toEqual(round === null ? [] : [round]);
+  if (round !== null) {
+    expect(staticSources(html)).toContain(JSON.stringify(['ptr', round, '/split']));
+  }
 });
 
 test('the methodology page names the round its repair line describes', async ({page}) => {
@@ -441,11 +468,14 @@ test('the methodology page names the round its repair line describes', async ({p
   // pass the value checks.
   const summary = resolver.repairStatusSummary();
   const split = resolver.repairStatusSplit();
-  // Today a summary's only not_measured key is repair_at_1.
-  const keys =
+  // Today a summary's only not_measured key is repair_at_1, which the page
+  // leaves out once the cited run's round is scored.
+  const statuses =
     summary === null
       ? []
       : Object.keys(resolver.resolve(['ptr', summary, '/not_measured']) as object);
+  const measured = resolver.methodologyRound() !== null;
+  const keys = statuses.filter((key) => !(measured && key === 'repair_at_1'));
 
   await page.goto('methodology/');
   const labels = page.locator('h2:text-is("Not measured yet") + dl > dt');
@@ -453,7 +483,7 @@ test('the methodology page names the round its repair line describes', async ({p
     .locator('[data-fmt="split"]')
     .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-src')));
 
-  expect(keys).toEqual(summary === null ? [] : ['repair_at_1']);
+  expect(statuses).toEqual(summary === null ? [] : ['repair_at_1']);
   expect(await labels.allTextContents()).toEqual(
     keys.map(() => `${fmt(split, 'split')} repair round`),
   );
