@@ -1,6 +1,6 @@
 // Records the home page's Disproof Reel as PNG frames for the README GIF.
 //
-// Serves the built export (out/, after `pnpm build`), opens / at 1280x1000
+// Serves the built export (out/, after `pnpm build`), opens / at 1280x1100
 // with a fake clock paused before the page loads, presses "Play the sweep",
 // scrolls the ladder to the top of the window, then steps the clock at a
 // fixed rate and captures the ladder and the readout after each step. The
@@ -28,6 +28,9 @@ const PORT = 3150;
 // exactly. The sweep ends about six seconds in; the rest holds its end.
 const FPS = 10;
 const SECONDS = 8;
+// The window holds the opening probe's whole ladder, at 24 px a row, down
+// to its footer, with 12 px above and below it.
+const HEIGHT = 1100;
 const scheme = process.argv[2] === 'dark' ? 'dark' : 'light';
 
 const server = spawn(process.execPath, [path.join(WEB, 'scripts', 'serve.mjs')], {
@@ -50,7 +53,7 @@ try {
   rmSync(FRAMES, {recursive: true, force: true});
   mkdirSync(FRAMES, {recursive: true});
   const context = await browser.newContext({
-    viewport: {width: 1280, height: 1000},
+    viewport: {width: 1280, height: HEIGHT},
     deviceScaleFactor: 1,
     colorScheme: scheme,
     reducedMotion: 'no-preference',
@@ -80,7 +83,7 @@ try {
     x: left,
     y: 0,
     width: Math.ceil(readout.x + readout.width + 12 - left),
-    height: Math.min(1000, Math.ceil(ladder.height + 24)),
+    height: Math.min(HEIGHT, Math.ceil(ladder.height + 24)),
   };
   for (let frame = 0; frame < FPS * SECONDS; frame += 1) {
     const name = `frame-${String(frame).padStart(4, '0')}.png`;
