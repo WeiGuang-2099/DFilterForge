@@ -2717,21 +2717,29 @@ def test_highlight_takes_the_second_then_first_then_third_probe(
     assert highlight["frame"]["src"][2].startswith(f"/probes/{probe}/{side}/")
 
 
+@pytest.mark.parametrize(
+    "repaired", [_ANCHOR, _MID], ids=["pick_repaired", "other_repaired"]
+)
 def test_repair_traces_and_feedback_do_not_move_the_pick(
-    fixture: Fixture,
+    fixture: Fixture, repaired: str
 ) -> None:
+    candidates = {_ANCHOR: "i-0002", _MID: "i-0001"}
     fixture.answers[(_ANCHOR, "C4", "i-0002")] = _wrong((2,), (1,), (4, 5))
     fixture.answers[(_MID, "C4", "i-0001")] = _wrong((2,), (), (4, 5))
     root = fixture.build()
     before = _reel(root)
 
-    # Scored rounds whose counterexample arms repair the pick and fail the
-    # other candidate.
-    _round(fixture, _ANCHOR, ("i-0002",), _tag(_ANCHOR, "cx"))
-    _round(fixture, _MID, ("i-0001",), _tag(_MID, "cx"))
-    fixture.answers[(_tag(_MID, "cx"), "C4", "i-0001")] = _wrong(
-        (2,), (), (4, 5)
-    )
+    # Scored rounds in which only one candidate's counterexample turn
+    # repairs, either way round. A pick that leaned toward a repair that
+    # worked, the bias reel-v1 exists to prevent, moves to the other
+    # candidate when only that one repairs; one that leaned toward a failed
+    # repair moves when only the pick repairs.
+    for run_id, item_id in candidates.items():
+        _round(fixture, run_id, (item_id,), _tag(run_id, "cx"))
+        if run_id != repaired:
+            fixture.answers[(_tag(run_id, "cx"), "C4", item_id)] = _wrong(
+                (2,), (), (4, 5)
+            )
     fixture.build()
     # Traces of both candidates, one refused by the trace budget.
     for run_id, item_id, result in (
@@ -2759,7 +2767,9 @@ def test_repair_traces_and_feedback_do_not_move_the_pick(
 
     assert _picked(before) == (_ANCHOR, "C4", "i-0002")
     assert _choice(after) == _choice(before)
-    assert after["repair"]["turn"]["outcome"]["t"] == "strong_exact"
+    assert after["repair"]["turn"]["outcome"]["t"] == (
+        "strong_exact" if repaired == _ANCHOR else "silent_wrong"
+    )
     assert after["trace_reason"] == "trace_limit"
     assert after["inputs_sha256"] != before["inputs_sha256"]
 
