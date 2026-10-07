@@ -231,18 +231,25 @@ the weights (about 4 GB).
 $env:PYTHONIOENCODING = "utf-8"
 uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-2026-10-07 --run-id dev-qwen3-1.7b-2026-10-07 --config artifacts/modal/qwen3-1.7b.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
 modal deploy modal/serve_vllm.py
+$url = "https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct"
 $secure = Read-Host -AsSecureString "Proxy key wk-<id>.ws-<secret>"
 $env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
 Remove-Variable secure
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $h = @{ Authorization = "Bearer $env:DFILTERFORGE_MODEL_API_KEY" }
-do { try { $m = Invoke-RestMethod "$url/v1/models" -Headers $h -TimeoutSec 30 } catch { $m = $null; Start-Sleep 15 } } until ($m)
-$m.data.id
-Invoke-RestMethod "$url/version" -Headers $h
+$m = $null; $t = [Diagnostics.Stopwatch]::StartNew()
+while (-not $m -and $t.Elapsed.TotalMinutes -lt 15) { try { $m = Invoke-RestMethod "$url/v1/models" -Headers $h -TimeoutSec 30 } catch { Write-Host "$([int]$t.Elapsed.TotalSeconds) s: $($_.Exception.Message)"; if ([int]$_.Exception.Response.StatusCode -in 401, 403, 404) { break }; Start-Sleep 15 } }
+if ($m) { $m.data.id; Invoke-RestMethod "$url/version" -Headers $h } else { Write-Host 'Not ready. Read modal app logs dfilterforge-vllm, then run modal app stop dfilterforge-vllm.' }
 ```
 
-The last line prints the vLLM version, which must be 0.21.0; give it to the
-maintainer with the run.
+Replace `WORKSPACE` in `$url` as in the Once block. The wait prints each
+failed try. It stops at once on 401 or 403 (a wrong key) and on 404 (a
+wrong `$url` or no deploy), since waiting cannot fix those, and gives up
+after 15 minutes, the server's own startup limit. When it prints `Not
+ready`, read the server's log with `modal app logs dfilterforge-vllm`
+(Ctrl+C ends it) and end the session as below before anything else.
+Otherwise the last line prints the vLLM version, which must be 0.21.0;
+give it to the maintainer with the run.
 
 ### Base model: dev, then test
 
