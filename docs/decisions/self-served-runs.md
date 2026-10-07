@@ -44,8 +44,8 @@ Why one L4: it is the cheapest Modal GPU with bf16 and 24 GB (USD 0.80/h
 against 1.10 for an A10; a T4 has no bf16), the bf16 weights (3.4 GB) and
 the 4-bit QLoRA run both fit, and its dense bf16 rate is about an A10's, so
 training costs less on it. Decoding is memory-bound and an L4 has half an
-A10's bandwidth, so a pass takes longer; at the measured prompt and answer
-sizes of the hosted runs, either GPU answers a test pass in under an hour.
+A10's bandwidth, so a pass takes longer; at the prompt and answer sizes
+the hosted runs measured, a test pass should still take under an hour.
 Prices: modal.com/pricing, 2026-10-07.
 
 Why vLLM 0.21.0: it is the version Modal's vLLM example pins on that image
@@ -116,11 +116,11 @@ An outage re-run adds `-r2` after the tag, before the date
 - Items left pending by transient failures (HTTP 5xx, including the 503 a
   scaled-down server returns, 408, 429, a timeout or a transport error) are
   sent again by the same command with `--resume`.
-- A resume refuses a new endpoint host (`settings_changed`). A redeploy of
-  the same app keeps the host and the pass resumes; a pass whose host
-  changed (another app name, workspace or region), or that ends with no
-  completed answer, is re-run once from scratch under its `-r2` id. If that
-  fails too, the row is reported not run.
+- A resume refuses a new endpoint host (`settings_changed`). A pass whose
+  host changed (another app name, workspace or region), or that ends with
+  no completed answer, is re-run once from scratch under its `-r2` id; if
+  that fails too, the row is reported not run. A redeploy of the same app
+  should keep the host, since the URL names the workspace, app and class.
 - The base row and every adapter row use the stack above. A change of GPU
   type, dtype, vLLM version, image or model revision starts every row again
   under new run ids, registered here first.
@@ -145,3 +145,6 @@ plan, three seeds trained and four rows scored, near USD 7.
 - Each run manifest records the endpoint host, which names the owner's
   Modal workspace.
 - The nominal prices make the call step's spend cap a formality here.
+- Nothing here has run on Modal yet: the image, the deploy, the URL form,
+  scale to zero and the cost estimates are read from the documentation
+  cited in `modal/serve_vllm.py` and `modal/train_sft.py`, not measured.
