@@ -190,53 +190,55 @@ scales to zero.
 1. Install the Modal client and log in. Set a workspace budget of USD 10 on
    https://modal.com/settings/usage (Usage and Billing); the Starter plan's
    USD 30 monthly credit covers the whole plan.
-2. Make a key for the server: run
-   `uv run --frozen python -c "import secrets; print(secrets.token_hex(32))"`
-   once and keep the printed key in your password manager. The Modal Secret
-   holds it for vLLM, and the call step sends it as its bearer key.
-3. Create the Secret, deploy, and fill in the call config with the URL the
-   deploy prints (`https://<workspace>--dfilterforge-vllm-server.us-east.modal.direct`):
-   replace `WORKSPACE` in `$url` below with your part of it.
+2. Make the server's key: create a Proxy Auth Token on
+   https://modal.com/settings/proxy-auth-tokens and keep its ID (`wk-...`)
+   and secret (`ws-...`, shown only once) in your password manager. The key
+   the call step sends is the two joined by a period,
+   `wk-<id>.ws-<secret>`. Modal's proxy answers every request without it
+   with 401 before a container starts, so nobody else can start the GPU.
+3. Deploy, fill in the call config with the URL the deploy prints
+   (`https://<workspace>--dfilterforge-vllm-server.us-east.modal.direct`):
+   replace `WORKSPACE` in `$url` below with your part of it, then stop the
+   app. Each session deploys it again and stops it at the end.
 4. Copy the committed prompt sets to where the call step reads them.
 
 ```powershell
 uv tool install modal==1.6.1
 modal setup
-$secure = Read-Host -AsSecureString "vLLM key"
-$env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
-Remove-Variable secure
-modal secret create dfilterforge-vllm-key "VLLM_API_KEY=$env:DFILTERFORGE_MODEL_API_KEY"
 modal deploy modal/serve_vllm.py
 $url = "https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct"
 New-Item -ItemType Directory -Force artifacts/modal | Out-Null
 (Get-Content modal/call-config.json -Raw).Replace("https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct", $url) | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b.json
 foreach ($id in "dev-qwen3-1.7b-2026-10-07", "test-qwen3-1.7b-2026-10-07") { New-Item -ItemType Directory -Force "artifacts/model-eval/$id" | Out-Null; Copy-Item "docs/results/$id/prepare.json", "docs/results/$id/prepared" "artifacts/model-eval/$id" -Recurse -Force }
-Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
+modal app stop dfilterforge-vllm
 ```
 
-The deploy builds the image once and starts no GPU until a request arrives.
+The deploy builds the image once and starts no GPU until a request with
+the key arrives. The last line is required: no app stays deployed between
+sessions.
 
 ### Each session
 
 First, without the key in the shell, run each call you will send this
 session: it must stop at `api_key_missing` (exit 2), which proves that the
 run id, cap, prompts, source digests, freeze admission and config pass the
-call step's own checks; the call step has no `--dry-run`. Then read the key,
-set `$url` again, wake the server (paid: it starts the GPU) and wait until
-`/v1/models` lists the served names. The first start downloads the weights
-(about 4 GB).
+call step's own checks; the call step has no `--dry-run`. Then deploy, read
+the key, set `$url` again, wake the server (paid: it starts the GPU) and
+wait until `/v1/models` lists the served names. The first start downloads
+the weights (about 4 GB).
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
 uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-2026-10-07 --run-id dev-qwen3-1.7b-2026-10-07 --config artifacts/modal/qwen3-1.7b.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
-$secure = Read-Host -AsSecureString "vLLM key"
+modal deploy modal/serve_vllm.py
+$secure = Read-Host -AsSecureString "Proxy key wk-<id>.ws-<secret>"
 $env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
 Remove-Variable secure
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $h = @{ Authorization = "Bearer $env:DFILTERFORGE_MODEL_API_KEY" }
 do { try { $m = Invoke-RestMethod "$url/v1/models" -Headers $h -TimeoutSec 30 } catch { $m = $null; Start-Sleep 15 } } until ($m)
 $m.data.id
-Invoke-RestMethod "$url/version"
+Invoke-RestMethod "$url/version" -Headers $h
 ```
 
 The last line prints the vLLM version, which must be 0.21.0; give it to the
@@ -264,12 +266,18 @@ docker compose --profile pilot build lab
 docker compose --profile pilot run --rm lab score --run-dir /workspace/results/dev-qwen3-1.7b-2026-10-07 --code-revision (git rev-parse --short HEAD)
 ```
 
-Repeat the first and last lines for `test-qwen3-1.7b-2026-10-07`. Then end
-the session: the server scales to zero 5 minutes after the last request,
-and `modal app stop dfilterforge-vllm` stops it at once (deploy again before
-the next session). Remove the key with
-`Remove-Item Env:DFILTERFORGE_MODEL_API_KEY`. Read the session's GPU time
-and cost on Modal's usage page and give them to the maintainer for the note.
+Repeat the first and last lines for `test-qwen3-1.7b-2026-10-07`.
+
+End every session with these two lines, also after a failed run: the first
+stops the server at once, where scale to zero would bill 5 more idle
+minutes, and leaves no app deployed until the next session's deploy. Then
+read the session's GPU time and cost on Modal's usage page and give them to
+the maintainer for the note.
+
+```powershell
+modal app stop dfilterforge-vllm
+Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
+```
 
 ### Training: three seeds
 
@@ -291,12 +299,12 @@ A failed seed is trained again only after
 
 ### Adapters: dev, then test
 
-Deploy again so a new container serves the trained adapters, and wait until
-`$m.data.id` lists `qwen3-1.7b-sft-s17` and the others. The maintainer
-first seeds and commits `docs/results/<run id>/` for each adapter run from
-the base row's directory, as the note says. Each seed then gets its own
-config, and its calls are the base model's with its run id and config, for
-example for seed 17 (paid):
+Open a session as above, whose deploy serves every adapter trained by
+then, and wait until `$m.data.id` lists `qwen3-1.7b-sft-s17` and the
+others. The maintainer first seeds and commits `docs/results/<run id>/` for
+each adapter run from the base row's directory, as the note says. Each
+seed then gets its own config, and its calls are the base model's with its
+run id and config, for example for seed 17 (paid):
 
 ```powershell
 (Get-Content modal/call-config.json -Raw).Replace("https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct", $url).Replace('"Qwen/Qwen3-1.7B"', '"qwen3-1.7b-sft-s17"') | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b-sft-s17.json

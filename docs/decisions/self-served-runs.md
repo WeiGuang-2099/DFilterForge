@@ -34,9 +34,11 @@ checks it against this note and `training/train_sft.py`.
   served as `qwen3-1.7b-sft-s17`, `qwen3-1.7b-sft-s42` or
   `qwen3-1.7b-sft-s2026` once its run manifest is there. The adapters were
   trained on the nf4-quantized base and are served on the bf16 base.
-- Auth: vLLM's `--api-key`, read from `VLLM_API_KEY` in the Modal Secret
-  `dfilterforge-vllm-key`, refuses `/v1` requests without the owner's key;
-  the Modal proxy itself is open (`unauthenticated=True`).
+- Auth: Modal's proxy refuses every request, on every path, that lacks a
+  Proxy Auth Token of the owner's workspace, with 401 and before a container
+  starts; the call step sends the token as its bearer key. vLLM checks no
+  key. The owner stops the app at the end of every session, so none stays
+  deployed between them.
 - Training: `modal/train_sft.py` runs `training/train_sft.py` unchanged on
   the same GPU type, in the training lock's cu126 environment.
 
@@ -143,8 +145,10 @@ plan, three seeds trained and four rows scored, near USD 7.
 - No test compares vLLM's rendered prompt with training's token by token;
   the pinned tokenizer revision and the thinking flag stand for it.
 - Each run manifest records the endpoint host, which names the owner's
-  Modal workspace.
+  Modal workspace. The host is public; without the token a request to it
+  starts no container.
 - The nominal prices make the call step's spend cap a formality here.
 - Nothing here has run on Modal yet: the image, the deploy, the URL form,
-  scale to zero and the cost estimates are read from the documentation
-  cited in `modal/serve_vllm.py` and `modal/train_sft.py`, not measured.
+  proxy auth, scale to zero and the cost estimates are read from the
+  documentation cited in `modal/serve_vllm.py` and `modal/train_sft.py`,
+  not measured.

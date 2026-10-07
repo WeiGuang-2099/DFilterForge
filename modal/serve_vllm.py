@@ -14,19 +14,22 @@ is on for the base rows too, so base and adapter rows share the flags;
 each trained seed's adapter on the adapters volume is served under its
 own model name, and the base keeps the hub id.
 
-vLLM checks the bearer key itself (VLLM_API_KEY, from the Modal Secret),
-so the client's Authorization header works unchanged, and the Modal proxy
-lets requests through (unauthenticated=True). At most one container runs.
-It scales to zero after SCALEDOWN_SECONDS without a request; a request
-while none runs gets HTTP 503 and starts one, so the runbook polls
-/v1/models until it answers before a call.
+Modal's proxy checks every request, on every path, for a Proxy Auth
+Token of the owner's workspace, which the client sends unchanged as its
+bearer key (`Authorization: Bearer wk-<id>.ws-<secret>`). It answers any
+other request with 401 before a container starts, so the public host
+alone cannot start the GPU; vLLM itself checks no key. At most one
+container runs. It scales to zero after SCALEDOWN_SECONDS without a
+request; a request while none runs gets HTTP 503 and starts one, so the
+runbook polls /v1/models until it answers before a call.
 
 Sources, read 2026-10-07: Modal's vLLM example, which pins the image and
 the vLLM version used here (modal.com/docs/examples/vllm_inference); Modal
-Servers (modal.com/docs/guide/servers); App.server's parameters
+Servers, which require proxy auth unless unauthenticated=True
+(modal.com/docs/guide/servers); Proxy Auth Tokens
+(modal.com/docs/guide/webhook-proxy-auth); App.server's parameters
 (modal.com/docs/reference/modal.App); vLLM's serve options
-(docs.vllm.ai/en/v0.21.0/cli/serve/) and VLLM_API_KEY
-(docs.vllm.ai/en/latest/configuration/env_vars/).
+(docs.vllm.ai/en/v0.21.0/cli/serve/).
 """
 
 from __future__ import annotations
@@ -50,7 +53,6 @@ PORT = 8000
 SCALEDOWN_SECONDS = 5 * 60
 STARTUP_SECONDS = 15 * 60
 APP_NAME = "dfilterforge-vllm"
-SECRET_NAME = "dfilterforge-vllm-key"
 HF_CACHE_VOLUME = "dfilterforge-hf-cache"
 ADAPTER_VOLUME = "dfilterforge-adapters"
 CACHE_ROOT = Path("/cache")
@@ -107,7 +109,6 @@ app = modal.App(APP_NAME)
 @app.server(
     image=image,
     gpu=GPU,
-    secrets=[modal.Secret.from_name(SECRET_NAME)],
     volumes={
         str(CACHE_ROOT): modal.Volume.from_name(
             HF_CACHE_VOLUME, create_if_missing=True
@@ -124,7 +125,6 @@ app = modal.App(APP_NAME)
     scaledown_window=SCALEDOWN_SECONDS,
     min_containers=0,
     max_containers=1,
-    unauthenticated=True,
 )
 class Server:
     """One vLLM process; the container is ready once it listens."""
