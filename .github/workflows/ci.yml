@@ -20,8 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose --profile dev build test
-      - run: docker compose --profile dev run --rm test pyink --check src tests scripts
-      - run: docker compose --profile dev run --rm test isort --check-only src tests scripts
+      - run: docker compose --profile dev run --rm test pyink --check src tests scripts modal
+      - run: docker compose --profile dev run --rm test isort --check-only src tests scripts modal
       - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py scripts/two_turn_smoke.py scripts/repair_arms.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
@@ -37,8 +37,9 @@ jobs:
         # tests, the test-pass batch's committed-registry and note tests,
         # the repair-arm batch's tests of the committed passes, plans, caps
         # and note (it builds every dev arm with the real follow-up step),
-        # the freeze quote test, and the frozen-prompt guard, so a
-        # commit that lets the note and the registry drift fails here.
+        # the freeze quote test, the self-served note's check against the
+        # Modal glue, and the frozen-prompt guard, so a commit that lets
+        # the note and the registry drift fails here.
         # The guard fails a branch that edits a prepare-hashed file while a
         # prompt set still awaits its call, rather than at the call step's
         # prepare_code_mismatch. The hosted test-run registry,
@@ -60,7 +61,7 @@ jobs:
           tests/test_model_run.py::test_frozen_prompts_awaiting_a_call_match_the_model_side_code
           tests/test_hosted_test_runs.py tests/test_dev_bakeoff.py
           tests/test_test_passes.py tests/test_repair_arms.py
-          tests/test_held_out.py'
+          tests/test_held_out.py tests/test_modal_glue.py'
       - name: Re-count the committed A/A reruns with the pair report
         # The suite above skips these tests for the same missing docs/
         # tree, and they are the only checks of the pair report against
