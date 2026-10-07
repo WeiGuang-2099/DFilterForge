@@ -1,0 +1,17 @@
+{
+  "endpoint_url": "https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct/v1/chat/completions",
+  "settings": {
+    "model_id": "Qwen/Qwen3-1.7B",
+    "temperature": 0.0,
+    "seed": 17,
+    "max_output_tokens": 2048,
+    "timeout_seconds": 120.0,
+    "json_mode": true,
+    "openrouter": null
+  },
+  "prices": {
+    "usd_per_million_input": 0.01,
+    "usd_per_million_output": 0.01,
+    "source": "nominal, not charged: self-served vLLM on one Modal L4; the real cost is GPU time (L4 USD 0.80/h, modal.com/pricing, 2026-10-07), recorded per run in docs/decisions/self-served-runs.md"
+  }
+}
