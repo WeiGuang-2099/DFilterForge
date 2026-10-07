@@ -36,7 +36,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import socket
 import subprocess
+import time
 
 import modal
 
@@ -95,6 +97,26 @@ def vllm_command(adapter_root: Path = ADAPTER_ROOT) -> list[str]:
     return command
 
 
+def wait_until_listening(
+    process: subprocess.Popen[bytes], port: int = PORT
+) -> None:
+    """Returns once the server accepts connections on its port.
+
+    Raises as soon as the process has exited, so a vLLM that dies on
+    startup fails its container at once instead of holding the GPU for
+    STARTUP_SECONDS; Modal's startup timeout bounds any other wait.
+    """
+    while True:
+        code = process.poll()
+        if code is not None:
+            raise RuntimeError(f"vllm serve exited with code {code}")
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                return
+        except OSError:
+            time.sleep(1)
+
+
 image = (
     modal.Image.from_registry(
         "nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12"
@@ -131,9 +153,13 @@ class Server:
 
     @modal.enter()
     def start(self) -> None:
-        """Starts vLLM with the adapters the volume holds now."""
+        """Starts vLLM with the adapters the volume holds now.
+
+        Returns once vLLM listens; raises at once if it exits first.
+        """
         # pylint: disable-next=attribute-defined-outside-init,consider-using-with
         self.process = subprocess.Popen(vllm_command())
+        wait_until_listening(self.process)
 
     @modal.exit()
     def stop(self) -> None:

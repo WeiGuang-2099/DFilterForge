@@ -12,6 +12,8 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import socket
+import subprocess
 import sys
 from types import ModuleType
 from typing import cast, Protocol
@@ -52,6 +54,11 @@ class _Serve(Protocol):
         ...
 
     def vllm_command(self, adapter_root: Path) -> list[str]:
+        ...
+
+    def wait_until_listening(
+        self, process: subprocess.Popen[bytes], port: int
+    ) -> None:
         ...
 
 
@@ -189,6 +196,28 @@ def test_the_server_serves_the_trained_revision_with_thinking_off(
         for seed in finished
     ]
     assert "--lora-modules" not in serve.vllm_command(tmp_path / "empty")
+
+
+def test_the_server_start_fails_as_soon_as_vllm_exits() -> None:
+    """The container is ready once vLLM listens, and fails if vLLM dies.
+
+    A vLLM that exits on startup must not hold the GPU for the whole
+    startup timeout before Modal marks the container failed.
+    """
+    dead = subprocess.Popen([sys.executable, "-c", "raise SystemExit(3)"])
+    dead.wait()
+    with pytest.raises(RuntimeError, match="exited with code 3"):
+        serve.wait_until_listening(dead, 1)
+
+    with socket.create_server(("127.0.0.1", 0)) as listener:
+        alive = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"]
+        )
+        try:
+            serve.wait_until_listening(alive, listener.getsockname()[1])
+        finally:
+            alive.kill()
+            alive.wait()
 
 
 def test_training_writes_where_the_server_reads_on_the_same_gpu() -> None:
