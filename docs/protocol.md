@@ -299,6 +299,26 @@ continued-SFT control matched on optimizer steps and tokens, three seeds each.
 
 Amended 2026-10-04: the test frontier arm runs' provider, NextBit, was written after the first test request and before any test repair request; see Repair.
 
+Amended 2026-10-07, before any self-served request (owner ruling of
+2026-10-06: GPU work runs on Modal). "Local" above means self-served: the
+base model and each seed's adapter answer through vLLM's OpenAI-compatible
+server on Modal (`modal/serve_vllm.py`), serving Qwen/Qwen3-1.7B at the
+revision `training/train_sft.py` pins, in bf16, on one pinned GPU type with
+one pinned vLLM version, and the adapters are trained on that GPU type
+(`modal/train_sft.py`). Thinking is off by the server's default
+`--default-chat-template-kwargs '{"enable_thinking": false}'`: the client
+sends no switch, no prepare-hashed file changes, and the run note records
+it. Each run sends the hosted runs' settings and call options with
+`openrouter` null (temperature 0, seed 17, 2048 output tokens, JSON mode,
+`--gate-first`, three attempts, 1 s pacing). Prices are nominal, because a
+config needs non-zero ones; the real cost is GPU time, recorded per run. A
+pass whose endpoint host changed cannot resume and is re-run under `-r2`.
+The base row and every adapter row use the same stack. Each row answers dev
+first and the frozen test prompts only if its dev run settles every item, a
+rule fixed before any score. The [self-served note](decisions/self-served-runs.md),
+part of this protocol, holds the stack, the run ids and the rules, written
+before the first test request.
+
 ## Training rules
 
 Training data comes from an IR grammar on train-only capture seeds, paraphrased
