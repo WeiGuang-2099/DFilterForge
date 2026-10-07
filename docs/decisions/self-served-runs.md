@@ -133,7 +133,7 @@ An outage re-run adds `-r2` after the tag, before the date
 GPU time and cost per run, from Modal's usage page, go here as each run
 finishes. Before any run, the estimates in `docs/usage.md` (Self-served runs
 on Modal) put the base row's dev and test passes near USD 1 and the whole
-plan, three seeds trained and four rows scored, near USD 5.
+plan, three seeds trained and four rows scored, near USD 7.
 
 ## Limits
 
