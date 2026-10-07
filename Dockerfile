@@ -187,6 +187,10 @@ COPY data ./data
 # The hosted model run commands, which tests/test_model_run.py parses. The
 # rest of docs/ stays out, so the tests that read it still skip here.
 COPY docs/usage.md ./docs/usage.md
+# The Modal glue and the training script whose pins it serves, which
+# tests/test_modal_glue.py reads without modal or torch installed.
+COPY modal ./modal
+COPY training/train_sft.py ./training/train_sft.py
 
 RUN uv sync --frozen --extra dev
 

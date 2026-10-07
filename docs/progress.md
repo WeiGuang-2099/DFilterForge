@@ -5,20 +5,21 @@ Last updated: 2026-10-07
 ## Current slice
 
 The site is live on GitHub Pages at
-https://weiguang-2099.github.io/DFilterForge/: PR #25 merged as 210e100 on
-2026-10-06, and the deployed methodology page links its sources at 210e100.
-It serves the Reel on `/` and `/methodology`. Branch `site-board` adds
-`/board`, the test repair round and the counted test passes, and has
-`main` merged in, so the board sits beside the Reel's ladder. The
-readability pass on the live pages is on that branch too: digests shown as
-twelve-digit prefixes, the methodology page in two columns, the Reel's
-witness tail as one break row and its repair card as a table. The README
-there is the owner's results page: the pitch, the live URL, the GIF of the
-home page (`docs/media/reel.gif`), the repair numbers and their limits; the
-run instructions moved to `docs/usage.md`. Branch `sft`
-holds the SFT code on training set v1 (PR #24). GPU work comes next, on
-Modal (owner ruling), with Qwen/Qwen3-1.7B, thinking off (Planned next 3).
-Reports under the ignored `artifacts/` are not project evidence.
+https://weiguang-2099.github.io/DFilterForge/: on 2026-10-07 the
+methodology page links its sources at 9cf7ea1, the merge of PR #27, and
+`/` and `/board` answer. Branch `modal-gpu` (Planned next 3) makes the
+small model servable and trainable on Modal, with nothing spent:
+`modal/serve_vllm.py` serves Qwen/Qwen3-1.7B, thinking off, through vLLM
+0.21.0 on one L4, with each trained seed's adapter by name;
+`modal/train_sft.py` runs `training/train_sft.py` unchanged on the same
+GPU type. The dev and test prompt sets for the base model and the
+adapters are prepared at 637c788 and seeded in `docs/results`; the test
+set's four prompt files are byte-identical to the frozen test prepare's,
+and its `prepare.json` is admitted 14th in the freeze record. The
+[self-served note](decisions/self-served-runs.md) registers the stack,
+the eight run ids and the rules, and `docs/usage.md` gives the owner one
+PowerShell command per step, with cost estimates. Reports under the
+ignored `artifacts/` are not project evidence.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2568,6 +2569,32 @@ https://weiguang-2099.github.io/DFilterForge/; on 2026-10-07 its
 methodology page links its sources at 210e100. The branch also drops the
 retired Go/No-Go gates from the pull request template and the docs.
 
+## PR #26 merged: 2026-10-07
+
+PR #26 merged `site-board` into `main` as d29b046; the owner reports
+hosted CI green. It adds `/board`, the pooled test repair round and the
+counted test passes, and the readability pass on the live pages: digests
+as twelve-digit prefixes, the methodology page in two columns, the Reel's
+agreeing witness frames as one break row and its repair card as a table.
+The README is now the owner's results page, with the live URL, the home
+page GIF (`docs/media/reel.gif`) and the repair numbers; the run
+instructions moved to `docs/usage.md` ([web site
+note](decisions/web-site.md)).
+
+## PR #27 merged: 2026-10-07
+
+PR #27 merged `sft` into `main` as 9cf7ea1; the owner reports hosted CI
+green. It adds the SFT set, 1,299 rows of the scorer's own C4 prompts and
+target envelopes (`data/train/v1/sft.jsonl.gz`, built by
+`scripts/sft_dataset.py`; 540 of the 1,088 ready rows target a field the
+row's retrieved list leaves out), a training lock kept apart from the
+evaluation package, and `training/train_sft.py`, the QLoRA run with a CPU
+smoke in Docker and a parity test of the trained sequence against the
+served render. `docs/protocol.md` (Training rules) pre-registers the
+recipe, the final-epoch checkpoint, seeds 17, 42 and 2026, and adapter C4
+minus base C4 on strong exact as the SFT headline. No model is trained
+yet.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2579,14 +2606,15 @@ where an item says it is the maintainer's order.
 
 1. Done: the [repair round](decisions/repair-round.md), dev and test (PRs
    #20 to #22).
-2. The hosted site: the Disproof Reel on `/`, chosen by the registered rule
-   `reel-v1`, `/board`, `/methodology` and the README GIF, deployed to
-   GitHub Pages by the `pages` job. The receipts and cases pages follow
-   as site work once it is live, in the maintainer's order; they do not
-   gate item 3.
+2. Done: the hosted site, live since PR #25 and complete with PR #26: the
+   Disproof Reel on `/`, chosen by the registered rule `reel-v1`,
+   `/board`, `/methodology` and the README GIF, deployed to GitHub Pages
+   by the `pages` job. The receipts and cases pages follow as site work,
+   in the maintainer's order; they do not gate item 3.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
    scorer, at most 3 USD, only after item 2 is live. GPU work runs on
-   Modal (owner ruling).
+   Modal (owner ruling); branch `modal-gpu` holds the server, the trainer,
+   the admitted prompt sets and the runbook.
 4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
    verifier-labelled DPO and a continued-SFT control, three seeds each; the
    GRPO gate measured.
@@ -2616,6 +2644,10 @@ where an item says it is the maintainer's order.
   withholding against a stub child.
 - The repair tooling records only gate stops as not run; no further round
   is planned, so the gap stays unfixed.
+- The Modal glue has never run: no image is built, nothing is deployed
+  and no request is sent. `tests/test_modal_glue.py` checks only its plain
+  functions and constants, the server's flags and the call config; the
+  cost table in `docs/usage.md` is an estimate.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 
