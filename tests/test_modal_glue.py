@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from dfilterforge import held_out
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.model_client import OpenAiCompatibleBackend
 
@@ -220,8 +221,9 @@ def test_training_writes_where_the_server_reads_on_the_same_gpu() -> None:
 def test_the_note_names_the_served_stack_and_usable_run_ids() -> None:
     """The self-served note records what the server runs, verbatim.
 
-    Each run id it names is one the call step accepts, and each prompt
-    set it names is seeded under docs/results.
+    Each run id it names is one the call step accepts, each prompt set it
+    names is seeded under docs/results, and the freeze record admits the
+    test one.
     """
     if not _NOTE.is_file():
         pytest.skip("the test image carries no docs/ tree")
@@ -243,4 +245,4 @@ def test_the_note_names_the_served_stack_and_usable_run_ids() -> None:
     for split in ("dev", "test"):
         prepare = _ROOT / "docs" / "results" / f"{split}-qwen3-1.7b-2026-10-07"
         assert prepare.name in run_ids
-        assert (prepare / "prepare.json").is_file()
+        held_out.admit_prepare(split, (prepare / "prepare.json").read_bytes())
