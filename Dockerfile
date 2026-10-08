@@ -40,9 +40,11 @@ RUN apt-get update \
 
 WORKDIR /build
 
+# all-versions/ keeps every release; download/src/ keeps only current ones
+# and dropped 4.6.8 once its successor shipped.
 RUN curl --fail --location --proto '=https' --tlsv1.2 \
         --output wireshark.tar.xz \
-        "https://www.wireshark.org/download/src/wireshark-${WIRESHARK_VERSION}.tar.xz" \
+        "https://www.wireshark.org/download/src/all-versions/wireshark-${WIRESHARK_VERSION}.tar.xz" \
     && echo "${WIRESHARK_SHA256}  wireshark.tar.xz" | sha256sum --check - \
     && tar --extract --file wireshark.tar.xz \
     && cmake \
