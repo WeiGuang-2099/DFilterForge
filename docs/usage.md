@@ -210,28 +210,35 @@ $url = "https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct"
 New-Item -ItemType Directory -Force artifacts/modal | Out-Null
 (Get-Content modal/call-config.json -Raw).Replace("https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct", $url) | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b.json
 foreach ($id in "dev-qwen3-1.7b-2026-10-07", "test-qwen3-1.7b-2026-10-07") { New-Item -ItemType Directory -Force "artifacts/model-eval/$id" | Out-Null; Copy-Item "docs/results/$id/prepare.json", "docs/results/$id/prepared" "artifacts/model-eval/$id" -Recurse -Force }
-modal app stop dfilterforge-vllm
+modal app stop -y dfilterforge-vllm
 ```
 
 The deploy builds the image once and starts no GPU until a request with
 the key arrives. The last line is required: no app stays deployed between
-sessions.
+sessions. Without `-y`, `modal app stop` asks to confirm and Enter
+answers no.
 
 ### Each session
 
-First, without the key in the shell, run each call you will send this
-session: it must stop at `api_key_missing` (exit 2), which proves that the
-run id, cap, prompts, source digests, freeze admission and config pass the
-call step's own checks; the call step has no `--dry-run`. Then deploy, read
-the key, set `$url` again, wake the server (paid: it starts the GPU) and
+First set `$url` and write the call config from it, so the calls and
+the wait below reach the same host. Then, without the key in the shell,
+run each call you will send this session: it must stop at
+`api_key_missing` (exit 2), which proves that the cap, prompts, source
+digests, freeze admission and config pass the call step's own checks; the
+call step has no `--dry-run`. It checks the key before the run directory,
+so it does not show whether a fresh call would find the run already
+started: use `--resume` only for a run an earlier session left pending.
+Go on only if every call stopped there. Then deploy, read the key, wake
+the server (paid: it starts the GPU) and
 wait until `/v1/models` lists the served names. The first start downloads
 the weights (about 4 GB).
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
+$url = "https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct"
+(Get-Content modal/call-config.json -Raw).Replace("https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct", $url) | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b.json
 uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-2026-10-07 --run-id dev-qwen3-1.7b-2026-10-07 --config artifacts/modal/qwen3-1.7b.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
 modal deploy modal/serve_vllm.py
-$url = "https://WORKSPACE--dfilterforge-vllm-server.us-east.modal.direct"
 $secure = Read-Host -AsSecureString "Proxy key wk-<id>.ws-<secret>"
 $env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
 Remove-Variable secure
@@ -239,7 +246,7 @@ Remove-Variable secure
 $h = @{ Authorization = "Bearer $env:DFILTERFORGE_MODEL_API_KEY" }
 $m = $null; $t = [Diagnostics.Stopwatch]::StartNew()
 while (-not $m -and $t.Elapsed.TotalMinutes -lt 15) { try { $m = Invoke-RestMethod "$url/v1/models" -Headers $h -TimeoutSec 30 } catch { Write-Host "$([int]$t.Elapsed.TotalSeconds) s: $($_.Exception.Message)"; if ([int]$_.Exception.Response.StatusCode -in 401, 403, 404) { break }; Start-Sleep 15 } }
-if ($m) { $m.data.id; Invoke-RestMethod "$url/version" -Headers $h } else { Write-Host 'Not ready. Read modal app logs dfilterforge-vllm, then run modal app stop dfilterforge-vllm.' }
+if ($m) { $m.data.id; Invoke-RestMethod "$url/version" -Headers $h } else { Write-Host 'Not ready. Read modal app logs dfilterforge-vllm, then run modal app stop -y dfilterforge-vllm.' }
 ```
 
 Replace `WORKSPACE` in `$url` as in the Once block. The wait prints each
@@ -282,8 +289,8 @@ read the session's GPU time and cost on Modal's usage page and give them to
 the maintainer for the note.
 
 ```powershell
-modal app stop dfilterforge-vllm
-Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
+modal app stop -y dfilterforge-vllm
+Remove-Item Env:DFILTERFORGE_MODEL_API_KEY -ErrorAction SilentlyContinue
 ```
 
 ### Training: three seeds
@@ -291,13 +298,18 @@ Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
 One command per seed (paid), one after another, so the first fills the
 weight cache the others read. `--detach` keeps a run going if the shell
 disconnects. Each writes `sft-v1-s<seed>/` (adapter, log, run manifest) to
-the `dfilterforge-adapters` volume; the last line copies a run into the
-ignored `artifacts/sft/`.
+the `dfilterforge-adapters` volume; the last two lines copy a run to
+`artifacts/sft/sft-v1-s<seed>/` in the ignored `artifacts/` tree. The
+directory must exist first: `modal volume get` into a missing one writes
+every file to the same path and fails. To copy a retrained seed again,
+delete its old copy first with
+`Remove-Item -Recurse -Force artifacts/sft/sft-v1-s<seed>`.
 
 ```powershell
 modal run --detach modal/train_sft.py --seed 17
 modal run --detach modal/train_sft.py --seed 42
 modal run --detach modal/train_sft.py --seed 2026
+New-Item -ItemType Directory -Force artifacts/sft | Out-Null
 modal volume get dfilterforge-adapters sft-v1-s17 artifacts/sft
 ```
 

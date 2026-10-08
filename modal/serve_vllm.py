@@ -36,6 +36,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import PurePath
+from pathlib import PurePosixPath
 import socket
 import subprocess
 import time
@@ -57,8 +59,10 @@ STARTUP_SECONDS = 15 * 60
 APP_NAME = "dfilterforge-vllm"
 HF_CACHE_VOLUME = "dfilterforge-hf-cache"
 ADAPTER_VOLUME = "dfilterforge-adapters"
-CACHE_ROOT = Path("/cache")
-ADAPTER_ROOT = Path("/adapters")
+# Paths in the Linux container. Path would write them with backslashes
+# when the owner deploys from Windows, and the image build rejects those.
+CACHE_ROOT = PurePosixPath("/cache")
+ADAPTER_ROOT = PurePosixPath("/adapters")
 THINKING_OFF = json.dumps({"enable_thinking": False})
 
 
@@ -72,7 +76,7 @@ def adapter_dir(seed: int) -> str:
     return f"sft-v1-s{seed}"
 
 
-def vllm_command(adapter_root: Path = ADAPTER_ROOT) -> list[str]:
+def vllm_command(adapter_root: PurePath = ADAPTER_ROOT) -> list[str]:
     """The vllm serve argv, with every adapter already trained.
 
     --lora-modules takes all adapters after one flag: given twice, the
@@ -87,10 +91,11 @@ def vllm_command(adapter_root: Path = ADAPTER_ROOT) -> list[str]:
         *("--host", "0.0.0.0", "--port", str(PORT)),
     ]
     # train_sft.py writes run_manifest.json last, after the adapter.
+    root = Path(adapter_root)
     modules = [
-        f"{adapter_name(seed)}={adapter_root / adapter_dir(seed) / 'adapter'}"
+        f"{adapter_name(seed)}={root / adapter_dir(seed) / 'adapter'}"
         for seed in SEEDS
-        if (adapter_root / adapter_dir(seed) / "run_manifest.json").is_file()
+        if (root / adapter_dir(seed) / "run_manifest.json").is_file()
     ]
     if modules:
         command += ["--lora-modules", *modules]
