@@ -34,9 +34,10 @@ checks it against this note and `training/train_sft.py`.
   served as `qwen3-1.7b-sft-s17`, `qwen3-1.7b-sft-s42` or
   `qwen3-1.7b-sft-s2026` once its run manifest is there. The adapters were
   trained on the nf4-quantized base and are served on the bf16 base.
-- Auth: Modal's proxy refuses every request, on every path, that lacks a
-  Proxy Auth Token of the owner's workspace, with 401 and before a container
-  starts; the call step sends the token as its bearer key. vLLM checks no
+- Auth: Modal documents that its proxy refuses every request, on every
+  path, that lacks a Proxy Auth Token of the owner's workspace, with 401
+  and before a container starts; the call step sends the token as its
+  bearer key. vLLM checks no
   key. The owner stops the app at the end of every session, so none stays
   deployed between them.
 - Training: `modal/train_sft.py` runs `training/train_sft.py` unchanged on
@@ -133,20 +134,20 @@ An outage re-run adds `-r2` after the tag, before the date
 ## Measured
 
 Each pass and each training run below ran on 2026-10-08; the two passes
-record source revision e1f61bd, and the training runs record no commit.
-Costs are each Modal app's whole bill, from deploy or start to
-stop, all resources, read with `modal billing report` (hourly, local
-time) on 2026-10-08; the dev figure equals the owner's reading of the
-usage page. The estimates in `docs/usage.md` put the base row's dev and
-test passes near USD 1 and the whole plan near USD 7.
+record source revision e1f61bd. Costs are each Modal app's bill, from
+deploy or start to stop, read with `modal billing report` (hourly, local
+time, by resource) on 2026-10-08; the dev total equals the owner's reading
+of the usage page. The L4 share at USD 0.80 an hour gives the GPU time.
+The estimates in `docs/usage.md` put the base row's dev and test passes
+near USD 1 and the whole plan near USD 7.
 
-| Run | Work | Cost, USD |
-| --- | --- | ---: |
-| `dev-qwen3-1.7b-2026-10-07` | 160 requests, each settled on its first attempt | 0.35 |
-| `test-qwen3-1.7b-2026-10-07` | 448 requests, each settled on its first attempt | 0.67 |
-| `sft-v1-s17` | 246 steps, 3 epochs, 3,057 s on the L4 | 0.78 |
-| `sft-v1-s42` | 246 steps, 3 epochs, 3,006 s | 0.76 |
-| `sft-v1-s2026` | 246 steps, 3 epochs, 3,048 s | not yet billed |
+| Run | Work | Total, USD | L4, USD (about) |
+| --- | --- | ---: | ---: |
+| `dev-qwen3-1.7b-2026-10-07` | 160 requests, each settled on its first attempt | 0.35 | 0.32 (24 min) |
+| `test-qwen3-1.7b-2026-10-07` | 448 requests, each settled on its first attempt | 0.67 | 0.62 (47 min) |
+| `sft-v1-s17` | 246 steps, 3 epochs, 3,057 s of training | 0.78 | 0.69 (52 min) |
+| `sft-v1-s42` | 246 steps, 3 epochs, 3,006 s | 0.76 | 0.68 (51 min) |
+| `sft-v1-s2026` | 246 steps, 3 epochs, 3,048 s | not yet billed | |
 
 The first deploy from Windows failed in the image build until
 `modal/serve_vllm.py` wrote its container paths as POSIX (PR #29); that
@@ -162,9 +163,12 @@ prompt's token count equals a local render of the pinned template with
 thinking off, which is 4 tokens longer than the thinking-on render; on
 the 160 dev items it also equals hosted Qwen3-32B's count. Each seed's
 run manifest and loss log are committed in `docs/results/sft-v1/`, with
-the adapters' SHA-256 in `adapters.sha256`: the pre-registered recipe,
-the final-step checkpoint, a run-average train loss of 0.023 and about
-1e-4 per target token over the last steps.
+the SHA-256 of each adapter's weights and config in `adapters.sha256`
+(paths relative to `artifacts/sft/`, the copy of the
+`dfilterforge-adapters` volume). They record the pre-registered recipe,
+the final-step checkpoint and run-average train losses of 0.024, 0.023
+and 0.023 (seeds 17, 42, 2026); the last logged losses are about 1e-4 per
+target token, up to 8e-4 for seed 17.
 
 ## Limits
 
@@ -178,8 +182,8 @@ the final-step checkpoint, a run-average train loss of 0.023 and about
   vLLM renders adapter requests with the base model's tokenizer and
   template, not the copies in each adapter directory.
 - Each run manifest records the endpoint host, which names the owner's
-  Modal workspace. The host is public; without the token a request to it
-  starts no container.
+  Modal workspace. The host is public; by Modal's documentation a request
+  to it without the token starts no container.
 - The nominal prices make the call step's spend cap a formality here.
 - Measured on Modal: the image, the deploy, the URL form, requests with
   the token, the cold start and the costs above. Not observed: a request
@@ -188,12 +192,21 @@ the final-step checkpoint, a run-average train loss of 0.023 and about
 - The response parser accepts a reply that leaves `missing_slots` out but
   refuses an explicit `"missing_slots": null`, although the prompt says it
   is [] unless the status is `needs_clarification`. The base row wrote
-  null in 14 of 40 C1 dev replies and 31 of 112 C1 test replies, all
-  refused as malformed, and in no other condition. On dev, reading null
-  as [] would make 2 items strong exact (C1 `mei-0003` and `mei-0004`,
-  case `udp-expiring-ttl`): C1 dev strong exact would be 1 of 12 cases
-  instead of 0. No hosted reply wrote null, and the scorer stays as it is
-  for every row.
+  null in 14 of 40 C1 dev replies and 31 of 112 C1 test replies, and in
+  no other condition; all were refused as malformed, 1 and 2 of them also
+  cut at the token cap. Re-scored offline with null read as [] (lab image,
+  pinned tshark, 2026-10-08; the unchanged replies reproduce the committed
+  outcomes), 2 dev and 3 test items become strong exact: C1 `mei-0003`
+  and `mei-0004` on dev, `mei-1005`, `mei-1039` and `mei-1071` on test.
+  C1 strong exact would be 0.083 instead of 0 on dev and 0.088 instead of
+  0.050 on test, and the test C2 - C1 difference 0.075 (7 cases against
+  5) instead of 0.113 (8 against 3). The other rewritten replies become
+  invalid, silent-wrong or false-ready, or stay malformed. No hosted reply
+  wrote null, C4 is unaffected, and the scorer stays as it is for every
+  row.
+- The training manifests record no commit. The owner's checkout was
+  `main` at e1f61bd during the session, and `training/` and `data/train/`
+  are unchanged on `main` since PR #27 (9cf7ea1).
 - Every row decodes greedily (temperature 0), as the protocol fixes for
   all models. The Qwen3 model card at the pinned revision suggests
   temperature 0.7, top_p 0.8 and top_k 20 for thinking-off use, and warns
