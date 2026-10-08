@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp","kind":"predicate","operator":"eq","value":"ACK"},{"field":"tcp","kind":"predicate","operator":"ne","value":"SYN"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

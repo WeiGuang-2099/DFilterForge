@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.flags","kind":"predicate","operator":"eq","value":"SYN"},{"field":"tcp.flags","kind":"predicate","operator":"eq","value":"FIN"},{"field":"tcp.flags","kind":"predicate","operator":"eq","value":"RST"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

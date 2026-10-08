@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"src.port","kind":"predicate","operator":"eq","value":53},{"field":"dst.port","kind":"predicate","operator":"ne","value":53},{"field":"protocol","kind":"predicate","operator":"eq","value":"udp"},{"field":"response.code","kind":"predicate","operator":"eq","value":"NOERROR"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

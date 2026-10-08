@@ -1,0 +1,1 @@
+{"expression":{"field":"dest_port","kind":"predicate","operator":"eq","value":"INPUT_JSON"},"ir_schema_version":"1.0","scope":"packet"}

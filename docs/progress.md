@@ -4,33 +4,29 @@ Last updated: 2026-10-08
 
 ## Current slice
 
-Branch `modal-windows-paths` unblocks the first self-served run, with
-no GPU time spent. The owner's first `modal deploy` from Windows failed in
-the image build, because `modal/serve_vllm.py` built its cache path with
-`Path`, which writes `/cache` as `\cache` there; the container paths are
-now POSIX on any host. A sweep of the runbook against Modal 1.6.1 on
-Windows also fixed the stop lines (`-y`), the adapter copy-back
-(`artifacts/sft` must exist) and the call config's URL (written each
-session). Hosted CI has failed at the test image build since Wireshark
-moved the 4.6.8 tarball to `download/src/all-versions/`; the Dockerfile
-now downloads it from there, under the same SHA-256 pin.
-
-The site is live on GitHub Pages at
-https://weiguang-2099.github.io/DFilterForge/: on 2026-10-07 the
-methodology page links its sources at 9cf7ea1, the merge of PR #27, and
-`/` and `/board` answer. PR #28 (`modal-gpu`, Planned next 3) makes the
-small model servable and trainable on Modal, with nothing spent:
-`modal/serve_vllm.py` serves Qwen/Qwen3-1.7B, thinking off, through vLLM
-0.21.0 on one L4, with each trained seed's adapter by name;
-`modal/train_sft.py` runs `training/train_sft.py` unchanged on the same
-GPU type. The dev and test prompt sets for the base model and the
-adapters are prepared at 637c788 and seeded in `docs/results`; the test
-set's four prompt files are byte-identical to the frozen test prepare's,
-and its `prepare.json` is admitted 14th in the freeze record. The
-[self-served note](decisions/self-served-runs.md) registers the stack,
-the eight run ids and the rules, and `docs/usage.md` gives the owner one
-PowerShell command per step, with cost estimates. Reports under the
-ignored `artifacts/` are not project evidence.
+Branch `base-dev-1.7b` (Planned next 3) holds the small model's first
+numbers. Base Qwen/Qwen3-1.7B, thinking off, served by vLLM 0.21.0 on one
+Modal L4, scores strong exact 0 in every condition on dev. On the frozen
+test prompts it scores 0.050 (C1), 0.163 (C2), 0.000 (C3) and 0.062 (C4,
+[0.025, 0.113]), 22 of 320 ready-gold items across the four conditions
+(C4: 5 of 80); adapter C4 minus that C4 is the SFT headline. An audit
+before any further spend re-scored all 160 dev items with pinned tshark
+(0 differences), matched every served prompt's token count to the pinned
+template with thinking off and to hosted Qwen3-32B, and confirmed greedy
+decoding: the zero is the model's under the strict output contract. In
+C1 alone, reading an explicit `"missing_slots": null` as [] would add 2
+dev and 3 test exact items (the note's Limits). Every filter of
+the base model that ran on dev ready gold was silent-wrong (18 of 18),
+and 47 dev replies broke the output contract, against 7 to 19 for the
+hosted 8B and 9B models. The [self-served
+note](decisions/self-served-runs.md) records the costs (USD 0.35 dev,
+0.67 test) and three limits the audit found. The three SFT seeds are
+trained on Modal (246 steps, 3 epochs, about 50 minutes each, run-average
+train loss 0.023 to 0.024; USD 0.78 and 0.76 for the two billed so far;
+records in
+`docs/results/sft-v1/`); the six adapter
+result directories are seeded, and the adapters' dev and test passes come
+next.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2617,6 +2613,17 @@ Hosted CI failed on the PR and on the push at the test image build, a
 Pages deploy was skipped and the live site still shows 9cf7ea1. No GPU
 has started on Modal.
 
+## PR #29 merged: 2026-10-08
+
+PR #29 merged `modal-windows-paths` into `main` as e1f61bd; hosted CI
+passed on main, and the Pages deploy that PR #28's failed build skipped
+ran again. `modal/serve_vllm.py` writes its container paths as POSIX, so
+the owner's deploy from Windows builds; the runbook's stop lines pass
+`-y`, the adapter copy-back creates `artifacts/sft` first, and each
+session writes the call config from its own URL. The Dockerfile downloads
+tshark's source from Wireshark's `all-versions/` archive under the same
+SHA-256 pin.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2635,8 +2642,11 @@ where an item says it is the maintainer's order.
    in the maintainer's order; they do not gate item 3.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
    scorer, at most 3 USD, only after item 2 is live. GPU work runs on
-   Modal (owner ruling); branch `modal-gpu` holds the server, the trainer,
-   the admitted prompt sets and the runbook.
+   Modal (owner ruling); `main` holds the server, the trainer, the
+   admitted prompt sets and the runbook (PRs #28 and #29). The base row
+   is measured on branch `base-dev-1.7b` (dev strong exact 0, test C4
+   0.062) for USD 1.02; the three SFT seeds are trained, and the six
+   adapter dev and test passes come next.
 4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
    verifier-labelled DPO and a continued-SFT control, three seeds each; the
    GRPO gate measured.
@@ -2666,10 +2676,13 @@ where an item says it is the maintainer's order.
   withholding against a stub child.
 - The repair tooling records only gate stops as not run; no further round
   is planned, so the gap stays unfixed.
-- The Modal glue has never run: no image is built, nothing is deployed
-  and no request is sent. `tests/test_modal_glue.py` checks only its plain
-  functions and constants, the server's flags and the call config; the
-  cost table in `docs/usage.md` is an estimate.
+- The Modal glue ran on 2026-10-08: the base row's dev and test passes
+  (608 requests) and three SFT seeds, with the billed costs in the
+  [self-served note](decisions/self-served-runs.md) (Measured);
+  `docs/usage.md` keeps the estimates. Not observed: a request without
+  the token, which should get 401, and scale to zero, since each session
+  was stopped by hand. `tests/test_modal_glue.py` checks only the glue's
+  plain functions and constants, the server's flags and the call config.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 

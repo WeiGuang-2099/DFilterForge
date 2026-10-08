@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"ipv4_ttl","kind":"predicate","operator":"gt","value":1},{"field":"ipv4_ttl","kind":"predicate","operator":"lt","value":64}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

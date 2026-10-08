@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"rtpsvt.direction","kind":"predicate","operator":"eq","value":"forward"},{"field":"asterix.021_V0_24_210_DTI","kind":"predicate","operator":"eq","value":"192.0.2.0/24"},{"field":"asterix.021_V2_2_271_LW","kind":"predicate","operator":"eq","value":"10.0.0.0/8"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

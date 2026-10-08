@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dis.packets_sent","kind":"predicate","operator":"eq","value":1},{"field":"ppi.proc-info","kind":"predicate","operator":"contains","value":"Chrome browser"}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}

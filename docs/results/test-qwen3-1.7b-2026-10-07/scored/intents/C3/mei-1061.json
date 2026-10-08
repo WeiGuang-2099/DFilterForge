@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dns_response","kind":"predicate","operator":"eq","value":"1"},{"field":"mDNS","kind":"predicate","operator":"eq","value":"1"},{"field":"error","kind":"predicate","operator":"ne","value":"NXDOMAIN"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

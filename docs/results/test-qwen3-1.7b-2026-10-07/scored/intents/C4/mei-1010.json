@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.flags.ack","kind":"predicate","operator":"eq","value":true},{"field":"tcp.source.address","kind":"predicate","operator":"in_subnet","value":"192.0.2.0/24"},{"field":"tcp.flags","kind":"predicate","operator":"contains","value":"SYN|FIN|RST"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
