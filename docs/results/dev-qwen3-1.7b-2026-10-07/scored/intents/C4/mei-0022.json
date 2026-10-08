@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"nhrp.dst.prot.addr.ipv6","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"},{"field":"nhrp.dst.prot.addr","kind":"predicate","operator":"in_subnet","value":"10.0.0.0/8"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

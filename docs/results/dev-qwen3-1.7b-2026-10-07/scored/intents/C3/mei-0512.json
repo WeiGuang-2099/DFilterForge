@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"frame_length","kind":"predicate","operator":"gt","value":5},{"field":"frame_count","kind":"predicate","operator":"eq","value":5}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
