@@ -11,6 +11,9 @@ import ast
 import importlib.util
 import json
 from pathlib import Path
+from pathlib import PurePath
+from pathlib import PurePosixPath
+from pathlib import PureWindowsPath
 import re
 import socket
 import subprocess
@@ -44,8 +47,8 @@ class _Serve(Protocol):
     THINKING_OFF: str
     HF_CACHE_VOLUME: str
     ADAPTER_VOLUME: str
-    CACHE_ROOT: Path
-    ADAPTER_ROOT: Path
+    CACHE_ROOT: PurePosixPath
+    ADAPTER_ROOT: PurePosixPath
 
     def adapter_name(self, seed: int) -> str:
         ...
@@ -53,7 +56,7 @@ class _Serve(Protocol):
     def adapter_dir(self, seed: int) -> str:
         ...
 
-    def vllm_command(self, adapter_root: Path) -> list[str]:
+    def vllm_command(self, adapter_root: PurePath) -> list[str]:
         ...
 
     def wait_until_listening(
@@ -198,6 +201,28 @@ def test_the_server_serves_the_trained_revision_with_thinking_off(
     assert "--lora-modules" not in serve.vllm_command(tmp_path / "empty")
 
 
+def test_a_deploy_from_windows_hands_modal_posix_container_paths() -> None:
+    """The owner deploys from Windows, where Path writes / as a backslash.
+
+    The image build rejects such a cache variable as an escape. Modal
+    rewrites mount points as POSIX itself; they are checked all the same.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("pathlib.Path", PureWindowsPath)
+        windows = _load(_ROOT / "modal" / "serve_vllm.py", "modal_serve_win")
+    calls = cast(MagicMock, getattr(windows, "modal")).mock_calls
+
+    (env,) = [args[0] for name, args, _ in calls if name.endswith(".env")]
+    (volumes,) = [
+        kwargs["volumes"]
+        for name, _, kwargs in calls
+        if name.endswith(".server")
+    ]
+
+    assert env["HF_HOME"] == "/cache/hf"
+    assert set(volumes) == {"/cache", "/root/.cache/vllm", "/adapters"}
+
+
 def test_the_server_start_fails_as_soon_as_vllm_exits() -> None:
     """The container is ready once vLLM listens, and fails if vLLM dies.
 
@@ -231,7 +256,7 @@ def test_training_writes_where_the_server_reads_on_the_same_gpu() -> None:
         serve.HF_CACHE_VOLUME,
         serve.ADAPTER_VOLUME,
     )
-    assert Path(trainer.CACHE_ROOT) == serve.CACHE_ROOT
+    assert PurePosixPath(trainer.CACHE_ROOT) == serve.CACHE_ROOT
     assert set(trainer.FILES) == {
         "training/train_sft.py",
         "data/train/v1/sft.jsonl.gz",
@@ -240,7 +265,8 @@ def test_training_writes_where_the_server_reads_on_the_same_gpu() -> None:
     assert all((_ROOT / name).is_file() for name in trainer.FILES)
     for seed in serve.SEEDS:
         output = trainer.output_dir(seed)
-        assert Path(output) == serve.ADAPTER_ROOT / serve.adapter_dir(seed)
+        served = serve.ADAPTER_ROOT / serve.adapter_dir(seed)
+        assert PurePosixPath(output) == served
         assert trainer.train_command(seed)[1:] == [
             f"{trainer.REMOTE_ROOT}/training/train_sft.py",
             *("--seed", str(seed), "--output-dir", output),
