@@ -4,33 +4,25 @@ Last updated: 2026-10-08
 
 ## Current slice
 
-Branch `modal-windows-paths` unblocks the first self-served run, with
-no GPU time spent. The owner's first `modal deploy` from Windows failed in
-the image build, because `modal/serve_vllm.py` built its cache path with
-`Path`, which writes `/cache` as `\cache` there; the container paths are
-now POSIX on any host. A sweep of the runbook against Modal 1.6.1 on
-Windows also fixed the stop lines (`-y`), the adapter copy-back
-(`artifacts/sft` must exist) and the call config's URL (written each
-session). Hosted CI has failed at the test image build since Wireshark
-moved the 4.6.8 tarball to `download/src/all-versions/`; the Dockerfile
-now downloads it from there, under the same SHA-256 pin.
-
-The site is live on GitHub Pages at
-https://weiguang-2099.github.io/DFilterForge/: on 2026-10-07 the
-methodology page links its sources at 9cf7ea1, the merge of PR #27, and
-`/` and `/board` answer. PR #28 (`modal-gpu`, Planned next 3) makes the
-small model servable and trainable on Modal, with nothing spent:
-`modal/serve_vllm.py` serves Qwen/Qwen3-1.7B, thinking off, through vLLM
-0.21.0 on one L4, with each trained seed's adapter by name;
-`modal/train_sft.py` runs `training/train_sft.py` unchanged on the same
-GPU type. The dev and test prompt sets for the base model and the
-adapters are prepared at 637c788 and seeded in `docs/results`; the test
-set's four prompt files are byte-identical to the frozen test prepare's,
-and its `prepare.json` is admitted 14th in the freeze record. The
-[self-served note](decisions/self-served-runs.md) registers the stack,
-the eight run ids and the rules, and `docs/usage.md` gives the owner one
-PowerShell command per step, with cost estimates. Reports under the
-ignored `artifacts/` are not project evidence.
+Branch `base-dev-1.7b` (Planned next 3) holds the small model's first
+numbers. Base Qwen/Qwen3-1.7B, thinking off, served by vLLM 0.21.0 on one
+Modal L4, scores strong exact 0 in every condition on dev. On the frozen
+test prompts it scores 0.050 (C1), 0.163 (C2), 0.000 (C3) and 0.062 (C4,
+[0.025, 0.113]), 22 of 448 items; adapter C4 minus that C4 is the SFT
+headline. An audit before any further spend re-scored all 160 dev items
+with pinned tshark (0 differences), matched every served prompt's token
+count to the pinned template with thinking off and to hosted Qwen3-32B,
+and confirmed greedy decoding: the zero is the model's. Every filter of
+the base model that ran on dev ready gold was silent-wrong (18 of 18),
+and 47 dev replies broke the output contract, against 7 to 19 for the
+hosted 8B and 9B models. The [self-served
+note](decisions/self-served-runs.md) records the costs (USD 0.35 dev,
+0.67 test) and three limits the audit found. The three SFT seeds are
+trained on Modal (246 steps, 3 epochs, about 50 minutes each, run-average
+train loss 0.023; USD 0.78 and 0.76 for the two billed so far; records in
+`docs/results/sft-v1/`); the six adapter
+result directories are seeded, and the adapters' dev and test passes come
+next.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2616,6 +2608,17 @@ Hosted CI failed on the PR and on the push at the test image build, a
 404 on the moved Wireshark tarball that no PR #28 file caused, so the
 Pages deploy was skipped and the live site still shows 9cf7ea1. No GPU
 has started on Modal.
+
+## PR #29 merged: 2026-10-08
+
+PR #29 merged `modal-windows-paths` into `main` as e1f61bd; hosted CI
+passed on main, and the Pages deploy that PR #28's failed build skipped
+ran again. `modal/serve_vllm.py` writes its container paths as POSIX, so
+the owner's deploy from Windows builds; the runbook's stop lines pass
+`-y`, the adapter copy-back creates `artifacts/sft` first, and each
+session writes the call config from its own URL. The Dockerfile downloads
+tshark's source from Wireshark's `all-versions/` archive under the same
+SHA-256 pin.
 
 ## Planned next
 

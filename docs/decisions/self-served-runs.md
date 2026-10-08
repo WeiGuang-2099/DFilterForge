@@ -132,23 +132,75 @@ An outage re-run adds `-r2` after the tag, before the date
 
 ## Measured
 
-GPU time and cost per run, from Modal's usage page, go here as each run
-finishes. Before any run, the estimates in `docs/usage.md` (Self-served runs
-on Modal) put the base row's dev and test passes near USD 1 and the whole
-plan, three seeds trained and four rows scored, near USD 7.
+Each pass and each training run below ran on 2026-10-08; the two passes
+record source revision e1f61bd, and the training runs record no commit.
+Costs are each Modal app's whole bill, from deploy or start to
+stop, all resources, read with `modal billing report` (hourly, local
+time) on 2026-10-08; the dev figure equals the owner's reading of the
+usage page. The estimates in `docs/usage.md` put the base row's dev and
+test passes near USD 1 and the whole plan near USD 7.
+
+| Run | Work | Cost, USD |
+| --- | --- | ---: |
+| `dev-qwen3-1.7b-2026-10-07` | 160 requests, each settled on its first attempt | 0.35 |
+| `test-qwen3-1.7b-2026-10-07` | 448 requests, each settled on its first attempt | 0.67 |
+| `sft-v1-s17` | 246 steps, 3 epochs, 3,057 s on the L4 | 0.78 |
+| `sft-v1-s42` | 246 steps, 3 epochs, 3,006 s | 0.76 |
+| `sft-v1-s2026` | 246 steps, 3 epochs, 3,048 s | not yet billed |
+
+The first deploy from Windows failed in the image build until
+`modal/serve_vllm.py` wrote its container paths as POSIX (PR #29); that
+build cost under USD 0.01. The working deploy printed
+`https://weiguang-2099--dfilterforge-vllm-server.us-east.modal.direct`
+with Modal's proxy-auth marker. With the token, requests were answered 503
+while the container started and 200 once vLLM listened. The first cold
+start took about six minutes from deploy to the first answer, of which
+vLLM's engine start took 249 s (78 s compiling, 36 s capturing CUDA
+graphs). Every reply records the fingerprint `vllm-0.21.0-84f508c7`, and
+no reply holds a think block. On all 608 dev and test items the served
+prompt's token count equals a local render of the pinned template with
+thinking off, which is 4 tokens longer than the thinking-on render; on
+the 160 dev items it also equals hosted Qwen3-32B's count. Each seed's
+run manifest and loss log are committed in `docs/results/sft-v1/`, with
+the adapters' SHA-256 in `adapters.sha256`: the pre-registered recipe,
+the final-step checkpoint, a run-average train loss of 0.023 and about
+1e-4 per target token over the last steps.
 
 ## Limits
 
 - Only `vllm` is pinned in the server image; its other packages resolve when
   Modal first builds it, and Modal reuses that build while the image
   definition is unchanged. The owner records `/version` before each run.
-- No test compares vLLM's rendered prompt with training's token by token;
-  the pinned tokenizer revision and the thinking flag stand for it.
+- No test in CI compares vLLM's rendered prompt with training's token by
+  token. A check on 2026-10-08 rendered all 1,299 training rows and all
+  608 dev and test prompts with the pinned template, thinking off, and got
+  the same token ids under transformers 5.18 (training), 5.19 and 4.57;
+  vLLM renders adapter requests with the base model's tokenizer and
+  template, not the copies in each adapter directory.
 - Each run manifest records the endpoint host, which names the owner's
   Modal workspace. The host is public; without the token a request to it
   starts no container.
 - The nominal prices make the call step's spend cap a formality here.
-- Nothing here has run on Modal yet: the image, the deploy, the URL form,
-  proxy auth, scale to zero and the cost estimates are read from the
-  documentation cited in `modal/serve_vllm.py` and `modal/train_sft.py`,
-  not measured.
+- Measured on Modal: the image, the deploy, the URL form, requests with
+  the token, the cold start and the costs above. Not observed: a request
+  without the token, which should get 401, and scale to zero, since each
+  session was stopped by hand.
+- The response parser accepts a reply that leaves `missing_slots` out but
+  refuses an explicit `"missing_slots": null`, although the prompt says it
+  is [] unless the status is `needs_clarification`. The base row wrote
+  null in 14 of 40 C1 dev replies and 31 of 112 C1 test replies, all
+  refused as malformed, and in no other condition. On dev, reading null
+  as [] would make 2 items strong exact (C1 `mei-0003` and `mei-0004`,
+  case `udp-expiring-ttl`): C1 dev strong exact would be 1 of 12 cases
+  instead of 0. No hosted reply wrote null, and the scorer stays as it is
+  for every row.
+- Every row decodes greedily (temperature 0), as the protocol fixes for
+  all models. The Qwen3 model card at the pinned revision suggests
+  temperature 0.7, top_p 0.8 and top_k 20 for thinking-off use, and warns
+  that greedy decoding can repeat endlessly in thinking mode. 7 of 160
+  base dev replies and 18 of 448 base test replies ran to the 2048-token
+  cap, the dev ones checked as loops. At temperature 0 vLLM ignores the
+  model's generation_config sampling defaults.
+- The base rows are served with `--enable-lora` and no adapter, as the
+  stack requires; whether that changes any logit against a plain bf16
+  serve is not measured.
