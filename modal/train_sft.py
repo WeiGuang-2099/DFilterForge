@@ -9,8 +9,10 @@ serves on, in the training lock's cu126 environment, and writes adapter/,
 log.jsonl and run_manifest.json to sft-v1-s<seed>/ on the adapters
 volume, where the server finds it at its next start. The model weights are
 cached on the volume the server reads them from. Copy a run into the
-ignored artifacts/ tree with
+ignored artifacts/ tree with the two lines below; `modal volume get` needs
+the local directory to exist, or it writes every file to the same path.
 
+    New-Item -ItemType Directory -Force artifacts/sft | Out-Null
     modal volume get dfilterforge-adapters sft-v1-s17 artifacts/sft
 
 train_sft.py refuses a non-empty output directory, so a seed is trained
