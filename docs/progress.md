@@ -1,13 +1,24 @@
 # Implementation Progress
 
-Last updated: 2026-10-07
+Last updated: 2026-10-08
 
 ## Current slice
+
+Branch `modal-windows-paths` unblocks the first self-served run, with
+no GPU time spent. The owner's first `modal deploy` from Windows failed in
+the image build, because `modal/serve_vllm.py` built its cache path with
+`Path`, which writes `/cache` as `\cache` there; the container paths are
+now POSIX on any host. A sweep of the runbook against Modal 1.6.1 on
+Windows also fixed the stop lines (`-y`), the adapter copy-back
+(`artifacts/sft` must exist) and the call config's URL (written each
+session). Hosted CI has failed at the test image build since Wireshark
+moved the 4.6.8 tarball to `download/src/all-versions/`; the Dockerfile
+now downloads it from there, under the same SHA-256 pin.
 
 The site is live on GitHub Pages at
 https://weiguang-2099.github.io/DFilterForge/: on 2026-10-07 the
 methodology page links its sources at 9cf7ea1, the merge of PR #27, and
-`/` and `/board` answer. Branch `modal-gpu` (Planned next 3) makes the
+`/` and `/board` answer. PR #28 (`modal-gpu`, Planned next 3) makes the
 small model servable and trainable on Modal, with nothing spent:
 `modal/serve_vllm.py` serves Qwen/Qwen3-1.7B, thinking off, through vLLM
 0.21.0 on one L4, with each trained seed's adapter by name;
@@ -2594,6 +2605,17 @@ served render. `docs/protocol.md` (Training rules) pre-registers the
 recipe, the final-epoch checkpoint, seeds 17, 42 and 2026, and adapter C4
 minus base C4 on strong exact as the SFT headline. No model is trained
 yet.
+
+## PR #28 merged: 2026-10-08
+
+PR #28 merged `modal-gpu` into `main` as c9bab50: `modal/serve_vllm.py`
+and `modal/train_sft.py`, the base model's dev and test prompt sets (the
+test set admitted 14th in the freeze record), the [self-served
+note](decisions/self-served-runs.md) and the runbook in `docs/usage.md`.
+Hosted CI failed on the PR and on the push at the test image build, a
+404 on the moved Wireshark tarball that no PR #28 file caused, so the
+Pages deploy was skipped and the live site still shows 9cf7ea1. No GPU
+has started on Modal.
 
 ## Planned next
 
