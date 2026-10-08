@@ -1,0 +1,1 @@
+{"case_id":"nc-printer","missing_slots":["address"],"rationale":"Every packet sent from the office printer, any protocol or port; the printer's address is never given.","split":"test","status":"needs_clarification"}

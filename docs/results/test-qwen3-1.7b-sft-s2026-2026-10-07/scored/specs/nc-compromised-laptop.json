@@ -1,0 +1,1 @@
+{"case_id":"nc-compromised-laptop","missing_slots":["address"],"rationale":"DNS traffic sent from the compromised laptop; the laptop's address is never given.","split":"test","status":"needs_clarification"}

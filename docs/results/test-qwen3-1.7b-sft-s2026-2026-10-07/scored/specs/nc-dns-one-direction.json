@@ -1,0 +1,1 @@
+{"case_id":"nc-dns-one-direction","missing_slots":["direction"],"rationale":"UDP packets on port 53 in one direction only, to port 53 or from it; which direction is never stated. Port 53 rather than mDNS's 5353, where both ends usually use the port and direction by port would not split the traffic.","split":"test","status":"needs_clarification"}

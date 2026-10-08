@@ -1,0 +1,1 @@
+{"case_id":"nc-game-server-port","missing_slots":["port"],"rationale":"UDP packets sent to the destination port the in-house game server uses, any host; the port number is never given.","split":"test","status":"needs_clarification"}
