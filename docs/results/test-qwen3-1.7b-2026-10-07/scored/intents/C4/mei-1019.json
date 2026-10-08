@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"udp.srcport","kind":"predicate","operator":"ne","value":53},{"field":"udp.dstport","kind":"predicate","operator":"ne","value":53}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

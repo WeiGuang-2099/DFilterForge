@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"source_port","kind":"predicate","operator":"ne","value":443},{"field":"destination_port","kind":"predicate","operator":"ne","value":443}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

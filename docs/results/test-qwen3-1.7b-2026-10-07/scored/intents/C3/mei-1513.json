@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"protocol","kind":"predicate","operator":"eq","value":"udp"},{"field":"port","kind":"predicate","operator":"eq","value":53},{"field":"direction","kind":"predicate","operator":"eq","value":"in"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

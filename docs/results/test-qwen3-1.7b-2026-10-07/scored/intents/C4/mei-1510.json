@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dns.qry.type","kind":"predicate","operator":"eq","value":1},{"field":"dns.qry.name","kind":"predicate","operator":"contains","value":"record type we talked about before"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

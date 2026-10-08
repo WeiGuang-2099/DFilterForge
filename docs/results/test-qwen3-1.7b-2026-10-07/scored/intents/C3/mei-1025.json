@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"protocol","kind":"predicate","operator":"eq","value":"tcp"},{"field":"syn","kind":"predicate","operator":"ne","value":true},{"field":"dest_port","kind":"predicate","operator":"eq","value":443}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
