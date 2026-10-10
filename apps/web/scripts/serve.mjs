@@ -123,7 +123,6 @@ async function handle(request, response) {
   const target = request.url ?? '';
   const queryStart = target.indexOf('?');
   const pathname = queryStart === -1 ? target : target.slice(0, queryStart);
-  const query = queryStart === -1 ? '' : target.slice(queryStart);
   const filePath = filePathFor(pathname);
   if (filePath === undefined) {
     response.writeHead(400).end();
@@ -131,6 +130,7 @@ async function handle(request, response) {
   }
   if (filePath !== null) {
     const isDirectory = pathname.endsWith('/');
+    const canonicalPath = path.posix.join(basePath, relativePath(filePath));
     const file = isDirectory ? path.join(filePath, 'index.html') : filePath;
     const size = await fileSize(file);
     if (size !== null) {
@@ -138,7 +138,7 @@ async function handle(request, response) {
       return;
     }
     if (!isDirectory && (await fileSize(path.join(filePath, 'index.html'))) !== null) {
-      response.writeHead(301, {Location: `${pathname}/${query}`}).end();
+      response.writeHead(301, {Location: canonicalPath.endsWith('/') ? canonicalPath : `${canonicalPath}/`}).end();
       return;
     }
   }
