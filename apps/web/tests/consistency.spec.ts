@@ -301,7 +301,7 @@ function markupSources(html: string): string[] {
   let previous: string;
   do {
     previous = markup;
-    markup = markup.replace(/<script\b[\s\S]*?<\/script>/gi, '');
+    markup = markup.replace(/<script\b[\s\S]*?<\/script(?:\s+[^>]*)?\s*>/gi, '');
   } while (markup !== previous);
   return Array.from(markup.matchAll(/\sdata-src="([^"]*)"/g), (match) =>
     decodeEntities(match[1] ?? ''),
