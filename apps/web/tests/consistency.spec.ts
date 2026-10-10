@@ -297,9 +297,9 @@ function decodeEntities(text: string): string {
 
 /** The data-src values in server-rendered HTML, outside scripts, in order. */
 function markupSources(html: string): string[] {
-  const markup = html.replace(/<script\b[\s\S]*?<\/script>/gi, '');
-  return Array.from(markup.matchAll(/\sdata-src="([^"]*)"/g), (match) =>
-    decodeEntities(match[1] ?? ''),
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll('[data-src]'), (element) =>
+    decodeEntities(element.getAttribute('data-src') ?? ''),
   );
 }
 
