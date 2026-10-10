@@ -297,7 +297,12 @@ function decodeEntities(text: string): string {
 
 /** The data-src values in server-rendered HTML, outside scripts, in order. */
 function markupSources(html: string): string[] {
-  const markup = html.replace(/<script\b[\s\S]*?<\/script>/gi, '');
+  let markup = html;
+  let previous: string;
+  do {
+    previous = markup;
+    markup = markup.replace(/<script\b[\s\S]*?<\/script(?:\s+[^>]*)?\s*>/gi, '');
+  } while (markup !== previous);
   return Array.from(markup.matchAll(/\sdata-src="([^"]*)"/g), (match) =>
     decodeEntities(match[1] ?? ''),
   );
