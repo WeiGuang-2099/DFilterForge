@@ -388,6 +388,38 @@ needs_clarification row swaps one atom's wording for the handwritten
 wording that leaves its slot open. "Paraphrased by a hosted model" above
 was the plan, not what was built. No published number changes.
 
+Amended 2026-10-18, before seeds 17 and 42 are scored on test: the SFT
+headline's estimator. When this was written the base row's dev and test
+scores and seed 2026's were known (test C4 strong exact 0.062 and 0.475
+[0.338, 0.600]); seeds 17 and 42 had answered every test item, and no
+score of theirs had been computed. A seed's difference is paired by case:
+over the 40 ready test cases, the seed's C4 strong-exact case mean
+(paraphrases averaged, every item in the denominator) minus the base
+row's on the same case. Its interval uses the ready universe's
+`draw_indices(40)` vectors from `dfilterforge.score_summary` (1,000
+resamples, seed 17), the vectors behind every other test interval, with
+the nearest-rank 2.5 and 97.5 percentiles. The three-seed mean is taken
+inside each resample: a vector's statistic is the mean of the three
+seeds' differences on that vector's draw. The interval therefore covers
+case sampling with the three trained adapters fixed; the spread between
+seeds is shown as the three per-seed rows, not folded into it. Discordant
+cases are counted for each seed against base, and once more on the
+seed-averaged case differences. A seed's difference, or the mean, is
+reported as a gain or a loss only if its interval excludes 0 and at least
+10 cases are discordant, and as inconclusive otherwise. Self-served rerun
+noise is not measured yet, and the headline says so until it is. The C4
+split by field coverage uses the estimator of silent-wrong over
+compile-valid items: per case, the share of its C4 items that are in the
+stratum and strong exact, over the share of its items in the stratum,
+each summed over a resample's drawn cases; a resample with no item in the
+stratum is skipped, and the number used is reported. Retrieval depends
+only on the prompt, so the base row and every seed put each item in the
+same stratum, and a paired difference within a stratum sums the case
+differences of the numerators over that one denominator. No mean is
+quoted before all three seeds are scored, and none is computed by hand: a
+committed script writes `docs/results/sft-v1/headline.json`, and CI
+rebuilds it with `--check`.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
