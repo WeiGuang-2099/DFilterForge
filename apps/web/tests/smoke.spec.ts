@@ -137,6 +137,16 @@ for (const {path, status, heading} of PAGES) {
   });
 }
 
+test('the site icon is an SVG served under the base path', async ({page, request}) => {
+  await page.goto('./');
+
+  const href = (await page.locator('link[rel="icon"]').getAttribute('href')) ?? '';
+  expect(href.startsWith(`${basePath}/`)).toBe(true);
+  const icon = await request.get(new URL(href, page.url()).href);
+  expect(icon.status()).toBe(200);
+  expect(icon.headers()['content-type']).toBe('image/svg+xml');
+});
+
 test('client navigation stays under the base path', async ({page}) => {
   await page.goto('./');
 
