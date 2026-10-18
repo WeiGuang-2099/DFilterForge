@@ -20,7 +20,8 @@ written, is the best. The mean is not separable from qwen/qwen3.5-9b or
 qwen/qwen3-32b on these 40 cases and scores below qwen/qwen3.5-122b-a10b
 and deepseek/deepseek-v4-pro-0813. The [self-served
 note](decisions/self-served-runs.md) holds every Modal bill, USD 4.87 in
-all. Still to come on this branch: the site's `/training` page.
+all. The site's `/training` page shows the headline, every number sourced
+from `training.json`.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
