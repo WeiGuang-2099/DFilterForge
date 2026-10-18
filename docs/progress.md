@@ -4,24 +4,16 @@ Last updated: 2026-10-18
 
 ## Current slice
 
-Branch `adapter-rows` (plan slice 1) holds the SFT headline. Before seeds
-17 and 42 were scored, it registered the headline's estimator, the
-descriptive analyses to follow and the rules for setting the 1.7B rows
-beside hosted models (`docs/protocol.md`, Training rules; ADR 0002),
-committed the script that computes the headline and both seeds' runs
-unscored, and pushed them on 2026-10-18 at 08:32 UTC; the lab container
-scored the runs after that. On the 40 ready test cases, C4 strong exact
-is 0.063 for the base model and 0.396 [0.296, 0.492] for the mean of
-three SFT seeds: +0.333 [0.233, 0.433] paired by case, 29 cases better
-and 1 worse, a gain by the registered rule
-([headline](results/sft-v1/headline.json)). Seeds 17, 42 and 2026 score
-0.338, 0.375 and 0.475; seed 2026, the one known when the rules were
-written, is the best. The mean is not separable from qwen/qwen3.5-9b or
-qwen/qwen3-32b on these 40 cases and scores below qwen/qwen3.5-122b-a10b
-and deepseek/deepseek-v4-pro-0813. The [self-served
-note](decisions/self-served-runs.md) holds every Modal bill, USD 4.87 in
-all. The site's `/training` page shows the headline, every number sourced
-from `training.json`.
+Branch `share-shell` (plan slice 2) makes the site say whose it is. Every
+page's masthead names the author, WeiGuang-2099, and links the source,
+and a footer line says both again. A link to any page unfurls into a
+1200 by 630 card of the page's top, recorded from the build by
+`apps/web/scripts/record_previews.mjs`; the training page has its own
+card, so a link to the headline shows the headline. The site's icon is
+the Reel's ladder with the disproving frame in carmine, and the README
+names the author under its title. brace-expansion is overridden to the
+releases that fix its three open advisories; braces 3.0.3 has no fixed
+release, so its alert stays for the owner to dismiss. No number changes.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2648,6 +2640,22 @@ as f2fd289; hosted CI and the Pages deploy passed.
   their first attempt, for USD 0.26. New rule in `docs/usage.md`: check
   the network without the key before the deploy.
 
+## PR #35 merged: 2026-10-18
+
+PR #35 merged `adapter-rows` into `main` as e72324f; hosted CI passed on
+main and the Pages deploy serves it. Before seeds 17 and 42 were scored
+it registered the headline's estimator, the descriptive analyses, the
+ADR 0002 amendment and `scripts/sft_headline.py`; then it scored them.
+Test C4 strong exact is 0.063 for the base model and 0.396 [0.296,
+0.492] for the mean of three SFT seeds, +0.333 [0.233, 0.433] paired by
+case, a gain by the registered rule
+([headline](results/sft-v1/headline.json)). The site gained
+`/training`, the README's first screen states the result, and the
+[self-served note](decisions/self-served-runs.md) holds every Modal
+bill, USD 4.87 in all. The local CI replay passed every step before the
+web exporter tests, which low memory on the owner's machine stopped; the
+hosted run is the one of record.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2669,8 +2677,8 @@ where an item says it is the maintainer's order.
    Modal (owner ruling); `main` holds the server, the trainer, the
    admitted prompt sets and the runbook (PRs #28 and #29). Done: the
    base row (PR #30, test C4 strong exact 0.063) and the three SFT
-   seeds' dev and test passes (branch `adapter-rows`, test C4 mean
-   0.396), for USD 4.87 of Modal time in all.
+   seeds' dev and test passes (PR #35, test C4 mean 0.396), for USD
+   4.87 of Modal time in all.
 4. Done: the training data and QLoRA-SFT, three seeds. Next:
    verifier-labelled DPO and a continued-SFT control, three seeds each,
    and the GRPO gate measured, all registered before any sampling.
