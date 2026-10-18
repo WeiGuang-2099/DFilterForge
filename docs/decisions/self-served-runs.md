@@ -133,13 +133,16 @@ An outage re-run adds `-r2` after the tag, before the date
 
 ## Measured
 
-Each pass and each training run below ran on 2026-10-08; the two passes
-record source revision e1f61bd. Costs are each Modal app's bill, from
-deploy or start to stop, read with `modal billing report` (hourly, local
-time, by resource) on 2026-10-08; the dev total equals the owner's reading
-of the usage page. The L4 share at USD 0.80 an hour gives the GPU time.
-The estimates in `docs/usage.md` put the base row's dev and test passes
-near USD 1 and the whole plan near USD 7.
+Each pass and each training run below ran on 2026-10-08, except the last
+adapter session, on 2026-10-18; every pass records source revision
+e1f61bd. Costs are each Modal app's bill, from deploy or start to stop,
+read with `modal billing report` (hourly, local time, by resource) on
+2026-10-08 and again on 2026-10-18, whose rows are in
+[`evidence/self-served/modal-billing-2026-10-07-to-18.json`](evidence/self-served/modal-billing-2026-10-07-to-18.json);
+the dev total equals the owner's reading of the usage page. The L4 share
+at USD 0.80 an hour gives the GPU time. The estimates in `docs/usage.md`
+put the base row's dev and test passes near USD 1 and the whole plan near
+USD 7; Modal billed USD 4.87 in all, the failed first build included.
 
 | Run | Work | Total, USD | L4, USD (about) |
 | --- | --- | ---: | ---: |
@@ -147,7 +150,25 @@ near USD 1 and the whole plan near USD 7.
 | `test-qwen3-1.7b-2026-10-07` | 448 requests, each settled on its first attempt | 0.67 | 0.62 (47 min) |
 | `sft-v1-s17` | 246 steps, 3 epochs, 3,057 s of training | 0.78 | 0.69 (52 min) |
 | `sft-v1-s42` | 246 steps, 3 epochs, 3,006 s | 0.76 | 0.68 (51 min) |
-| `sft-v1-s2026` | 246 steps, 3 epochs, 3,048 s | not yet billed | |
+| `sft-v1-s2026` | 246 steps, 3 epochs, 3,048 s | 0.78 | 0.69 (51 min) |
+| Adapter session 1, 2026-10-08 | Seed 2026's dev and test passes, each item settled on its first attempt; the first passes of dev s17 (160 HTTP 503s) and dev s42 (134 answers, 26 HTTP 503s) | 0.63 | 0.59 (44 min) |
+| Adapter session 2, 2026-10-08 | dev s17 resumed (160 answers); test s17 (292 answers, then 154 HTTP 503s and 2 HTTP 502s); dev s42's two resumes (26 HTTP 503s each); test s42 (234 answers, 214 HTTP 503s) | 0.63 | 0.58 (44 min) |
+| Adapter session 3, 2026-10-18 | test s17 (156 answers) and test s42 (214) resumed, each on its first attempt | 0.26 | 0.24 (18 min) |
+
+The adapter passes needed three sessions. In the first, dev s17 started
+on a server that had scaled to zero between the wake and the call. In the
+second, Modal preempted the container at 21:44:09 local time, during test
+s17; the replacement stopped 11 s after it came up at 21:51:48, and the
+next was ready at 21:58:33. Every request in those gaps got 503 or 502,
+and each spent one attempt, so seed 42's 26 dev C1 items failed three
+times and score `provider_failed` under the rules above, while the 370
+test items left pending kept two attempts each. On 2026-10-18 a first try
+from the University of Adelaide network sent nothing: the network reset
+every TLS connection to `*.modal.direct`, no container started and
+nothing was billed. The third session ran from another network, and
+each call under a watchdog that would have stopped it at its first
+failed answer. All 1,798 adapter answers, 608 of seed 2026's and 1,190 of
+seeds 17 and 42, carry the fingerprint `vllm-0.21.0-84f508c7`.
 
 The first deploy from Windows failed in the image build until
 `modal/serve_vllm.py` wrote its container paths as POSIX (PR #29); that

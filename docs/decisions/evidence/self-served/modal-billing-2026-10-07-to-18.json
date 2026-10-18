@@ -1,0 +1,530 @@
+{
+  "commands": [
+    "modal billing report --start 2026-10-07 --end 2026-10-14 -r h --tz local --show-resources --json",
+    "modal billing report --start 2026-10-14 --end 2026-10-19 -r h --tz local --show-resources --json"
+  ],
+  "note": "Hourly reports span at most 7 days, so two windows; read on 2026-10-18 after the last session's app stopped at 16:31 local time. Costs are USD, before credits.",
+  "retrieved": "2026-10-18",
+  "rows": [
+    {
+      "cost": "0.00422567",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T09:30:00+10:30",
+      "object_id": "ap-FCgFzEqtNi6GkwZMgtGO2k",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.00012920",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T09:30:00+10:30",
+      "object_id": "ap-FCgFzEqtNi6GkwZMgtGO2k",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00014090",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T09:30:00+10:30",
+      "object_id": "ap-FCgFzEqtNi6GkwZMgtGO2k",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.00000986",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-jgbSul2XCVBdVi2EUBbrAl",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.00000167",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-jgbSul2XCVBdVi2EUBbrAl",
+      "resource": "Memory"
+    },
+    {
+      "cost": "7E-8",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-jgbSul2XCVBdVi2EUBbrAl",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.01152813",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.18755550",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00557457",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00312091",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T12:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.00748549",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.13066681",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00391797",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00004936",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.00662381",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.13022216",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00445275",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00007165",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T13:30:00+10:30",
+      "object_id": "ap-mbK9yi3ATH265tNoRvqQW2",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.02371192",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.48977780",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.01635416",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00028349",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-2jj4b7oITQvRqCm5077Nc1",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.04324322",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.34977775",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00603217",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00097787",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T14:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.03718675",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.33911123",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00596171",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "Memory"
+    },
+    {
+      "cost": "1.1E-7",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-G1QVHBnyEgA6lyHGEoLiGw",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.04743055",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.44755548",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00759322",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "Memory"
+    },
+    {
+      "cost": "1.8E-7",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T15:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.02458434",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T16:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.23022227",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T16:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00395933",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T16:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "Memory"
+    },
+    {
+      "cost": "1.1E-7",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T16:30:00+10:30",
+      "object_id": "ap-H2lCMIFLLg76ZErO7bPL8a",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.07706937",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T18:30:00+10:30",
+      "object_id": "ap-lzEQSUDipIs3IYKRRTEvBS",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.68622215",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T18:30:00+10:30",
+      "object_id": "ap-lzEQSUDipIs3IYKRRTEvBS",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.01272185",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T18:30:00+10:30",
+      "object_id": "ap-lzEQSUDipIs3IYKRRTEvBS",
+      "resource": "Memory"
+    },
+    {
+      "cost": "2.9E-7",
+      "description": "dfilterforge-sft",
+      "environment": "main",
+      "interval_start": "2026-10-08T18:30:00+10:30",
+      "object_id": "ap-lzEQSUDipIs3IYKRRTEvBS",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.00013687",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T19:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.00266660",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T19:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00000899",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T19:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00506143",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.10622224",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00286745",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00002893",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.02433464",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.58491533",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.01793854",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00027799",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T20:30:00+10:30",
+      "object_id": "ap-njnwxwovaK07HsSNDt7ydW",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.02449612",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T21:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.47825578",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T21:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.01443441",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T21:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00021797",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-08T21:30:00+10:30",
+      "object_id": "ap-d5cGR8vz5056VdZNnjqCvz",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.01035826",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T15:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.21955545",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T15:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00691583",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T15:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00014863",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T15:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "Network Egress"
+    },
+    {
+      "cost": "0.00097436",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T16:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.02355569",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T16:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00080085",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T16:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00002162",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-18T16:30:00+10:30",
+      "object_id": "ap-3E24Naif9YbBXUPRgeOBvK",
+      "resource": "Network Egress"
+    }
+  ]
+}
