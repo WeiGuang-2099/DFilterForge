@@ -379,6 +379,15 @@ The SFT headline is adapter C4 minus base C4 on strong exact, per seed and
 as the three-seed mean, with the case bootstrap; C4 against C2 is not read
 for adapters.
 
+Corrected 2026-10-18 (owner ruling of that day): no hosted model
+paraphrased the training requests. `dfilterforge.train_combos` writes each
+request of `data/train/v1` from a fixed sentence frame, fixed connectives
+and, for each atom, one of the two handwritten wordings it carries in
+`src/dfilterforge/train_atoms.py`, picked by the seeded sampler; a
+needs_clarification row swaps one atom's wording for the handwritten
+wording that leaves its slot open. "Paraphrased by a hosted model" above
+was the plan, not what was built. No published number changes.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
