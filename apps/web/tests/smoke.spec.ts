@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@playwright/test';
 
+import {CARD, SITE_URL} from '../lib/preview';
 import {AUTHOR, AUTHOR_URL, REPOSITORY} from '../lib/site';
 import {basePath} from '../scripts/base_path.mjs';
 
@@ -96,6 +97,31 @@ for (const {path, status, heading} of PAGES) {
       'href',
       REPOSITORY,
     );
+  });
+
+  test(`${path} unfurls into a card this build serves at the card size`, async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    await page.goto(path);
+
+    const content = (selector: string) => page.locator(selector).getAttribute('content');
+    const image = (await content('meta[property="og:image"]')) ?? '';
+    expect(image.startsWith(SITE_URL)).toBe(true);
+    expect(await content('meta[property="og:title"]')).toBe(await page.title());
+    expect(await content('meta[name="twitter:card"]')).toBe('summary_large_image');
+    expect(await content('meta[name="twitter:image"]')).toBe(image);
+    expect(await content('meta[name="author"]')).toBe(AUTHOR);
+    expect(await content('meta[property="og:image:width"]')).toBe(String(CARD.width));
+    expect(await content('meta[property="og:image:height"]')).toBe(String(CARD.height));
+
+    // The published card is this build's file at the same path.
+    const card = await request.get(requireBaseURL(baseURL) + image.slice(SITE_URL.length));
+    expect(card.status()).toBe(200);
+    const png = await card.body();
+    // A PNG's header chunk holds its width and height at bytes 16 and 20.
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([CARD.width, CARD.height]);
   });
 
   test(`${path} links and loads only under the base path`, async ({page}) => {
