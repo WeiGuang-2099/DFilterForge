@@ -17,9 +17,8 @@ import {loadSite, sourcePaths} from './data';
 import type {NumNode, Src, StrNode} from './data';
 import {fmt} from './fmt';
 import type {FmtKind} from './fmt';
+import {REPOSITORY} from './site';
 import type {TermName} from './terms';
-
-const REPOSITORY = 'https://github.com/WeiGuang-2099/DFilterForge';
 
 /** Returns the GitHub permalink of a repository file at the source commit. */
 export function repositoryFile(file: string): string {

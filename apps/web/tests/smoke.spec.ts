@@ -5,6 +5,8 @@ import {join} from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@playwright/test';
 
+import {CARD, SITE_URL} from '../lib/preview';
+import {AUTHOR, AUTHOR_URL, REPOSITORY} from '../lib/site';
 import {basePath} from '../scripts/base_path.mjs';
 
 // Paths are relative so that they resolve under the base URL, which ends in
@@ -79,6 +81,49 @@ for (const {path, status, heading} of PAGES) {
     await expect(page.getByRole('heading', {level: 1, name: heading})).toBeVisible();
   });
 
+  test(`${path} names the author and links the source`, async ({page}) => {
+    await page.goto(path);
+
+    const [banner, footer] = [page.getByRole('banner'), page.getByRole('contentinfo')];
+    for (const frame of [banner, footer]) {
+      const author = frame.getByRole('link', {name: AUTHOR, exact: true});
+      await expect(author).toHaveAttribute('href', AUTHOR_URL);
+    }
+    await expect(banner.getByRole('link', {name: 'Source', exact: true})).toHaveAttribute(
+      'href',
+      REPOSITORY,
+    );
+    await expect(footer.getByRole('link', {name: 'GitHub', exact: true})).toHaveAttribute(
+      'href',
+      REPOSITORY,
+    );
+  });
+
+  test(`${path} unfurls into a card this build serves at the card size`, async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    await page.goto(path);
+
+    const content = (selector: string) => page.locator(selector).getAttribute('content');
+    const image = (await content('meta[property="og:image"]')) ?? '';
+    expect(image.startsWith(SITE_URL)).toBe(true);
+    expect(await content('meta[property="og:title"]')).toBe(await page.title());
+    expect(await content('meta[name="twitter:card"]')).toBe('summary_large_image');
+    expect(await content('meta[name="twitter:image"]')).toBe(image);
+    expect(await content('meta[name="author"]')).toBe(AUTHOR);
+    expect(await content('meta[property="og:image:width"]')).toBe(String(CARD.width));
+    expect(await content('meta[property="og:image:height"]')).toBe(String(CARD.height));
+
+    // The published card is this build's file at the same path.
+    const card = await request.get(requireBaseURL(baseURL) + image.slice(SITE_URL.length));
+    expect(card.status()).toBe(200);
+    const png = await card.body();
+    // A PNG's header chunk holds its width and height at bytes 16 and 20.
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([CARD.width, CARD.height]);
+  });
+
   test(`${path} links and loads only under the base path`, async ({page}) => {
     // Failed statuses only: the router's HEAD probe before a prefetch is
     // reported as aborted even when it gets its 200.
@@ -117,6 +162,16 @@ for (const {path, status, heading} of PAGES) {
     expect(seriousOrCritical).toEqual([]);
   });
 }
+
+test('the site icon is an SVG served under the base path', async ({page, request}) => {
+  await page.goto('./');
+
+  const href = (await page.locator('link[rel="icon"]').getAttribute('href')) ?? '';
+  expect(href.startsWith(`${basePath}/`)).toBe(true);
+  const icon = await request.get(new URL(href, page.url()).href);
+  expect(icon.status()).toBe(200);
+  expect(icon.headers()['content-type']).toBe('image/svg+xml');
+});
 
 test('client navigation stays under the base path', async ({page}) => {
   await page.goto('./');

@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import type {ReactNode} from 'react';
 
+import {AUTHOR, AUTHOR_URL, REPOSITORY} from '@/lib/site';
+import {Term} from '@/lib/sourced';
+
 const navigation = [
   {href: '/', label: 'Reel'},
   {href: '/board', label: 'Board'},
@@ -12,7 +15,20 @@ interface ShellProps {
   readonly children: ReactNode;
 }
 
-/** The page frame: a masthead in the manner of an RFC page header. */
+/** The author's handle, linked to the profile. */
+function Author() {
+  return (
+    <a href={AUTHOR_URL} rel="author">
+      <Term name={AUTHOR} />
+    </a>
+  );
+}
+
+/**
+ * The page frame: a masthead in the manner of an RFC page header, which
+ * names the author and links the source, and a footer line that says so
+ * again where a reader finishes.
+ */
 export function Shell({children}: ShellProps) {
   return (
     <div className="page">
@@ -22,6 +38,9 @@ export function Shell({children}: ShellProps) {
             DFilterForge
           </Link>
           <span>Wireshark display filter benchmark</span>
+          <span>
+            by <Author />
+          </span>
         </div>
         <nav aria-label="Primary navigation" className="mast-nav">
           {navigation.map((item) => (
@@ -29,10 +48,17 @@ export function Shell({children}: ShellProps) {
               {item.label}
             </Link>
           ))}
+          <a href={REPOSITORY}>Source</a>
         </nav>
         <p className="mast-note">Recorded results only. This site never calls a model.</p>
       </header>
       <main>{children}</main>
+      <footer className="foot">
+        <p>
+          DFilterForge is by <Author />. The code, the data and every recorded run are on{' '}
+          <a href={REPOSITORY}>GitHub</a>.
+        </p>
+      </footer>
     </div>
   );
 }

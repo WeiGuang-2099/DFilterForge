@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The Reel's ladder: two hosts, frames between them, and one frame in
+       carmine, the one that disproves the filter. -->
+  <style>
+    .tile {fill: #13212e;}
+    .rail {stroke: #9aa8b4;}
+    .rung {stroke: #dce4ea;}
+    .dis {stroke: #e86f84;}
+    @media (prefers-color-scheme: dark) {
+      .tile {fill: #dce4ea;}
+      .rail {stroke: #4a5a68;}
+      .rung {stroke: #13212e;}
+      .dis {stroke: #b3203e;}
+    }
+  </style>
+  <rect class="tile" width="32" height="32" rx="7"/>
+  <path class="rail" d="M9 6V26M23 6V26" stroke-width="2"/>
+  <path class="rung" d="M9 11H23M9 16.5H23" stroke-width="2"/>
+  <path class="dis" d="M9 22H23" stroke-width="3"/>
+</svg>

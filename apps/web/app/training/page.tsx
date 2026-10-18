@@ -4,6 +4,7 @@ import type {ReactNode} from 'react';
 import {Against, Head, Ladder} from '@/app/_components/training/ladder';
 import {CaseStrip, Scale} from '@/app/_components/training/marks';
 import {ConditionTable} from '@/app/_components/training/tables';
+import {preview} from '@/lib/preview';
 import {Num, repositoryFile, Str} from '@/lib/sourced';
 import {loadTraining} from '@/lib/training-data';
 
@@ -13,6 +14,11 @@ import '@/app/_components/training/training.css';
 export const metadata: Metadata = {
   title: 'Training',
   description: 'The small model before and after supervised fine-tuning, by the same verifier.',
+  openGraph: preview(
+    'og-training.png',
+    'The top of the DFilterForge training page: the small model before and after ' +
+      'supervised fine-tuning, on the frozen test split.',
+  ),
 };
 
 // The training page shows docs/results/sft-v1/headline.json through
