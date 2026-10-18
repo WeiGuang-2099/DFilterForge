@@ -386,7 +386,10 @@ and, for each atom, one of the two handwritten wordings it carries in
 `src/dfilterforge/train_atoms.py`, picked by the seeded sampler; a
 needs_clarification row swaps one atom's wording for the handwritten
 wording that leaves its slot open. "Paraphrased by a hosted model" above
-was the plan, not what was built. No published number changes.
+was the plan, not what was built, and so is the train row of the Splits
+table: v1 holds 1,299 compositions, 1,088 ready and 211
+needs_clarification, each with one request, not three. No published
+number changes.
 
 Amended 2026-10-18, before seeds 17 and 42 are scored on test: the SFT
 headline's estimator. When this was written the base row's dev and test
