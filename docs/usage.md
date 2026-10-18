@@ -258,6 +258,25 @@ ready`, read the server's log with `modal app logs dfilterforge-vllm`
 Otherwise the last line prints the vLLM version, which must be 0.21.0;
 give it to the maintainer with the run.
 
+Two rules come from the sessions of 2026-10-08 and 2026-10-18:
+
+- Check the network before the deploy. Without the key, `$url/v1/models`
+  must return an HTTP status, since Modal's proxy answers 401 itself; a
+  TLS reset or a timeout means the network blocks the server. The
+  University of Adelaide network resets every connection to
+  `*.modal.direct` while `api.modal.com` works, so a deploy succeeds there
+  and every request fails. Check from PowerShell and from Python's
+  `http.client`, the call step's transport, which ignores the Windows
+  proxy settings, and use another network, such as a phone hotspot, if
+  either gets no status.
+- Wake the server before every call, not once per session. It scales to
+  zero after 5 idle minutes, and a call that starts while it is down gets
+  503 for every item and spends one attempt on each: dev s17 lost a whole
+  pass that way on 2026-10-08. A server lost mid-pass does the same to
+  every remaining item at the call's 1 s pacing, so the 2026-10-18 resume
+  session ran each call under a watchdog that stopped it at the first
+  failed answer.
+
 ### Base model: dev, then test
 
 One command per run (paid). Exit 0 means the run is complete. On exit 1,

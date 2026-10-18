@@ -244,6 +244,16 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   frames and each filter and request leaf with the frames it matched, all
   pointers into the committed trace; `pick.joins` holds the root operator
   of each side's IR.
+- `training.json`: the SFT headline for `/training`, null until
+  `docs/results/sft-v1/headline.json` exists, which also sets
+  `phase.training`. Every rate, interval, count and reading is a pointer
+  into that file: the base row, the three-seed mean and each seed, the two
+  coverage strata (whose readings are null: they are shown and never
+  read) and the hosted rows set against the mean. The base row and each
+  seed's strong exact per condition on test and dev are pointers into
+  their summaries; each ready case's strong-exact C4 answers per row are
+  `count` ops over the rows' outcomes, in the order of answers gained,
+  so the page draws a case from counts and never divides.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 

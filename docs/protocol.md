@@ -379,6 +379,109 @@ The SFT headline is adapter C4 minus base C4 on strong exact, per seed and
 as the three-seed mean, with the case bootstrap; C4 against C2 is not read
 for adapters.
 
+Corrected 2026-10-18 (owner ruling of that day): no hosted model
+paraphrased the training requests. `dfilterforge.train_combos` writes each
+request of `data/train/v1` from a fixed sentence frame, fixed connectives
+and, for each atom, one of the two handwritten wordings it carries in
+`src/dfilterforge/train_atoms.py`, picked by the seeded sampler; a
+needs_clarification row swaps one atom's wording for the handwritten
+wording that leaves its slot open. "Paraphrased by a hosted model" above
+was the plan, not what was built, and so is the train row of the Splits
+table: v1 holds 1,299 compositions, 1,088 ready and 211
+needs_clarification, each with one request, not three. No published
+number changes.
+
+Amended 2026-10-18, before seeds 17 and 42 are scored on test: the SFT
+headline's estimator. When this was written the base row's dev and test
+scores and seed 2026's were known (test C4 strong exact 0.062 and 0.475
+[0.338, 0.600]). Seeds 17 and 42 had answered every test item and
+settled every dev item (26 of seed 42's dev C1 items ended in HTTP 503);
+no score of theirs had been computed, and their runs are committed
+unscored before one is. A seed's difference is paired by case: over
+the 40 ready test cases, the seed's C4 strong-exact case mean
+(paraphrases averaged, every item in the denominator) minus the base
+row's on the same case. Its interval uses `draw_indices(40)` from
+`dfilterforge.score_summary` (1,000 resamples, seed 17) over the ready
+case ids in sorted order, the vectors behind every other ready-case test
+interval, with the nearest-rank 2.5 and 97.5 percentiles. The three-seed
+mean is taken inside each resample: a vector's statistic is the mean of
+the three seeds' differences on that vector's draw. The interval
+therefore covers case sampling with the three trained adapters fixed;
+the spread between seeds is shown as the three per-seed rows, not folded
+into it. Discordant cases are counted for each seed against base, and
+once more on the seed-averaged case differences. A seed's difference, or
+the mean, reads as a gain or a loss only if its interval excludes 0 and
+at least 10 cases are discordant, and as inconclusive otherwise. That is
+stricter than the summaries' inconclusive flag, which counts discordant
+cases only, and an interval with an endpoint at 0 does not exclude 0.
+Pages and the README open with the three-seed mean and its reading; the
+seeds follow in seed order. Self-served rerun noise is not measured, and
+the headline says so. The C4 split by field coverage uses the estimator
+of silent-wrong over compile-valid items: per case, the share of its C4
+items that are in the stratum and strong exact, over the share of its
+items in the stratum, each summed over a resample's drawn cases; a
+resample with no item in the stratum is skipped, and the number used is
+reported. Retrieval depends only on the prompt, so the base row and
+every seed put each item in the same stratum. Within a stratum, a seed's
+difference to base and the three-seed mean's sum the case differences of
+the numerators over that one denominator, and a case with an item in the
+stratum is discordant there when its numerators differ. Stratum
+differences are shown with their intervals and discordant counts and are
+never read as a gain or a loss. No mean is quoted before all three seeds
+are scored, and none is computed by hand: `scripts/sft_headline.py`,
+committed before seeds 17 and 42 are scored, writes
+`docs/results/sft-v1/headline.json`, CI rebuilds it with `--check`, and
+where this text is silent that script decides.
+
+Amended 2026-10-18, before seeds 17 and 42 are scored on test:
+descriptive analyses of the self-served rows. They describe; they decide
+nothing. No training data, prompt, checkpoint, seed or later design
+choice changes because of them, and no test failure becomes training
+data. The error classes and the proximity strata were defined after seed
+2026's test scores were known and are labelled post hoc wherever they are
+shown. Code written after this text computes each one and CI rebuilds
+its output with `--check`; where that code and this text differ, this
+text holds. All are on test C4, for the base row and each seed unless
+stated, and none is read as a gain or a loss.
+
+- Transitions: per seed, the base row's outcome against the seed's on the
+  same item, over the 80 ready and, separately, the 32 non-ready C4 items.
+- Error classes: each ready C4 item that is not strong exact takes the
+  first class that applies, in this order: `provider_failed`; `truncated`
+  (malformed with finish_reason `length`); `malformed`; `abstained`;
+  `unknown_field` (invalid with error code `unknown_field`, a field the
+  frozen catalog lacks); `invalid_other`; `shortcut`; then, for
+  silent-wrong, comparing sets taken from the answer's IR and the gold IR,
+  in this order: a gold field absent from the answer (`missing_field`);
+  an answer field absent from the gold (`extra_field`); differing sets of
+  (field, operator) pairs (`operator`); differing sets of predicates in
+  canonical form (`in` lists sorted), negation ignored (`value`);
+  differing canonical forms, with All and AnyOf flattened and sorted as
+  `dfilterforge.train_combos` keys them (`structure`); else `same_form`.
+  Ten items drawn by `random.Random(17).sample` from every classified item
+  of the four rows, listed by row (base, then seeds 17, 42 and 2026) and
+  item id, are checked by hand, and the check is recorded.
+- Field coverage: the C4 split of the base row, each seed and the four
+  counted hosted test rows (the slot winners and qwen/qwen3-32b's pass A,
+  not pass B or a repair arm), with the estimator above.
+- Proximity to training: a ready test case's atoms are the predicates of
+  its gold IR, negation and grouping ignored. Against the atoms of each of
+  the 1,088 ready targets in `data/train/v1`, the case takes the first
+  stratum that applies: `same_atoms` (a target has exactly those atoms,
+  composed differently, since no target has a gold's canonical key),
+  `inside_one_target` (a target has them all and more), `pairs_seen`
+  (every two of them appear together in some target), `apart`. No target
+  joins two atoms on one field, so a case that does is `apart` by
+  construction. Strong exact is reported per stratum and row, as case
+  means.
+- Copies and unlisted fields: per row, over ready C4 items with a stored
+  IR (outcome invalid, shortcut, silent_wrong or strong_exact), the share
+  whose canonical key equals one of the 1,088 ready targets' keys, and the
+  share whose IR tests a field missing from the item's retrieved list,
+  each split by field coverage, with how many of them are strong exact.
+  The base row never saw the training set, so its copy share is the
+  untrained reference rate.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4

@@ -1,0 +1,1 @@
+{"case_id":"ne-after-syn","missing_slots":[],"rationale":"The frame that immediately follows each TCP SYN in capture order, whatever it is; a display filter judges one packet at a time and cannot refer to the previous frame.","split":"dev","status":"not_expressible"}

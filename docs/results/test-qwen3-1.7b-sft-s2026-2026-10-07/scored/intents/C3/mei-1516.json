@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"source","kind":"predicate","operator":"exists","value":null},{"child":{"field":"protocol","kind":"predicate","operator":"exists","value":null},"kind":"not"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

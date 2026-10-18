@@ -1,8 +1,8 @@
 # DFilterForge
 
-An LLM writes a Wireshark display filter from a plain-English request. A pinned tshark 4.6.8 runs it on synthetic captures whose every frame is labelled by the recipe that built it, never by a filter. A filter that fails to compile is easy to catch; one that compiles, runs and selects the wrong frames is not. DFilterForge calls that answer *silent-wrong*, and sends the frame that disproves it back to the model for one repair turn. The same verifier will score a small model post-trained here; nothing is trained yet.
+An LLM writes a Wireshark display filter from a plain-English request. A pinned tshark 4.6.8 runs it on synthetic captures whose every frame is labelled by the recipe that built it, never by a filter. A filter that fails to compile is easy to catch; one that compiles, runs and selects the wrong frames is not. DFilterForge calls that answer *silent-wrong*, and sends the frame that disproves it back to the model for one repair turn. The same verifier scores a small model fine-tuned here: on the frozen test requests, Qwen3-1.7B's strong-exact rate with typed intent and field context (C4) rises from 0.063 to 0.396 after supervised fine-tuning, the mean of three seeds, with 29 test cases better and 1 worse ([below](#fine-tuning-a-small-model)).
 
-**[Live site](https://weiguang-2099.github.io/DFilterForge/)** | [Board](https://weiguang-2099.github.io/DFilterForge/board/) | [Methodology](https://weiguang-2099.github.io/DFilterForge/methodology/) | [Locked test result](docs/results/locked-test-v1.md) | [Protocol](docs/protocol.md) | [Usage](docs/usage.md) | [![CI](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml/badge.svg)](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml)
+**[Live site](https://weiguang-2099.github.io/DFilterForge/)** | [Board](https://weiguang-2099.github.io/DFilterForge/board/) | [Training](https://weiguang-2099.github.io/DFilterForge/training/) | [Methodology](https://weiguang-2099.github.io/DFilterForge/methodology/) | [Locked test result](docs/results/locked-test-v1.md) | [Protocol](docs/protocol.md) | [Usage](docs/usage.md) | [![CI](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml/badge.svg)](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml)
 
 [![The Disproof Reel: tshark sweeps a probe capture and stops at frame 60, which disproves the model's filter](docs/media/reel.gif)](https://weiguang-2099.github.io/DFilterForge/)
 
@@ -15,6 +15,20 @@ On the frozen test split, four hosted models wrote 971 filters that compiled and
 | Resample: the same prompt again | 4 / 75 | 0.053 [0.014, 0.113] |
 
 Pooled over the four models and counted by case, all three arm comparisons are conclusive. Per model, the registered primary, counterexample against bare, reads only for qwen/qwen3.5-122b-a10b; the other three have too few discordant cases.
+
+## Fine-tuning a small model
+
+Qwen/Qwen3-1.7B with thinking off, before and after supervised fine-tuning (SFT): QLoRA on [1,299 synthetic training rows](data/train/v1/manifest.json) labelled by pinned tshark on train-only captures, three seeds, the final checkpoint of each. The base model and the adapters were served by vLLM 0.21.0 on one Modal L4 and scored by the same scorer on the frozen test prompts. The estimator was [registered](docs/protocol.md#training-rules) before seeds 17 and 42 were scored ([headline](docs/results/sft-v1/headline.json)):
+
+| Qwen/Qwen3-1.7B, test C4 | Strong exact [95% case bootstrap] | Minus base, paired by case | Cases better / worse |
+| --- | --- | --- | ---: |
+| Base | 0.063 [0.025, 0.113] | | |
+| **SFT, mean of three seeds** | **0.396** [0.296, 0.492] | **+0.333** [0.233, 0.433] | 29 / 1 |
+| SFT seed 17 | 0.338 [0.238, 0.450] | +0.275 [0.175, 0.375] | 19 / 1 |
+| SFT seed 42 | 0.375 [0.263, 0.500] | +0.313 [0.200, 0.438] | 21 / 1 |
+| SFT seed 2026 | 0.475 [0.338, 0.600] | +0.413 [0.288, 0.538] | 24 / 1 |
+
+By the registered rule the mean's difference is a gain: its interval excludes 0, and 30 cases are discordant. Seed 2026, the only seed scored when the rules were written, is the best of the three. Split by field coverage, the mean is 0.464 on the 28 test items whose retrieved field list holds every gold field and 0.359 on the other 52, where the base model scores 0.143 and 0.019. Set against the hosted rows below case by case, the mean minus each is -0.042 [-0.188, 0.088] for qwen/qwen3.5-9b and -0.104 [-0.254, 0.046] for qwen/qwen3-32b, not separable on these 40 cases, and -0.217 [-0.358, -0.067] for qwen/qwen3.5-122b-a10b and -0.454 [-0.583, -0.333] for deepseek/deepseek-v4-pro-0813, both lower. The adapters were trained on compositions of exactly the 38 predicates the dev and test gold uses, so test asks them for unseen compositions of seen atoms, not for unseen fields, operators or values.
 
 ## One answer, end to end
 
@@ -64,13 +78,13 @@ Silent-wrong of ran sums C1 to C4 of the [compile validity table](docs/results/l
 - **Pinned tshark, no shell.** tshark is built from the official Wireshark 4.6.8 source after a SHA-256 check ([Dockerfile](Dockerfile)) and runs with no network, no Linux capabilities and no root. A filter reaches it as one argv element with `shell=False`, under time, output and frame limits ([runner](src/dfilterforge/runner.py)).
 - **Labels never come from a filter, and near misses get caught.** CI runs every single-site mutant of each gold filter on the probes and fails on any survivor without a written waiver ([gate](scripts/probe_adequacy.py)). The witness packets were added after three wrong answers in the first dev run scored strong exact ([ablation 005](docs/ablations/005-probe-witnesses.md)).
 - **Frozen before measured.** Test prompts, gold and captures were frozen on 2026-09-26 ([freeze record](src/dfilterforge/held_out_freeze.json)), and the client refuses any test request the record does not admit. Models were chosen on dev, and each metric and comparison was written into the [protocol](docs/protocol.md) before the test requests it reads.
-- **Replayable without a key.** Every answer is committed verbatim. CI re-scores every committed scored run (the 41 under `docs/results`) and re-derives every repair round and pool, with no network and no API key ([CI](.github/workflows/ci.yml)).
+- **Replayable without a key.** Every answer is committed verbatim. CI re-scores every committed scored run under `docs/results`, rebuilds the SFT headline from those scores, and re-derives every repair round and pool, with no network and no API key ([CI](.github/workflows/ci.yml)).
 - **A site that cannot drift.** The site is a static export of the committed files and never calls a model; a Playwright test re-derives each value it shows from those files ([web site note](docs/decisions/web-site.md)).
 
 ## Status
 
-- **Nothing is trained yet.** Next: Qwen/Qwen3-1.7B with thinking off, fine-tuned with QLoRA on [`data/train/v1`](data/train/v1/manifest.json): 1,299 rows (1,088 ready, 211 asking for clarification) whose labels are the frames pinned tshark selects with the gold intent on three train-only probes. No row's canonical filter or train-probe frame set equals a dev or test gold's, and no row shares an 8-word run with a dev or test request ([tests](tests/test_train_split.py)). The base model and every adapter will be scored by the same scorer, with checkpoints chosen on dev only ([training rules](docs/protocol.md#training-rules)).
-- **Spend so far:** the 57 committed model runs, dev and test, charged at most 2.38 USD in all, the sum of `charged_usd_upper_bound` over their `run_manifest.json` files. The [locked test result](docs/results/locked-test-v1.md) itemizes the test phase.
+- **SFT is measured; preference training is next.** The training set, [`data/train/v1`](data/train/v1/manifest.json), holds 1,299 rows (1,088 ready, 211 asking for clarification) whose labels are the frames pinned tshark selects with the gold intent on three train-only probes. No row's canonical filter or train-probe frame set equals a dev or test gold's, and no row shares an 8-word run with a dev or test request ([tests](tests/test_train_split.py)). Each seed's checkpoint is its final epoch, fixed before training, so none was chosen on dev or test ([training rules](docs/protocol.md#training-rules)). Next: verifier-labelled DPO against a continued-SFT control matched on steps and tokens, three seeds each.
+- **Spend so far:** USD 7.25. The 57 hosted model runs, dev and test, charged at most USD 2.38, the sum of `charged_usd_upper_bound` over their `run_manifest.json` files; the [locked test result](docs/results/locked-test-v1.md) itemizes the test phase. Modal billed USD 4.87 for the self-served base model, the three training runs and the adapters' passes ([self-served note](docs/decisions/self-served-runs.md#measured)).
 
 ## Reproduce
 
@@ -93,6 +107,8 @@ In order: build tshark from source into the no-network lab image, and the test i
 - Rate limiting (HTTP 429) left 20 ready C1 items of deepseek-v4-pro-0813 and 3 ready C4 items of qwen3.5-9b without an answer; they score as failures. deepseek-v4-pro-0813's repair turns were served by NextBit, its first answers by DeepInfra.
 - 21 of the 35 counterexample repairs hold a value their card showed for that field, such as `tcp.dstport` 443 or `ip.ttl` 64, and count as repaired. A copied host address or ephemeral port would score as a shortcut; none did ([limits](docs/results/locked-test-v1.md#limits)).
 - The training set recombines the 38 predicates the dev and test gold uses, so the test can show unseen compositions, not unseen fields, operators or values.
+- The SFT interval resamples the 40 cases with the three adapters fixed. The spread between seeds, 0.338 to 0.475, is shown as three rows rather than folded in, and the self-served model's rerun noise is not measured.
+- The adapters were trained on C4 prompts only, so their C1 to C3 scores are untrained conditions. Seed 42's dev pass lost 26 C1 answers to a Modal preemption; they score as failures.
 - No CI step checks the locked test page itself, only the files it cites.
 
 ## Safety boundary and license

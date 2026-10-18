@@ -838,6 +838,18 @@ def test_export_is_deterministic_compact_and_sorted(fixture: Fixture) -> None:
     assert json.loads(first["site.json"])["source_commit"] == "abc1234"
 
 
+def test_training_is_null_until_a_headline_is_committed(
+    fixture: Fixture,
+) -> None:
+    documents = _documents(exporter.export(fixture.build(), "x"))
+
+    assert documents["training.json"] == {
+        "schema": "web-training/1.0",
+        "headline": None,
+    }
+    assert documents["site.json"]["phase"]["training"] is False
+
+
 def test_every_sourced_value_resolves_from_the_raw_files(
     fixture: Fixture,
 ) -> None:
@@ -3720,6 +3732,53 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
     ]
     assert line["not_run"] == []
     assert check_sources(_ROOT, documents) > 150_000
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_exports_the_sft_headline() -> None:
+    documents = _documents(_committed())
+    training = documents["training.json"]["headline"]
+    headline = json.loads(
+        (_ROOT / "docs/results/sft-v1/headline.json").read_text("utf-8")
+    )
+
+    assert documents["site.json"]["phase"]["training"] is True
+    assert training["model_id"]["t"] == "Qwen/Qwen3-1.7B"
+    assert training["mean"]["rate"]["value"]["v"] == (
+        headline["mean"]["rate"]["value"]
+    )
+    assert training["mean"]["reading"]["t"] == "gain"
+    assert [seed["seed"]["v"] for seed in training["seeds"]] == [17, 42, 2026]
+    # The strata are shown and never read.
+    assert [
+        (stratum["stratum"], stratum["mean"]["reading"])
+        for stratum in training["coverage"]
+    ] == [
+        ("every_gold_field_retrieved", None),
+        ("some_gold_field_missing", None),
+    ]
+    # Cases run from the most seed answers gained over base to the most
+    # lost, and their signs are the mean's discordant cases.
+    nets = [
+        sum(seed["v"] for seed in case["seeds"]) - 3 * case["base"]["v"]
+        for case in training["cases_detail"]
+    ]
+    assert len(nets) == headline["cases"]
+    assert nets == sorted(nets, reverse=True)
+    assert (sum(net > 0 for net in nets), sum(net < 0 for net in nets)) == (
+        headline["mean"]["first_better_cases"],
+        headline["mean"]["second_better_cases"],
+    )
+    assert [row["run_id"]["t"] for row in training["dev"]] == [
+        "dev-qwen3-1.7b-2026-10-07",
+        "dev-qwen3-1.7b-sft-s17-2026-10-07",
+        "dev-qwen3-1.7b-sft-s42-2026-10-07",
+        "dev-qwen3-1.7b-sft-s2026-2026-10-07",
+    ]
+    assert training["dev"][2]["conditions"][0]["provider_failed"]["v"] == 26
+    check_sources(_ROOT, {"training.json": documents["training.json"]})
 
 
 @pytest.mark.skipif(
