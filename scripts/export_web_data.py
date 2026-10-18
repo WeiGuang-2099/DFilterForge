@@ -52,9 +52,17 @@ intervals and comparisons are pointers into a test run's summary.json.
 
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
-board.json, methodology.json, reel.json, cases/<case_id>.json and
-receipts/<run_slug>/<condition>/<item_id>.json, where the run slug is the
-run id with each dot replaced by an underscore.
+board.json, methodology.json, reel.json, training.json, cases/<case_id>.json
+and receipts/<run_slug>/<condition>/<item_id>.json, where the run slug is
+the run id with each dot replaced by an underscore.
+
+training.json holds the SFT headline once docs/results/sft-v1/headline.json
+exists, and ``headline`` null before: the base row, the three-seed mean and
+each seed, the coverage strata and the hosted rows, all pointers into the
+headline; the rows' strong exact per condition on test and dev from their
+summaries, each dev run named after its test run with the split prefix
+swapped; and each ready case's strong-exact C4 answer counts per row, as
+``count`` sources over the rows' outcomes.
 
 reel.json projects the home page's Disproof Reel by the pre-registered
 rule reel-v1 (docs/decisions/disproof-reel.md). Pool: in the test phase
@@ -175,6 +183,12 @@ SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
 # The test repair round pooled over the test pool's passes (repair-pool/1.0).
 REPAIR_POOL = "docs/results/repair-pool/test.json"
+# The SFT headline (sft-headline/1.0), scripts/sft_headline.py's output.
+HEADLINE = "docs/results/sft-v1/headline.json"
+_BOUNDS = ("value", "low", "high")
+_PAIRED = ("first_better_cases", "second_better_cases", "discordant_cases")
+_STRATA = ("every_gold_field_retrieved", "some_gold_field_missing")
+_TRAINING_CONDITIONS = ("C1", "C2", "C3", "C4")
 # The note that registers the test runs (protocol.md requires them in
 # writing before the first test request). Read only to check its Runs table
 # against test-runs.json; no sourced value ever points into it.
@@ -3003,6 +3017,190 @@ def build_reel(
     return document
 
 
+def _paired(repo: Repo, *at: str | int) -> Node:
+    """One paired difference of the headline: interval, counts, reading.
+
+    The coverage strata carry no reading (docs/protocol.md, Training rules:
+    they are shown and never read), so their ``reading`` is null.
+    """
+    entry = _obj(repo.resolve(ptr(HEADLINE, *at)), "headline entry")
+    node: Node = {key: repo.v(ptr(HEADLINE, *at, key)) for key in _PAIRED}
+    node["difference"] = repo.numbers(HEADLINE, _BOUNDS, *at, "difference")
+    node["reading"] = (
+        repo.t(ptr(HEADLINE, *at, "reading")) if "reading" in entry else None
+    )
+    return node
+
+
+def _ladder(repo: Repo, *at: str | int) -> Node:
+    """The base row, the three-seed mean and each seed, in seed order."""
+    seeds = _arr(repo.resolve(ptr(HEADLINE, *at, "seeds")), "headline seeds")
+    return {
+        "base": repo.numbers(HEADLINE, _BOUNDS, *at, "base"),
+        "mean": {
+            "rate": repo.numbers(HEADLINE, _BOUNDS, *at, "mean", "rate"),
+            **_paired(repo, *at, "mean"),
+        },
+        "seeds": [
+            {
+                "seed": repo.v(ptr(HEADLINE, *at, "seeds", index, "seed")),
+                "rate": repo.numbers(
+                    HEADLINE, _BOUNDS, *at, "seeds", index, "rate"
+                ),
+                **_paired(repo, *at, "seeds", index),
+            }
+            for index in range(len(seeds))
+        ],
+    }
+
+
+def _row_conditions(repo: Repo, run_id: str) -> Node:
+    """A row's strong exact and provider failures per condition."""
+    summary = f"{RESULTS}/{check_run_id(run_id)}/scored/summary.json"
+    return {
+        "run_id": repo.t(ptr(summary, "run")),
+        "conditions": [
+            {
+                "label": repo.t(ptr(summary, "conditions", label, "condition")),
+                "strong_exact": repo.v(
+                    ptr(summary, "conditions", label, "strong_exact", "value")
+                ),
+                "provider_failed": repo.v(
+                    ptr(
+                        summary,
+                        "conditions",
+                        label,
+                        "outcomes",
+                        "provider_failed",
+                    )
+                ),
+            }
+            for label in _TRAINING_CONDITIONS
+        ],
+    }
+
+
+def _training_cases(repo: Repo, runs: Sequence[str]) -> list[Node]:
+    """Each ready case's strong-exact C4 answers in the base row and seeds.
+
+    Counts only: the page draws each case from them and never divides. The
+    cases run from the most seed answers gained over base to the most lost,
+    each seed's two paraphrases counted, then by case id.
+    """
+    paths = [
+        f"{RESULTS}/{check_run_id(run)}/scored/outcomes.jsonl" for run in runs
+    ]
+    first: dict[str, str] = {}
+    for item in repo.rows(paths[0]):
+        if item.get("condition") == "C4" and item.get("gold_status") == "ready":
+            case, item_id = _text(item.get("case_id"), "case"), _text(
+                item.get("item_id"), "item"
+            )
+            first[case] = min(first.get(case, item_id), item_id)
+    cases: list[tuple[int, str, Node]] = []
+    for case in sorted(first):
+        counts = [
+            repo.v(
+                count(
+                    path,
+                    {
+                        "case_id": [case],
+                        "condition": ["C4"],
+                        "gold_status": ["ready"],
+                        "outcome": ["strong_exact"],
+                    },
+                )
+            )
+            for path in paths
+        ]
+        gained = sum(_int(node["v"], "count") for node in counts[1:])
+        net = gained - (len(paths) - 1) * _int(counts[0]["v"], "count")
+        node: Node = {
+            "case_id": repo.t(
+                row(
+                    paths[0],
+                    {"item_id": first[case], "condition": "C4"},
+                    "case_id",
+                )
+            ),
+            "base": counts[0],
+            "seeds": counts[1:],
+        }
+        cases.append((-net, case, node))
+    return [node for _, _, node in sorted(cases, key=lambda each: each[:2])]
+
+
+def build_training(repo: Repo) -> Document:
+    """The SFT headline as docs/results/sft-v1/headline.json records it.
+
+    Every rate, interval, count and reading is a pointer into the headline,
+    which scripts/sft_headline.py writes and CI rebuilds; the untrained
+    conditions and the dev gate are pointers into each row's summaries,
+    and each case's counts are counts over its outcomes. Before the
+    headline exists, ``headline`` is null.
+    """
+    if not repo.exists(HEADLINE):
+        return {"schema": "web-training/1.0", "headline": None}
+    base = _text(repo.resolve(ptr(HEADLINE, "base_run")), "headline base_run")
+    seeds = [
+        _text(each, "headline seed run")
+        for each in (
+            _obj(seed, "headline seed").get("run")
+            for seed in _arr(repo.resolve(ptr(HEADLINE, "seeds")), "seeds")
+        )
+    ]
+    hosted = _arr(repo.resolve(ptr(HEADLINE, "hosted")), "headline hosted")
+    test_runs = [base, *seeds]
+    # Each test row's dev pass shares its run id after the split prefix.
+    dev_runs = ["dev-" + run.removeprefix("test-") for run in test_runs]
+    return {
+        "schema": "web-training/1.0",
+        "headline": {
+            "model_id": repo.t(
+                ptr(
+                    f"{RESULTS}/{check_run_id(base)}/scored/summary.json",
+                    "model_id",
+                )
+            ),
+            "condition": repo.t(ptr(HEADLINE, "condition")),
+            "cases": repo.v(ptr(HEADLINE, "cases")),
+            "items": repo.v(ptr(HEADLINE, "items")),
+            "bootstrap": repo.numbers(
+                HEADLINE,
+                ("seed", "resamples", "min_discordant_cases"),
+                "bootstrap",
+            ),
+            **_ladder(repo),
+            "coverage": [
+                {
+                    "stratum": stratum,
+                    "items": repo.v(
+                        ptr(HEADLINE, "coverage", stratum, "items")
+                    ),
+                    **_ladder(repo, "coverage", stratum),
+                }
+                for stratum in _STRATA
+            ],
+            "hosted": [
+                {
+                    "model_id": repo.t(
+                        ptr(HEADLINE, "hosted", index, "model_id")
+                    ),
+                    "rate": repo.numbers(
+                        HEADLINE, _BOUNDS, "hosted", index, "rate"
+                    ),
+                    **_paired(repo, "hosted", index),
+                }
+                for index in range(len(hosted))
+            ],
+            "rerun_noise": repo.t(ptr(HEADLINE, "self_served_rerun_noise")),
+            "cases_detail": _training_cases(repo, test_runs),
+            "test": [_row_conditions(repo, run) for run in test_runs],
+            "dev": [_row_conditions(repo, run) for run in dev_runs],
+        },
+    }
+
+
 def build_site(
     repo: Repo, selection: Selection, source_commit: str
 ) -> Document:
@@ -3020,7 +3218,7 @@ def build_site(
             "test": selection.test_phase,
             # The test round only, as board.json's repair block shows it.
             "repair": selection.test_phase and repo.exists(REPAIR_POOL),
-            "training": False,
+            "training": repo.exists(HEADLINE),
             "aa": False,
         },
         "runs": [
@@ -3097,6 +3295,7 @@ def export(root: Path, source_commit: str) -> dict[str, bytes]:
     files["board.json"] = render(build_board(repo, selection))
     files["methodology.json"] = render(build_methodology(repo, selection))
     files["reel.json"] = render(build_reel(repo, captures, selection))
+    files["training.json"] = render(build_training(repo))
     files["routes.json"] = render(
         {
             "schema": "web-routes/1.0",
