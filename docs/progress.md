@@ -1,32 +1,26 @@
 # Implementation Progress
 
-Last updated: 2026-10-08
+Last updated: 2026-10-18
 
 ## Current slice
 
-Branch `base-dev-1.7b` (Planned next 3) holds the small model's first
-numbers. Base Qwen/Qwen3-1.7B, thinking off, served by vLLM 0.21.0 on one
-Modal L4, scores strong exact 0 in every condition on dev. On the frozen
-test prompts it scores 0.050 (C1), 0.163 (C2), 0.000 (C3) and 0.062 (C4,
-[0.025, 0.113]), 22 of 320 ready-gold items across the four conditions
-(C4: 5 of 80); adapter C4 minus that C4 is the SFT headline. An audit
-before any further spend re-scored all 160 dev items with pinned tshark
-(0 differences), matched every served prompt's token count to the pinned
-template with thinking off and to hosted Qwen3-32B, and confirmed greedy
-decoding: the zero is the model's under the strict output contract. In
-C1 alone, reading an explicit `"missing_slots": null` as [] would add 2
-dev and 3 test exact items (the note's Limits). Every filter of
-the base model that ran on dev ready gold was silent-wrong (18 of 18),
-and 47 dev replies broke the output contract, against 7 to 19 for the
-hosted 8B and 9B models. The [self-served
-note](decisions/self-served-runs.md) records the costs (USD 0.35 dev,
-0.67 test) and three limits the audit found. The three SFT seeds are
-trained on Modal (246 steps, 3 epochs, about 50 minutes each, run-average
-train loss 0.023 to 0.024; USD 0.78 and 0.76 for the two billed so far;
-records in
-`docs/results/sft-v1/`); the six adapter
-result directories are seeded, and the adapters' dev and test passes come
-next.
+Branch `adapter-rows` (plan slice 1) holds the SFT headline. Before seeds
+17 and 42 were scored, it registered the headline's estimator, the
+descriptive analyses to follow and the rules for setting the 1.7B rows
+beside hosted models (`docs/protocol.md`, Training rules; ADR 0002),
+committed the script that computes the headline and both seeds' runs
+unscored, and pushed them on 2026-10-18 at 08:32 UTC; the lab container
+scored the runs after that. On the 40 ready test cases, C4 strong exact
+is 0.063 for the base model and 0.396 [0.296, 0.492] for the mean of
+three SFT seeds: +0.333 [0.233, 0.433] paired by case, 29 cases better
+and 1 worse, a gain by the registered rule
+([headline](results/sft-v1/headline.json)). Seeds 17, 42 and 2026 score
+0.338, 0.375 and 0.475; seed 2026, the one known when the rules were
+written, is the best. The mean is not separable from qwen/qwen3.5-9b or
+qwen/qwen3-32b on these 40 cases and scores below qwen/qwen3.5-122b-a10b
+and deepseek/deepseek-v4-pro-0813. The [self-served
+note](decisions/self-served-runs.md) holds every Modal bill, USD 4.87 in
+all. Still to come on this branch: the site's `/training` page.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2624,6 +2618,35 @@ session writes the call config from its own URL. The Dockerfile downloads
 tshark's source from Wireshark's `all-versions/` archive under the same
 SHA-256 pin.
 
+## PR #30 merged: 2026-10-08
+
+PR #30 merged `base-dev-1.7b` into `main` as 8bbc60f; hosted CI passed on
+main. It adds the base Qwen/Qwen3-1.7B row's dev and test passes and
+scores (dev strong exact 0 in every condition, test C4 0.063 [0.025,
+0.113]), the three SFT seeds' manifests, loss logs and adapter hashes in
+`docs/results/sft-v1/`, and the six adapter result directories, seeded
+before their first call.
+
+## PR #31 merged: 2026-10-10
+
+PR #31, from Dependabot, bumped `next` from 16.3.4 to 16.3.8 in `apps/web`
+as f2fd289; hosted CI and the Pages deploy passed.
+
+## Adapter passes: 2026-10-08 to 2026-10-18
+
+- 2026-10-08: dev s17's first pass found the server down (160 HTTP 503s)
+  and was resumed after a fresh wake. New rule in `docs/usage.md`: wake
+  before every call.
+- 2026-10-08: Modal preempted the container at 21:44:09 local time, and
+  its replacement stopped 11 s after it came up. 26 of seed 42's dev C1
+  items failed three times and score `provider_failed`; 370 test items
+  stayed pending with two attempts each.
+- 2026-10-18: the University of Adelaide network reset every TLS
+  connection to `*.modal.direct`, so nothing was sent or billed. The
+  resume ran from another network under a watchdog, all 370 items on
+  their first attempt, for USD 0.26. New rule in `docs/usage.md`: check
+  the network without the key before the deploy.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2643,13 +2666,13 @@ where an item says it is the maintainer's order.
 3. Qwen/Qwen3-1.7B, the hybrid model with thinking off, through the same
    scorer, at most 3 USD, only after item 2 is live. GPU work runs on
    Modal (owner ruling); `main` holds the server, the trainer, the
-   admitted prompt sets and the runbook (PRs #28 and #29). The base row
-   is measured on branch `base-dev-1.7b` (dev strong exact 0, test C4
-   0.062) for USD 1.02; the three SFT seeds are trained, and the six
-   adapter dev and test passes come next.
-4. Training data, built on CPU alongside item 2; then QLoRA-SFT,
-   verifier-labelled DPO and a continued-SFT control, three seeds each; the
-   GRPO gate measured.
+   admitted prompt sets and the runbook (PRs #28 and #29). Done: the
+   base row (PR #30, test C4 strong exact 0.063) and the three SFT
+   seeds' dev and test passes (branch `adapter-rows`, test C4 mean
+   0.396), for USD 4.87 of Modal time in all.
+4. Done: the training data and QLoRA-SFT, three seeds. Next:
+   verifier-labelled DPO and a continued-SFT control, three seeds each,
+   and the GRPO gate measured, all registered before any sampling.
 
 ## Blocked or unverified
 
@@ -2659,7 +2682,8 @@ where an item says it is the maintainer's order.
   partial measurements are not release evidence.
 - Dev has 12 ready cases, so every dev comparison is inconclusive. The test
   repair round is measured, but 9 of its 12 per-model comparisons are
-  inconclusive. SFT, DPO and GRPO are unmeasured.
+  inconclusive. DPO and GRPO are unmeasured, and so is the self-served
+  model's rerun noise.
 - The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
   page applies it to the other three models as a named extrapolation.
 - Only the baseline half of `docs/results/locked-test-v1.md` was generated,
@@ -2676,13 +2700,14 @@ where an item says it is the maintainer's order.
   withholding against a stub child.
 - The repair tooling records only gate stops as not run; no further round
   is planned, so the gap stays unfixed.
-- The Modal glue ran on 2026-10-08: the base row's dev and test passes
-  (608 requests) and three SFT seeds, with the billed costs in the
-  [self-served note](decisions/self-served-runs.md) (Measured);
-  `docs/usage.md` keeps the estimates. Not observed: a request without
-  the token, which should get 401, and scale to zero, since each session
-  was stopped by hand. `tests/test_modal_glue.py` checks only the glue's
-  plain functions and constants, the server's flags and the call config.
+- The Modal glue ran on 2026-10-08 and 2026-10-18: the base row's dev
+  and test passes, three SFT seeds and the six adapter passes, with every
+  bill in the [self-served note](decisions/self-served-runs.md)
+  (Measured); `docs/usage.md` keeps the estimates. Not observed: a
+  request without the token, which should get 401, and scale to zero,
+  since each session was stopped by hand. `tests/test_modal_glue.py`
+  checks only the glue's plain functions and constants, the server's
+  flags and the call config.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 

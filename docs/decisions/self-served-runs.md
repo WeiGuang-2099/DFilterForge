@@ -155,8 +155,8 @@ USD 7; Modal billed USD 4.87 in all, the failed first build included.
 | Adapter session 2, 2026-10-08 | dev s17 resumed (160 answers); test s17 (292 answers, then 154 HTTP 503s and 2 HTTP 502s); dev s42's two resumes (26 HTTP 503s each); test s42 (234 answers, 214 HTTP 503s) | 0.63 | 0.58 (44 min) |
 | Adapter session 3, 2026-10-18 | test s17 (156 answers) and test s42 (214) resumed, each on its first attempt | 0.26 | 0.24 (18 min) |
 
-The adapter passes needed three sessions. In the first, dev s17 started
-on a server that had scaled to zero between the wake and the call. In the
+The adapter passes needed three sessions. In the first, dev s17's first
+pass found the server down and got 503 for every item. In the
 second, Modal preempted the container at 21:44:09 local time, during test
 s17; the replacement stopped 11 s after it came up at 21:51:48, and the
 next was ready at 21:58:33. Every request in those gaps got 503 or 502,
