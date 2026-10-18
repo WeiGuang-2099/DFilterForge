@@ -420,6 +420,49 @@ quoted before all three seeds are scored, and none is computed by hand: a
 committed script writes `docs/results/sft-v1/headline.json`, and CI
 rebuilds it with `--check`.
 
+Amended 2026-10-18, before seeds 17 and 42 are scored on test:
+descriptive analyses of the self-served rows. They describe and decide
+nothing: no training data, prompt, checkpoint, seed or later design choice
+changes because of them, and no test failure becomes training data. The
+error classes and the proximity strata were defined after seed 2026's test
+scores were known and are labelled post hoc wherever they are shown.
+Committed code computes each one, and CI rebuilds its output with
+`--check`. All are on test C4, for the base row and each seed unless
+stated.
+
+- Transitions: per seed, the base row's outcome against the seed's on the
+  same item, over the 80 ready and, separately, the 32 non-ready C4 items.
+- Error classes: each ready C4 item that is not strong exact takes the
+  first class that applies, in this order: `provider_failed`; `truncated`
+  (malformed, cut at the output-token cap); `malformed`; `abstained`;
+  `unknown_field` (invalid with a field the frozen catalog lacks);
+  `invalid_other`; `shortcut`; then, for silent-wrong, the first
+  difference between the canonical forms (All and AnyOf flattened and
+  sorted, as `dfilterforge.train_combos` keys them) of the answer's IR
+  and the gold IR: `missing_field` (a gold field the answer never tests),
+  `extra_field` (a field the gold never tests), `operator` (the same
+  fields, one tested under another operator), `value` (the same fields
+  and operators, another value), `structure` (the same predicates,
+  grouped or negated differently), else `same_form`. Ten classified
+  items, drawn with a fixed seed, are checked by hand and the check is
+  recorded.
+- Field coverage: every test row's C4 split, the hosted rows included,
+  with the estimator above.
+- Proximity to training: a ready test case's atoms are the predicates of
+  its gold IR, negation and grouping ignored. Against the atoms of each
+  ready target in `data/train/v1`, the case takes the first stratum that
+  applies: `same_atoms` (a target has exactly those atoms, composed
+  differently, since no target has a gold's canonical key),
+  `inside_one_target` (a target has them all and more), `pairs_seen`
+  (every two of them appear together in some target), `apart`. Strong
+  exact is reported per stratum and row, as case means.
+- Copies and unlisted fields: per row, over ready C4 items whose reply
+  parsed to an IR, the share whose IR has a training target's canonical
+  key and the share that tests a field missing from the item's retrieved
+  list, each split by field coverage, with how many of them are strong
+  exact. The base row never saw the training set, so its share of copies
+  is the chance level.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
