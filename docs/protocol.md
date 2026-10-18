@@ -394,9 +394,10 @@ number changes.
 Amended 2026-10-18, before seeds 17 and 42 are scored on test: the SFT
 headline's estimator. When this was written the base row's dev and test
 scores and seed 2026's were known (test C4 strong exact 0.062 and 0.475
-[0.338, 0.600]). Seeds 17 and 42 had answered every dev and test item,
-their runs are committed unscored before any score of theirs is
-computed, and none had been. A seed's difference is paired by case: over
+[0.338, 0.600]). Seeds 17 and 42 had answered every test item and
+settled every dev item (26 of seed 42's dev C1 items ended in HTTP 503);
+no score of theirs had been computed, and their runs are committed
+unscored before one is. A seed's difference is paired by case: over
 the 40 ready test cases, the seed's C4 strong-exact case mean
 (paraphrases averaged, every item in the denominator) minus the base
 row's on the same case. Its interval uses `draw_indices(40)` from
@@ -438,8 +439,9 @@ nothing. No training data, prompt, checkpoint, seed or later design
 choice changes because of them, and no test failure becomes training
 data. The error classes and the proximity strata were defined after seed
 2026's test scores were known and are labelled post hoc wherever they are
-shown. Committed code computes each one, and CI rebuilds its output with
-`--check`. All are on test C4, for the base row and each seed unless
+shown. Code written after this text computes each one and CI rebuilds
+its output with `--check`; where that code and this text differ, this
+text holds. All are on test C4, for the base row and each seed unless
 stated, and none is read as a gain or a loss.
 
 - Transitions: per seed, the base row's outcome against the seed's on the
@@ -452,13 +454,13 @@ stated, and none is read as a gain or a loss.
   silent-wrong, comparing sets taken from the answer's IR and the gold IR,
   in this order: a gold field absent from the answer (`missing_field`);
   an answer field absent from the gold (`extra_field`); differing sets of
-  (field, operator) pairs (`operator`); differing sets of predicates,
-  negation ignored (`value`); differing canonical forms, with All and
-  AnyOf flattened and sorted as `dfilterforge.train_combos` keys them
-  (`structure`); else `same_form`. Ten items drawn by
-  `random.Random(17).sample` from every classified item of the four rows,
-  listed by row (base, then seeds 17, 42 and 2026) and item id, are
-  checked by hand, and the check is recorded.
+  (field, operator) pairs (`operator`); differing sets of predicates in
+  canonical form (`in` lists sorted), negation ignored (`value`);
+  differing canonical forms, with All and AnyOf flattened and sorted as
+  `dfilterforge.train_combos` keys them (`structure`); else `same_form`.
+  Ten items drawn by `random.Random(17).sample` from every classified item
+  of the four rows, listed by row (base, then seeds 17, 42 and 2026) and
+  item id, are checked by hand, and the check is recorded.
 - Field coverage: the C4 split of the base row, each seed and the four
   counted hosted test rows (the slot winners and qwen/qwen3-32b's pass A,
   not pass B or a repair arm), with the estimator above.
