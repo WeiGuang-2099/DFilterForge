@@ -13,7 +13,8 @@
 
 /** The reviewed names. */
 // repair@1 is the protocol's repair metric (docs/protocol.md, Repair).
-export const TERMS = ['IPv4', 'SHA-256', 'repair@1'] as const;
+// WeiGuang-2099 is the author's GitHub handle (lib/site.ts).
+export const TERMS = ['IPv4', 'SHA-256', 'WeiGuang-2099', 'repair@1'] as const;
 
 /** One reviewed name. */
 export type TermName = (typeof TERMS)[number];

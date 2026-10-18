@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@playwright/test';
 
+import {AUTHOR, AUTHOR_URL, REPOSITORY} from '../lib/site';
 import {basePath} from '../scripts/base_path.mjs';
 
 // Paths are relative so that they resolve under the base URL, which ends in
@@ -77,6 +78,24 @@ for (const {path, status, heading} of PAGES) {
 
     expect(response?.status()).toBe(status);
     await expect(page.getByRole('heading', {level: 1, name: heading})).toBeVisible();
+  });
+
+  test(`${path} names the author and links the source`, async ({page}) => {
+    await page.goto(path);
+
+    const [banner, footer] = [page.getByRole('banner'), page.getByRole('contentinfo')];
+    for (const frame of [banner, footer]) {
+      const author = frame.getByRole('link', {name: AUTHOR, exact: true});
+      await expect(author).toHaveAttribute('href', AUTHOR_URL);
+    }
+    await expect(banner.getByRole('link', {name: 'Source', exact: true})).toHaveAttribute(
+      'href',
+      REPOSITORY,
+    );
+    await expect(footer.getByRole('link', {name: 'GitHub', exact: true})).toHaveAttribute(
+      'href',
+      REPOSITORY,
+    );
   });
 
   test(`${path} links and loads only under the base path`, async ({page}) => {
