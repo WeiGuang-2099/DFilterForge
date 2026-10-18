@@ -1,0 +1,1 @@
+{"case_id":"nc-streaming-transport","missing_slots":["protocol"],"rationale":"Packets to destination port 5000 over the single transport (TCP or UDP) the streaming app uses; which transport is never stated.","split":"test","status":"needs_clarification"}
