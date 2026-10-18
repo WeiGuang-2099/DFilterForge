@@ -1,0 +1,89 @@
+/* The training page in the board's language: flat fills on the ground, ink
+   rules instead of cards, one carmine for what was lost. An interval and its
+   value are placed by their committed bounds, read from --lo, --hi and --v;
+   a case column fills one block per answer, so no mark divides. */
+
+.training {padding-top: 40px;}
+.tr-head {display: flex; flex-direction: column; gap: 14px; max-width: 72rem;}
+.tr-h1 {max-width: 24ch; font: 600 clamp(30px, 3.6vw, 48px)/1.06 var(--sans); font-stretch: 106%; letter-spacing: -0.018em;}
+.tr-lede {max-width: 70ch; font-size: 16px; line-height: 1.6; color: var(--ink-2);}
+.tr-lede strong {color: var(--ink); font-weight: 600;}
+.tr-tag {display: inline-block; padding: 2px 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--ground); font: 600 10.5px/1.2 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; vertical-align: 2px;}
+.tr-sec {padding-top: 64px;}
+.tr-sec h2 {margin-bottom: 8px; font: 600 clamp(22px, 2.2vw, 28px)/1.15 var(--sans); font-stretch: 106%; letter-spacing: -0.01em;}
+.tr-sub {max-width: 76ch; margin-bottom: 14px; font-size: 14.5px; line-height: 1.6; color: var(--ink-2);}
+.tr-note {max-width: 80ch; margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--ink-2);}
+
+/* A ladder: one ruled row per model row, its interval on one scale. */
+.tr-ladder {margin: 18px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--ink);}
+.tr-row {display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) minmax(0, 17rem); gap: 4px 20px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line);}
+.tr-name {font: 500 13.5px/1.35 var(--sans);}
+.tr-name small {display: block; font: 12px/1.4 var(--mono); color: var(--ink-2); overflow-wrap: anywhere;}
+.tr-row-mean .tr-name {font-weight: 700;}
+.tr-val {display: flex; flex-direction: column; gap: 1px; font: 13px/1.45 var(--mono); font-variant-numeric: tabular-nums;}
+.tr-val .bd-ci, .tr-of {color: var(--ink-2);}
+.tr-of {font-size: 12px;}
+.tr-read {font: 600 10.5px/1.5 var(--sans); letter-spacing: 0.06em; text-transform: uppercase;}
+
+.tr-scale {position: relative; display: block; height: 22px; background: linear-gradient(to right, var(--line) 1px, transparent 1px) 0 0 / 25% 100%;}
+.tr-scale::after {content: ""; position: absolute; top: 0; bottom: 0; right: 0; border-right: 1px solid var(--line);}
+.tr-ci {position: absolute; top: 7px; height: 8px; border: solid var(--ink); border-width: 0 1.5px;}
+.tr-ci::before {content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 1.5px; background: var(--ink);}
+.tr-dot {position: absolute; top: 6px; width: 10px; height: 10px; margin-left: -5px; background: var(--ink);}
+.tr-scale-rate .tr-ci {left: calc(var(--lo) * 100%); right: calc((1 - var(--hi)) * 100%);}
+.tr-scale-rate .tr-dot {left: calc(var(--v) * 100%);}
+.tr-scale-difference .tr-ci {left: calc((var(--lo) + 1) * 50%); right: calc((1 - var(--hi)) * 50%);}
+.tr-scale-difference .tr-dot {left: calc((var(--v) + 1) * 50%);}
+.tr-scale-difference::before {content: ""; position: absolute; top: -3px; bottom: -3px; left: 50%; border-left: 1px dashed var(--line-2);}
+.tr-row-base .tr-dot {background: var(--ground); box-shadow: inset 0 0 0 1.5px var(--ink);}
+.tr-row-seed .tr-ci, .tr-row-seed .tr-ci::before {border-color: var(--ink-3);}
+.tr-row-seed .tr-ci::before, .tr-row-seed .tr-dot {background: var(--ink-3);}
+.tr-row-mean .tr-ci {top: 5px; height: 12px;}
+.tr-row-mean .tr-ci::before {top: 5px; height: 2px;}
+.tr-row-mean .tr-dot {top: 4px; width: 14px; height: 14px; margin-left: -7px;}
+.tr-axis {display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) minmax(0, 17rem); gap: 4px 20px; margin-top: 6px; font: 11.5px/1.4 var(--sans); color: var(--ink-2);}
+.tr-axis span:nth-child(2) {display: flex; justify-content: space-between;}
+
+/* The coverage strata, side by side, smaller. */
+.tr-strata {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 40px;}
+.tr-strata .tr-row {grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) minmax(0, 11rem); gap: 2px 14px; padding: 6px 0;}
+.tr-strata h3 {margin: 0 0 4px; font: 600 15px/1.3 var(--sans);}
+.tr-strata .tr-val {font-size: 12px;}
+
+/* The forty cases: one column each, a block per answer gained or lost. */
+.tr-cases {display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; margin: 14px 0 0; padding: 0; list-style: none;}
+.tr-case {display: grid; grid-template-rows: 1fr 1px 1fr; height: 200px;}
+.tr-case::before {content: ""; grid-row: 2; background: var(--line-2);}
+.tr-half {display: flex; flex-direction: column; gap: 2px; min-height: 0;}
+.tr-up {grid-row: 1; justify-content: flex-end; padding-bottom: 2px;}
+.tr-down {grid-row: 3; justify-content: flex-start; padding-top: 2px;}
+/* A block is one slot of the half's height: the slots are the seeds'
+   paraphrases, set on the half as --slots. */
+.tr-block {flex: none; height: calc((100% - (var(--slots) - 1) * 2px) / var(--slots)); background: var(--ink);}
+.tr-down .tr-block {background: var(--dis);}
+.tr-counts {display: flex; flex-wrap: wrap; gap: 4px 22px; font: 13px/1.4 var(--mono);}
+.tr-counts .dn {color: var(--dis);}
+.tr-key {display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font: 11.5px/1.4 var(--sans); color: var(--ink-2);}
+
+.tr-details {margin-top: 18px; border-top: 1px solid var(--line);}
+.tr-details summary {padding: 10px 0; font: 500 13.5px/1.4 var(--sans); cursor: pointer;}
+.tr-table-wrap {overflow-x: auto;}
+.tr-table {width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums;}
+.tr-table th, .tr-table td {padding: 6px 14px 6px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: baseline;}
+.tr-table thead th {border-bottom-color: var(--line-2); font: 500 12px/1.3 var(--sans); color: var(--ink-2);}
+.tr-table td {font: 12.5px/1.45 var(--mono);}
+.tr-table td.tr-cell-name {font: 500 13.5px/1.35 var(--sans);}
+/* Faint text in the token that keeps WCAG AA contrast on the ground. */
+.tr-faint {color: var(--ink-faint);}
+.tr-tables {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 40px;}
+
+.tr-limits {max-width: 80ch; margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: var(--ink-2);}
+.tr-limits li + li {margin-top: 6px;}
+
+@media (max-width: 760px) {
+  .tr-row, .tr-axis, .tr-strata .tr-row {grid-template-columns: minmax(0, 1fr);}
+  .tr-axis span:first-child, .tr-axis span:last-child {display: none;}
+  .tr-strata, .tr-tables {grid-template-columns: minmax(0, 1fr);}
+  .tr-cases {gap: 1px;}
+  .tr-case {height: 150px;}
+}
