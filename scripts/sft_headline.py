@@ -280,14 +280,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     output = args.results / OUTPUT
     try:
-        text = canonical_json(build(args.results)) + "\n"
+        data = (canonical_json(build(args.results)) + "\n").encode("utf-8")
     except DFilterForgeError as error:
         print(f"{error.code}: {error}", file=sys.stderr)
         return _FAILURE
+    # Bytes, so a Windows checkout writes and compares what CI does.
     if not args.check:
-        output.write_text(text, encoding="utf-8")
+        output.write_bytes(data)
         return 0
-    if output.is_file() and output.read_text(encoding="utf-8") == text:
+    if output.is_file() and output.read_bytes() == data:
         return 0
     print(f"{output} differs from its rebuild", file=sys.stderr)
     return _MISMATCH
