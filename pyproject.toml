@@ -54,6 +54,7 @@ include = [
   "scripts/provider_reply_replay.py",
   "scripts/repair_arms.py",
   "scripts/retrieval_recall.py",
+  "scripts/sft_analysis.py",
   "scripts/sft_dataset.py",
   "scripts/sft_headline.py",
   "scripts/test_passes.py",

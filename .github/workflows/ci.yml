@@ -22,7 +22,7 @@ jobs:
       - run: docker compose --profile dev build test
       - run: docker compose --profile dev run --rm test pyink --check src tests scripts modal
       - run: docker compose --profile dev run --rm test isort --check-only src tests scripts modal
-      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py scripts/two_turn_smoke.py scripts/repair_arms.py scripts/sft_headline.py
+      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py scripts/two_turn_smoke.py scripts/repair_arms.py scripts/sft_headline.py scripts/sft_analysis.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
@@ -148,6 +148,15 @@ jobs:
           --volume "$PWD/docs:/workspace/docs:ro"
           test sh -c 'test -d /workspace/docs/results
           && python scripts/sft_headline.py --check'
+      - name: Rebuild the SFT analyses from the committed scores
+        # After the headline, which names the rows and whose coverage split
+        # and mean the analyses must reproduce; the training set is in the
+        # image.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python scripts/sft_analysis.py --check'
       - name: Check committed repair plans and rounds offline
         # While no arm run sits beside its pass, each plan is derived again
         # from the pass and the feedback probe and compared byte for byte.
