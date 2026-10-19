@@ -850,6 +850,17 @@ def test_training_is_null_until_a_headline_is_committed(
     assert documents["site.json"]["phase"]["training"] is False
 
 
+def test_the_analysis_is_null_until_its_file_is_committed(
+    fixture: Fixture,
+) -> None:
+    documents = _documents(exporter.export(fixture.build(), "x"))
+
+    assert documents["analysis.json"] == {
+        "schema": "web-analysis/1.0",
+        "analysis": None,
+    }
+
+
 def test_every_sourced_value_resolves_from_the_raw_files(
     fixture: Fixture,
 ) -> None:
@@ -3779,6 +3790,49 @@ def test_the_committed_tree_exports_the_sft_headline() -> None:
     ]
     assert training["dev"][2]["conditions"][0]["provider_failed"]["v"] == 26
     check_sources(_ROOT, {"training.json": documents["training.json"]})
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_exports_the_analyses() -> None:
+    documents = _documents(_committed())
+    analysis = documents["analysis.json"]["analysis"]
+    opening = analysis["opening"]
+    items = analysis["items"]["v"]
+
+    # The analysis page's opening sentence.
+    assert opening["loud"]["v"] == 49
+    assert [opening["loud_ran"][end]["v"] for end in ("low", "high")] == [
+        32,
+        35,
+    ]
+    assert [opening["loud_silent"][end]["v"] for end in ("low", "high")] == [
+        17,
+        18,
+    ]
+    assert [opening["loud_exact"][end]["v"] for end in ("low", "high")] == [
+        14,
+        18,
+    ]
+    assert analysis["rerun_noise"]["t"] == "not_measured"
+    # Every seed puts each ready item in one group, and every row in one
+    # class; a class has an example exactly when it has an item.
+    for ribbons in analysis["flows"]:
+        assert sum(ribbon["count"]["v"] for ribbon in ribbons) == items
+        assert sum(len(ribbon["items"]) for ribbon in ribbons) == items
+    for row in analysis["rows"]:
+        classes = row["classes"]
+        assert sum(each["count"]["v"] for each in classes) == items
+        assert all(
+            (each["example"] is None) == (each["count"]["v"] == 0)
+            for each in classes
+        )
+    assert [len(loss["curve"]) for loss in analysis["loss"]] == [50, 50, 50]
+    assert [loss["rows"]["v"] for loss in analysis["loss"]] == [1299] * 3
+    assert check_sources(
+        _ROOT, {"analysis.json": documents["analysis.json"]}
+    ) > (2000)
 
 
 @pytest.mark.skipif(
