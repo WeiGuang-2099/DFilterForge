@@ -254,6 +254,18 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   their summaries; each ready case's strong-exact C4 answers per row are
   `count` ops over the rows' outcomes, in the order of answers gained,
   so the page draws a case from counts and never divides.
+- `analysis.json`: the descriptive analyses for `/training/analysis` and
+  the board's small-model band, null until
+  `docs/results/sft-v1/analysis.json` exists. Counts, ranges, classes,
+  strata and the seeds' mean per condition are pointers into that file,
+  and outcome counts are `count` ops over each row's outcomes. Each seed's
+  answers are grouped by the base row's outcome on the same item; a
+  group's count points into the file and must equal its items. An answer
+  is its receipt's filter, its IR's field names and error code, its capped
+  raw reply or a `json` op to its question, by outcome; a class's first
+  item carries its request, reference and, when silent-wrong, the first
+  disagreeing frame of its receipt with that frame's name from
+  `captures.json`. Each seed's logged loss points into its run manifest.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 

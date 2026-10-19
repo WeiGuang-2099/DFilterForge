@@ -52,9 +52,9 @@ intervals and comparisons are pointers into a test run's summary.json.
 
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
-board.json, methodology.json, reel.json, training.json, cases/<case_id>.json
-and receipts/<run_slug>/<condition>/<item_id>.json, where the run slug is
-the run id with each dot replaced by an underscore.
+board.json, methodology.json, reel.json, training.json, analysis.json,
+cases/<case_id>.json and receipts/<run_slug>/<condition>/<item_id>.json,
+where the run slug is the run id with each dot replaced by an underscore.
 
 training.json holds the SFT headline once docs/results/sft-v1/headline.json
 exists, and ``headline`` null before: the base row, the three-seed mean and
@@ -63,6 +63,20 @@ headline; the rows' strong exact per condition on test and dev from their
 summaries, each dev run named after its test run with the split prefix
 swapped; and each ready case's strong-exact C4 answer counts per row, as
 ``count`` sources over the rows' outcomes.
+
+analysis.json holds the descriptive analyses of the self-served rows once
+docs/results/sft-v1/analysis.json exists, and ``analysis`` null before:
+the opening's counts and ranges, the headline's rerun-noise status, each
+row's outcome and class counts with the first item of each class, each
+seed's answers grouped by what the base row did with the same item, each
+case's proximity stratum and the target shown beside it, the copies, each
+seed's logged loss from its run manifest and the board band's strong exact
+per condition. Counts and classes are pointers into the analysis or counts
+over a row's outcomes; an answer is its receipt's filter, its IR's fields
+and error code, its capped raw reply or its question, by its outcome. The
+rows are the analysis's own; a table whose rows or seeds are not those, in
+order, or a group whose items differ from the outcomes stops the export
+(``analysis_inconsistent``).
 
 reel.json projects the home page's Disproof Reel by the pre-registered
 rule reel-v1 (docs/decisions/disproof-reel.md). Pool: in the test phase
@@ -185,6 +199,28 @@ FREEZE = "src/dfilterforge/held_out_freeze.json"
 REPAIR_POOL = "docs/results/repair-pool/test.json"
 # The SFT headline (sft-headline/1.0), scripts/sft_headline.py's output.
 HEADLINE = "docs/results/sft-v1/headline.json"
+# The descriptive analyses (sft-analysis/1.0), scripts/sft_analysis.py's
+# output, and the one condition they describe.
+ANALYSIS = "docs/results/sft-v1/analysis.json"
+_ANALYSIS_CONDITION = "C4"
+# A loud failure is refused by tshark or is no answer the scorer can read.
+_LOUD = ("invalid", "malformed")
+# The opening's moves from the base row to a seed, as their range.
+_MOVES = (
+    "loud_ran",
+    "loud_exact",
+    "loud_silent",
+    "silent_exact",
+    "exact_silent",
+)
+_PROXIMITY = ("same_atoms", "inside_one_target", "pairs_seen", "apart")
+_COPY_COUNTS = (
+    "with_ir",
+    "copies",
+    "copies_exact",
+    "unlisted",
+    "unlisted_exact",
+)
 _BOUNDS = ("value", "low", "high")
 _PAIRED = ("first_better_cases", "second_better_cases", "discordant_cases")
 _STRATA = ("every_gold_field_retrieved", "some_gold_field_missing")
@@ -3201,6 +3237,448 @@ def build_training(repo: Repo) -> Document:
     }
 
 
+def _ready_c4(path: str, **where: Sequence[str]) -> Src:
+    """Counts a run's ready C4 rows whose other keys hold the listed values."""
+    return count(path, {"condition": ["C4"], "gold_status": ["ready"], **where})
+
+
+def _position(run: Run, item_id: str) -> int:
+    return run.completion[(_ANALYSIS_CONDITION, item_id)]
+
+
+def _answer(repo: Repo, run: Run, item_id: str) -> Node:
+    """One row's answer to a ready C4 item, in the form its outcome has.
+
+    An executed answer is its filter, an invalid one the fields its IR
+    tests and the scorer's error code, a malformed one its raw reply and an
+    abstention its question, when it asks one; a provider failure has no
+    answer.
+    """
+    label = _ANALYSIS_CONDITION
+    keys = {"condition": label, "item_id": item_id}
+    outcome = run.outcome(label, item_id)
+    completions = run.condition(label).completions
+    reply = ptr(
+        completions, "completions", _position(run, item_id), "response_text"
+    )
+    node: Node = {
+        "outcome": repo.t(row(run.outcomes, keys, "outcome")),
+        "filter": None,
+        "fields": None,
+        "error_code": None,
+        "raw": None,
+        "question": None,
+    }
+    if outcome in _EXECUTED:
+        node["filter"] = repo.t(
+            ptr(run.receipt(label, item_id), "candidate_filter")
+        )
+    elif outcome == "invalid":
+        intent = run.intent(label, item_id)
+        node["fields"] = ir_fields(repo, intent, repo.json(intent))
+        node["error_code"] = repo.t(row(run.outcomes, keys, "error_code"))
+    elif outcome == "malformed":
+        node["raw"] = repo.raw(reply)[0]
+    elif outcome == "abstained":
+        # A not_expressible abstention asks no question.
+        asked = _obj(
+            parse_json(_text(repo.resolve(reply), "reply"), completions),
+            f"{completions} reply",
+        ).get("clarifying_question")
+        if isinstance(asked, str):
+            node["question"] = repo.t(
+                ["json", completions, reply[2], "/clarifying_question"]
+            )
+    return node
+
+
+def _disproof(
+    repo: Repo, captures: Captures, run: Run, item_id: str
+) -> Node | None:
+    """The first scored probe that disagrees, and its lowest such frame.
+
+    The side says whether only the reference selects the frame (the answer
+    missed it) or only the answer does.
+    """
+    receipt = run.receipt(_ANALYSIS_CONDITION, item_id)
+    probes = _arr(_obj(repo.json(receipt), receipt).get("probes"), receipt)
+    for index, item in enumerate(probes):
+        probe = _obj(item, f"{receipt} probe")
+        sides = {
+            side: _ints(probe.get(side), f"{receipt} {side}")
+            for side in ("reference_only", "candidate_only")
+        }
+        frames = sorted(frame for each in sides.values() for frame in each)
+        if not frames:
+            continue
+        side = next(side for side, each in sides.items() if frames[0] in each)
+        probe_id = _text(probe.get("probe_id"), f"{receipt} probe_id")
+        at = ("probes", index, side, sides[side].index(frames[0]))
+        return {
+            "probe": repo.t(ptr(receipt, "probes", index, "probe_id")),
+            "frame": repo.v(ptr(receipt, *at)),
+            "name": repo.t(
+                frame_src(
+                    captures.check(probe_id, frames, receipt), frames[0], "name"
+                )
+            ),
+            "side": side,
+        }
+    return None
+
+
+def _example(
+    repo: Repo, captures: Captures, run: Run, at: Sequence[str | int]
+) -> Node:
+    """The item an analysis row names, with its request, gold and receipt."""
+    label = _ANALYSIS_CONDITION
+    item_id = _text(repo.resolve(ptr(ANALYSIS, *at)), "example")
+    if (label, item_id) not in run.rows:
+        raise ContractError("analysis_inconsistent", f"{run.run_id} {item_id}")
+    keys = {"condition": label, "item_id": item_id}
+    case_id = _text(run.rows[(label, item_id)].get("case_id"), "case_id")
+    outcome = run.outcome(label, item_id)
+    return {
+        "item_id": repo.t(ptr(ANALYSIS, *at)),
+        "case_id": repo.t(row(run.outcomes, keys, "case_id")),
+        "request": repo.t(
+            ["input", run.condition(label).prepared, item_id, "/intent"]
+        ),
+        "reference": repo.t(ptr(run.spec(case_id), "reference_filter")),
+        "answer": _answer(repo, run, item_id),
+        "disproof": (
+            _disproof(repo, captures, run, item_id)
+            if outcome == "silent_wrong"
+            else None
+        ),
+        "file": (
+            run.receipt(label, item_id)
+            if outcome in _EXECUTED
+            else run.condition(label).completions
+        ),
+    }
+
+
+def _analysis_row(repo: Repo, captures: Captures, run: Run, index: int) -> Node:
+    """A row's outcome counts and each class with its count and example."""
+    at = ("classes", "rows", index)
+    entry = _obj(repo.resolve(ptr(ANALYSIS, *at)), "analysis class row")
+    if entry.get("run") != run.run_id:
+        raise ContractError("analysis_inconsistent", f"{run.run_id} classes")
+    examples = _obj(entry.get("examples"), "analysis examples")
+    order = _arr(repo.resolve(ptr(ANALYSIS, "classes", "order")), "order")
+    return {
+        "run_id": repo.t(ptr(run.summary, "run")),
+        "outcomes": {
+            name: repo.v(_ready_c4(run.outcomes, outcome=[name]))
+            for name in SEGMENTS
+        },
+        "executed": repo.v(_ready_c4(run.outcomes, outcome=list(_EXECUTED))),
+        "classes": [
+            {
+                "class": kind,
+                "count": repo.v(ptr(ANALYSIS, *at, "counts", kind)),
+                "example": (
+                    _example(repo, captures, run, (*at, "examples", kind))
+                    if kind in examples
+                    else None
+                ),
+            }
+            for kind in (_text(each, "class") for each in order)
+        ],
+    }
+
+
+def _ribbons(repo: Repo, base: Run, seed: Run, index: int) -> list[Node]:
+    """Each base outcome's answers that a seed gave another, or the same."""
+    at = ("transitions", "ready", index, "flows")
+    flows = _obj(repo.resolve(ptr(ANALYSIS, *at)), "analysis flows")
+    if any(
+        first not in SEGMENTS
+        or any(then not in SEGMENTS for then in _obj(each, "analysis flow"))
+        for first, each in flows.items()
+    ):
+        raise ContractError("analysis_inconsistent", f"{seed.run_id} flows")
+    label = _ANALYSIS_CONDITION
+    ready = sorted(
+        item_id
+        for (each, item_id), item in base.rows.items()
+        if each == label and item.get("gold_status") == "ready"
+    )
+    ribbons: list[Node] = []
+    for first in SEGMENTS:
+        for then in SEGMENTS:
+            moved = [
+                item_id
+                for item_id in ready
+                if base.outcome(label, item_id) == first
+                and seed.outcome(label, item_id) == then
+            ]
+            listed = _obj(flows.get(first, {}), "analysis flow").get(then, 0)
+            if listed != len(moved):
+                raise ContractError(
+                    "analysis_inconsistent", f"{seed.run_id} {first} {then}"
+                )
+            if moved:
+                ribbons.append(
+                    {
+                        "from": first,
+                        "to": then,
+                        "count": repo.v(ptr(ANALYSIS, *at, first, then)),
+                        "items": [
+                            {
+                                "item_id": repo.t(
+                                    row(
+                                        seed.outcomes,
+                                        {"condition": label, "item_id": key},
+                                        "item_id",
+                                    )
+                                ),
+                                "case_id": repo.t(
+                                    row(
+                                        seed.outcomes,
+                                        {"condition": label, "item_id": key},
+                                        "case_id",
+                                    )
+                                ),
+                                "answer": _answer(repo, seed, key),
+                            }
+                            for key in moved
+                        ],
+                    }
+                )
+    return ribbons
+
+
+def _nearness(repo: Repo, runs: Sequence[Run]) -> Node:
+    """Each case's stratum, shown target and exact answers per row."""
+    base = runs[0]
+    at = ("proximity",)
+    cases = _arr(repo.resolve(ptr(ANALYSIS, *at, "cases")), "proximity")
+    strata = _arr(repo.resolve(ptr(ANALYSIS, *at, "strata")), "strata")
+    nodes: list[Node] = []
+    for index, item in enumerate(cases):
+        case_id = _text(_obj(item, "case").get("case_id"), "case_id")
+        if case_id not in base.cases:
+            raise ContractError("analysis_inconsistent", case_id)
+        here = (*at, "cases", index)
+        nodes.append(
+            {
+                "case_id": repo.t(ptr(ANALYSIS, *here, "case_id")),
+                "stratum": _stratum(
+                    repo.resolve(ptr(ANALYSIS, *here, "stratum"))
+                ),
+                "atoms": repo.v(ptr(ANALYSIS, *here, "atoms")),
+                "request": repo.t(
+                    [
+                        "input",
+                        base.condition(_ANALYSIS_CONDITION).prepared,
+                        base.cases[case_id][0],
+                        "/intent",
+                    ]
+                ),
+                "reference": repo.t(
+                    ptr(base.spec(case_id), "reference_filter")
+                ),
+                "exact": [
+                    repo.v(
+                        _ready_c4(
+                            run.outcomes,
+                            case_id=[case_id],
+                            outcome=["strong_exact"],
+                        )
+                    )
+                    for run in runs
+                ],
+                "nearest": {
+                    **repo.texts(
+                        ANALYSIS, ("id", "request", "filter"), *here, "nearest"
+                    ),
+                    "shared": repo.v(ptr(ANALYSIS, *here, "nearest", "shared")),
+                },
+            }
+        )
+    return {
+        "targets": repo.v(ptr(ANALYSIS, *at, "targets")),
+        "strata": [
+            {
+                "stratum": _stratum(_obj(item, "stratum").get("stratum")),
+                "cases": repo.v(ptr(ANALYSIS, *at, "strata", index, "cases")),
+                "items": repo.v(ptr(ANALYSIS, *at, "strata", index, "items")),
+                "rows": [
+                    repo.v(
+                        ptr(
+                            ANALYSIS,
+                            *at,
+                            "strata",
+                            index,
+                            "rows",
+                            place,
+                            "strong_exact",
+                        )
+                    )
+                    for place in range(len(runs))
+                ],
+            }
+            for index, item in enumerate(strata)
+        ],
+        "cases": nodes,
+    }
+
+
+def _stratum(value: object) -> str:
+    stratum = _text(value, "stratum")
+    if stratum not in _PROXIMITY:
+        raise ContractError("analysis_inconsistent", f"stratum {stratum}")
+    return stratum
+
+
+def _loss(repo: Repo, seed: int) -> Node:
+    """A seed's logged training loss from its run manifest."""
+    manifest = f"{RESULTS}/sft-v1/sft-v1-s{seed}/run_manifest.json"
+    if repo.resolve(ptr(manifest, "seed")) != seed:
+        raise ContractError("analysis_inconsistent", f"{manifest} seed")
+    curve = _arr(repo.resolve(ptr(manifest, "loss_curve")), "loss_curve")
+    return {
+        "seed": repo.v(ptr(manifest, "seed")),
+        "rows": repo.v(ptr(manifest, "dataset", "rows")),
+        "epochs": repo.v(ptr(manifest, "recipe", "epochs")),
+        "steps": repo.v(ptr(manifest, "steps")),
+        "curve": [
+            {
+                "step": repo.v(ptr(manifest, "loss_curve", index, 0)),
+                "loss": repo.v(ptr(manifest, "loss_curve", index, 1)),
+            }
+            for index in range(len(curve))
+        ],
+    }
+
+
+def _check_analysis_rows(
+    repo: Repo, runs: Sequence[str], seeds: Sequence[int]
+) -> None:
+    """Refuses tables whose rows are not the base row and seeds in order."""
+    strata = _arr(repo.resolve(ptr(ANALYSIS, "proximity", "strata")), "strata")
+    tables = [
+        [
+            _obj(each, "copies").get("run")
+            for each in _arr(repo.resolve(ptr(ANALYSIS, "copies")), "copies")
+        ],
+        *(
+            [
+                _obj(each, "row").get("run")
+                for each in _arr(
+                    _obj(item, "stratum").get("rows"), "stratum rows"
+                )
+            ]
+            for item in strata
+        ),
+    ]
+    flows = [
+        _obj(each, "transitions").get("seed")
+        for each in _arr(
+            repo.resolve(ptr(ANALYSIS, "transitions", "ready")), "transitions"
+        )
+    ]
+    if any(table != list(runs) for table in tables) or flows != list(seeds):
+        raise ContractError("analysis_inconsistent", "the rows differ")
+
+
+def build_analysis(repo: Repo, captures: Captures) -> Document:
+    """The descriptive analyses as docs/results/sft-v1/analysis.json holds them.
+
+    Every count, rate and class is a pointer into that file, which
+    scripts/sft_analysis.py writes and CI rebuilds, or a count over a row's
+    outcomes; every answer, request and filter comes from the row's own
+    scored files. Before the file exists, ``analysis`` is null.
+    """
+    if not repo.exists(ANALYSIS):
+        return {"schema": "web-analysis/1.0", "analysis": None}
+    base = Run(repo, _text(repo.resolve(ptr(ANALYSIS, "base_run")), "base"))
+    seeds = _arr(repo.resolve(ptr(ANALYSIS, "seeds")), "analysis seeds")
+    numbers = [_int(_obj(each, "seed").get("seed"), "seed") for each in seeds]
+    runs = [
+        base,
+        *(
+            Run(repo, _text(_obj(each, "seed").get("run"), "seed run"))
+            for each in seeds
+        ),
+    ]
+    _check_analysis_rows(repo, [run.run_id for run in runs], numbers)
+    return {
+        "schema": "web-analysis/1.0",
+        "analysis": {
+            "model_id": repo.t(ptr(base.summary, "model_id")),
+            "condition": repo.t(ptr(ANALYSIS, "condition")),
+            "items": repo.v(ptr(ANALYSIS, "items")),
+            "cases": repo.v(ptr(ANALYSIS, "cases")),
+            "post_hoc": repo.v(ptr(ANALYSIS, "post_hoc")),
+            "rerun_noise": repo.t(ptr(HEADLINE, "self_served_rerun_noise")),
+            "opening": {
+                "loud": repo.v(_ready_c4(base.outcomes, outcome=list(_LOUD))),
+                "base_silent": repo.v(
+                    _ready_c4(base.outcomes, outcome=["silent_wrong"])
+                ),
+                "base_exact": repo.v(
+                    _ready_c4(base.outcomes, outcome=["strong_exact"])
+                ),
+                **{
+                    name: repo.numbers(
+                        ANALYSIS, ("low", "high"), "summary", "range", name
+                    )
+                    for name in _MOVES
+                },
+            },
+            "seeds": [
+                repo.v(ptr(ANALYSIS, "seeds", index, "seed"))
+                for index in range(len(seeds))
+            ],
+            "rows": [
+                _analysis_row(repo, captures, run, index)
+                for index, run in enumerate(runs)
+            ],
+            "flows": [
+                _ribbons(repo, base, run, index)
+                for index, run in enumerate(runs[1:])
+            ],
+            "nearness": _nearness(repo, runs),
+            "copies": [
+                {
+                    name: repo.numbers(
+                        ANALYSIS, _COPY_COUNTS, "copies", index, "strata", name
+                    )
+                    for name in _STRATA
+                }
+                for index in range(len(runs))
+            ],
+            "loss": [_loss(repo, seed) for seed in numbers],
+            "band": {
+                "rows": [
+                    {"conditions": _band_conditions(repo, run.summary)}
+                    for run in runs
+                ],
+                "mean": [
+                    repo.v(ptr(ANALYSIS, "seed_mean", label))
+                    for label in _TRAINING_CONDITIONS
+                ],
+            },
+        },
+    }
+
+
+def _band_conditions(repo: Repo, summary: str) -> list[Node]:
+    """A row's strong exact per condition, as its summary holds it."""
+    return [
+        {
+            "label": repo.t(ptr(summary, "conditions", label, "condition")),
+            "strong_exact": repo.v(
+                ptr(summary, "conditions", label, "strong_exact", "value")
+            ),
+        }
+        for label in _TRAINING_CONDITIONS
+    ]
+
+
 def build_site(
     repo: Repo, selection: Selection, source_commit: str
 ) -> Document:
@@ -3296,6 +3774,7 @@ def export(root: Path, source_commit: str) -> dict[str, bytes]:
     files["methodology.json"] = render(build_methodology(repo, selection))
     files["reel.json"] = render(build_reel(repo, captures, selection))
     files["training.json"] = render(build_training(repo))
+    files["analysis.json"] = render(build_analysis(repo, captures))
     files["routes.json"] = render(
         {
             "schema": "web-routes/1.0",

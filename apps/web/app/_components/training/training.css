@@ -8,6 +8,8 @@
 .tr-h1 {max-width: 24ch; font: 600 clamp(30px, 3.6vw, 48px)/1.06 var(--sans); font-stretch: 106%; letter-spacing: -0.018em;}
 .tr-lede {max-width: 70ch; font-size: 16px; line-height: 1.6; color: var(--ink-2);}
 .tr-lede strong {color: var(--ink); font-weight: 600;}
+.tr-next {max-width: 72ch; margin-top: 18px; padding-left: 12px; border-left: 3px solid var(--ink); font-size: 14.5px; line-height: 1.55; color: var(--ink-2);}
+.tr-next a {font-weight: 600;}
 .tr-tag {display: inline-block; padding: 2px 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--ground); font: 600 10.5px/1.2 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; vertical-align: 2px;}
 .tr-sec {padding-top: 64px;}
 .tr-sec h2 {margin-bottom: 8px; font: 600 clamp(22px, 2.2vw, 28px)/1.15 var(--sans); font-stretch: 106%; letter-spacing: -0.01em;}

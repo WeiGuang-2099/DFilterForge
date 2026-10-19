@@ -1,14 +1,17 @@
 import type {Metadata} from 'next';
 import type {ReactNode} from 'react';
 
+import {SmallModelBand} from '@/app/_components/analysis/band';
 import {Comparisons} from '@/app/_components/board/comparisons';
 import {ArmBars, OutcomeBar, OutcomeLegend, Rate} from '@/app/_components/board/marks';
+import {loadAnalysis} from '@/lib/analysis-data';
 import {loadBoard} from '@/lib/board-data';
 import type {Arm, BoardTest, Repair, TestRow} from '@/lib/board-data';
 import type {StrNode} from '@/lib/data';
 import {roleLabel} from '@/lib/roles';
 import {Num, repositoryFile, Str, Term} from '@/lib/sourced';
 
+import '@/app/_components/analysis/analysis.css';
 import '@/app/_components/board/board.css';
 
 export const metadata: Metadata = {
@@ -18,8 +21,9 @@ export const metadata: Metadata = {
 };
 
 // The board shows the test phase from board.json: the repair round first,
-// then the counted passes in pool order, never ranked. Every value is a
-// sourced node; the words around them are fixed. The registered comparisons
+// then the counted passes in pool order, never ranked, and under them the
+// self-served small model in a band of its own from analysis.json. Every
+// value is a sourced node; the words around them are fixed. The registered comparisons
 // between conditions are left to docs/results/locked-test-v1.md, which
 // gives them their A/A reading and confound notes.
 
@@ -257,6 +261,7 @@ function Limits(): ReactNode {
 
 export default function BoardPage() {
   const {test} = loadBoard();
+  const {analysis} = loadAnalysis();
   if (test === null) {
     throw new Error('board: board.json has no test block, and the board shows test passes only');
   }
@@ -277,6 +282,7 @@ export default function BoardPage() {
         <Headline label={label} repair={test.repair} />
       )}
       <Passes label={label} test={test} />
+      {analysis === null ? null : <SmallModelBand analysis={analysis} />}
       {test.repair === null ? null : <Round repair={test.repair} />}
       <Limits />
     </article>

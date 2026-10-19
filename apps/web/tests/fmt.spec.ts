@@ -27,6 +27,7 @@ const NUM_KIND_SAMPLES: Readonly<Record<NumKind, NumNode['v']>> = {
   ints: [3, 9],
   rate: 0.6375,
   runtime: 60.32937800000582,
+  loss: 0.00029710752423852684,
   verdict: true,
 };
 
@@ -137,6 +138,21 @@ test('runtime shows milliseconds to one decimal, never the raw float', () => {
   expect(fmt(12, 'runtime')).toBe('12.0');
   for (const value of [Number.NaN, -Infinity, '60', null]) {
     expect(() => fmt(value, 'runtime'), String(value)).toThrow(TypeError);
+  }
+});
+
+test('loss shows two significant digits of a positive number, halves away from zero', () => {
+  // The first and last logged losses of an SFT seed's run manifest.
+  expect(fmt(0.6284915208816528, 'loss')).toBe('0.63');
+  expect(fmt(0.00029710752423852684, 'loss')).toBe('0.00030');
+  expect(fmt(7.376624271273612e-5, 'loss')).toBe('0.000074');
+  expect(fmt(1.2e-7, 'loss')).toBe('0.00000012');
+  expect(fmt(0.0995, 'loss')).toBe('0.100');
+  expect(fmt(0.125, 'loss')).toBe('0.13');
+  expect(fmt(1.5, 'loss')).toBe('1.5');
+  expect(fmt(12.3, 'loss')).toBe('12');
+  for (const value of [0, -0.25, Number.NaN, Infinity, '0.5', true, null, [1]]) {
+    expect(() => fmt(value, 'loss'), String(value)).toThrow(TypeError);
   }
 });
 
@@ -256,6 +272,7 @@ test('every kind is named', () => {
     'split',
     'rate',
     'runtime',
+    'loss',
     'outcome',
     'frame_kind',
     'join',

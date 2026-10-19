@@ -6,9 +6,10 @@
  * formatting kind (data-fmt), so tests/consistency.spec.ts can re-derive the
  * value from the committed files and check both the value and the text. A
  * number also links to the committed file it comes from, at the commit the
- * site was built from. <Term> renders a reviewed name that holds a digit,
- * such as SHA-256. ESLint bans digits typed into markup, so a hand-written
- * number has no other way onto a page.
+ * site was built from; a client island renders the same markup without the
+ * link through lib/sourced-text.tsx. <Term> renders a reviewed name that
+ * holds a digit, such as SHA-256. ESLint bans digits typed into markup, so
+ * a hand-written number has no other way onto a page.
  */
 
 import type {ReactNode} from 'react';
@@ -16,14 +17,22 @@ import type {ReactNode} from 'react';
 import {loadSite, sourcePaths} from './data';
 import type {NumNode, Src, StrNode} from './data';
 import {fmt} from './fmt';
-import type {FmtKind} from './fmt';
 import {REPOSITORY} from './site';
+import {NumText, StrText} from './sourced-text';
+import type {NumKind} from './sourced-text';
 import type {TermName} from './terms';
+
+/**
+ * Returns the GitHub permalink prefix of the repository's files at the
+ * source commit; a file's path follows it with each segment encoded.
+ */
+export function repositoryBlob(): string {
+  return `${REPOSITORY}/blob/${encodeURIComponent(loadSite().source_commit)}/`;
+}
 
 /** Returns the GitHub permalink of a repository file at the source commit. */
 export function repositoryFile(file: string): string {
-  const encoded = file.split('/').map(encodeURIComponent).join('/');
-  return `${REPOSITORY}/blob/${encodeURIComponent(loadSite().source_commit)}/${encoded}`;
+  return repositoryBlob() + file.split('/').map(encodeURIComponent).join('/');
 }
 
 /**
@@ -39,28 +48,16 @@ function permalink(source: Src): string | null {
   return repositoryFile(file);
 }
 
-// The kinds that show a string: as written, as fixed words for a code, or
-// as a digest's leading digits.
-type WordKind = 'text' | 'unmeasured' | 'split' | 'outcome' | 'frame_kind' | 'join' | 'digest';
-
 interface NumProps {
   readonly node: NumNode;
-  // Leaves out fmt's string-only kinds, which throw on every value a NumNode
-  // holds. A kind added to FMT_KINDS fails typecheck in tests/fmt.spec.ts
-  // until it is either excluded here or listed in NUM_KIND_SAMPLES there.
-  readonly kind: Exclude<FmtKind, WordKind>;
+  readonly kind: NumKind;
   /** False where many numbers stand close, as on the ladder's axis. */
   readonly link?: boolean;
 }
 
 /** Renders a sourced number, boolean or integer list, linked to its file. */
 export function Num({node, kind, link = true}: NumProps): ReactNode {
-  const json = JSON.stringify(node.v);
-  const value = (
-    <data data-fmt={kind} data-src={JSON.stringify(node.src)} data-v={json} value={json}>
-      {fmt(node.v, kind)}
-    </data>
-  );
+  const value = <NumText kind={kind} node={node} />;
   const href = link ? permalink(node.src) : null;
   return href === null ? (
     value
@@ -77,16 +74,7 @@ interface StrProps {
 
 /** Renders a sourced string with its controls made visible. */
 export function Str({node}: StrProps): ReactNode {
-  return (
-    <span
-      data-cap={node.cap}
-      data-fmt="text"
-      data-src={JSON.stringify(node.src)}
-      data-v={JSON.stringify(node.t)}
-    >
-      {fmt(node.t, 'text')}
-    </span>
-  );
+  return <StrText node={node} />;
 }
 
 /**

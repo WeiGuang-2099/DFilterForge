@@ -570,6 +570,8 @@ test('the board shows the pool in its order and repair numbers from the allowed 
   // counted rows and as repair rounds, and a repair number may come only
   // from the pool file or a pool pass's repair/summary.json, never from an
   // arm run's scored summary (docs/decisions/web-site.md, Sourced values).
+  // The self-served small model's band follows the passes, named by the
+  // base row of the analysis file once that file is committed.
   const html = readFileSync(path.join(OUT, 'board', 'index.html'), 'utf8');
   const sources = markupSources(html).map(
     (source) => JSON.parse(source) as readonly [string, string, unknown],
@@ -582,7 +584,12 @@ test('the board shows the pool in its order and repair numbers from the allowed 
   const rounds = pool.map((run) => `docs/results/${run}/repair/summary.json`);
   const files = new Set(sources.map(([, file]) => file));
 
-  expect(runsOf('/scored/summary.json')).toEqual(pool);
+  const analysis = 'docs/results/sft-v1/analysis.json';
+  const band = existsSync(path.join(WEB, '..', '..', ...analysis.split('/')))
+    ? [String(resolver.resolve(['ptr', analysis, '/base_run']))]
+    : [];
+
+  expect(runsOf('/scored/summary.json')).toEqual([...pool, ...band]);
   expect(runsOf('/repair/summary.json')).toEqual(pool);
   expect([...files].filter((file) => /-(?:cx|bare|res)(?:-r2)?-[0-9]{4}-/.test(file))).toEqual([]);
   expect([...files].filter((file) => file.includes('/repair')).sort()).toEqual(
