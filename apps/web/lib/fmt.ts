@@ -25,6 +25,7 @@ export const FMT_KINDS = [
   'split',
   'rate',
   'runtime',
+  'loss',
   'outcome',
   'frame_kind',
   'join',
@@ -91,6 +92,10 @@ const DIGEST_SHOWN = 12;
 // locked-test-v1.md shows it, and a tshark runtime in milliseconds.
 const PLACES = {rate: 3, runtime: 1} as const;
 
+// Significant digits of a training loss, which falls by orders of magnitude
+// over a run, so no fixed count of decimal places shows its last values.
+const LOSS_DIGITS = 2;
+
 /** One formatting kind. */
 export type FmtKind = (typeof FMT_KINDS)[number];
 
@@ -155,6 +160,23 @@ function rounded(value: unknown, places: number): string {
 }
 
 /**
+ * Rounds a positive finite number to a count of significant digits by the
+ * same string arithmetic as rounded(): it keeps the decimal places that end
+ * that many digits after the first non-zero one. A carry keeps those places,
+ * so 0.0995 shows as 0.100.
+ */
+function significant(value: unknown, digits: number): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new TypeError(`fmt: ${JSON.stringify(value)} is not a positive finite number`);
+  }
+  const [mantissa = '', exponent = '0'] = String(value).split('e');
+  const [head = '', tail = ''] = mantissa.split('.');
+  const point = head.length + Number(exponent);
+  const first = (head + tail).search(/[1-9]/);
+  return rounded(value, Math.max(0, first - point + digits));
+}
+
+/**
  * Formats one sourced value.
  *
  * @param value The value a sourced node holds.
@@ -165,7 +187,8 @@ function rounded(value: unknown, places: number): string {
  *     not_measured status as fixed words, never the status key itself;
  *     split, a run's split as the capitalized word that names its round;
  *     rate, a rate, difference or bound to three decimals; runtime, a
- *     duration in milliseconds to one decimal; outcome, a scored outcome
+ *     duration in milliseconds to one decimal; loss, a positive training
+ *     loss to two significant digits; outcome, a scored outcome
  *     code as the protocol's words; frame_kind, a frame's kind in
  *     captures.json as a word; join, an intent IR's root operator as the
  *     words that join its leaves; verdict, a comparison's inconclusive
@@ -206,6 +229,8 @@ export function fmt(value: unknown, kind: FmtKind): string {
     case 'rate':
     case 'runtime':
       return rounded(value, PLACES[kind]);
+    case 'loss':
+      return significant(value, LOSS_DIGITS);
     case 'outcome':
       return word(value, OUTCOMES, 'outcome');
     case 'frame_kind':
