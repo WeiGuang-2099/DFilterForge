@@ -1,19 +1,19 @@
 # Implementation Progress
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 ## Current slice
 
-Branch `share-shell` (plan slice 2) makes the site say whose it is. Every
-page's masthead names the author, WeiGuang-2099, and links the source,
-and a footer line says both again. A link to any page unfurls into a
-1200 by 630 card of the page's top, recorded from the build by
-`apps/web/scripts/record_previews.mjs`; the training page has its own
-card, so a link to the headline shows the headline. The site's icon is
-the Reel's ladder with the disproving frame in carmine, and the README
-names the author under its title. brace-expansion is overridden to the
-releases that fix its three open advisories; braces 3.0.3 has no fixed
-release, so its alert stays for the owner to dismiss. No number changes.
+Branch `sft-analysis` (plan slice 3) shows what fine-tuning fixed on test
+C4 and what it did not. `scripts/sft_analysis.py` computes the descriptive
+analyses the protocol registered on 2026-10-18 (transitions, error
+classes, field coverage, proximity to training, copies and unlisted
+fields) into `docs/results/sft-v1/analysis.json`, and CI rebuilds it with
+`--check`. The classes and the strata were defined after seed 2026's test
+scores were known, so every page that shows them labels them post hoc. A
+new page, `/training/analysis/`, opens with where the base model's loud
+failures went under each seed, and `/board` gains a separate band for the
+small model that ranks nothing. No published number changes.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2655,6 +2655,15 @@ case, a gain by the registered rule
 bill, USD 4.87 in all. The local CI replay passed every step before the
 web exporter tests, which low memory on the owner's machine stopped; the
 hosted run is the one of record.
+
+## PR #36 merged: 2026-10-19
+
+PR #36 merged `share-shell` into `main` as ced2b04; hosted CI passed on
+main and the Pages deploy serves it. Every page names its author and
+links the source, a pasted link unfurls into a 1200 by 630 card of the
+page's top (the training page has its own), and the site has an icon.
+brace-expansion is overridden to the releases that fix its advisories.
+No number changed.
 
 ## Planned next
 
