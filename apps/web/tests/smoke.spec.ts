@@ -23,6 +23,12 @@ const PAGES = [
     status: 200,
     heading: /^Supervised fine-tuning lifts \S+ from [0-9.]+ to [0-9.]+$/,
   },
+  {
+    path: 'training/analysis/',
+    status: 200,
+    heading:
+      /^Fine-tuning made [0-9]+( to [0-9]+)? of [0-9]+ loud failures run\. [0-9]+( to [0-9]+)? of them now fail silently\.$/,
+  },
   {path: 'methodology/', status: 200, heading: 'Evidence has a boundary.'},
   {path: 'no-such-page/', status: 404, heading: 'This page does not exist.'},
 ] as const;

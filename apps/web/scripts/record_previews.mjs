@@ -27,6 +27,7 @@ const [WIDTH, HEIGHT] = [1200, 630];
 const CARDS = [
   {page: '/', file: 'og.png'},
   {page: '/training/', file: 'og-training.png'},
+  {page: '/training/analysis/', file: 'og-analysis.png'},
 ];
 
 const server = spawn(process.execPath, [path.join(WEB, 'scripts', 'serve.mjs')], {

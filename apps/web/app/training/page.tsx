@@ -1,4 +1,5 @@
 import type {Metadata} from 'next';
+import Link from 'next/link';
 import type {ReactNode} from 'react';
 
 import {Against, Head, Ladder} from '@/app/_components/training/ladder';
@@ -46,6 +47,11 @@ export default function TrainingPage(): ReactNode {
   return (
     <article className="training">
       <Head headline={headline} />
+      <p className="tr-next">
+        <Link href="/training/analysis">What fine-tuning fixed, and what it did not</Link>: where
+        each of the base model&apos;s failed answers went under each seed, the kinds of mistake
+        that remain, and how close the test split sits to training.
+      </p>
 
       <section aria-labelledby="tr-rows" className="tr-sec">
         <h2 id="tr-rows">Every row on one scale</h2>
