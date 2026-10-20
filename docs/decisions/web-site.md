@@ -48,7 +48,23 @@ Data moves one way, through three layers:
    records the receipt's path and SHA-256, and for each scored probe the
    frames where the answer and the labels disagree, with each leaf of
    both filters and the frames among those that tshark matched it on.
-   `check` rebuilds both files and compares them byte for byte, so it runs
+
+   [`exhibits.json`](evidence/web/exhibits.json) (`verifier-exhibits/1.0`)
+   replays the Reel pool's test answers on verifier v1, the three scored
+   test captures with their 33-packet witness tail cut off: the benchmark
+   captures as ablation 005's Simplified arm read them. Every published
+   score stays on verifier v2. `export_web_evidence.py exhibits --write`
+   builds it through `dfilterforge.witness_replay`. It proves each v2
+   capture is its v1 capture plus the tail, and matches the v1 digests to
+   005's capture manifest and the v2 digests to the held-out freeze
+   record. It then runs each case's reference and each distinct answer
+   filter once per probe with the pinned tshark, and stops unless the
+   reference selects exactly the v1 labels (the v2 labels cut to the
+   benchmark frames) and every answer's v1 frames are its receipt's v2
+   frames cut the same way. For each executed ready answer it records the
+   receipt's path and SHA-256 and both verdicts; an answer that v1 accepts
+   and v2 finds silent-wrong also lists each witness frame it gets wrong.
+   `check` rebuilds all three and compares them byte for byte, so it runs
    in the test image, which has tshark and the frozen catalog.
 3. **`scripts/export_web_data.py`.** It uses the standard library only, starts
    no process, opens no socket and reads no clock, environment variable or git
@@ -501,8 +517,8 @@ and pool checks, which leaves the frozen-prompt guard and the pylint line
 untouched:
 1. pylint on the two web scripts;
 2. `export_web_evidence.py check`, with `docs/` mounted read-only. It
-   regenerates `captures.json` in pure Python, and `packets.json` and
-   every committed trace with the image's tshark;
+   regenerates `captures.json` in pure Python, and `packets.json`, every
+   committed trace and `exhibits.json` with the image's tshark;
 3. the two scripts' tests, with `docs/` mounted, so the committed-tree cases
    run instead of skipping;
 4. two exports of the committed tree, compared with `diff -r`.

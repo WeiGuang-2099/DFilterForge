@@ -17,8 +17,11 @@ names a probe, and the held-out freeze digests for the test captures.
 ``packets`` records each capture's packet list as the pinned tshark shows
 it (``dfilterforge.packet_list``). ``trace`` replays one committed C3 or C4
 answer with the scorer's replay code and records its predicate trace, each
-leaf of both filters at every frame where they disagree. ``check`` rebuilds
-both and compares them byte for byte, so it needs the test image's tshark.
+leaf of both filters at every frame where they disagree. ``exhibits``
+replays every executed ready answer of the Reel pool's test runs on the
+scored captures without their witness tail (``dfilterforge.witness_replay``)
+and writes or checks ``exhibits.json``. ``check`` rebuilds all three and
+compares them byte for byte, so it needs the test image's tshark.
 
 Exit status: 0 when the file is written or every check holds, 1 when a check
 fails, 2 when the evidence cannot be built or an input cannot be read.
@@ -58,6 +61,7 @@ from dfilterforge.model_split import ModelSplit
 from dfilterforge.packet_list import packet_table
 from dfilterforge.packet_list import PacketListRunner
 from dfilterforge.replay import replay_live
+from dfilterforge.witness_replay import build_exhibits
 from dfilterforge.witnesses import WITNESS_NAMES
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +69,7 @@ _SCHEMA_VERSION = "capture-frames/1.0"
 CAPTURES_PATH = Path("docs/decisions/evidence/web/captures.json")
 PACKETS_PATH = Path("docs/decisions/evidence/web/packets.json")
 TRACES_PATH = Path("docs/decisions/evidence/web/traces")
+EXHIBITS_PATH = Path("docs/decisions/evidence/web/exhibits.json")
 _PACKETS_SCHEMA = "capture-packets/1.0"
 _TRACE_SCHEMA = "web-trace/1.0"
 _RUN_ID = re.compile(
@@ -465,6 +470,29 @@ def tshark_failures(repo: Path, runner: PacketListRunner) -> list[str]:
     return failures
 
 
+def build_exhibits_document(
+    repo: Path, runner: PacketListRunner
+) -> dict[str, object]:
+    """Replays the Reel pool's test answers on the tail-free test probes."""
+    with curated() as (probes, _):
+        scored = [
+            probe
+            for probe, split, role in probes
+            if (split, role) == ("test", "scored")
+        ]
+        return build_exhibits(repo, scored, runner)
+
+
+def exhibits_failures(repo: Path, runner: PacketListRunner) -> list[str]:
+    """Replays exhibits.json and compares it byte for byte."""
+    committed = repo / EXHIBITS_PATH
+    if not committed.is_file():
+        return [f"{EXHIBITS_PATH.as_posix()} is missing"]
+    if committed.read_bytes() != render(build_exhibits_document(repo, runner)):
+        return [f"{EXHIBITS_PATH.as_posix()} differs from a replay"]
+    return []
+
+
 def _summary(
     document: Mapping[str, object], path: Path = CAPTURES_PATH
 ) -> dict[str, object]:
@@ -511,9 +539,30 @@ def _tshark_run(repo: Path, arguments: argparse.Namespace) -> list[str]:
     return []
 
 
+def _exhibits_run(repo: Path, write: bool) -> list[str]:
+    runner = PacketListRunner()
+    if write:
+        _write(repo, EXHIBITS_PATH, build_exhibits_document(repo, runner))
+    elif failures := exhibits_failures(repo, runner):
+        return failures
+    data = (repo / EXHIBITS_PATH).read_bytes()
+    print(
+        canonical_json(
+            {
+                "path": EXHIBITS_PATH.as_posix(),
+                "size_bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+    )
+    return []
+
+
 def _run(arguments: argparse.Namespace) -> int:
     repo = cast(Path, arguments.repo)
-    if arguments.command in ("packets", "trace"):
+    if arguments.command == "exhibits":
+        failures = _exhibits_run(repo, cast(bool, arguments.write))
+    elif arguments.command in ("packets", "trace"):
         failures = _tshark_run(repo, arguments)
     else:
         document = build_captures()
@@ -524,7 +573,9 @@ def _run(arguments: argparse.Namespace) -> int:
         else:
             failures = check(repo, document)
         if arguments.command == "check":
-            failures += tshark_failures(repo, PacketListRunner())
+            runner = PacketListRunner()
+            failures += tshark_failures(repo, runner)
+            failures += exhibits_failures(repo, runner)
         if not failures:
             print(canonical_json(_summary(document)))
     for failure in failures:
@@ -567,6 +618,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     for name in ("run", "condition", "item"):
         trace.add_argument(f"--{name}", required=True)
+    exhibits = commands.add_parser(
+        "exhibits", help="write or check the verifier v1 replay, with tshark"
+    )
+    mode = exhibits.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--write", action="store_true")
+    mode.add_argument("--check", action="store_true")
     commands.add_parser(
         "check", help="check every committed web evidence, with tshark"
     )
