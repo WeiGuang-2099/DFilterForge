@@ -161,7 +161,7 @@ def _reply(request_id: str, text: str, finish: str = "stop") -> CompletionV1:
 
 
 def _says(verdict: str) -> str:
-    return json.dumps({"reason": "One sentence.", "verdict": verdict})
+    return json.dumps({"verdict": verdict, "reason": "One sentence."})
 
 
 def test_the_committed_answer_sets_are_the_registered_ones() -> None:
@@ -204,7 +204,7 @@ def test_an_outcomes_file_that_breaks_its_pin_is_refused(tree: Path) -> None:
 
 
 def test_the_system_prompts_are_the_notes_fenced_blocks() -> None:
-    """Both judge-v1 texts are the note's, byte for byte."""
+    """Both judge-v2 texts are the note's, byte for byte."""
     if not _NOTE.is_file():
         pytest.skip(_NO_DOCS)
     note = _NOTE.read_text(encoding="utf-8")
@@ -261,36 +261,65 @@ def test_only_the_secondary_mode_shows_the_reference_filter(
     ("text", "finish", "verdict"),
     [
         (_says("correct"), "stop", "correct"),
-        ('{"verdict": "incorrect", "reason": "First."}', "stop", "incorrect"),
+        (_says("incorrect"), "stop", "incorrect"),
+        # judge-v1's order, and a verdict with no reason after it.
+        ('{"reason": "First.", "verdict": "incorrect"}', "stop", None),
         ('{"verdict": "correct"}', "stop", None),
-        ('{"reason": 7, "verdict": "correct"}', "stop", None),
         (_says("Correct"), "stop", None),
         (_says("partly"), "stop", None),
         ("correct", "stop", None),
         ('["correct"]', "stop", None),
+        ('{"verdict": "corr', "length", None),
+        # JSON's whitespace, other keys, a long or odd reason.
+        ('\n { "verdict" :\t"correct" ,\r\n"reason": "a"}', "stop", "correct"),
         (
-            '{"reason": "r", "verdict": "correct", "confidence": 1}',
+            '{"verdict": "correct", "reason": "r", "confidence": 1}',
             "stop",
             "correct",
         ),
         (
-            json.dumps({"reason": "x" * 900, "verdict": "incorrect"}),
+            json.dumps({"verdict": "incorrect", "reason": "x" * 900}),
             "stop",
             "incorrect",
         ),
-        (_says("correct"), "length", None),
+        ('{"verdict": "incorrect", "reason": 7}', "stop", "incorrect"),
+        # A reason cut at the token limit, or broken, keeps the verdict,
+        # whatever the unparsed text holds.
+        ('{"verdict": "correct",', "length", "correct"),
         (
-            '{"reason": "a", "verdict": "incorrect", "verdict": "correct"}',
+            '{"verdict": "correct", "reason": "It is correct. It is correct.',
+            "length",
+            "correct",
+        ),
+        (
+            '{"verdict": "incorrect", "reason": "a"} Verdict: no.',
+            "stop",
+            "incorrect",
+        ),
+        (
+            '{"verdict": "incorrect", "verdict": "correct", "reason": "a"} no',
+            "stop",
+            "incorrect",
+        ),
+        (
+            '{"verdict": "correct", "reason": {"k": 1, "k": 2}, "y": "cu',
+            "length",
+            "correct",
+        ),
+        # A whole JSON text that gives a key twice, at any depth.
+        ('{"verdict": "correct", "reason": {"k": 1, "k": 2}}', "stop", None),
+        (
+            '{"verdict": "incorrect", "verdict": "correct", "reason": "a"}',
             "stop",
             None,
         ),
-        ('{"reason": 7, "reason": "a", "verdict": "correct"}', "stop", None),
+        ('{"verdict": "correct", "reason": "a", "reason": "b"}', "stop", None),
     ],
 )
 def test_the_verdict_parser_takes_only_the_registered_reply(
     text: str, finish: str, verdict: str | None
 ) -> None:
-    """A verdict needs a string reason; other keys and its length are free."""
+    """A reply gives the verdict it opens with; the rest is not read."""
     assert judge.parse_verdict(_reply("primary-x", text, finish)) == verdict
 
 

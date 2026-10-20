@@ -242,7 +242,7 @@ def _body(content: str) -> bytes:
 
 
 def _says(verdict: str) -> tuple[int, bytes]:
-    reply = {"reason": "It selects those packets.", "verdict": verdict}
+    reply = {"verdict": verdict, "reason": "It selects those packets."}
     return 200, _body(json.dumps(reply))
 
 
@@ -320,7 +320,7 @@ def test_the_runner_sends_resumes_publishes_and_tabulates(
     follows on its route, and the table is written and checked.
     """
     config = tmp_path / "call.json"
-    run_dir = tmp_path / "artifacts" / "judge-v1" / "dev-deepinfra"
+    run_dir = tmp_path / "artifacts" / "judge-v2" / "dev-deepinfra"
     script = [_LIMITED, (200, _body("no verdict here")), _REFUSED]
     with _provider(script) as (url, received):
         _write_config(config, url)
@@ -384,7 +384,7 @@ def test_the_runner_sends_resumes_publishes_and_tabulates(
     ]
     assert (manifest["status"], manifest["completed"]) == ("complete", 4)
     assert manifest["endpoint_host"] == "127.0.0.1"
-    published = tmp_path / "docs" / "results" / "judge-v1"
+    published = tmp_path / "docs" / "results" / "judge-v2"
     for name in (js.ATTEMPTS, js.MANIFEST):
         data = (published / "dev" / name).read_bytes()
         assert data == (run_dir / name).read_bytes()
@@ -434,10 +434,10 @@ def test_the_dry_run_prints_the_plan_and_writes_nothing(
 # call meets. api_key_missing is the last check, so meeting it means J2
 # leaves that route standing.
 _TREES = {
-    "dev": ("docs", "results", "judge-v1", "dev"),
+    "dev": ("docs", "results", "judge-v2", "dev"),
     "moved": ("docs", "decisions", "evidence", "judge", "dev-deepinfra"),
-    "test": ("docs", "results", "judge-v1", "test"),
-    "run": ("artifacts", "judge-v1", "test-deepinfra"),
+    "test": ("docs", "results", "judge-v2", "test"),
+    "run": ("artifacts", "judge-v2", "test-deepinfra"),
 }
 
 

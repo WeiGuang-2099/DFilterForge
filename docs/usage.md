@@ -359,7 +359,11 @@ order; `scripts/judge_study.py` runs each step. Every line runs in Windows
 PowerShell 5.1 at the root of the owner's checkout, on `main`. Only `call`
 sends requests, and only with `DFILTERFORGE_MODEL_API_KEY` set, as the
 note's Commands section sets and removes it. Run each call line once
-without the key first: it must stop at `api_key_missing` (exit 2).
+without the key first: it must stop at `api_key_missing` (exit 2). Since
+the note's correction of 2026-10-21 the runner sends the `judge-v2`
+prompts and keeps its runs only under `artifacts/judge-v2/` and
+`docs/results/judge-v2/`; the judge-v1 dev check stays in
+`docs/results/judge-v1/dev/`.
 
 ```powershell
 uv run --frozen python scripts/judge_study.py dry-run --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40
