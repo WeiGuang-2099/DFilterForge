@@ -351,3 +351,29 @@ uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-e
 ```
 
 Seeds 42 and 2026 follow with `s42` and `s2026` in the names.
+
+### Seed 2026's test rerun
+
+One more pass of seed 2026's adapter over the test prompts, registered in
+the note before its request. The maintainer seeds and commits
+`docs/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07/` with the
+registration, and the session runs from a checkout that holds both. The
+call is seed 2026's test call with the rerun's id, so the config, host and
+settings are the first pass's (paid):
+
+```powershell
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-2026-10-07 --run-id test-qwen3-1.7b-sft-s2026-passb-2026-10-07 --config artifacts/modal/qwen3-1.7b-sft-s2026.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+```
+
+It is a fresh pass: add `--resume` only to send it again after it stopped
+with items pending. Publish and score it as above, then read the pair
+offline in the lab container (no key, no GPU):
+
+```powershell
+uv run --frozen python scripts/model_run.py publish --run-dir artifacts/model-eval/test-qwen3-1.7b-2026-10-07/runs/test-qwen3-1.7b-sft-s2026-passb-2026-10-07 --output docs/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07
+docker compose --profile pilot run --rm lab score --run-dir /workspace/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm -T lab pair --first-run-dir /workspace/results/test-qwen3-1.7b-sft-s2026-2026-10-07 --second-run-dir /workspace/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07
+```
+
+The last line prints the pair report. Its committed copy is written from
+Git Bash, because Windows PowerShell 5.1's `>` writes UTF-16.

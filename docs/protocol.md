@@ -482,6 +482,15 @@ stated, and none is read as a gain or a loss.
   The base row never saw the training set, so its copy share is the
   untrained reference rate.
 
+Amended 2026-10-20, before its request: one self-served rerun. Seed
+2026's adapter answers the frozen test prompts a second time on the same
+stack, and `dfilterforge pair` reads the two passes as the A/A pair under
+Metrics is read, by the rules of the [self-served
+note](decisions/self-served-runs.md). The second pass is not a row, no
+comparison is read against it, and it sets no noise bound. "Self-served
+rerun noise is not measured" above holds until its pair report is
+committed; from then on the headline and the pages point to that report.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
