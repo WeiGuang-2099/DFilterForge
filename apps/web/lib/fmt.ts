@@ -52,7 +52,10 @@ const SPLITS: Readonly<Record<string, string>> = {
 };
 
 // What the scorer's outcome codes say on a page, in docs/protocol.md's
-// words. A code is never shown as written; one not listed fails the build.
+// words, and the replay's unscorable: a verdict on the captures alone for
+// a case with no label left once the witness tail is cut off, which the
+// scorer refuses to score (docs/decisions/evidence/web/exhibits.json). A
+// code is never shown as written; one not listed fails the build.
 const OUTCOMES: Readonly<Record<string, string>> = {
   strong_exact: 'strong exact',
   shortcut: 'shortcut',
@@ -62,6 +65,7 @@ const OUTCOMES: Readonly<Record<string, string>> = {
   provider_failed: 'provider failed',
   abstained: 'abstained',
   false_ready: 'false ready',
+  unscorable: 'not scorable',
 };
 
 // What captures.json's frame kinds say on a page: a recipe frame is one of

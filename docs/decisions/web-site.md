@@ -442,10 +442,14 @@ sets and source ops before a page renders.
   exact.
   `<Outcome>` renders a scored outcome code as the protocol's words, with
   `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and a code the
-  table does not list fails the build. `<Word>` does the same for two more
-  codes: a frame's kind in `captures.json` (`frame_kind`: "recipe" or
-  "witness") and an IR's root operator (`join`: `all` reads "every
-  leaf"). `<Num link={false}>` leaves out the link where numbers stand
+  table does not list fails the build. The table has one code the scorer
+  never writes: the exhibits replay's `unscorable`, a verdict on the
+  captures alone for a case with no label left, reads "not scorable".
+  `<Word>` does the same for two more codes: a frame's kind in
+  `captures.json` (`frame_kind`: "recipe" or "witness") and an IR's root
+  operator (`join`: `all` reads "every leaf"). Both render through
+  `CodeText` in `lib/sourced-text.tsx`, which a client island uses for the
+  same markup. `<Num link={false}>` leaves out the link where numbers stand
   close, as on the ladder's axis.
   `<Term>` renders a reviewed name that holds a digit; the list in
   `lib/terms.ts` is `IPv4`, `SHA-256` and `repair@1`. `verdict` shows a

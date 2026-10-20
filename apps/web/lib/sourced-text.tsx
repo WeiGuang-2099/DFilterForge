@@ -1,11 +1,12 @@
 /**
  * @fileoverview The markup of a sourced value, without its link.
  *
- * <Num> and <Str> in lib/sourced.tsx render through these, and a client
- * island renders the same markup with them: a number's link names the
- * build's source commit, which only the server reads. The markup keeps the
- * node's source op (data-src), its value as JSON (data-v) and the
- * formatting kind (data-fmt), which tests/consistency.spec.ts re-derives.
+ * <Num>, <Str>, <Outcome> and <Word> in lib/sourced.tsx render through
+ * these, and a client island renders the same markup with them: a number's
+ * link names the build's source commit, which only the server reads. The
+ * markup keeps the node's source op (data-src), its value as JSON (data-v)
+ * and the formatting kind (data-fmt), which tests/consistency.spec.ts
+ * re-derives.
  */
 
 import type {ReactNode} from 'react';
@@ -33,6 +34,22 @@ export function NumText({node, kind}: {readonly node: NumNode; readonly kind: Nu
     <data data-fmt={kind} data-src={JSON.stringify(node.src)} data-v={json} value={json}>
       {fmt(node.v, kind)}
     </data>
+  );
+}
+
+/** The kinds that show a code as fixed words. */
+export type CodeKind = 'outcome' | 'frame_kind' | 'join';
+
+/**
+ * Renders a sourced code as the fixed words fmt() gives its kind: a scored
+ * outcome, a frame's kind or an IR's root operator. The node keeps the code
+ * in data-v, and a code fmt does not know fails the build.
+ */
+export function CodeText({node, kind}: {readonly node: StrNode; readonly kind: CodeKind}): ReactNode {
+  return (
+    <span data-fmt={kind} data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
+      {fmt(node.t, kind)}
+    </span>
   );
 }
 

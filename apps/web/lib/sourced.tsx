@@ -18,7 +18,7 @@ import {loadSite, sourcePaths} from './data';
 import type {NumNode, Src, StrNode} from './data';
 import {fmt} from './fmt';
 import {REPOSITORY} from './site';
-import {NumText, StrText} from './sourced-text';
+import {CodeText, NumText, StrText} from './sourced-text';
 import type {NumKind} from './sourced-text';
 import type {TermName} from './terms';
 
@@ -116,11 +116,7 @@ export function Split({node}: StrProps): ReactNode {
  * build.
  */
 export function Outcome({node}: StrProps): ReactNode {
-  return (
-    <span data-fmt="outcome" data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
-      {fmt(node.t, 'outcome')}
-    </span>
-  );
+  return <CodeText kind="outcome" node={node} />;
 }
 
 /**
@@ -162,11 +158,7 @@ interface WordProps {
  * fmt does not know fails the build.
  */
 export function Word({node, kind}: WordProps): ReactNode {
-  return (
-    <span data-fmt={kind} data-src={JSON.stringify(node.src)} data-v={JSON.stringify(node.t)}>
-      {fmt(node.t, kind)}
-    </span>
-  );
+  return <CodeText kind={kind} node={node} />;
 }
 
 interface TermProps {
