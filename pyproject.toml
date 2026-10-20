@@ -162,6 +162,7 @@ forbidden_modules = [
   "dfilterforge.counterexample",
   "dfilterforge.evaluation",
   "dfilterforge.fixtures",
+  "dfilterforge.judge",
   "dfilterforge.model_cases",
   "dfilterforge.model_dev_cases",
   "dfilterforge.model_feedback",
