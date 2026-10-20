@@ -717,6 +717,119 @@ test("the Reel's ladder and readout say what the receipt, packets and trace hold
   expect(leaves.filter(([, , word]) => word === 'false')).not.toEqual([]);
 });
 
+interface Replayed {
+  readonly run_id: string;
+  readonly receipt: string;
+  readonly v1: string;
+  readonly v2: string;
+}
+
+interface ScoredProbe {
+  readonly probe_id: string;
+  readonly expected_frames: readonly number[];
+  readonly candidate_frames: readonly number[];
+  readonly candidate_only: readonly number[];
+  readonly reference_only: readonly number[];
+}
+
+test('the exhibits page draws what the replay and the receipts hold', async ({page}) => {
+  // A square's look, a tape's cells and the words beside a killing frame
+  // are geometry and fixed words, which no value check sees. Here each is
+  // derived again: every row's squares, as verdict pairs and rings, from
+  // the committed replay and the Reel's pool; every turned answer's tapes
+  // and killing frames from its receipt and the frame tables.
+  const replay = 'docs/decisions/evidence/web/exhibits.json';
+  const answers = resolver.resolve([
+    'ptr',
+    replay,
+    '/sources/hosted_test/answers',
+  ]) as readonly Replayed[];
+  const letters: Readonly<Record<string, string>> = {
+    strong_exact: 'e',
+    shortcut: 's',
+    silent_wrong: 'w',
+    unscorable: 'u',
+  };
+  const turned = (each: Replayed) =>
+    (each.v1 === 'strong_exact' || each.v1 === 'shortcut') && each.v2 === 'silent_wrong';
+  const square = (each: Replayed) =>
+    `${letters[each.v1] ?? '?'}${letters[each.v2] ?? '?'}${turned(each) ? ' ringed' : ''}`;
+  const tables = resolver.resolve([
+    'ptr',
+    'docs/decisions/evidence/web/captures.json',
+    '/probes',
+  ]) as readonly {readonly probe_id: string; readonly frames: readonly unknown[]}[];
+  const sides = {
+    candidate_only: 'matched; the labels leave it out',
+    reference_only: 'labelled; the answer misses it',
+  };
+
+  await page.goto('exhibits/');
+  const rows = await page.locator('.xh-row').evaluateAll((all) =>
+    all.map((row) =>
+      Array.from(row.querySelectorAll('.xh-cells .xh-q'), (each) =>
+        [
+          `${each.getAttribute('data-a') ?? '?'}${each.getAttribute('data-t') ?? '?'}`,
+          each.classList.contains('xh-q-k') ? ' ringed' : '',
+        ].join(''),
+      ).sort(),
+    ),
+  );
+  expect(rows).toEqual(
+    resolver
+      .reelPool()
+      .map((run) => answers.filter((each) => each.run_id === run).map(square).sort()),
+  );
+
+  // Each turned answer by its receipt digest: its tapes and its packet lists.
+  const drawn = await page.locator('article.xh-ex').evaluateAll((cards) =>
+    cards.flatMap((card) =>
+      Array.from(card.querySelectorAll('.xh-rcpt [data-fmt="digest"]'), (digest) => {
+        const at = digest.closest('[data-ans]')?.getAttribute('data-ans') ?? '';
+        const source = JSON.parse(digest.getAttribute('data-src') ?? '[]') as unknown[];
+        const tapes = card.querySelector(`.xh-tapes-in[data-ans~="${at}"]`);
+        return {
+          receipt: String(source[1]),
+          states: Array.from(tapes?.querySelectorAll('[data-p]') ?? [], (tape) =>
+            Array.from(tape.querySelectorAll('[data-s]'), (cell) => cell.getAttribute('data-s')),
+          ),
+          kills: Array.from(card.querySelectorAll(`[data-pr][data-ans~="${at}"]`), (list) =>
+            Array.from(list.querySelectorAll('tbody tr'), (row) => [
+              Number(row.querySelector('[data-fmt="int"]')?.getAttribute('data-v')),
+              row.querySelector('.xh-pl-side')?.textContent ?? '',
+            ]),
+          ),
+        };
+      }),
+    ),
+  );
+  expect(drawn.map(({receipt}) => receipt).sort()).toEqual(
+    answers
+      .filter(turned)
+      .map((each) => each.receipt)
+      .sort(),
+  );
+  for (const {receipt, states, kills} of drawn) {
+    const probes = resolver.resolve(['ptr', receipt, '/probes']) as readonly ScoredProbe[];
+    expect({states, kills}, receipt).toEqual({
+      states: probes.map((probe) => {
+        const frames = tables.find((table) => table.probe_id === probe.probe_id)?.frames ?? [];
+        return frames.map((_, row) => {
+          const selected = probe.candidate_frames.includes(row + 1);
+          const requested = probe.expected_frames.includes(row + 1);
+          return selected ? (requested ? 'tp' : 'fp') : requested ? 'fn' : 'tn';
+        });
+      }),
+      kills: probes.map((probe) =>
+        [
+          ...probe.candidate_only.map((frame) => [frame, sides.candidate_only] as const),
+          ...probe.reference_only.map((frame) => [frame, sides.reference_only] as const),
+        ].sort(([first], [second]) => first - second),
+      ),
+    });
+  }
+});
+
 test('model text is cut only at the contract size and only where the exporter cuts it', () => {
   // A page that hides most of an answer, or cuts a string that is not model
   // output, must fail even when its data-cap agrees with what it shows.
