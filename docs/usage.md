@@ -352,28 +352,39 @@ uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-e
 
 Seeds 42 and 2026 follow with `s42` and `s2026` in the names.
 
-### Seed 2026's test rerun
+## Judge study
 
-One more pass of seed 2026's adapter over the test prompts, registered in
-the note before its request. The maintainer seeds and commits
-`docs/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07/` with the
-registration, and the session runs from a checkout that holds both. The
-call is seed 2026's test call with the rerun's id, so the config, host and
-settings are the first pass's (paid):
-
-```powershell
-uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-2026-10-07 --run-id test-qwen3-1.7b-sft-s2026-passb-2026-10-07 --config artifacts/modal/qwen3-1.7b-sft-s2026.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
-```
-
-It is a fresh pass: add `--resume` only to send it again after it stopped
-with items pending. Publish and score it as above, then read the pair
-offline in the lab container (no key, no GPU):
+The [judge note](decisions/judge-study.md) registers the study and its
+order; `scripts/judge_study.py` runs each step. Every line runs in Windows
+PowerShell 5.1 at the root of the owner's checkout, on `main`. Only `call`
+sends requests, and only with `DFILTERFORGE_MODEL_API_KEY` set, as the
+note's Commands section sets and removes it. Run each call line once
+without the key first: it must stop at `api_key_missing` (exit 2).
 
 ```powershell
-uv run --frozen python scripts/model_run.py publish --run-dir artifacts/model-eval/test-qwen3-1.7b-2026-10-07/runs/test-qwen3-1.7b-sft-s2026-passb-2026-10-07 --output docs/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07
-docker compose --profile pilot run --rm lab score --run-dir /workspace/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07 --code-revision (git rev-parse --short HEAD)
-docker compose --profile pilot run --rm -T lab pair --first-run-dir /workspace/results/test-qwen3-1.7b-sft-s2026-2026-10-07 --second-run-dir /workspace/results/test-qwen3-1.7b-sft-s2026-passb-2026-10-07
+uv run --frozen python scripts/judge_study.py dry-run --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40
+uv run --frozen python scripts/judge_study.py dry-run --split test --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 1.50
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40 --resume
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_gmicloud_judge.json --max-usd 0.40
+uv run --frozen python scripts/judge_study.py call --split test --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 1.50
+uv run --frozen python scripts/judge_study.py publish --split dev --route deepinfra
+uv run --frozen python scripts/judge_study.py publish --split test --route deepinfra
+uv run --frozen python scripts/judge_study.py table
+uv run --frozen python scripts/judge_study.py table --check
 ```
 
-The last line prints the pair report. Its committed copy is written from
-Git Bash, because Windows PowerShell 5.1's `>` writes UTF-16.
+In order: the two dry runs, which need no key and write nothing; the dev
+check on DeepInfra (paid), and its resume after exit 1 once the network
+works, or after exit 3 for HTTP 401, 402 or 403 once fixed; the dev check
+sent again from scratch on GMICloud, only when the published DeepInfra
+check counts a request `failed` and the maintainer has moved it to
+`docs/decisions/evidence/judge/dev-deepinfra/` (J2); the test study (paid),
+which the runner sends only on the route J2 leaves standing, DeepInfra or,
+after J2's re-run, GMICloud with its config, and never on the other route
+once one holds a test run; then the maintainer's publish lines,
+`--route gmicloud` after J2's re-run, and the table and its check. Exit
+codes: 0 done; 1 requests pending after three timeouts or transport errors
+in a row (`unreachable`) or Ctrl-C, or a table that differs from its
+rebuild; 2 refused before any request; 3 stopped by HTTP 401, 402 or 403,
+the thinking gate or the cap.

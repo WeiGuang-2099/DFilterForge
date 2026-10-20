@@ -141,6 +141,103 @@ it only if the spend so far plus that bound stays within the cap.
    committed code, which CI rebuilds with `--check`, and adds the
    `/methodology` block and the README sentence.
 
+## Commands
+
+`scripts/judge_study.py` runs every step; `tests/test_judge_study.py` runs
+it against a fake provider on 127.0.0.1. Each line below runs in Windows
+PowerShell 5.1 at the root of the owner's checkout, on `main` once the
+runner is merged. Only `call` sends a request, and only with the key set. It
+sends one request at a time, paced at 1 s, and sends a timeout, a transport
+error or HTTP 408, 429 or 5xx again in a later sweep, 60 s on, at most three
+attempts per request. The spend counts a timeout or a transport error at
+its whole bound, since the provider may have generated before the reply was
+lost, so three of them in a row end the call (`unreachable`, exit 1) rather
+than let an outage spend the cap on bounds. Its run is
+`artifacts/judge-v1/<split>-<route>/` (ignored): `attempts.jsonl` and
+`manifest.json`.
+
+Step 2, the dry runs, with no key. Each prints the counts, the requests,
+their prompt bytes, the expected spend and the worst case, and writes
+nothing:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+uv run --frozen python scripts/judge_study.py dry-run --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40
+uv run --frozen python scripts/judge_study.py dry-run --split test --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 1.50
+```
+
+Step 3, the dev check on DeepInfra (paid). The call line runs first without
+the key and must stop at `api_key_missing` (exit 2), which shows that every
+other check passed; then it runs again with the key set:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40
+$secure = Read-Host -AsSecureString "OpenRouter key"
+$env:DFILTERFORGE_MODEL_API_KEY = [System.Net.NetworkCredential]::new("", $secure).Password
+Remove-Variable secure
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40
+"exit code: $LASTEXITCODE"
+Remove-Item Env:DFILTERFORGE_MODEL_API_KEY
+```
+
+On exit 1 once the network works, or on exit 3 for HTTP 401, 402 or 403
+once the key, credit or guardrail is fixed, the same block resumes the run
+with this call line:
+
+```powershell
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 0.40 --resume
+```
+
+Step 4 is the maintainer's. Under J2, if the published dev check's
+`manifest.json` counts any request `failed`, the maintainer moves
+`docs/results/judge-v1/dev/` to `docs/decisions/evidence/judge/dev-deepinfra/`
+as evidence, where the runner reads it, and the owner sends the dev check
+again from scratch on GMICloud, in the same block with this call line, which
+the maintainer then publishes:
+
+```powershell
+uv run --frozen python scripts/judge_study.py call --split dev --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_gmicloud_judge.json --max-usd 0.40
+```
+
+Step 5, the test study (paid), in the same block with this call line. The
+keyless run stops at `api_key_missing` only once the published dev checks
+leave the call's route standing under J2 and the other route holds no test
+run; it stops at `route_not_standing` or `route_fixed` otherwise. DeepInfra
+stands while its published dev check counts no request `failed`. GMICloud
+stands once the DeepInfra check that counts one sits in
+`docs/decisions/evidence/judge/dev-deepinfra/` and GMICloud's own published
+dev check counts some request `completed`; none is J3's case, which a
+correction decides. A test run on one route, under `artifacts/judge-v1/` or
+published, fixes the route. After J2's re-run the line takes the GMICloud
+config, and it resumes with `--resume`:
+
+```powershell
+uv run --frozen python scripts/judge_study.py call --split test --config docs/decisions/evidence/judge/configs/deepseek-v4-pro-0813_deepinfra_judge.json --max-usd 1.50
+```
+
+The maintainer's lines for steps 4 and 6, with `--route gmicloud` after
+J2's re-run. `publish` copies a complete run's two files to
+`docs/results/judge-v1/<split>/`, refuses a directory that holds another
+run, and prints step 4's check: the run's `completed` and `failed` counts
+and each mode's verdicts, `none` for a completed reply that gives none.
+`table` writes `docs/results/judge-v1/table.json` from the published test
+run and the committed scores, and `--check` compares it byte for byte:
+
+```powershell
+uv run --frozen python scripts/judge_study.py publish --split dev --route deepinfra
+uv run --frozen python scripts/judge_study.py publish --split test --route deepinfra
+uv run --frozen python scripts/judge_study.py table
+uv run --frozen python scripts/judge_study.py table --check
+```
+
+| Exit | Meaning | What the owner does |
+| --- | --- | --- |
+| 0 | Done: every request has its final reply or failure, or the step finished. | Hand the printed line to the maintainer. |
+| 1 | Requests left pending: three attempts in a row ended in a timeout or a transport error (`unreachable`), the attempt log could not be written (`io_error`), or the call was interrupted with Ctrl-C, and a request in flight may be billed but not recorded. For `table --check`, a table that differs from its rebuild. | Check the network or the disk, then run the resume line; a `table --check` difference goes to the maintainer. |
+| 2 | Refused before any request: `api_key_missing`, which the keyless run expects; a changed pin, receipt or prompt; a config or cap the note does not register; a fresh call where a run exists, or a resume with other settings, host or requests or after a gate stop; a test call on a route J2 does not leave standing, or once the other route holds a test run. | Set the key for `api_key_missing`; otherwise give the `error` line to the maintainer. |
+| 3 | Stopped: HTTP 401, 402 or 403; a first reply that shows thinking; or a next request whose bound would take the spend past the cap. | Fix the key, credit or guardrail and run the resume line. Each resume that meets HTTP 401, 402 or 403 again uses one of that request's three attempts, so check the key and the credit on openrouter.ai first. A thinking or cap stop ends the run until a correction named here; give it to the maintainer. |
+
 ## Outputs
 
 `docs/results/judge-v1/dev/` and `docs/results/judge-v1/test/` each hold
@@ -166,3 +263,16 @@ names avoid `prepare.json`, `prepared/`, `scored/` and
   rejects is a disagreement, not a proven judge error.
 - The counts are over answers, not cases: a filter several models wrote
   weighs as often as it was written.
+
+## Corrections
+
+- 2026-10-20, before any judge request. J7 called both caps above three
+  times the expected spend. By this note's own estimates they are about
+  2.2 and 2.3 times it (0.40 USD against 0.18, 1.50 USD against 0.64), and
+  the runner's dry runs price the dev check at 0.167 USD and the test
+  study at 0.639 USD. The caps stand: each still funds twice the expected
+  spend plus the dearest request. Two rules the text left open are fixed
+  with the runner: a call ends, its requests pending, after three timeouts
+  or transport errors in a row, since the charge counts each at its whole
+  bound and an outage would otherwise use up the cap without a reply; and
+  a reply that gives a key twice gives no verdict.
