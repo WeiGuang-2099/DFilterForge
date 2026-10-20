@@ -66,6 +66,16 @@ Data moves one way, through three layers:
    and v2 finds silent-wrong also lists each witness frame it gets wrong.
    `check` rebuilds all three and compares them byte for byte, so it runs
    in the test image, which has tshark and the frozen catalog.
+
+   [`exhibit-readings.json`](evidence/web/exhibit-readings.json)
+   (`exhibit-readings/1.0`) is written by hand, not rebuilt: a reading of
+   each case whose answers the tail turns, an addendum to some single
+   answers, and for each witness that turns one the comment above it in
+   `src/dfilterforge/witnesses.py`, one note per comment. The readings were
+   written after the answers were known and decide nothing.
+   `tests/test_export_web_data.py` holds each note to its comment, verbatim
+   with the lines joined, and the readings to the replay's turned cases and
+   witnesses.
 3. **`scripts/export_web_data.py`.** It uses the standard library only, starts
    no process, opens no socket and reads no clock, environment variable or git
    state. Its output in `apps/web/data/` is ignored by git and rebuilt for
@@ -282,6 +292,20 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   item carries its request, reference and, when silent-wrong, the first
   disagreeing frame of its receipt with that frame's name from
   `captures.json`. Each seed's logged loss points into its run manifest.
+- `exhibits.json`: the Reel pool's test answers on the captures alone and
+  with the witness tail, for `/exhibits`, null outside the test phase or
+  until `evidence/web/exhibits.json` exists. Every count is a `count` op
+  over the replay's answers, by verdict, overall and per pool pass, and
+  each answer is one square with both verdicts. One exhibit per case the
+  tail turns an answer of, most turned answers first, holds the reading,
+  the witnesses' notes and each answer's request, filters, receipt digest,
+  addendum and frame strips; each replayed probe carries its frame table
+  and packet list, as the Reel's strips do. A replay that does not name the
+  Reel's test pool in pool order, or that records an answer otherwise than
+  its receipt and outcome row, stops the export (`exhibits_inconsistent`):
+  its verdict alone must be the receipt's frames cut to the benchmark
+  frames, and its verdict with the tail the scored outcome. So do readings
+  that miss or add a turned case or a witness that turns one.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 
@@ -525,6 +549,13 @@ untouched:
 
 Each step that needs `docs/` starts with `test -d`, so a missing mount fails
 the step.
+
+The exhibits replay made steps 2 and 3 slower by about 90 s each: step 2
+replays every pool answer with tshark, and step 3 runs the committed-tree
+replay test, which exports the committed tree. On the development host in
+the test image, step 2 took 96 to 100 s at d1716f8 with the replay, against
+7 s at 54c056f, and step 3 took 202 to 218 s for 216 to 232 tests, against
+92.9 s for 189 at 0a1617c.
 
 The web job runs the composite action. It builds `out/` through the
 Dockerfile, then runs typecheck, lint and the Playwright suite on the runner

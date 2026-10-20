@@ -4,7 +4,10 @@ A fixture repository in tmp_path holds a bake-off ranking with five dev runs
 (one with a dotted id), a bake-off ruling, the frame tables and the global
 evidence, each file in the shape the committed ones take. A test that
 registers test runs adds a test-runs/1.0 registry of 16 rows, its note's
-Runs table and the test runs it publishes. A test resolver written apart
+Runs table and the test runs it publishes; a test of the exhibits also
+commits the test pool's answers replayed without the witness tail, derived
+from the fixture's receipts apart from the exporter, and readings for the
+answers the tail turns. A test resolver written apart
 from the exporter re-derives every sourced value from those raw files. The
 tests of the committed tree skip where the test image carries no docs/
 tree; one of them repeats the registered dev Reel check on a copy of the
@@ -20,11 +23,13 @@ from dataclasses import field
 import functools
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import re
 import shutil
 import sys
+import tokenize
 from types import ModuleType
 from typing import Any, cast
 
@@ -3647,6 +3652,462 @@ def test_a_slot_without_a_winner_leaves_the_pool(fixture: Fixture) -> None:
     assert reel["pick"] is None and reel["candidates"]["v"] == 0
 
 
+_CAPTURES = "docs/decisions/evidence/web/captures.json"
+_EXHIBITS = "docs/decisions/evidence/web/exhibits.json"
+_READINGS = "docs/decisions/evidence/web/exhibit-readings.json"
+# What the captures alone accept, so what the tail can turn.
+_ACCEPTED = ("strong_exact", "shortcut")
+
+
+def _replay_of(root: Path) -> Document:
+    """A verifier-exhibits/1.0 replay of the fixture's test pool, written apart.
+
+    dfilterforge.witness_replay runs each answer on the test captures
+    without their tail; tshark reads a capture in one pass, so the frames
+    it selects there are its receipt's cut to the benchmark frames, and so
+    are its labels. Every executed ready answer of the pool is listed, in
+    pool and then row order.
+    """
+    tables = json.loads((root / _CAPTURES).read_text(encoding="utf-8"))
+    probes = [
+        table
+        for table in tables["probes"]
+        if table["probe_id"] in _PROBES["test"]
+    ]
+    last = {table["probe_id"]: table["benchmark_frames"] for table in probes}
+    names = {
+        table["probe_id"]: [frame["name"] for frame in table["frames"]]
+        for table in probes
+    }
+    answers: list[Document] = []
+    for run_id in _POOL_RUNS:
+        scored = f"docs/results/{run_id}/scored"
+        text = (root / scored / "outcomes.jsonl").read_text(encoding="utf-8")
+        for row in map(json.loads, text.splitlines()):
+            if row["gold_status"] != "ready" or row["outcome"] not in (
+                "strong_exact",
+                "shortcut",
+                "silent_wrong",
+            ):
+                continue
+            path = f"{scored}/receipts/{row['condition']}/{row['item_id']}.json"
+            data = (root / path).read_bytes()
+            scored_probes = json.loads(data)["probes"]
+            cut = {
+                key: [
+                    [n for n in probe[key] if n <= last[probe["probe_id"]]]
+                    for probe in scored_probes
+                ]
+                for key in ("expected_frames", "candidate_frames")
+            }
+            if not any(cut["expected_frames"]):
+                alone = "unscorable"
+            elif cut["candidate_frames"] != cut["expected_frames"]:
+                alone = "silent_wrong"
+            else:
+                alone = "shortcut" if row.get("shortcuts") else "strong_exact"
+            answer: Document = {
+                "case_id": row["case_id"],
+                "condition": row["condition"],
+                "item_id": row["item_id"],
+                "receipt": path,
+                "receipt_sha256": hashlib.sha256(data).hexdigest(),
+                "run_id": run_id,
+                "v1": alone,
+                "v2": row["outcome"],
+            }
+            if alone in _ACCEPTED and row["outcome"] == "silent_wrong":
+                answer["witness_frames"] = [
+                    {
+                        "answer_matched": n in probe["candidate_only"],
+                        "n": n,
+                        "probe_id": probe["probe_id"],
+                        "should_match": n in probe["reference_only"],
+                        "witness": names[probe["probe_id"]][n - 1],
+                    }
+                    for probe in scored_probes
+                    for n in sorted(
+                        probe["candidate_only"] + probe["reference_only"]
+                    )
+                ]
+            answers.append(answer)
+    return {
+        "notes": [],
+        "schema_version": "verifier-exhibits/1.0",
+        "sources": {
+            "hosted_test": {
+                "answers": answers,
+                "probes": [
+                    {
+                        "probe_id": table["probe_id"],
+                        "v1_capture_sha256": _digest(f"{table['probe_id']} v1"),
+                        "v1_frames": table["benchmark_frames"],
+                        "v2_capture_sha256": table["capture_sha256"],
+                        "v2_frames": len(table["frames"]),
+                    }
+                    for table in probes
+                ],
+                "runs": list(_POOL_RUNS),
+                "unscorable_cases": sorted(
+                    {
+                        answer["case_id"]
+                        for answer in answers
+                        if answer["v1"] == "unscorable"
+                    }
+                ),
+            }
+        },
+    }
+
+
+def _readings_of(replay: Document) -> Document:
+    """Readings for every case and witness of the replay's turned answers.
+
+    Each case's first turned answer gets an addendum.
+    """
+    turned = [
+        answer
+        for answer in replay["sources"]["hosted_test"]["answers"]
+        if "witness_frames" in answer
+    ]
+    cases = sorted({answer["case_id"] for answer in turned})
+    witnesses = sorted(
+        {
+            frame["witness"]
+            for answer in turned
+            for frame in answer["witness_frames"]
+        }
+    )
+    return {
+        "cases": [
+            {
+                "addenda": [
+                    {
+                        "answers": [
+                            {
+                                key: answer[key]
+                                for key in ("condition", "item_id", "run_id")
+                            }
+                            for answer in turned
+                            if answer["case_id"] == case_id
+                        ][:1],
+                        "text": f"Why the first answer to {case_id} turns.",
+                    }
+                ],
+                "case_id": case_id,
+                "reading": f"Why {case_id} turns.",
+            }
+            for case_id in cases
+        ],
+        "notes": ["Written once the answers were known."],
+        "schema_version": "exhibit-readings/1.0",
+        "witness_notes": [
+            {"note": f"What {witness} separates.", "witnesses": [witness]}
+            for witness in witnesses
+        ],
+    }
+
+
+def _commit_replay(root: Path) -> None:
+    replay = _replay_of(root)
+    _write(root / _EXHIBITS, replay)
+    _write(root / _READINGS, _readings_of(replay))
+
+
+def _with_replay(fixture: Fixture) -> Path:
+    """The test phase with a committed replay and its readings.
+
+    Pass A's C4 i-1002 selects the labelled frames on every benchmark frame
+    and misses witness frame 5 of the third probe, so the tail turns it;
+    the small winner's C4 i-1001 is wrong on the benchmark frames too.
+    """
+    _register(fixture, _registration(), *(run for _, run in _PLANNED))
+    fixture.answers[(_PASS_A, "C4", "i-1002")] = _wrong((2, 3), (1,), (4,))
+    fixture.answers[(_TEST_SMALL, "C4", "i-1001")] = _wrong((2,), (1,), (4, 5))
+    root = fixture.build()
+    _commit_replay(root)
+    return root
+
+
+def _exhibits(root: Path) -> Document:
+    return json.loads(exporter.export(root, "abc1234")["exhibits.json"])
+
+
+def test_the_replay_is_null_outside_the_test_phase_or_without_its_file(
+    fixture: Fixture,
+) -> None:
+    root = _with_replay(fixture)
+    before = _exhibits(root)["replay"]
+
+    (root / _EXHIBITS).unlink()
+    unreplayed = _exhibits(root)
+    _commit_replay(root)
+    (root / f"docs/results/{_TEST_FRONT}/scored/summary.json").unlink()
+    unsettled = _exhibits(root)
+
+    assert before is not None
+    assert unreplayed == {"schema": "web-exhibits/1.0", "replay": None}
+    # The replay is of test runs, which the site shows only in the test
+    # phase.
+    assert unsettled == unreplayed
+
+
+def test_the_replay_counts_every_pool_answer_and_shows_the_turned_one(
+    fixture: Fixture,
+) -> None:
+    root = _with_replay(fixture)
+
+    document = _exhibits(root)
+
+    replay = document["replay"]
+    counts = {key: node["v"] for key, node in replay["counts"].items()}
+    assert counts == {
+        "answers": 32,
+        "exhibits": 1,
+        "killing_witnesses": 1,
+        "probes": 3,
+        "runs": 4,
+        "tail_frames": _FRAMES - _BENCHMARK,
+        "tail_only": 0,
+    }
+    assert {key: node["v"] for key, node in replay["alone"].items()} == {
+        "shortcut": 0,
+        "silent_wrong": 1,
+        "strong_exact": 31,
+        "unscorable": 0,
+    }
+    assert {key: node["v"] for key, node in replay["tail"].items()} == {
+        "shortcut": 0,
+        "silent_wrong": 2,
+        "strong_exact": 30,
+    }
+    assert replay["turned"]["src"] == [
+        "count",
+        _EXHIBITS,
+        "/sources/hosted_test/answers",
+        {"v1": ["strong_exact", "shortcut"], "v2": ["silent_wrong"]},
+    ]
+    assert replay["turned"]["v"] == 1
+    # One row per pool pass, one square per answer; only the turned one
+    # opens an exhibit.
+    rows = replay["rows"]
+    assert [row["run_id"]["t"] for row in rows] == list(_POOL_RUNS)
+    assert [len(row["squares"]) for row in rows] == [8, 8, 8, 8]
+    assert [
+        (square["item_id"]["t"], square["condition"]["t"], square["turned"])
+        for row in rows
+        for square in row["squares"]
+        if square["turned"] is not None
+    ] == [("i-1002", "C4", {"exhibit": 0, "answer": 0})]
+    assert rows[0]["turned"]["v"] == 1 and rows[1]["turned"]["v"] == 0
+    (exhibit,) = replay["exhibits"]
+    assert exhibit["case"] == "case-t" and exhibit["turned"]["v"] == 1
+    assert exhibit["reading"]["t"] == "Why case-t turns."
+    assert [name["t"] for name in exhibit["witnesses"]] == ["recipe-5"]
+    assert [
+        ([name["t"] for name in note["witnesses"]], note["note"]["t"])
+        for note in exhibit["notes"]
+    ] == [(["recipe-5"], "What recipe-5 separates.")]
+    (answer,) = exhibit["answers"]
+    assert answer["request"]["t"] == "Request for i-1002."
+    assert answer["filter"]["t"] == "filter for i-1002"
+    assert (answer["alone"]["t"], answer["tail"]["t"]) == (
+        "strong_exact",
+        "silent_wrong",
+    )
+    assert answer["addendum"]["t"] == "Why the first answer to case-t turns."
+    assert answer["receipt"] == (
+        f"docs/results/{_PASS_A}/scored/receipts/C4/i-1002.json"
+    )
+    assert [
+        (probe["disagreeing"]["v"], probe["states"])
+        for probe in answer["probes"]
+    ] == [
+        (0, ["tn", "tp", "tp", "tn", "tn", "tn"]),
+        (0, ["tp", "tn", "tn", "tn", "tn", "tn"]),
+        (1, ["tn", "tn", "tn", "tp", "fn", "tn"]),
+    ]
+    assert len(replay["probes"][0]["frame_rows"]) == _FRAMES
+    assert replay["tail_only"]["cases"] == []
+    assert check_sources(root, {"exhibits.json": document}) > 300
+
+
+def test_a_case_whose_labels_are_all_in_the_tail_is_never_passed(
+    fixture: Fixture,
+) -> None:
+    _register(fixture, _registration(), *(run for _, run in _PLANNED))
+    root = fixture.build()
+
+    def tail_only(value: Document) -> None:
+        for table in value["probes"]:
+            if table["split"] == "test":
+                table["benchmark_frames"] = 0
+                for frame in table["frames"]:
+                    frame["kind"] = "witness"
+
+    # Every test frame is a witness frame, so no benchmark frame is labelled
+    # and the captures alone cannot score the case.
+    _edit(root / _CAPTURES, tail_only)
+    _commit_replay(root)
+    document = _exhibits(root)
+
+    replay = document["replay"]
+    assert replay["alone"]["unscorable"]["v"] == 32
+    assert replay["alone"]["strong_exact"]["v"] == 0
+    assert replay["exhibits"] == [] and replay["turned"]["v"] == 0
+    (case,) = replay["tail_only"]["cases"]
+    assert (case["case"], case["answers"]["v"]) == ("case-t", 32)
+    assert case["tail"]["strong_exact"]["v"] == 32
+    assert case["intent"]["t"] == "Show the gold request."
+    assert [
+        [label["name"]["t"] for label in probe["expected"]]
+        for probe in case["probes"]
+    ] == [["recipe-2", "recipe-3"], ["recipe-1"], ["recipe-4", "recipe-5"]]
+    check_sources(root, {"exhibits.json": document})
+
+
+@pytest.mark.parametrize("change", ["pass_b", "reordered", "dropped"])
+def test_a_replay_of_another_pool_stops_the_export(
+    fixture: Fixture, change: str
+) -> None:
+    root = _with_replay(fixture)
+    runs = list(_POOL_RUNS)
+    if change == "pass_b":
+        # Pass B is never pooled.
+        runs[0] = _PASS_B
+    elif change == "reordered":
+        runs.reverse()
+    else:
+        runs.pop()
+    _edit(
+        root / _EXHIBITS,
+        lambda value: value["sources"]["hosted_test"].update(runs=runs),
+    )
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == "exhibits_inconsistent"
+    assert "Reel's test pool" in str(caught.value)
+
+
+def _answers(replay: Document) -> list[Document]:
+    return replay["sources"]["hosted_test"]["answers"]
+
+
+def _exact(replay: Document) -> Document:
+    """The first answer the tail leaves exact."""
+    return next(
+        answer for answer in _answers(replay) if answer["v2"] == "strong_exact"
+    )
+
+
+def _turned(replay: Document) -> Document:
+    return next(
+        answer for answer in _answers(replay) if "witness_frames" in answer
+    )
+
+
+def _alone_flipped(replay: Document, _: Document) -> None:
+    _exact(replay)["v1"] = "silent_wrong"
+
+
+def _tail_flipped(replay: Document, _: Document) -> None:
+    _exact(replay)["v2"] = "silent_wrong"
+
+
+def _other_bytes(replay: Document, _: Document) -> None:
+    _exact(replay)["receipt_sha256"] = "0" * 64
+
+
+def _answer_left_out(replay: Document, _: Document) -> None:
+    _answers(replay).remove(_exact(replay))
+
+
+def _answer_twice(replay: Document, _: Document) -> None:
+    _answers(replay).append(_exact(replay))
+
+
+def _frames_dropped(replay: Document, _: Document) -> None:
+    _turned(replay)["witness_frames"] = []
+
+
+def _frames_on_exact(replay: Document, _: Document) -> None:
+    _exact(replay)["witness_frames"] = []
+
+
+def _benchmark_moved(replay: Document, _: Document) -> None:
+    replay["sources"]["hosted_test"]["probes"][0]["v1_frames"] -= 1
+
+
+def _unscorable_named(replay: Document, _: Document) -> None:
+    replay["sources"]["hosted_test"]["unscorable_cases"] = ["case-t"]
+
+
+def _case_unread(_: Document, readings: Document) -> None:
+    readings["cases"] = []
+
+
+def _witness_unnoted(_: Document, readings: Document) -> None:
+    readings["witness_notes"] = []
+
+
+def _witness_noted_twice(_: Document, readings: Document) -> None:
+    readings["witness_notes"].append(readings["witness_notes"][0])
+
+
+def _addendum_on_exact(replay: Document, readings: Document) -> None:
+    readings["cases"][0]["addenda"][0]["answers"] = [
+        {key: _exact(replay)[key] for key in ("condition", "item_id", "run_id")}
+    ]
+
+
+def _replay_schema(replay: Document, _: Document) -> None:
+    replay["schema_version"] = "verifier-exhibits/2.0"
+
+
+def _readings_schema(_: Document, readings: Document) -> None:
+    readings["schema_version"] = "exhibit-readings/2.0"
+
+
+@pytest.mark.parametrize(
+    ("damage", "code"),
+    [
+        (_alone_flipped, "exhibits_inconsistent"),
+        (_tail_flipped, "exhibits_inconsistent"),
+        (_other_bytes, "exhibits_inconsistent"),
+        (_answer_left_out, "exhibits_inconsistent"),
+        (_answer_twice, "exhibits_inconsistent"),
+        (_frames_dropped, "exhibits_inconsistent"),
+        (_frames_on_exact, "exhibits_inconsistent"),
+        (_benchmark_moved, "exhibits_inconsistent"),
+        (_unscorable_named, "exhibits_inconsistent"),
+        (_case_unread, "exhibits_inconsistent"),
+        (_witness_unnoted, "exhibits_inconsistent"),
+        (_witness_noted_twice, "exhibits_inconsistent"),
+        (_addendum_on_exact, "exhibits_inconsistent"),
+        (_replay_schema, "schema_invalid"),
+        (_readings_schema, "schema_invalid"),
+    ],
+)
+def test_a_replay_or_reading_off_the_scored_files_stops_the_export(
+    fixture: Fixture,
+    damage: Callable[[Document, Document], None],
+    code: str,
+) -> None:
+    root = _with_replay(fixture)
+    exporter.export(root, "abc1234")
+    replay = json.loads((root / _EXHIBITS).read_text(encoding="utf-8"))
+    readings = json.loads((root / _READINGS).read_text(encoding="utf-8"))
+
+    damage(replay, readings)
+    _write(root / _EXHIBITS, replay)
+    _write(root / _READINGS, readings)
+
+    with pytest.raises(exporter.ExportError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == code
+
+
 _HAS_DOCS = (_ROOT / "docs" / "results").is_dir()
 
 
@@ -3833,6 +4294,204 @@ def test_the_committed_tree_exports_the_analyses() -> None:
     assert check_sources(
         _ROOT, {"analysis.json": documents["analysis.json"]}
     ) > (2000)
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_replays_the_pool_without_the_tail() -> None:
+    document = _documents(_committed())["exhibits.json"]
+    replay = document["replay"]
+    qwen32, qwen9 = "test-qwen3-32b-2026-09-26", "test-qwen3.5-9b-2026-09-26"
+    deepseek = "test-deepseek-v4-pro-0813-2026-09-26"
+
+    # The page's headline: without the witness packets the verifier passes
+    # 731 of the 971 answers as exact, and the tail finds 11 of them wrong.
+    assert replay["counts"]["answers"]["v"] == 971
+    assert {key: node["v"] for key, node in replay["alone"].items()} == {
+        "strong_exact": 731,
+        "shortcut": 3,
+        "silent_wrong": 135,
+        "unscorable": 102,
+    }
+    assert {key: node["v"] for key, node in replay["tail"].items()} == {
+        "strong_exact": 804,
+        "shortcut": 2,
+        "silent_wrong": 165,
+    }
+    assert [
+        replay[key]["v"]
+        for key in ("turned", "turned_exact", "turned_shortcut")
+    ] == [12, 11, 1]
+    assert [
+        replay["counts"][key]["v"]
+        for key in ("tail_frames", "exhibits", "killing_witnesses", "tail_only")
+    ] == [33, 6, 10, 4]
+    # Per pass: answers, exact alone, of those wrong with the tail,
+    # shortcuts alone and answers only the tail can score.
+    assert [
+        (
+            row["run_id"]["t"],
+            row["answers"]["v"],
+            row["alone"]["strong_exact"]["v"],
+            row["turned_exact"]["v"],
+            row["alone"]["shortcut"]["v"],
+            row["alone"]["unscorable"]["v"],
+        )
+        for row in replay["rows"]
+    ] == [
+        (qwen32, 234, 166, 2, 0, 26),
+        (qwen9, 205, 144, 6, 1, 24),
+        ("test-qwen3.5-122b-a10b-2026-09-26", 258, 198, 0, 2, 24),
+        (deepseek, 274, 223, 3, 0, 28),
+    ]
+    # The twelve answers the tail turns, case by case from the most turned.
+    assert [
+        (
+            exhibit["case"],
+            [
+                (
+                    each["run_id"]["t"],
+                    each["condition"]["t"],
+                    each["item_id"]["t"],
+                )
+                for each in exhibit["answers"]
+            ],
+        )
+        for exhibit in replay["exhibits"]
+    ] == [
+        (
+            "tcp-destination-not-https",
+            [
+                (qwen9, "C1", "mei-1031"),
+                (qwen9, "C2", "mei-1031"),
+                (deepseek, "C1", "mei-1031"),
+                (deepseek, "C2", "mei-1031"),
+                (deepseek, "C2", "mei-1032"),
+            ],
+        ),
+        (
+            "ack-outside-testnet",
+            [
+                (qwen9, "C1", "mei-1010"),
+                (qwen9, "C2", "mei-1009"),
+                (qwen9, "C2", "mei-1010"),
+            ],
+        ),
+        ("dns-response-not-nxdomain", [(qwen32, "C1", "mei-1061")]),
+        ("high-udp-source-testnet", [(qwen32, "C2", "mei-1011")]),
+        ("udp-not-from-testnet", [(qwen9, "C4", "mei-1076")]),
+        ("unicast-dns-udp-queries", [(qwen9, "C3", "mei-1066")]),
+    ]
+    # Each of them is a ringed square that opens its exhibit, and only they.
+    assert sorted(
+        (square["turned"]["exhibit"], square["turned"]["answer"])
+        for row in replay["rows"]
+        for square in row["squares"]
+        if square["turned"] is not None
+    ) == [(0, n) for n in range(5)] + [(1, n) for n in range(3)] + [
+        (n, 0) for n in range(2, 6)
+    ]
+    # Witnesses under one comment share one note.
+    assert [
+        [name["t"] for name in note["witnesses"]]
+        for note in replay["exhibits"][4]["notes"]
+    ] == [
+        ["dns-servfail"],
+        ["dns-response-53-to-53", "mdns-response", "dns-response-to-low-port"],
+    ]
+    tail_only = replay["tail_only"]
+    assert [case["case"] for case in tail_only["cases"]] == [
+        "dns-query-off-port-53",
+        "fin-from-https-port",
+        "tcp-from-https-port",
+        "ttl-between",
+    ]
+    assert {key: node["v"] for key, node in tail_only["tail"].items()} == {
+        "strong_exact": 84,
+        "shortcut": 0,
+        "silent_wrong": 18,
+    }
+    assert check_sources(_ROOT, {"exhibits.json": document}) > 7000
+
+
+_WITNESSES = _ROOT / "src" / "dfilterforge" / "witnesses.py"
+
+
+def _witness_comments() -> dict[str, tuple[int, str]]:
+    """Each witness's comment in witnesses.py, as its first line and text.
+
+    The comment above a witness heads its group: a witness without one of
+    its own, such as server-ack-next, shares the one before it. The text is
+    the comment's lines without their marks, joined with single spaces.
+    """
+    source = _WITNESSES.read_text(encoding="utf-8")
+    comments = {
+        token.start[0]: token.string.removeprefix("#").strip()
+        for token in tokenize.generate_tokens(io.StringIO(source).readline)
+        if token.type == tokenize.COMMENT
+    }
+    (table,) = [
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "WITNESSES"
+    ]
+    assert isinstance(table, ast.Tuple)
+    found: dict[str, tuple[int, str]] = {}
+    block = (0, "")
+    after = table.lineno
+    for call in table.elts:
+        assert isinstance(call, ast.Call)
+        name = call.args[0]
+        assert isinstance(name, ast.Constant) and isinstance(name.value, str)
+        lines = [
+            line for line in sorted(comments) if after < line < call.lineno
+        ]
+        if lines:
+            block = (lines[0], " ".join(comments[line] for line in lines))
+        found[name.value] = block
+        after = call.end_lineno or call.lineno
+    return found
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_readings_quote_each_witness_comment_and_read_every_exhibit() -> (
+    None
+):
+    readings = json.loads((_ROOT / _READINGS).read_text(encoding="utf-8"))
+    replay = json.loads((_ROOT / _EXHIBITS).read_text(encoding="utf-8"))
+    turned = [
+        answer for answer in _answers(replay) if "witness_frames" in answer
+    ]
+    killing = {
+        frame["witness"]
+        for answer in turned
+        for frame in answer["witness_frames"]
+    }
+    comments = _witness_comments()
+
+    # Each note is the comment above its witnesses, verbatim with its lines
+    # joined, and the witnesses under one comment share one note.
+    assert sorted(
+        sorted(note["witnesses"]) for note in readings["witness_notes"]
+    ) == sorted(
+        sorted(name for name in killing if comments[name] == block)
+        for block in {comments[name] for name in killing}
+    )
+    for note in readings["witness_notes"]:
+        assert {comments[name][1] for name in note["witnesses"]} == {
+            note["note"]
+        }
+    # Every case the tail turns an answer of has its reading, and no other.
+    assert sorted(case["case_id"] for case in readings["cases"]) == sorted(
+        {answer["case_id"] for answer in turned}
+    )
+    assert all(case["reading"] for case in readings["cases"])
+    assert (len(killing), len(readings["cases"])) == (10, 6)
 
 
 @pytest.mark.skipif(
