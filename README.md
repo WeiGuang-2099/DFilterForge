@@ -88,7 +88,7 @@ Silent-wrong of ran sums C1 to C4 of the [compile validity table](docs/results/l
 ## Status
 
 - **SFT is measured; preference training is next.** The training set, [`data/train/v1`](data/train/v1/manifest.json), holds 1,299 rows (1,088 ready, 211 asking for clarification) whose labels are the frames pinned tshark selects with the gold intent on three train-only probes. No row's canonical filter or train-probe frame set equals a dev or test gold's, and no row shares an 8-word run with a dev or test request ([tests](tests/test_train_split.py)). Each seed's checkpoint is its final epoch, fixed before training, so none was chosen on dev or test ([training rules](docs/protocol.md#training-rules)). Next: verifier-labelled DPO against a continued-SFT control matched on steps and tokens, three seeds each.
-- **Spend so far:** USD 7.25. The 57 hosted model runs, dev and test, charged at most USD 2.38, the sum of `charged_usd_upper_bound` over their `run_manifest.json` files; the [locked test result](docs/results/locked-test-v1.md) itemizes the test phase. Modal billed USD 4.87 for the self-served base model, the three training runs and the adapters' passes ([self-served note](docs/decisions/self-served-runs.md#measured)).
+- **Spend so far:** USD 7.53, summed before rounding. The 57 hosted model runs, dev and test, charged at most USD 2.38, the sum of `charged_usd_upper_bound` over their `run_manifest.json` files; the [locked test result](docs/results/locked-test-v1.md) itemizes the test phase. Modal billed USD 5.16 for the self-served base model, the three training runs, the adapters' passes and seed 2026's test rerun ([self-served note](docs/decisions/self-served-runs.md#measured)).
 
 ## Reproduce
 
@@ -111,7 +111,7 @@ In order: build tshark from source into the no-network lab image, and the test i
 - Rate limiting (HTTP 429) left 20 ready C1 items of deepseek-v4-pro-0813 and 3 ready C4 items of qwen3.5-9b without an answer; they score as failures. deepseek-v4-pro-0813's repair turns were served by NextBit, its first answers by DeepInfra.
 - 21 of the 35 counterexample repairs hold a value their card showed for that field, such as `tcp.dstport` 443 or `ip.ttl` 64, and count as repaired. A copied host address or ephemeral port would score as a shortcut; none did ([limits](docs/results/locked-test-v1.md#limits)).
 - The training set recombines the 38 predicates the dev and test gold uses, so the test can show unseen compositions, not unseen fields, operators or values.
-- The SFT interval resamples the 40 cases with the three adapters fixed. The spread between seeds, 0.338 to 0.475, is shown as three rows rather than folded in, and the self-served model's rerun noise is not measured.
+- The SFT interval resamples the 40 cases with the three adapters fixed. The spread between seeds, 0.338 to 0.475, is shown as three rows rather than folded in, and a second pass of seed 2026 on the same stack, in a later session, changed 33 of its 448 answers and flipped none of the 40 ready C4 cases ([pair report](docs/decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json)).
 - The adapters were trained on C4 prompts only, so their C1 to C3 scores are untrained conditions. Seed 42's dev pass lost 26 C1 answers to a Modal preemption; they score as failures.
 - No CI step checks the locked test page itself, only the files it cites.
 
