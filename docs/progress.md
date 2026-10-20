@@ -1,19 +1,19 @@
 # Implementation Progress
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 ## Current slice
 
-Branch `sft-analysis` (plan slice 3) shows what fine-tuning fixed on test
-C4 and what it did not. `scripts/sft_analysis.py` computes the descriptive
-analyses the protocol registered on 2026-10-18 (transitions, error
-classes, field coverage, proximity to training, copies and unlisted
-fields) into `docs/results/sft-v1/analysis.json`, and CI rebuilds it with
-`--check`. The classes and the strata were defined after seed 2026's test
-scores were known, so every page that shows them labels them post hoc. A
-new page, `/training/analysis/`, opens with where the base model's loud
-failures went under each seed, and `/board` gains a separate band for the
-small model that ranks nothing. No published number changes.
+Plan week R2 runs three slices on three branches. `passb` (plan slice 4)
+sends seed 2026's adapter the frozen test prompts a second time, to
+measure how repeatable the self-served stack is; its registration and its
+seeded results directory are committed before the session. `judge-study`
+(slice 5) asks an LLM judge whether each of the 971 test filters that ran
+is right and compares its verdicts with tshark's, registered before any
+judge request. `exhibits` (slice 6) replays the hosted test answers
+without the witness packets and shows, on a new page, the wrong filters
+that only a witness frame disproves. No published number changes until
+each one's result is committed.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2664,6 +2664,20 @@ links the source, a pasted link unfurls into a 1200 by 630 card of the
 page's top (the training page has its own), and the site has an icon.
 brace-expansion is overridden to the releases that fix its advisories.
 No number changed.
+
+## PR #37 merged: 2026-10-19
+
+PR #37 merged `sft-analysis` into `main` as 22e1659; hosted CI passed on
+main and the Pages deploy serves it. The merge came 7 s after the PR's
+own run started, which it cancelled, so the run on main is the one of
+record. `/training/analysis/` opens with where the base model's 49 loud
+test C4 failures went under each seed: 32 to 35 of them now run, and 17
+to 18 of those are silently wrong. It also shows the registered error
+classes, proximity to training and copies, each labelled post hoc, from
+[`analysis.json`](results/sft-v1/analysis.json), which
+`scripts/sft_analysis.py` writes and CI rebuilds with `--check`. `/board`
+gained a separate band for the small model that ranks nothing. No
+published number changed.
 
 ## Planned next
 

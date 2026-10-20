@@ -131,6 +131,52 @@ An outage re-run adds `-r2` after the tag, before the date
   rows' C1 to C3 are marked untrained conditions and C4 is reported split by
   field coverage (protocol, Training rules).
 
+## Seed 2026's test pass, sent twice
+
+Added 2026-10-20, before its request. Seed 2026's adapter answers the
+frozen test prompts a second time, so the repeatability of this stack is
+measured once. When this was written every self-served row had been
+scored, seed 2026's first test pass included (C4 strong exact 0.475); the
+second pass changes no row, score, headline estimate or analysis.
+
+- Run: `test-qwen3-1.7b-sft-s2026-passb-2026-10-07`, `model_id`
+  `qwen3-1.7b-sft-s2026`, on the prepare `test-qwen3-1.7b-2026-10-07` in
+  all four conditions (448 items), with the first pass's config, settings,
+  endpoint host, call options and 0.10 cap, on the stack above. Its
+  results directory is seeded with the prepare's files and committed with
+  this text.
+- Why seed 2026: its first test pass is the only adapter test pass that
+  ran as one invocation with every item settled on its first attempt
+  (2026-10-08, 10:28 to 10:45 UTC).
+- Reading: `dfilterforge pair`, first pass first, reads the two passes as
+  the hosted A/A pair is read: per condition, changed answers, changed
+  outcomes, outcome transitions and flipped cases (ready cases whose
+  strong-exact case mean differs). Its output is committed as
+  `docs/decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json`,
+  and a CI test rebuilds it byte for byte. Pages quote the answers changed
+  over all 448 items and the C4 cases flipped over the 40 ready cases, C4
+  being the condition the adapter was trained on; the other conditions'
+  counts stay in the report. The condition comparisons the report also
+  prints are not read, as C4 against C2 is not read for adapters.
+- Scope: the second pass is not a row. It is never pooled with the first,
+  never scored into the headline or the analyses, never repaired, and it
+  sets no noise bound for later training. The hosted A/A's 24-hour rule
+  does not apply: the first pass ran on a container that had just answered
+  seed 2026's dev pass, and the second starts cold, weeks later, so the
+  pair measures whether the same image, adapter and greedy decoding give
+  the same answers across sessions.
+- Rules: every reply must carry the fingerprint `vllm-0.21.0-84f508c7`,
+  and the deploy must reuse the image of 2026-10-08; a pass that breaks
+  either is reported as such and not read as repeatability. Items left
+  pending by transient failures are resumed with `--resume` under the
+  rules above. A pass whose host changed, or that ends with no completed
+  answer, is re-run once as
+  `test-qwen3-1.7b-sft-s2026-passb-r2-2026-10-07`; if that fails too, the
+  rerun is reported not run and its seeded directory is removed in the
+  same commit.
+- Expectation, not a claim: greedy decoding on an unchanged stack should
+  change few answers or none. The counts are published as measured.
+
 ## Measured
 
 Each pass and each training run below ran on 2026-10-08, except the last
