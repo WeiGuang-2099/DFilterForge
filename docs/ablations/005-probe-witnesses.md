@@ -192,3 +192,9 @@ Ablation 004's raw-filter evidence pins the semantic-11/17/23 hashes from
 before the tail and is not reproducible from current code.
 Addendum 2026-09-24: two operator families and two witness packets were added
 ([DNS and FIN correction](../decisions/dns-off-port-and-fin-ack.md)).
+Addendum 2026-10-20: replayed on the three test captures without the tail, 731
+of the Reel pool's 971 executed test answers are strong exact, 11 of them
+silent-wrong with the tail, and 102 answers to four cases that label only
+witness frames cannot be scored without it
+([replay](../decisions/evidence/web/exhibits.json),
+[page](https://weiguang-2099.github.io/DFilterForge/exhibits/)).
