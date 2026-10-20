@@ -1,19 +1,23 @@
 # Implementation Progress
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 ## Current slice
 
 Plan week R2 runs three slices on three branches. `passb` (plan slice 4)
-sends seed 2026's adapter the frozen test prompts a second time, to
-measure how repeatable the self-served stack is; its registration and its
-seeded results directory are committed before the session. `judge-study`
-(slice 5) asks an LLM judge whether each of the 971 test filters that ran
-is right and compares its verdicts with tshark's, registered before any
-judge request. `exhibits` (slice 6) replays the hosted test answers
-without the witness packets and shows, on a new page, the wrong filters
-that only a witness frame disproves. No published number changes until
-each one's result is committed.
+is measured: sent the frozen test prompts a second time on 2026-10-20,
+seed 2026's adapter changed 33 of its 448 answers and flipped none of the
+40 ready C4 cases ([pair
+report](decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json));
+its result PR points the headline and the training pages to that report.
+`judge-study` (slice 5) asks an LLM judge whether each of the 971 test
+filters that ran is right and compares its verdicts with tshark's; its
+runner merged in PR #40, and its dev check, sent on 2026-10-20, showed a
+defect that a correction in the judge note fixes before any test
+request. `exhibits` (slice 6), in progress on `exhibits`, replays the
+hosted test answers without the witness packets and shows, on a new
+page, the wrong filters that only a witness frame disproves. No other
+published number changes until each one's result is committed.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2679,6 +2683,28 @@ classes, proximity to training and copies, each labelled post hoc, from
 gained a separate band for the small model that ranks nothing. No
 published number changed.
 
+## PR #38 merged: 2026-10-20
+
+PR #38 merged `passb` into `main` as 1fb7884: seed 2026's test rerun,
+registered before its request in the [self-served
+note](decisions/self-served-runs.md) and a `docs/protocol.md` amendment,
+with its seeded results directory and the runbook's lines in
+`docs/usage.md`.
+
+## PR #39 merged: 2026-10-20
+
+PR #39 merged `judge-study` into `main` as ed4851a: the LLM judge study,
+registered before any judge request in the [judge
+note](decisions/judge-study.md) and the protocol's Judge study section,
+with its configs and endpoint listing in `decisions/evidence/judge/`.
+
+## PR #40 merged: 2026-10-20
+
+PR #40 merged `judge-study` into `main` as 65d15e0: the judge study's
+owner runner, `scripts/judge_study.py`, the socket-free module that
+builds its requests and counts its verdicts, `src/dfilterforge/judge.py`,
+their tests and the judge note's first correction (J7's cap ratio).
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2701,7 +2727,8 @@ where an item says it is the maintainer's order.
    admitted prompt sets and the runbook (PRs #28 and #29). Done: the
    base row (PR #30, test C4 strong exact 0.063) and the three SFT
    seeds' dev and test passes (PR #35, test C4 mean 0.396), for USD
-   4.87 of Modal time in all.
+   4.87 of Modal time; seed 2026's test rerun (registered in PR #38)
+   brought Modal's total to USD 5.16.
 4. Done: the training data and QLoRA-SFT, three seeds. Next:
    verifier-labelled DPO and a continued-SFT control, three seeds each,
    and the GRPO gate measured, all registered before any sampling.
@@ -2714,8 +2741,10 @@ where an item says it is the maintainer's order.
   partial measurements are not release evidence.
 - Dev has 12 ready cases, so every dev comparison is inconclusive. The test
   repair round is measured, but 9 of its 12 per-model comparisons are
-  inconclusive. DPO and GRPO are unmeasured, and so is the self-served
-  model's rerun noise.
+  inconclusive. DPO and GRPO are unmeasured. The self-served model's
+  rerun was measured once, on seed 2026's test pass, and sets no noise
+  bound ([pair
+  report](decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json)).
 - The A/A noise bound is measured on qwen/qwen3-32b only; the locked test
   page applies it to the other three models as a named extrapolation.
 - Only the baseline half of `docs/results/locked-test-v1.md` was generated,
@@ -2732,14 +2761,14 @@ where an item says it is the maintainer's order.
   withholding against a stub child.
 - The repair tooling records only gate stops as not run; no further round
   is planned, so the gap stays unfixed.
-- The Modal glue ran on 2026-10-08 and 2026-10-18: the base row's dev
-  and test passes, three SFT seeds and the six adapter passes, with every
-  bill in the [self-served note](decisions/self-served-runs.md)
-  (Measured); `docs/usage.md` keeps the estimates. Not observed: a
-  request without the token, which should get 401, and scale to zero,
-  since each session was stopped by hand. `tests/test_modal_glue.py`
-  checks only the glue's plain functions and constants, the server's
-  flags and the call config.
+- The Modal glue ran on 2026-10-08, 2026-10-18 and 2026-10-20: the base
+  row's dev and test passes, three SFT seeds, the six adapter passes and
+  seed 2026's test rerun, with every bill in the [self-served
+  note](decisions/self-served-runs.md) (Measured); `docs/usage.md` keeps
+  the estimates. Not observed: a request without the token, which should
+  get 401, and scale to zero, since each session was stopped by hand.
+  `tests/test_modal_glue.py` checks only the glue's plain functions and
+  constants, the server's flags and the call config.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 
