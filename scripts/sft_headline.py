@@ -10,8 +10,9 @@ a denominator of 1 per case, ``ratio_rate`` is the scorer's case mean, so
 every row's C4 rate must equal its own ``summary.json``.
 
 ``--check`` rebuilds ``docs/results/sft-v1/headline.json`` and compares it
-byte for byte. Exit 0 on success, 1 on a mismatch, 2 when a run is not
-scored, a summary disagrees or the rows answer different items.
+byte for byte. Exit 0 on success, 1 on a mismatch, 2 when the pair report
+is missing, a run is not scored, a summary disagrees or the rows answer
+different items.
 """
 
 from __future__ import annotations
@@ -48,6 +49,9 @@ SEEDS: dict[int, str] = {
     42: "test-qwen3-1.7b-sft-s42-2026-10-07",
     2026: "test-qwen3-1.7b-sft-s2026-2026-10-07",
 }
+# The pair report of seed 2026's two test passes, by its repository path:
+# the headline points to it (protocol, Training rules, amended 2026-10-20).
+RERUN_REPORT = f"docs/decisions/evidence/aa-{SEEDS[2026]}.json"
 # The hosted test rows in the protocol's pool order: the three slot
 # winners, then qwen/qwen3-32b by its A/A pass A.
 HOSTED: tuple[str, ...] = (
@@ -223,9 +227,12 @@ def build(results: Path) -> dict[str, Any]:
     """Computes the headline from the committed scores under ``results``.
 
     Raises:
-        DFilterForgeError: A run is not scored, its summary reports another
-            C4 rate, or the rows answer different items.
+        DFilterForgeError: The pair report is missing, a run is not scored,
+            its summary reports another C4 rate, or the rows answer
+            different items.
     """
+    if not (results.resolve().parents[1] / RERUN_REPORT).is_file():
+        raise DFilterForgeError("rerun_report_missing", RERUN_REPORT)
     runs = (BASE, *SEEDS.values(), *HOSTED)
     scored = {run: _scored(results, run) for run in runs}
     rows = {run: items for run, (items, _) in scored.items()}
@@ -264,7 +271,7 @@ def build(results: Path) -> dict[str, Any]:
             }
             for run in HOSTED
         ],
-        "self_served_rerun_noise": "not_measured",
+        "self_served_rerun_noise": RERUN_REPORT,
         "sources": {
             run: file_sha256(results / run / "scored" / "outcomes.jsonl")
             for run in runs
