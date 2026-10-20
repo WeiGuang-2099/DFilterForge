@@ -263,3 +263,16 @@ names avoid `prepare.json`, `prepared/`, `scored/` and
   rejects is a disagreement, not a proven judge error.
 - The counts are over answers, not cases: a filter several models wrote
   weighs as often as it was written.
+
+## Corrections
+
+- 2026-10-20, before any judge request. J7 called both caps above three
+  times the expected spend. By this note's own estimates they are about
+  2.2 and 2.3 times it (0.40 USD against 0.18, 1.50 USD against 0.64), and
+  the runner's dry runs price the dev check at 0.167 USD and the test
+  study at 0.639 USD. The caps stand: each still funds twice the expected
+  spend plus the dearest request. Two rules the text left open are fixed
+  with the runner: a call ends, its requests pending, after three timeouts
+  or transport errors in a row, since the charge counts each at its whole
+  bound and an outage would otherwise use up the cap without a reply; and
+  a reply that gives a key twice gives no verdict.
