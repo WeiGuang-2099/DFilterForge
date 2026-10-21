@@ -277,7 +277,10 @@ The names avoid `prepare.json`, `prepared/`, `scored/` and
   was read for their wording, and are fixed before the dev check. They
   were revised once, after the judge-v1 dev check and for the reply's
   format alone, so the judge now gives its verdict before any rationale,
-  with thinking off.
+  with thinking off. Read in full, the judge-v2 dev check shows the cost:
+  6 of its 282 replies, all in the primary mode, open with "incorrect"
+  and end with a reason that calls the filter correct, 2 of them on
+  silent-wrong answers. The verdict a reply opens with is what counts.
 - On C3 and C4 the judge sees the compiled filter, not the model's IR.
 - Strong exact holds on three probes, so a strong-exact filter the judge
   rejects is a disagreement, not a proven judge error.
