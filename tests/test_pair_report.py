@@ -1,9 +1,11 @@
 """A pair of scored passes: changed answers, transitions and flipped cases.
 
 The fixture is two published, scored two-condition passes whose every
-number below was counted by hand from the tables in this file; the last
-test reads the two committed dev passes that share their C1 and C2 prompts
-and checks the repeat the typed-IR prompt v2 note reports.
+number below was counted by hand from the tables in this file. The last
+three tests read committed passes: the two dev passes that share their C1
+and C2 prompts, checked against the repeat the typed-IR prompt v2 note
+reports, then the hosted test A/A pair and seed 2026's adapter pair, each
+checked byte for byte against its committed evidence.
 """
 
 from datetime import datetime
@@ -746,3 +748,39 @@ def test_the_committed_test_a_a_pair_is_the_report_its_evidence_keeps() -> None:
         ("C2", "C1", True, True, False),
         ("C4", "C3", False, False, False),
     ]
+
+
+def test_the_committed_adapter_pair_is_the_report_its_evidence_keeps() -> None:
+    """Seed 2026's two test passes, derived again from their committed scores.
+
+    The self-served note registers the pair: seed 2026's adapter answered
+    the frozen test prompts a second time on the same stack, and the report
+    of the two passes, first pass first, is committed as the evidence the
+    training pages and the README quote. It must equal the report derived
+    from the committed scored outcomes byte for byte. The counts below are
+    the ones they quote: 33 of the 448 answers changed, and none of the 40
+    ready C4 cases flipped; the other conditions' counts stay in the report.
+
+    Like the pairs above, it skips only when the whole results tree is
+    absent, and CI runs it in the step that mounts docs/.
+    """
+    if not _RESULTS.is_dir():
+        pytest.skip("the test image carries no docs/ tree")
+    report = pair_runs(
+        _RESULTS / "test-qwen3-1.7b-sft-s2026-2026-10-07",
+        _RESULTS / "test-qwen3-1.7b-sft-s2026-passb-2026-10-07",
+    )
+    evidence = _EVIDENCE / "aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json"
+
+    assert f"{canonical_json(report)}\n".encode() == evidence.read_bytes()
+    assert report.settings_identical is True
+    assert all(item.prompts_identical for item in report.conditions)
+    changed = [item.changed_answers for item in report.conditions]
+    assert changed == [11, 6, 11, 5]
+    assert (sum(changed), sum(item.items for item in report.conditions)) == (
+        33,
+        448,
+    )
+    assert [item.flipped_cases for item in report.conditions] == [3, 3, 3, 0]
+    trained = report.conditions[-1]
+    assert (trained.condition, trained.ready_cases) == ("C4", 40)

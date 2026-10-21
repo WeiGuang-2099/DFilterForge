@@ -37,6 +37,27 @@ const ROW = object({
   conditions: array(object({label: strNode, strong_exact: numNode, provider_failed: numNode})),
 });
 
+/**
+ * Seed 2026's test pass sent again, from the pair report the headline names:
+ * the report's path, the seed and the two run ids, the answers changed over
+ * every condition, and the trained condition's changed answers and flipped
+ * ready cases. The analysis page reads the same block.
+ */
+export const RERUN = object({
+  report: strNode,
+  seed: numNode,
+  first_run: strNode,
+  second_run: strNode,
+  changed_answers: numNode,
+  items: numNode,
+  trained: object({
+    condition: strNode,
+    changed_answers: numNode,
+    flipped_cases: numNode,
+    ready_cases: numNode,
+  }),
+});
+
 const TRAINING = object({
   schema: literal('web-training/1.0'),
   headline: nullable(
@@ -49,7 +70,7 @@ const TRAINING = object({
       ...LADDER,
       coverage: array(object({stratum: text, items: numNode, ...LADDER})),
       hosted: array(object({model_id: strNode, rate: INTERVAL, ...PAIRED})),
-      rerun_noise: strNode,
+      rerun_noise: RERUN,
       cases_detail: array(object({case_id: strNode, base: numNode, seeds: array(numNode)})),
       test: array(ROW),
       dev: array(ROW),

@@ -177,18 +177,38 @@ second pass changes no row, score, headline estimate or analysis.
 - Expectation, not a claim: greedy decoding on an unchanged stack should
   change few answers or none. The counts are published as measured.
 
+Result, 2026-10-20. The registration was pushed first: GitHub records the
+branch `passb` created at 08:51:44 UTC, and PR #38 merged it into `main`
+at 08:55:11 UTC. The pass ran from 11:03:49 to 11:19:46 UTC as one
+invocation at source revision c9dddb8, each of its 448 requests settled on
+its first attempt, and every reply carries the fingerprint
+`vllm-0.21.0-84f508c7`. The session's script would have stopped on an
+image build, and none happened, so the deploy reused the image of
+2026-10-08. Prompts and settings were identical in every condition. The
+second pass changed 33 of the 448 answers, and none of the 40 ready C4
+cases flipped. The report,
+[`evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json`](evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json),
+holds the other conditions' counts, the outcome transitions, the items
+whose outcome changed and the flipped cases. Greedy decoding on this
+stack does not repeat itself exactly across sessions; for contrast, the
+hosted A/A pair changed 39 to 46 of 112 answers per condition.
+
 ## Measured
 
-Each pass and each training run below ran on 2026-10-08, except the last
-adapter session, on 2026-10-18; every pass records source revision
-e1f61bd. Costs are each Modal app's bill, from deploy or start to stop,
+Each pass and each training run below ran on 2026-10-08, except adapter
+sessions 3 and 4, on 2026-10-18 and 2026-10-20; every pass records source
+revision e1f61bd, except seed 2026's rerun in session 4, which records
+c9dddb8. Costs are each Modal app's bill, from deploy or start to stop,
 read with `modal billing report` (hourly, local time, by resource) on
 2026-10-08 and again on 2026-10-18, whose rows are in
-[`evidence/self-served/modal-billing-2026-10-07-to-18.json`](evidence/self-served/modal-billing-2026-10-07-to-18.json);
+[`evidence/self-served/modal-billing-2026-10-07-to-18.json`](evidence/self-served/modal-billing-2026-10-07-to-18.json),
+and for session 4 on 2026-10-20, in
+[`evidence/self-served/modal-billing-2026-10-20.json`](evidence/self-served/modal-billing-2026-10-20.json);
 the dev total equals the owner's reading of the usage page. The L4 share
 at USD 0.80 an hour gives the GPU time. The estimates in `docs/usage.md`
 put the base row's dev and test passes near USD 1 and the whole plan near
-USD 7; Modal billed USD 4.87 in all, the failed first build included.
+USD 7; Modal billed USD 5.16 in all, the failed first build and the rerun
+included, of which USD 4.87 before the rerun.
 
 | Run | Work | Total, USD | L4, USD (about) |
 | --- | --- | ---: | ---: |
@@ -200,9 +220,11 @@ USD 7; Modal billed USD 4.87 in all, the failed first build included.
 | Adapter session 1, 2026-10-08 | Seed 2026's dev and test passes, each item settled on its first attempt; the first passes of dev s17 (160 HTTP 503s) and dev s42 (134 answers, 26 HTTP 503s) | 0.63 | 0.59 (44 min) |
 | Adapter session 2, 2026-10-08 | dev s17 resumed (160 answers); test s17 (292 answers, then 154 HTTP 503s and 2 HTTP 502s); dev s42's two resumes (26 HTTP 503s each); test s42 (234 answers, 214 HTTP 503s) | 0.63 | 0.58 (44 min) |
 | Adapter session 3, 2026-10-18 | test s17 (156 answers) and test s42 (214) resumed, each on its first attempt | 0.26 | 0.24 (18 min) |
+| Adapter session 4, 2026-10-20 | Seed 2026's test rerun: 448 requests, each settled on its first attempt | 0.29 | 0.27 (20 min) |
 
-The adapter passes needed three sessions. In the first, dev s17's first
-pass found the server down and got 503 for every item. In the
+The adapter passes needed three sessions, and seed 2026's rerun a
+fourth. In the first, dev s17's first pass found the server down and got
+503 for every item. In the
 second, Modal preempted the container at 21:44:09 local time, during test
 s17; the replacement stopped 11 s after it came up at 21:51:48, and the
 next was ready at 21:58:33. Every request in those gaps got 503 or 502,
@@ -213,8 +235,9 @@ from the University of Adelaide network sent nothing: the network reset
 every TLS connection to `*.modal.direct`, no container started and
 nothing was billed. The third session ran from another network, and
 each call under a watchdog that would have stopped it at its first
-failed answer. All 1,798 adapter answers, 608 of seed 2026's and 1,190 of
-seeds 17 and 42, carry the fingerprint `vllm-0.21.0-84f508c7`.
+failed answer. The fourth sent the rerun in one invocation, every item
+on its first attempt. All 2,246 adapter answers, 1,056 of seed 2026's and
+1,190 of seeds 17 and 42, carry the fingerprint `vllm-0.21.0-84f508c7`.
 
 The first deploy from Windows failed in the image build until
 `modal/serve_vllm.py` wrote its container paths as POSIX (PR #29); that

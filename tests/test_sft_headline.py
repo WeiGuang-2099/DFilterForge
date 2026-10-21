@@ -82,14 +82,22 @@ def _both(cases: range) -> set[tuple[int, int]]:
 
 
 def _tree(tmp_path: Path, seeds: dict[int, set[tuple[int, int]]]) -> Path:
-    """Base exact on case 0; hosted rows exact on cases 0 to 5."""
-    _write(tmp_path, headline.BASE, _both(range(1)))
+    """Base exact on case 0; hosted rows exact on cases 0 to 5.
+
+    The results directory sits under docs/, beside the evidence directory
+    that holds the pair report the headline points to.
+    """
+    results = tmp_path / "docs" / "results"
+    _write(results, headline.BASE, _both(range(1)))
     for seed, run in headline.SEEDS.items():
-        _write(tmp_path, run, seeds[seed])
+        _write(results, run, seeds[seed])
     for run in headline.HOSTED:
-        _write(tmp_path, run, _both(range(6)))
-    (tmp_path / "sft-v1").mkdir()
-    return tmp_path
+        _write(results, run, _both(range(6)))
+    (results / "sft-v1").mkdir()
+    report = tmp_path / headline.RERUN_REPORT
+    report.parent.mkdir(parents=True)
+    report.write_text("{}\n", "utf-8")
+    return results
 
 
 def _same(exact: set[tuple[int, int]]) -> dict[int, set[tuple[int, int]]]:
@@ -202,6 +210,22 @@ def test_a_summary_that_disagrees_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(headline.DFilterForgeError, match="another C4 rate"):
         headline.build(results)
+
+
+def test_the_headline_points_to_the_pair_report_or_is_not_written(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Seed 2026's rerun is named by its report, which must be committed."""
+    results = _tree(tmp_path, _same(_both(range(_CASES))))
+    pointed = headline.build(results)["self_served_rerun_noise"]
+    (tmp_path / headline.RERUN_REPORT).unlink()
+
+    assert pointed == (
+        "docs/decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json"
+    )
+    assert headline.main(["--results", str(results)]) == 2
+    assert capsys.readouterr().err.startswith("rerun_report_missing: ")
+    assert not (results / headline.OUTPUT).exists()
 
 
 def test_check_compares_the_committed_bytes(tmp_path: Path) -> None:

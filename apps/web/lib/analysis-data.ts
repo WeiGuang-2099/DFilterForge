@@ -18,6 +18,7 @@ import {CLASS_OUTCOME, CLASSES, OUTCOMES, SIDES, STRATA} from './analysis-codes'
 import type {Outcome} from './analysis-codes';
 import {array, fail, literal, load, nullable, numNode, object, strNode, text} from './data';
 import type {Guard, Guarded, NumNode} from './data';
+import {RERUN} from './training-data';
 
 /** A guard for one string of a closed list. */
 function oneOf<T extends string>(values: readonly T[]): Guard<T> {
@@ -91,7 +92,7 @@ const ANALYSIS = object({
       items: numNode,
       cases: numNode,
       post_hoc: numNode,
-      rerun_noise: strNode,
+      rerun_noise: RERUN,
       opening: object({
         loud: numNode,
         base_silent: numNode,

@@ -61,12 +61,18 @@ exists, and ``headline`` null before: the base row, the three-seed mean and
 each seed, the coverage strata and the hosted rows, all pointers into the
 headline; the rows' strong exact per condition on test and dev from their
 summaries, each dev run named after its test run with the split prefix
-swapped; and each ready case's strong-exact C4 answer counts per row, as
-``count`` sources over the rows' outcomes.
+swapped; each ready case's strong-exact C4 answer counts per row, as
+``count`` sources over the rows' outcomes; and the self-served rerun, from
+the pair report the headline names: the report's path, the seed, the two
+run ids, the answers changed and the items over every condition (``sum``
+sources) and the trained condition's changed answers, flipped cases and
+ready cases. A report that does not pair seed 2026's test pass with its
+pass B on identical prompts and settings, or names another gold hash than
+the two passes' summaries, stops the export (``rerun_inconsistent``).
 
 analysis.json holds the descriptive analyses of the self-served rows once
 docs/results/sft-v1/analysis.json exists, and ``analysis`` null before:
-the opening's counts and ranges, the headline's rerun-noise status, each
+the opening's counts and ranges, the self-served rerun as above, each
 row's outcome and class counts with the first item of each class, each
 seed's answers grouped by what the base row did with the same item, each
 case's proximity stratum and the target shown beside it, the copies, each
@@ -199,6 +205,12 @@ FREEZE = "src/dfilterforge/held_out_freeze.json"
 REPAIR_POOL = "docs/results/repair-pool/test.json"
 # The SFT headline (sft-headline/1.0), scripts/sft_headline.py's output.
 HEADLINE = "docs/results/sft-v1/headline.json"
+# The self-served rerun (docs/decisions/self-served-runs.md, "Seed 2026's
+# test pass, sent twice"): the headline points to the pair report of this
+# seed's test pass and its pass B, whose run id is the pass's with -passb
+# before the date.
+RERUN_SEED = 2026
+PAIR_SCHEMA = "pair-report/1.0"
 # The descriptive analyses (sft-analysis/1.0), scripts/sft_analysis.py's
 # output, and the one condition they describe.
 ANALYSIS = "docs/results/sft-v1/analysis.json"
@@ -3166,6 +3178,99 @@ def _training_cases(repo: Repo, runs: Sequence[str]) -> list[Node]:
     return [node for _, _, node in sorted(cases, key=lambda each: each[:2])]
 
 
+def _rerun_seed(repo: Repo) -> int:
+    """The place of the rerun's seed among the headline's seeds."""
+    seeds = _arr(repo.resolve(ptr(HEADLINE, "seeds")), "headline seeds")
+    found = [
+        index
+        for index, item in enumerate(seeds)
+        if _obj(item, "headline seed").get("seed") == RERUN_SEED
+    ]
+    if len(found) != 1:
+        raise ContractError(
+            "rerun_inconsistent", f"{HEADLINE} lacks seed {RERUN_SEED}"
+        )
+    return found[0]
+
+
+def build_rerun(repo: Repo) -> Node:
+    """The self-served rerun, as the pair report the headline names holds it.
+
+    The headline's ``self_served_rerun_noise`` is the report's repository
+    path. The report must pair the rerun seed's test pass, first, with its
+    pass B, with identical prompts in every condition and identical
+    settings, on the gold hash both passes were scored on; any other report
+    stops the export (``rerun_inconsistent``). The pages quote the answers
+    changed over every condition and, in the condition the adapters were
+    trained on, the changed answers and flipped ready cases; the other
+    conditions' counts stay in the report, and its comparisons are not read
+    (docs/protocol.md, Training rules, amended 2026-10-20).
+    """
+    named = ptr(HEADLINE, "self_served_rerun_noise")
+    path = check_path(_text(repo.resolve(named), f"{HEADLINE} rerun"))
+    report = _obj(repo.json(path), path)
+    seed = _rerun_seed(repo)
+    first = check_run_id(
+        _text(repo.resolve(ptr(HEADLINE, "seeds", seed, "run")), "seed run")
+    )
+    # The run id ends in its date, "-YYYY-MM-DD"; -passb goes before it.
+    second = check_run_id(f"{first[:-11]}-passb{first[-11:]}")
+    paired = [
+        _obj(report.get(side), f"{path} {side}").get("run")
+        for side in ("first", "second")
+    ]
+    if report.get("schema_version") != PAIR_SCHEMA or paired != [first, second]:
+        raise ContractError(
+            "rerun_inconsistent", f"{path} does not pair {first} with {second}"
+        )
+    conditions = [
+        _obj(item, f"{path} condition")
+        for item in _arr(report.get("conditions"), f"{path} conditions")
+    ]
+    if report.get("settings_identical") is not True or any(
+        item.get("prompts_identical") is not True for item in conditions
+    ):
+        raise ContractError(
+            "rerun_inconsistent", f"{path} pairs other prompts or settings"
+        )
+    scored = {
+        repo.resolve(ptr(f"{RESULTS}/{run}/scored/summary.json", "gold_hash"))
+        for run in (first, second)
+    }
+    if scored != {report.get("gold_hash")}:
+        raise ContractError(
+            "rerun_inconsistent", f"{path} and the passes differ in gold hash"
+        )
+    labels = [item.get("condition") for item in conditions]
+    trained = repo.resolve(ptr(HEADLINE, "condition"))
+    if labels.count(trained) != 1:
+        raise ContractError(
+            "rerun_inconsistent", f"{path} does not hold {trained} once"
+        )
+    at = labels.index(trained)
+    every = range(len(conditions))
+    totals = {
+        key: repo.v(["sum", [ptr(path, "conditions", i, key) for i in every]])
+        for key in ("changed_answers", "items")
+    }
+    return {
+        "report": repo.t(named),
+        "seed": repo.v(ptr(HEADLINE, "seeds", seed, "seed")),
+        "first_run": repo.t(ptr(path, "first", "run")),
+        "second_run": repo.t(ptr(path, "second", "run")),
+        **totals,
+        "trained": {
+            "condition": repo.t(ptr(path, "conditions", at, "condition")),
+            **repo.numbers(
+                path,
+                ("changed_answers", "flipped_cases", "ready_cases"),
+                "conditions",
+                at,
+            ),
+        },
+    }
+
+
 def build_training(repo: Repo) -> Document:
     """The SFT headline as docs/results/sft-v1/headline.json records it.
 
@@ -3229,7 +3334,7 @@ def build_training(repo: Repo) -> Document:
                 }
                 for index in range(len(hosted))
             ],
-            "rerun_noise": repo.t(ptr(HEADLINE, "self_served_rerun_noise")),
+            "rerun_noise": build_rerun(repo),
             "cases_detail": _training_cases(repo, test_runs),
             "test": [_row_conditions(repo, run) for run in test_runs],
             "dev": [_row_conditions(repo, run) for run in dev_runs],
@@ -3613,7 +3718,7 @@ def build_analysis(repo: Repo, captures: Captures) -> Document:
             "items": repo.v(ptr(ANALYSIS, "items")),
             "cases": repo.v(ptr(ANALYSIS, "cases")),
             "post_hoc": repo.v(ptr(ANALYSIS, "post_hoc")),
-            "rerun_noise": repo.t(ptr(HEADLINE, "self_served_rerun_noise")),
+            "rerun_noise": build_rerun(repo),
             "opening": {
                 "loud": repo.v(_ready_c4(base.outcomes, outcome=list(_LOUD))),
                 "base_silent": repo.v(
