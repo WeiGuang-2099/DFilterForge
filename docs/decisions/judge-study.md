@@ -158,8 +158,10 @@ it only if the spend so far plus that bound stays within the cap.
 
 `scripts/judge_study.py` runs every step; `tests/test_judge_study.py` runs
 it against a fake provider on 127.0.0.1. Each line below runs in Windows
-PowerShell 5.1 at the root of the owner's checkout, on `main` once the
-runner is merged. Only `call` sends a request, and only with the key set. It
+PowerShell 5.1 at the root of a checkout of the branch that holds the
+runner and every correction, at its head, pushed before the call:
+`judge-study` until its pull request merges. The judge-v2 dev check went
+out from dcc96f7. Only `call` sends a request, and only with the key set. It
 sends one request at a time, paced at 1 s, and sends a timeout, a transport
 error or HTTP 408, 429 or 5xx again in a later sweep, 60 s on, at most three
 attempts per request. The spend counts a timeout or a transport error at
@@ -277,7 +279,10 @@ The names avoid `prepare.json`, `prepared/`, `scored/` and
   was read for their wording, and are fixed before the dev check. They
   were revised once, after the judge-v1 dev check and for the reply's
   format alone, so the judge now gives its verdict before any rationale,
-  with thinking off.
+  with thinking off. Read in full, the judge-v2 dev check shows the cost:
+  6 of its 282 replies, all in the primary mode, open with "incorrect"
+  and end with a reason that calls the filter correct, 2 of them on
+  silent-wrong answers. The verdict a reply opens with is what counts.
 - On C3 and C4 the judge sees the compiled filter, not the model's IR.
 - Strong exact holds on three probes, so a strong-exact filter the judge
   rejects is a disagreement, not a proven judge error.
