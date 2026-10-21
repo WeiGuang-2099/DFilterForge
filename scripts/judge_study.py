@@ -20,12 +20,14 @@ or an attempt whose bound would take the spend past the cap stops the run.
 Three attempts in a row that end in a timeout or a transport error end the
 call with their requests pending, since the charge counts each at its
 whole bound: an outage would otherwise spend the cap on bounds alone.
-Every attempt is fsynced to artifacts/judge-v1/<split>-<route>/attempts.jsonl
+Every attempt is fsynced to artifacts/judge-v2/<split>-<route>/attempts.jsonl
 beside manifest.json, which names the endpoint's host, never its URL or the
 key. ``--resume`` continues a run sent with the same settings, host and
 requests, unless the gate stopped it. ``publish`` copies a complete run to
-docs/results/judge-v1/<split>/, and ``table`` writes or checks
-docs/results/judge-v1/table.json from the published test run.
+docs/results/judge-v2/<split>/, and ``table`` writes or checks
+docs/results/judge-v2/table.json from the published test run. Each path is
+named for the prompt version; the judge-v1 dev check is published in
+docs/results/judge-v1/dev/ and read by nothing here.
 
 Exit codes: 0 done; 1 requests left pending (interrupted with Ctrl-C,
 three timeouts or transport errors in a row, or an attempt log that could
@@ -73,10 +75,10 @@ from dfilterforge.score_summary import OutcomeV1
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = Path("docs", "results")
-PUBLISHED = Path("docs", "results", "judge-v1")
-RUNS = Path("artifacts", "judge-v1")
+PUBLISHED = Path("docs", "results", judge.PROMPT_VERSION)
+RUNS = Path("artifacts", judge.PROMPT_VERSION)
 CONFIGS = Path("docs", "decisions", "evidence", "judge", "configs")
-TABLE = Path("judge-v1", "table.json")
+TABLE = Path(judge.PROMPT_VERSION, "table.json")
 ATTEMPTS = "attempts.jsonl"
 MANIFEST = "manifest.json"
 # J7: the note's caps, which a call may lower but never raise.
@@ -88,11 +90,11 @@ SWEEP_WAIT_SECONDS = 60.0
 FAULT_LIMIT = 3
 MICRO = 1_000_000
 # The note's estimate, used for nothing else: the deepseek test replies'
-# prompt tokens fitted by least squares on their prompt bytes, and 90
-# reply tokens.
+# prompt tokens fitted by least squares on their prompt bytes, and 172
+# reply tokens, the mean of the judge-v1 dev check's replies.
 TOKENS_PER_BYTE = 0.2679
 TOKENS_OFFSET = -48.8
-REPLY_TOKENS = 90
+REPLY_TOKENS = 172
 # J2: the route and its fallback, as the two configs name them, and where
 # the maintainer moves a DeepInfra dev check that sends the study on.
 ROUTES = ("deepinfra", "gmicloud")
@@ -645,7 +647,7 @@ def _call(arguments: argparse.Namespace) -> int:
 
 
 def _publish(arguments: argparse.Namespace) -> int:
-    """Copies one complete run to docs/results/judge-v1/<split>/.
+    """Copies one complete run to docs/results/judge-v2/<split>/.
 
     It prints the run's census and each mode's verdicts, which the note's
     Order step 4 checks before any test request.
@@ -709,7 +711,7 @@ def _published_test(
         DFilterForgeError: The published run is not a complete run of the
             requests the committed code builds now.
     """
-    published = results / "judge-v1" / "test"
+    published = results / judge.PROMPT_VERSION / "test"
     files = {
         name: _regular_file(published / name, MAX_RUN_FILE_BYTES)
         for name in (ATTEMPTS, MANIFEST)
@@ -721,10 +723,10 @@ def _published_test(
         for run, pin in judge.ANSWER_SETS["test"].items()
     }
     for name, data in files.items():
-        sources[f"docs/results/judge-v1/test/{name}"] = hashlib.sha256(
+        sources[(PUBLISHED / "test" / name).as_posix()] = hashlib.sha256(
             data
         ).hexdigest()
-    log = sources[f"docs/results/judge-v1/test/{ATTEMPTS}"]
+    log = sources[(PUBLISHED / "test" / ATTEMPTS).as_posix()]
     if (manifest.status, manifest.request_set_sha256, log) != (
         "complete",
         requests.sha256,

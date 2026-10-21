@@ -313,6 +313,20 @@ All of them are already public in the committed receipts. Under Splits,
 "the call refuses every test request whose `prepare.json` the record does
 not admit" holds for the call step; this study is its one exception.
 
+Amended 2026-10-21, after the dev check and before any test judge
+request, by the correction the judge note names. The dev check gave every
+request a completed reply, but 114 of its 282 replies gave no verdict:
+109 reached the token limit, 108 of them while the reason ran on, 57 of
+those repeating one sentence. The prompts, version `judge-v2`, ask for
+the `verdict` first and the one-sentence `reason` after it. A completed
+reply gives the verdict it opens with: a brace, the key `verdict` and
+`correct` or `incorrect`, then a comma. The reason is not read, so a
+reply cut in it at the token limit keeps its verdict, and a reply whose
+whole text parses as JSON and gives a key twice gives none. This replaces
+the reply rule above, as the dev check's defect route allows; every other
+rule stands, and the dev check is sent again with `judge-v2` before any
+test request.
+
 ## Decoding and provenance
 
 Temperature 0, one greedy pass, fixed max output tokens, thinking disabled where
