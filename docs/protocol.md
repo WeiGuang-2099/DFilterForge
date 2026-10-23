@@ -252,6 +252,81 @@ section applies (OD7). The six DeepInfra runs are reported not run and kept as
 evidence (OD6). The repair note gives the new run ids and the maintainer
 defaults behind them (OD6 to OD8).
 
+## Judge study
+
+Registered 2026-10-20, before any judge request. The [judge
+note](decisions/judge-study.md), part of this protocol, holds the
+decisions, the prompts, the configs, the caps, the commands and the
+outputs. When this was written every hosted and self-served test answer
+was scored and committed, and no judge reply existed.
+
+The question is how often an LLM judge, asked whether a display filter
+selects what its request asks for, accepts a filter that tshark disproves.
+The judged answers are the Disproof Reel's test pool under rule `reel-v1`:
+the published passes `test-qwen3-32b-2026-09-26` (pass A),
+`test-qwen3.5-9b-2026-09-26`, `test-qwen3.5-122b-a10b-2026-09-26` and
+`test-deepseek-v4-pro-0813-2026-09-26`, each ready C1 to C4 item whose
+outcome is strong exact, shortcut or silent-wrong: 971 answers, 804, 2 and
+165, pinned by the SHA-256 of each pass's `scored/outcomes.jsonl`. The
+judge sees the item's request and user assumptions, as the answering model
+saw them, and the filter that ran: the answer's display filter (C1, C2) or
+the one the compiler made from its IR (C3, C4), as the receipt records it.
+In the primary mode it sees nothing else; in the secondary mode it also
+sees the item's reference filter, named as one that selects exactly the
+requested packets. Answers with the same item and filter make one request
+per mode, whose verdict counts for each of them: 508 test requests per
+mode.
+
+The judge is deepseek/deepseek-v4-pro-0813 through OpenRouter, with the
+benchmark's decoding (temperature 0, seed 17, JSON mode, thinking off), at
+most 256 output tokens, one provider pinned, fallbacks off and
+`data_collection` set to deny. If its first reply shows thinking, the run
+stops, as a model run's gate does. A reply counts only as one JSON object
+whose `verdict` is `correct` or `incorrect`, after a one-sentence
+`reason`. Any other reply, a reply cut at the token limit and a request
+left with no completed reply after three attempts all give no verdict,
+and an answer with no verdict never counts as rated correct. On a
+silent-wrong answer, `correct` is a false
+acceptance, since tshark holds a frame that disproves the filter. A
+verdict on a strong-exact or shortcut answer is neither right nor wrong,
+since strong exact holds on three probes, not on every capture: agreement
+there is reported, not scored. The judge wrote 274 of the 971 answers, 27
+of the 165 silent-wrong among them; every table lists those rows apart,
+and the headline gives them beside the count over all 165.
+
+First, as a pipeline check that is never reported and changes no rule
+here, the judge rates the same four models' counted 2026-09-26 dev answers
+(284 answers, 141 requests per mode). A defect it shows is fixed only by a
+correction the judge note names, before any test judge request. Requests
+are paced at 1 s. A timeout, a transport error or HTTP 408, 429 or 5xx is
+sent again in a later sweep, at most three attempts in all, and HTTP 401,
+402 or 403 stops the run. Once a test request is sent, the provider never
+changes. The verdicts are counted over answers, per mode, outcome,
+condition and model, by committed code that CI rebuilds with `--check`.
+They are plain counts with no interval, and none is read as a property of
+the answering models.
+
+This path sends test requests, the answers' filters and, in the secondary
+mode, the reference filters to a provider outside the admission guard: the
+freeze record admits model prepares, and the judge's requests are not one.
+All of them are already public in the committed receipts. Under Splits,
+"the call refuses every test request whose `prepare.json` the record does
+not admit" holds for the call step; this study is its one exception.
+
+Amended 2026-10-21, after the dev check and before any test judge
+request, by the correction the judge note names. The dev check gave every
+request a completed reply, but 114 of its 282 replies gave no verdict:
+109 reached the token limit, 108 of them while the reason ran on, 57 of
+those repeating one sentence. The prompts, version `judge-v2`, ask for
+the `verdict` first and the one-sentence `reason` after it. A completed
+reply gives the verdict it opens with: a brace, the key `verdict` and
+`correct` or `incorrect`, then a comma. The reason is not read, so a
+reply cut in it at the token limit keeps its verdict, and a reply whose
+whole text parses as JSON and gives a key twice gives none. This replaces
+the reply rule above, as the dev check's defect route allows; every other
+rule stands, and the dev check is sent again with `judge-v2` before any
+test request.
+
 ## Decoding and provenance
 
 Temperature 0, one greedy pass, fixed max output tokens, thinking disabled where
@@ -481,6 +556,15 @@ stated, and none is read as a gain or a loss.
   each split by field coverage, with how many of them are strong exact.
   The base row never saw the training set, so its copy share is the
   untrained reference rate.
+
+Amended 2026-10-20, before its request: one self-served rerun. Seed
+2026's adapter answers the frozen test prompts a second time on the same
+stack, and `dfilterforge pair` reads the two passes as the A/A pair under
+Metrics is read, by the rules of the [self-served
+note](decisions/self-served-runs.md). The second pass is not a row, no
+comparison is read against it, and it sets no noise bound. "Self-served
+rerun noise is not measured" above holds until its pair report is
+committed; from then on the headline and the pages point to that report.
 
 ## Claim boundary
 

@@ -43,7 +43,7 @@ export default function TrainingPage(): ReactNode {
   if (headline === null) {
     throw new Error('training: training.json has no headline, and the page shows one only');
   }
-  const {bootstrap} = headline;
+  const {bootstrap, rerun_noise: rerun} = headline;
   return (
     <article className="training">
       <Head headline={headline} />
@@ -224,9 +224,16 @@ export default function TrainingPage(): ReactNode {
             adapters fixed, so it says nothing of how another seed would land; the seeds&apos;
             spread is shown instead.
           </li>
-          {headline.rerun_noise.t === 'not_measured' ? (
-            <li>The self-served model&apos;s rerun noise is not measured yet.</li>
-          ) : null}
+          <li>
+            Sent again in a later session on the same stack, seed{' '}
+            <Num kind="int" link={false} node={rerun.seed} />
+            &apos;s adapter changed <Num kind="int" node={rerun.changed_answers} /> of its{' '}
+            <Num kind="int" node={rerun.items} /> test answers and flipped{' '}
+            <Num kind="int" node={rerun.trained.flipped_cases} /> of the{' '}
+            <Num kind="int" node={rerun.trained.ready_cases} /> ready{' '}
+            <Str node={rerun.trained.condition} /> cases; the{' '}
+            <a href={repositoryFile(rerun.report.t)}>pair report</a> holds every condition.
+          </li>
           <li>
             The estimator and these words were registered in the{' '}
             <a href={repositoryFile(PROTOCOL)}>protocol</a> when one seed&apos;s test score was

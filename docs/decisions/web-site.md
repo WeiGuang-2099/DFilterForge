@@ -279,7 +279,10 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   seed's strong exact per condition on test and dev are pointers into
   their summaries; each ready case's strong-exact C4 answers per row are
   `count` ops over the rows' outcomes, in the order of answers gained,
-  so the page draws a case from counts and never divides.
+  so the page draws a case from counts and never divides. The
+  self-served rerun, in this file and in `analysis.json`, is pointers and
+  `sum` ops into the pair report the headline names; a report that does
+  not pair seed 2026's test pass with its pass B stops the export.
 - `analysis.json`: the descriptive analyses for `/training/analysis` and
   the board's small-model band, null until
   `docs/results/sft-v1/analysis.json` exists. Counts, ranges, classes,

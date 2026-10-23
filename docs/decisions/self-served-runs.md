@@ -131,18 +131,84 @@ An outage re-run adds `-r2` after the tag, before the date
   rows' C1 to C3 are marked untrained conditions and C4 is reported split by
   field coverage (protocol, Training rules).
 
+## Seed 2026's test pass, sent twice
+
+Added 2026-10-20, before its request. Seed 2026's adapter answers the
+frozen test prompts a second time, so the repeatability of this stack is
+measured once. When this was written every self-served row had been
+scored, seed 2026's first test pass included (C4 strong exact 0.475); the
+second pass changes no row, score, headline estimate or analysis.
+
+- Run: `test-qwen3-1.7b-sft-s2026-passb-2026-10-07`, `model_id`
+  `qwen3-1.7b-sft-s2026`, on the prepare `test-qwen3-1.7b-2026-10-07` in
+  all four conditions (448 items), with the first pass's config, settings,
+  endpoint host, call options and 0.10 cap, on the stack above. Its
+  results directory is seeded with the prepare's files and committed with
+  this text.
+- Why seed 2026: its first test pass is the only adapter test pass that
+  ran as one invocation with every item settled on its first attempt
+  (2026-10-08, 10:28 to 10:45 UTC).
+- Reading: `dfilterforge pair`, first pass first, reads the two passes as
+  the hosted A/A pair is read: per condition, changed answers, changed
+  outcomes, outcome transitions and flipped cases (ready cases whose
+  strong-exact case mean differs). Its output is committed as
+  `docs/decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json`,
+  and a CI test rebuilds it byte for byte. Pages quote the answers changed
+  over all 448 items and the C4 cases flipped over the 40 ready cases, C4
+  being the condition the adapter was trained on; the other conditions'
+  counts stay in the report. The condition comparisons the report also
+  prints are not read, as C4 against C2 is not read for adapters.
+- Scope: the second pass is not a row. It is never pooled with the first,
+  never scored into the headline or the analyses, never repaired, and it
+  sets no noise bound for later training. The hosted A/A's 24-hour rule
+  does not apply: the first pass ran on a container that had just answered
+  seed 2026's dev pass, and the second starts cold, weeks later, so the
+  pair measures whether the same image, adapter and greedy decoding give
+  the same answers across sessions.
+- Rules: every reply must carry the fingerprint `vllm-0.21.0-84f508c7`,
+  and the deploy must reuse the image of 2026-10-08; a pass that breaks
+  either is reported as such and not read as repeatability. Items left
+  pending by transient failures are resumed with `--resume` under the
+  rules above. A pass whose host changed, or that ends with no completed
+  answer, is re-run once as
+  `test-qwen3-1.7b-sft-s2026-passb-r2-2026-10-07`; if that fails too, the
+  rerun is reported not run and its seeded directory is removed in the
+  same commit.
+- Expectation, not a claim: greedy decoding on an unchanged stack should
+  change few answers or none. The counts are published as measured.
+
+Result, 2026-10-20. The registration was pushed first: GitHub records the
+branch `passb` created at 08:51:44 UTC, and PR #38 merged it into `main`
+at 08:55:11 UTC. The pass ran from 11:03:49 to 11:19:46 UTC as one
+invocation at source revision c9dddb8, each of its 448 requests settled on
+its first attempt, and every reply carries the fingerprint
+`vllm-0.21.0-84f508c7`. The session's script would have stopped on an
+image build, and none happened, so the deploy reused the image of
+2026-10-08. Prompts and settings were identical in every condition. The
+second pass changed 33 of the 448 answers, and none of the 40 ready C4
+cases flipped. The report,
+[`evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json`](evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json),
+holds the other conditions' counts, the outcome transitions, the items
+whose outcome changed and the flipped cases. Greedy decoding on this
+stack does not repeat itself exactly across sessions; for contrast, the
+hosted A/A pair changed 39 to 46 of 112 answers per condition.
+
 ## Measured
 
-Each pass and each training run below ran on 2026-10-08, except the last
-adapter session, on 2026-10-18; every pass records source revision
-e1f61bd. Costs are each Modal app's bill, from deploy or start to stop,
+Each pass and each training run below ran on 2026-10-08, except adapter
+sessions 3 and 4, on 2026-10-18 and 2026-10-20; every pass records source
+revision e1f61bd, except seed 2026's rerun in session 4, which records
+c9dddb8. Costs are each Modal app's bill, from deploy or start to stop,
 read with `modal billing report` (hourly, local time, by resource) on
 2026-10-08 and again on 2026-10-18, whose rows are in
-[`evidence/self-served/modal-billing-2026-10-07-to-18.json`](evidence/self-served/modal-billing-2026-10-07-to-18.json);
+[`evidence/self-served/modal-billing-2026-10-07-to-18.json`](evidence/self-served/modal-billing-2026-10-07-to-18.json),
+and for session 4 on 2026-10-20, in
+[`evidence/self-served/modal-billing-2026-10-20.json`](evidence/self-served/modal-billing-2026-10-20.json);
 the dev total equals the owner's reading of the usage page. The L4 share
 at USD 0.80 an hour gives the GPU time. The estimates in `docs/usage.md`
 put the base row's dev and test passes near USD 1 and the whole plan near
-USD 7; Modal billed USD 4.87 in all, the failed first build included.
+USD 7; Modal billed USD 5.16 in all, the failed first build and the rerun
+included, of which USD 4.87 before the rerun.
 
 | Run | Work | Total, USD | L4, USD (about) |
 | --- | --- | ---: | ---: |
@@ -154,9 +220,11 @@ USD 7; Modal billed USD 4.87 in all, the failed first build included.
 | Adapter session 1, 2026-10-08 | Seed 2026's dev and test passes, each item settled on its first attempt; the first passes of dev s17 (160 HTTP 503s) and dev s42 (134 answers, 26 HTTP 503s) | 0.63 | 0.59 (44 min) |
 | Adapter session 2, 2026-10-08 | dev s17 resumed (160 answers); test s17 (292 answers, then 154 HTTP 503s and 2 HTTP 502s); dev s42's two resumes (26 HTTP 503s each); test s42 (234 answers, 214 HTTP 503s) | 0.63 | 0.58 (44 min) |
 | Adapter session 3, 2026-10-18 | test s17 (156 answers) and test s42 (214) resumed, each on its first attempt | 0.26 | 0.24 (18 min) |
+| Adapter session 4, 2026-10-20 | Seed 2026's test rerun: 448 requests, each settled on its first attempt | 0.29 | 0.27 (20 min) |
 
-The adapter passes needed three sessions. In the first, dev s17's first
-pass found the server down and got 503 for every item. In the
+The adapter passes needed three sessions, and seed 2026's rerun a
+fourth. In the first, dev s17's first pass found the server down and got
+503 for every item. In the
 second, Modal preempted the container at 21:44:09 local time, during test
 s17; the replacement stopped 11 s after it came up at 21:51:48, and the
 next was ready at 21:58:33. Every request in those gaps got 503 or 502,
@@ -167,8 +235,9 @@ from the University of Adelaide network sent nothing: the network reset
 every TLS connection to `*.modal.direct`, no container started and
 nothing was billed. The third session ran from another network, and
 each call under a watchdog that would have stopped it at its first
-failed answer. All 1,798 adapter answers, 608 of seed 2026's and 1,190 of
-seeds 17 and 42, carry the fingerprint `vllm-0.21.0-84f508c7`.
+failed answer. The fourth sent the rerun in one invocation, every item
+on its first attempt. All 2,246 adapter answers, 1,056 of seed 2026's and
+1,190 of seeds 17 and 42, carry the fingerprint `vllm-0.21.0-84f508c7`.
 
 The first deploy from Windows failed in the image build until
 `modal/serve_vllm.py` wrote its container paths as POSIX (PR #29); that

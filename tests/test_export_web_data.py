@@ -7,8 +7,9 @@ registers test runs adds a test-runs/1.0 registry of 16 rows, its note's
 Runs table and the test runs it publishes; a test of the exhibits also
 commits the test pool's answers replayed without the witness tail, derived
 from the fixture's receipts apart from the exporter, and readings for the
-answers the tail turns. A test resolver written apart
-from the exporter re-derives every sourced value from those raw files. The
+answers the tail turns. A smaller tree holds only what the self-served
+rerun reads. A test resolver written apart from the exporter re-derives
+every sourced value from those raw files. The
 tests of the committed tree skip where the test image carries no docs/
 tree; one of them repeats the registered dev Reel check on a copy of the
 tree with the planned test runs registered again.
@@ -864,6 +865,124 @@ def test_the_analysis_is_null_until_its_file_is_committed(
         "schema": "web-analysis/1.0",
         "analysis": None,
     }
+
+
+# Seed 2026's rerun in a hand-built tree: a headline naming the seed's
+# test pass and the pair report, the two passes' summaries and the report.
+_RERUN_A = f"test-small-s2026-{_DATE}"
+_RERUN_B = f"test-small-s2026-passb-{_DATE}"
+_RERUN_REPORT = f"docs/decisions/evidence/aa-{_RERUN_A}.json"
+_SFT_HEADLINE = "docs/results/sft-v1/headline.json"
+
+
+def _rerun_tree(root: Path) -> Path:
+    """The files the rerun reads; 4 of 16 answers changed, 1 of 4 in C4."""
+    _write(
+        root / _SFT_HEADLINE,
+        {
+            "condition": "C4",
+            "seeds": [
+                {"seed": 17, "run": f"test-small-s17-{_DATE}"},
+                {"seed": 2026, "run": _RERUN_A},
+            ],
+            "self_served_rerun_noise": _RERUN_REPORT,
+        },
+    )
+    for run in (_RERUN_A, _RERUN_B):
+        _write(
+            root / f"docs/results/{run}/scored/summary.json",
+            {"gold_hash": "a" * 64, "run": run},
+        )
+    counts = (("C1", 2, 1), ("C2", 0, 0), ("C3", 1, 1), ("C4", 1, 0))
+    _write(
+        root / _RERUN_REPORT,
+        {
+            "schema_version": "pair-report/1.0",
+            "first": {"run": _RERUN_A},
+            "second": {"run": _RERUN_B},
+            "gold_hash": "a" * 64,
+            "settings_identical": True,
+            "conditions": [
+                {
+                    "condition": label,
+                    "items": 4,
+                    "changed_answers": changed,
+                    "flipped_cases": flipped,
+                    "ready_cases": 1,
+                    "prompts_identical": True,
+                }
+                for label, changed, flipped in counts
+            ],
+        },
+    )
+    return root
+
+
+def test_the_rerun_counts_every_condition_and_the_trained_one(
+    tmp_path: Path,
+) -> None:
+    root = _rerun_tree(tmp_path)
+
+    rerun = exporter.build_rerun(exporter.Repo(root))
+
+    assert rerun["report"] == {
+        "t": _RERUN_REPORT,
+        "src": ["ptr", _SFT_HEADLINE, "/self_served_rerun_noise"],
+    }
+    assert (rerun["first_run"]["t"], rerun["second_run"]["t"]) == (
+        _RERUN_A,
+        _RERUN_B,
+    )
+    assert [
+        rerun[key]["v"] for key in ("seed", "changed_answers", "items")
+    ] == [2026, 4, 16]
+    assert rerun["changed_answers"]["src"][0] == "sum"
+    trained = rerun["trained"]
+    assert trained["condition"]["t"] == "C4"
+    assert [
+        trained[key]["v"]
+        for key in ("changed_answers", "flipped_cases", "ready_cases")
+    ] == [1, 0, 1]
+    assert check_sources(root, {"rerun": rerun}) == 10
+
+
+@pytest.mark.parametrize(
+    ("file", "keys", "value"),
+    [
+        # Pass B first, or seed 17's pass.
+        (_RERUN_REPORT, ("first", "run"), _RERUN_B),
+        (_RERUN_REPORT, ("first", "run"), f"test-small-s17-{_DATE}"),
+        (_RERUN_REPORT, ("schema_version",), "pair-report/0.9"),
+        # Other settings, or other prompts in one condition.
+        (_RERUN_REPORT, ("settings_identical",), False),
+        (_RERUN_REPORT, ("conditions", 2, "prompts_identical"), False),
+        # Another gold hash in the report or in pass B's summary.
+        (_RERUN_REPORT, ("gold_hash",), "b" * 64),
+        (
+            f"docs/results/{_RERUN_B}/scored/summary.json",
+            ("gold_hash",),
+            "b" * 64,
+        ),
+        # No trained condition in the report, no seed 2026 in the headline.
+        (_RERUN_REPORT, ("conditions", 3, "condition"), "C3"),
+        (_SFT_HEADLINE, ("seeds", 1, "seed"), 42),
+    ],
+)
+def test_a_report_that_is_not_seed_2026s_pair_stops_the_export(
+    tmp_path: Path, file: str, keys: tuple[str | int, ...], value: object
+) -> None:
+    root = _rerun_tree(tmp_path)
+
+    def put(document: Any) -> None:
+        for key in keys[:-1]:
+            document = document[key]
+        document[keys[-1]] = value
+
+    _edit(root / file, put)
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.build_rerun(exporter.Repo(root))
+    assert caught.value.code == "rerun_inconsistent"
 
 
 def test_every_sourced_value_resolves_from_the_raw_files(
@@ -4250,6 +4369,25 @@ def test_the_committed_tree_exports_the_sft_headline() -> None:
         "dev-qwen3-1.7b-sft-s2026-2026-10-07",
     ]
     assert training["dev"][2]["conditions"][0]["provider_failed"]["v"] == 26
+    # Seed 2026's rerun, as the pages quote it: 33 of 448 answers changed,
+    # 5 of them in C4, and none of the 40 ready C4 cases flipped.
+    rerun = training["rerun_noise"]
+    assert rerun["report"]["t"] == (
+        "docs/decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json"
+    )
+    assert (rerun["first_run"]["t"], rerun["second_run"]["t"]) == (
+        "test-qwen3-1.7b-sft-s2026-2026-10-07",
+        "test-qwen3-1.7b-sft-s2026-passb-2026-10-07",
+    )
+    assert [
+        rerun[key]["v"] for key in ("seed", "changed_answers", "items")
+    ] == [2026, 33, 448]
+    trained = rerun["trained"]
+    assert trained["condition"]["t"] == "C4"
+    assert [
+        trained[key]["v"]
+        for key in ("changed_answers", "flipped_cases", "ready_cases")
+    ] == [5, 0, 40]
     check_sources(_ROOT, {"training.json": documents["training.json"]})
 
 
@@ -4276,7 +4414,10 @@ def test_the_committed_tree_exports_the_analyses() -> None:
         14,
         18,
     ]
-    assert analysis["rerun_noise"]["t"] == "not_measured"
+    # The same rerun the training page quotes.
+    assert analysis["rerun_noise"] == (
+        documents["training.json"]["headline"]["rerun_noise"]
+    )
     # Every seed puts each ready item in one group, and every row in one
     # class; a class has an example exactly when it has an item.
     for ribbons in analysis["flows"]:
