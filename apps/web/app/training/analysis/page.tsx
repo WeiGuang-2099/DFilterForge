@@ -8,7 +8,7 @@ import {Nearness} from '@/app/_components/analysis/nearness';
 import {CopiesTable, Head, StrataTable} from '@/app/_components/analysis/sections';
 import {loadAnalysis} from '@/lib/analysis-data';
 import {preview} from '@/lib/preview';
-import {Num, repositoryBlob, repositoryFile} from '@/lib/sourced';
+import {Num, repositoryBlob, repositoryFile, Str} from '@/lib/sourced';
 
 import '@/app/_components/analysis/analysis.css';
 
@@ -45,6 +45,7 @@ export default function AnalysisPage(): ReactNode {
     throw new Error('analysis: analysis.json has no rows');
   }
   const [loss] = analysis.loss;
+  const rerun = analysis.rerun_noise;
   return (
     <article className="analysis">
       <Head analysis={analysis} />
@@ -171,13 +172,20 @@ export default function AnalysisPage(): ReactNode {
             The transitions of the test items whose gold is not ready, and the field-coverage
             split of the hosted rows, are in the analysis file and not drawn here.
           </li>
-          {analysis.rerun_noise.t === 'not_measured' ? (
-            <li>
-              The self-served model&apos;s rerun noise is not measured, so a move of a single
-              answer between two rows may be noise as well as fine-tuning; the{' '}
-              <a href={repositoryFile(NOTE)}>self-served note</a> holds the serving stack.
-            </li>
-          ) : null}
+          <li>
+            Sent again in a later session on the same stack, seed{' '}
+            <Num kind="int" link={false} node={rerun.seed} />
+            &apos;s adapter changed <Num kind="int" node={rerun.changed_answers} /> of{' '}
+            <Num kind="int" node={rerun.items} /> answers,{' '}
+            <Num kind="int" node={rerun.trained.changed_answers} /> of them in{' '}
+            <Str node={rerun.trained.condition} />, and flipped{' '}
+            <Num kind="int" node={rerun.trained.flipped_cases} /> of the{' '}
+            <Num kind="int" node={rerun.trained.ready_cases} /> ready{' '}
+            <Str node={rerun.trained.condition} /> cases, so a move of one answer between two rows
+            can be noise as well as fine-tuning. The{' '}
+            <a href={repositoryFile(rerun.report.t)}>pair report</a> holds every condition, and
+            the <a href={repositoryFile(NOTE)}>self-served note</a> the serving stack.
+          </li>
           <li>
             The classes, strata, ranges and copies come from the{' '}
             <a href={repositoryFile(ANALYSIS)}>analysis file</a>, which a committed script writes

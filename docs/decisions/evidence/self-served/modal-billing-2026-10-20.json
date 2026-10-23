@@ -1,0 +1,66 @@
+{
+  "commands": [
+    "modal billing report --start 2026-10-20 --end 2026-10-21 -r h --tz local --show-resources --json",
+    "modal billing report --start 2026-10-18 --end 2026-10-21 -r h --tz local --show-resources --json"
+  ],
+  "note": "Read on 2026-10-20 at 22:26 local time, after the session's app stopped. Costs are USD, before credits. The second command, read on 2026-10-21, returned these rows, 2026-10-18's rows as modal-billing-2026-10-07-to-18.json holds them, and no row on 2026-10-19, so the two files cover every charge from 2026-10-07 to 2026-10-20.",
+  "retrieved": "2026-10-20",
+  "rows": [
+    {
+      "cost": "0.00013725",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T20:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.00311132",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T20:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00001237",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T20:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.01207952",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T21:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "CPU"
+    },
+    {
+      "cost": "0.26488886",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T21:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "L4"
+    },
+    {
+      "cost": "0.00858811",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T21:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "Memory"
+    },
+    {
+      "cost": "0.00022515",
+      "description": "dfilterforge-vllm",
+      "environment": "main",
+      "interval_start": "2026-10-20T21:30:00+10:30",
+      "object_id": "ap-moy0HBKuETOoKsBO0ZTAcZ",
+      "resource": "Network Egress"
+    }
+  ]
+}
