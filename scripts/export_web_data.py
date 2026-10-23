@@ -53,8 +53,9 @@ intervals and comparisons are pointers into a test run's summary.json.
 Outputs, schema family web-*/1.0, one JSON document per file, written with
 sorted keys, compact separators and one trailing LF: site.json, routes.json,
 board.json, methodology.json, reel.json, training.json, analysis.json,
-cases/<case_id>.json and receipts/<run_slug>/<condition>/<item_id>.json,
-where the run slug is the run id with each dot replaced by an underscore.
+exhibits.json, cases/<case_id>.json and
+receipts/<run_slug>/<condition>/<item_id>.json, where the run slug is the
+run id with each dot replaced by an underscore.
 
 training.json holds the SFT headline once docs/results/sft-v1/headline.json
 exists, and ``headline`` null before: the base row, the three-seed mean and
@@ -83,6 +84,26 @@ and error code, its capped raw reply or its question, by its outcome. The
 rows are the analysis's own; a table whose rows or seeds are not those, in
 order, or a group whose items differ from the outcomes stops the export
 (``analysis_inconsistent``).
+
+exhibits.json holds, in the test phase once
+docs/decisions/evidence/web/exhibits.json exists, the Reel pool's test
+answers replayed on the scored test captures without their witness tail,
+and ``replay`` null otherwise. The replay must name the Reel's test pool in
+pool order and list each executed ready answer of the pool once, with its
+receipt's path and SHA-256, its outcome row's case, its outcome as the
+verdict with the tail, as the verdict on the captures alone the scorer's
+verdict on the receipt's frames and labels cut to the benchmark frames,
+and, for an answer that verdict accepts and the tail finds silent-wrong,
+its witness frames. docs/decisions/evidence/web/exhibit-readings.json must
+read exactly the cases the tail turns an answer of and note exactly the
+witnesses that turn one. Anything else stops the export
+(``exhibits_inconsistent``). Every verdict count is a ``count`` op over the
+replay's answers, overall and per pool run. The document lists one square
+per answer with both verdicts; each replayed probe's frame table and
+packet list; one exhibit per turned case, most turned answers first, then
+by case id, with its reading, its witnesses' notes and, per answer, its
+request, filters, receipt digest, addendum and frame strips; and the cases
+only the tail can score.
 
 reel.json projects the home page's Disproof Reel by the pre-registered
 rule reel-v1 (docs/decisions/disproof-reel.md). Pool: in the test phase
@@ -257,6 +278,28 @@ PAIR_SCHEMA = "pair-report/1.0"
 # output, and the one condition they describe.
 ANALYSIS = "docs/results/sft-v1/analysis.json"
 _ANALYSIS_CONDITION = "C4"
+# The Reel pool's test answers replayed on the scored test captures without
+# their witness tail (verifier-exhibits/1.0, export_web_evidence.py
+# exhibits), and the readings written for the answers the tail turns
+# (exhibit-readings/1.0). The replay holds one source, the hosted test pool.
+EXHIBITS = "docs/decisions/evidence/web/exhibits.json"
+READINGS = "docs/decisions/evidence/web/exhibit-readings.json"
+_EXHIBITS_SCHEMA = "verifier-exhibits/1.0"
+_READINGS_SCHEMA = "exhibit-readings/1.0"
+_REPLAYED = ("sources", "hosted_test")
+# A verdict on the captures alone: the scorer's, or unscorable where no
+# label is left, as the scorer refuses such gold.
+_ALONE = ("strong_exact", "shortcut", "silent_wrong", "unscorable")
+# What the captures alone accept, so what the tail can turn silent-wrong.
+_ACCEPTED = ("strong_exact", "shortcut")
+# A square's fields, each a pointer into its replayed answer.
+_SQUARE = (
+    ("condition", "condition"),
+    ("item_id", "item_id"),
+    ("case_id", "case_id"),
+    ("alone", "v1"),
+    ("tail", "v2"),
+)
 # A loud failure is refused by tshark or is no answer the scorer can read.
 _LOUD = ("invalid", "malformed")
 # The opening's moves from the base row to a seed, as their range.
@@ -2014,27 +2057,17 @@ def packet_row(repo: Repo, captures: Captures, probe_id: str) -> int:
     return found[0]
 
 
-def reel_strips(
-    repo: Repo, captures: Captures, receipt: str, spec: str
-) -> list[Node]:
-    """The pick's probes as ``probe_nodes`` gives them, with every frame.
+def frame_table(repo: Repo, captures: Captures, probe_id: str) -> Node:
+    """A probe's client address and every frame of its capture, in order.
 
-    The Reel's cursor reads one frame at a time, so each strip also lists
-    every frame of its capture in order: the number, kind and name that
-    captures.json records, and the packet-list columns and direction that
-    packets.json records, with the probe's client address. Receipts and
-    cases show only the disagreeing frames and do without the list, which
-    would multiply their size.
+    Each frame has the number, kind and name that captures.json records,
+    and the packet-list columns and direction that packets.json records.
     """
-    strips = probe_nodes(repo, captures, receipt, spec)
-    for strip in strips:
-        probe_id = _text(
-            cast(Node, strip["probe_id"])["t"], f"{receipt} probe_id"
-        )
-        row_index = captures.index(probe_id)
-        packets = ("probes", packet_row(repo, captures, probe_id))
-        strip["client"] = repo.t(ptr(PACKETS, *packets, "client"))
-        strip["frame_rows"] = [
+    row_index = captures.index(probe_id)
+    packets = ("probes", packet_row(repo, captures, probe_id))
+    return {
+        "client": repo.t(ptr(PACKETS, *packets, "client")),
+        "frame_rows": [
             {
                 "n": repo.v(frame_src(row_index, frame, "n")),
                 "kind": repo.t(frame_src(row_index, frame, "kind")),
@@ -2053,7 +2086,26 @@ def reel_strips(
                 ),
             }
             for frame in range(1, captures.frames[probe_id] + 1)
-        ]
+        ],
+    }
+
+
+def reel_strips(
+    repo: Repo, captures: Captures, receipt: str, spec: str
+) -> list[Node]:
+    """The pick's probes as ``probe_nodes`` gives them, with every frame.
+
+    The Reel's cursor reads one frame at a time, so each strip also holds
+    its probe's ``frame_table``. Receipts and cases show only the
+    disagreeing frames and do without the table, which would multiply
+    their size.
+    """
+    strips = probe_nodes(repo, captures, receipt, spec)
+    for strip in strips:
+        probe_id = _text(
+            cast(Node, strip["probe_id"])["t"], f"{receipt} probe_id"
+        )
+        strip.update(frame_table(repo, captures, probe_id))
     return strips
 
 
@@ -4130,6 +4182,761 @@ def _band_conditions(repo: Repo, summary: str) -> list[Node]:
     ]
 
 
+@dataclass(frozen=True)
+class Replayed:
+    """One answer of the replay, read with its pass's scored files.
+
+    ``alone`` is its verdict on the captures alone. ``killing`` lists a
+    turned answer's witness frames as (probe id, frame, witness), in probe
+    and then frame order, and nothing for any other answer.
+    """
+
+    index: int
+    shown: Shown
+    label: str
+    item_id: str
+    alone: str
+    killing: tuple[tuple[str, int, str], ...]
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        """The run id, condition and item id that name the answer."""
+        return (self.shown.run.run_id, self.label, self.item_id)
+
+    @property
+    def case_id(self) -> str:
+        """The case its outcome row names."""
+        scored = self.shown.run.rows[(self.label, self.item_id)]
+        return _text(scored.get("case_id"), "case_id")
+
+    @property
+    def tail(self) -> str:
+        """Its scored outcome, the verdict with the tail."""
+        return self.shown.run.outcome(self.label, self.item_id)
+
+    @property
+    def turned(self) -> bool:
+        """Whether the captures alone accept it and the tail does not."""
+        return self.alone in _ACCEPTED and self.tail == "silent_wrong"
+
+    def src(self, key: str) -> Src:
+        """A pointer to one of its keys in the replay."""
+        return ptr(EXHIBITS, *_REPLAYED, "answers", self.index, key)
+
+
+@dataclass(frozen=True)
+class Readings:
+    """Where exhibit-readings.json holds each text the exhibits show.
+
+    ``cases`` gives each turned case's position in ``/cases``, ``notes``
+    each witness's note group and its position there, and ``addenda`` each
+    annotated answer's case position and addendum position.
+    """
+
+    cases: dict[str, int]
+    notes: dict[str, tuple[int, int]]
+    groups: int
+    addenda: dict[tuple[str, str, str], tuple[int, int]]
+
+
+def _replay_count(**where: Sequence[str]) -> Src:
+    """Counts the replayed answers whose keys hold the listed values."""
+    return count(EXHIBITS, where, pointer(*_REPLAYED, "answers"))
+
+
+def _answer_key(value: object, where: str) -> tuple[str, str, str]:
+    """An answer named by its run id, condition and item id."""
+    named = _obj(value, where)
+    run_id, label, item_id = (
+        _text(named.get(key), f"{where} {key}")
+        for key in ("run_id", "condition", "item_id")
+    )
+    return (run_id, label, item_id)
+
+
+def _replay_source(repo: Repo, selection: Selection) -> Document:
+    """The replay's one source, once it names the Reel's test pool.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for another schema.
+        ContractError: With code ``exhibits_inconsistent`` when its runs are
+            not the test pool's runs in pool order.
+    """
+    document = _obj(repo.json(EXHIBITS), EXHIBITS)
+    if document.get("schema_version") != _EXHIBITS_SCHEMA:
+        raise ExportError(
+            "schema_invalid", f"{EXHIBITS} is not {_EXHIBITS_SCHEMA}"
+        )
+    source = _obj(
+        pointer_get(document, pointer(*_REPLAYED)), f"{EXHIBITS} source"
+    )
+    runs = [
+        _text(each, f"{EXHIBITS} run")
+        for each in _arr(source.get("runs"), f"{EXHIBITS} runs")
+    ]
+    pool = [shown.run.run_id for shown in selection.pool]
+    if runs != pool:
+        raise ContractError(
+            "exhibits_inconsistent",
+            f"{EXHIBITS} replays {', '.join(runs) or 'no run'}, not the "
+            f"Reel's test pool {', '.join(pool) or '(empty)'}",
+        )
+    return source
+
+
+def _replay_probes(
+    repo: Repo, captures: Captures, source: Mapping[str, object]
+) -> dict[str, int]:
+    """Each replayed probe's benchmark frames, in the replay's order.
+
+    A probe is one of the frame tables, once: its frames on the captures
+    alone are the table's benchmark frames, and with the tail the table's
+    frames and capture.
+    """
+    last: dict[str, int] = {}
+    for item in _arr(source.get("probes"), f"{EXHIBITS} probes"):
+        probe = _obj(item, f"{EXHIBITS} probe")
+        probe_id = _text(probe.get("probe_id"), f"{EXHIBITS} probe_id")
+        table = _obj(
+            repo.resolve(ptr(CAPTURES, "probes", captures.index(probe_id))),
+            f"{CAPTURES} probe",
+        )
+        frames = _int(table.get("benchmark_frames"), f"{CAPTURES} frames")
+        recorded = [
+            probe.get(key)
+            for key in ("v1_frames", "v2_frames", "v2_capture_sha256")
+        ]
+        tabled = [
+            frames,
+            captures.frames[probe_id],
+            table.get("capture_sha256"),
+        ]
+        if probe_id in last or recorded != tabled:
+            raise ContractError(
+                "exhibits_inconsistent",
+                f"{EXHIBITS} probe {probe_id} is not its frame table",
+            )
+        last[probe_id] = frames
+    if not last:
+        raise ContractError("exhibits_inconsistent", f"{EXHIBITS} has no probe")
+    return last
+
+
+def _alone(
+    repo: Repo, receipt: str, last: Mapping[str, int], scored: Document
+) -> str:
+    """An answer's verdict on the captures alone, from its receipt.
+
+    tshark reads a capture in one pass, so a probe's benchmark frames
+    dissect alike with or without the tail, which the replay checks with
+    tshark: the label and answer sets on the captures alone are the
+    receipt's, cut to the benchmark frames. With no label left on any probe
+    the case is unscorable; a shortcut flag comes from the outcome row.
+    """
+    probes = [
+        _obj(item, f"{receipt} probe")
+        for item in _arr(
+            _obj(repo.json(receipt), receipt).get("probes"),
+            f"{receipt} probes",
+        )
+    ]
+    if [probe.get("probe_id") for probe in probes] != list(last):
+        raise ContractError(
+            "exhibits_inconsistent", f"{receipt} scores other probes"
+        )
+
+    def cut(key: str) -> list[list[int]]:
+        return [
+            [
+                frame
+                for frame in _ints(probe.get(key), f"{receipt} {key}")
+                if frame <= last[cast(str, probe["probe_id"])]
+            ]
+            for probe in probes
+        ]
+
+    labels = cut("expected_frames")
+    if not any(labels):
+        return "unscorable"
+    if cut("candidate_frames") != labels:
+        return "silent_wrong"
+    flagged = _arr(scored.get("shortcuts", []), f"{receipt} shortcuts")
+    return "shortcut" if flagged else "strong_exact"
+
+
+def _killing(
+    repo: Repo, captures: Captures, receipt: str
+) -> list[tuple[str, int, str, bool]]:
+    """Each frame where an answer and its labels disagree, by probe.
+
+    As (probe id, frame, name, whether the answer selects it); the name is
+    the frame tables'.
+    """
+    found: list[tuple[str, int, str, bool]] = []
+    probes = _arr(_obj(repo.json(receipt), receipt).get("probes"), receipt)
+    for item in probes:
+        probe = _obj(item, f"{receipt} probe")
+        probe_id = _text(probe.get("probe_id"), f"{receipt} probe_id")
+        chosen = _ints(probe.get("candidate_only"), f"{receipt} candidate")
+        frames = sorted(
+            chosen + _ints(probe.get("reference_only"), f"{receipt} labels")
+        )
+        row_index = captures.check(probe_id, frames, receipt)
+        found.extend(
+            (
+                probe_id,
+                frame,
+                _text(
+                    repo.resolve(frame_src(row_index, frame, "name")), "name"
+                ),
+                frame in chosen,
+            )
+            for frame in frames
+        )
+    return found
+
+
+def _replayed_answer(
+    repo: Repo,
+    captures: Captures,
+    last: Mapping[str, int],
+    shown: Shown,
+    entry: Mapping[str, object],
+) -> tuple[str, list[tuple[str, int, str, bool]]]:
+    """One replayed answer's verdict alone and its frames, once checked.
+
+    The entry must give its outcome row's case, its receipt's path and
+    SHA-256, ``_alone``'s verdict on the captures alone and its outcome as
+    the verdict with the tail; a turned answer, and only one, lists its
+    witness frames, each frame where it and its labels disagree with the
+    frame tables' name.
+    """
+    _, label, item_id = _answer_key(entry, f"{EXHIBITS} answer")
+    run = shown.run
+    scored = run.rows[(label, item_id)]
+    receipt = run.receipt(label, item_id)
+    alone = _alone(repo, receipt, last, scored)
+    tail = run.outcome(label, item_id)
+    turned = alone in _ACCEPTED and tail == "silent_wrong"
+    killing = _killing(repo, captures, receipt) if turned else []
+    if (
+        entry.get("case_id") != scored.get("case_id")
+        or entry.get("receipt") != receipt
+        or entry.get("receipt_sha256") != repo.resolve(["sha256", receipt])
+        or [entry.get("v1"), entry.get("v2")] != [alone, tail]
+        or entry.get("witness_frames")
+        != (
+            [
+                {
+                    "answer_matched": matched,
+                    "n": frame,
+                    "probe_id": probe_id,
+                    "should_match": not matched,
+                    "witness": witness,
+                }
+                for probe_id, frame, witness, matched in killing
+            ]
+            if turned
+            else None
+        )
+    ):
+        raise ContractError(
+            "exhibits_inconsistent",
+            f"{EXHIBITS} records {receipt} otherwise than it and its row",
+        )
+    return alone, killing
+
+
+def _replayed(
+    repo: Repo,
+    captures: Captures,
+    pool: Sequence[Shown],
+    source: Mapping[str, object],
+    last: Mapping[str, int],
+) -> list[Replayed]:
+    """Each replayed answer, checked against its pass's scored files.
+
+    The answers are the pool's executed ready answers, each once, each as
+    ``_replayed_answer`` checks it.
+
+    Raises:
+        ContractError: With code ``exhibits_inconsistent`` for any
+            difference.
+    """
+    shown = {item.run.run_id: item for item in pool}
+    wanted = {
+        (run_id, label, item_id)
+        for run_id, item in shown.items()
+        for (label, item_id), scored in item.run.rows.items()
+        if scored.get("gold_status") == "ready"
+        and item.run.outcome(label, item_id) in _EXECUTED
+    }
+    answers: list[Replayed] = []
+    for index, value in enumerate(
+        _arr(source.get("answers"), f"{EXHIBITS} answers")
+    ):
+        entry = _obj(value, f"{EXHIBITS} answer")
+        key = _answer_key(entry, f"{EXHIBITS} answer {index}")
+        if key not in wanted:
+            raise ContractError(
+                "exhibits_inconsistent",
+                f"{EXHIBITS} answer {index} is no executed ready answer of "
+                "the pool, or repeats one",
+            )
+        wanted.discard(key)
+        alone, killing = _replayed_answer(
+            repo, captures, last, shown[key[0]], entry
+        )
+        answers.append(
+            Replayed(
+                index=index,
+                shown=shown[key[0]],
+                label=key[1],
+                item_id=key[2],
+                alone=alone,
+                killing=tuple(each[:3] for each in killing),
+            )
+        )
+    if wanted:
+        raise ContractError(
+            "exhibits_inconsistent",
+            f"{EXHIBITS} leaves out {len(wanted)} executed ready answers",
+        )
+    return answers
+
+
+def _case_readings(
+    items: Sequence[object], turned: Mapping[tuple[str, str, str], str]
+) -> tuple[dict[str, int], dict[tuple[str, str, str], tuple[int, int]]]:
+    """Each read case's position, and each annotated answer's addendum.
+
+    A case is read once; an addendum adds to turned answers of its case,
+    each at most once.
+    """
+    cases: dict[str, int] = {}
+    addenda: dict[tuple[str, str, str], tuple[int, int]] = {}
+    for place, item in enumerate(items):
+        case = _obj(item, f"{READINGS} case")
+        case_id = _text(case.get("case_id"), f"{READINGS} case_id")
+        if case_id in cases:
+            raise ContractError(
+                "exhibits_inconsistent", f"{READINGS} reads {case_id} twice"
+            )
+        cases[case_id] = place
+        for position, each in enumerate(
+            _arr(case.get("addenda"), f"{READINGS} addenda")
+        ):
+            for named in _arr(_obj(each, READINGS).get("answers"), READINGS):
+                key = _answer_key(named, f"{READINGS} addendum answer")
+                if turned.get(key) != case_id or key in addenda:
+                    raise ContractError(
+                        "exhibits_inconsistent",
+                        f"{READINGS} adds to {' '.join(key)}, which is no "
+                        f"turned answer of {case_id} or has an addendum",
+                    )
+                addenda[key] = (place, position)
+    return cases, addenda
+
+
+def _witness_notes(groups: Sequence[object]) -> dict[str, tuple[int, int]]:
+    """Each noted witness's group and its position there; once each."""
+    notes: dict[str, tuple[int, int]] = {}
+    for group, item in enumerate(groups):
+        names = _arr(_obj(item, READINGS).get("witnesses"), READINGS)
+        for position, name in enumerate(names):
+            witness = _text(name, f"{READINGS} witness")
+            if witness in notes:
+                raise ContractError(
+                    "exhibits_inconsistent", f"{READINGS} notes {witness} twice"
+                )
+            notes[witness] = (group, position)
+    return notes
+
+
+def _read_readings(repo: Repo, answers: Sequence[Replayed]) -> Readings:
+    """Places each text of exhibit-readings.json the exhibits show.
+
+    The readings read each case the tail turns an answer of once and no
+    other case, note each witness that turns one in one group and no other
+    witness, and add to an answer at most once, and only to a turned answer
+    of the case the addendum sits under.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for another schema.
+        ContractError: With code ``exhibits_inconsistent`` for a case,
+            witness or answer missed, repeated or added.
+    """
+    document = _obj(repo.json(READINGS), READINGS)
+    if document.get("schema_version") != _READINGS_SCHEMA:
+        raise ExportError(
+            "schema_invalid", f"{READINGS} is not {_READINGS_SCHEMA}"
+        )
+    turned = {answer.key: answer.case_id for answer in answers if answer.turned}
+    cases, addenda = _case_readings(
+        _arr(document.get("cases"), f"{READINGS} cases"), turned
+    )
+    groups = _arr(document.get("witness_notes"), f"{READINGS} witness_notes")
+    notes = _witness_notes(groups)
+    killing = {each[2] for answer in answers for each in answer.killing}
+    if set(cases) != set(turned.values()) or set(notes) != killing:
+        raise ContractError(
+            "exhibits_inconsistent",
+            f"{READINGS} reads other cases or notes other witnesses than "
+            "those the tail turns an answer of or by",
+        )
+    return Readings(cases, notes, len(groups), addenda)
+
+
+def _verdicts(repo: Repo, **where: Sequence[str]) -> Node:
+    """The answers, among those ``where`` keeps, on each verdict.
+
+    On the captures alone and with the tail, and those the tail turns: all
+    of them, then the exact ones and the shortcuts.
+    """
+    wrong = ["silent_wrong"]
+    return {
+        "alone": {
+            verdict: repo.v(_replay_count(**where, v1=[verdict]))
+            for verdict in _ALONE
+        },
+        "tail": {
+            verdict: repo.v(_replay_count(**where, v2=[verdict]))
+            for verdict in _EXECUTED
+        },
+        "turned": repo.v(_replay_count(**where, v1=_ACCEPTED, v2=wrong)),
+        "turned_exact": repo.v(
+            _replay_count(**where, v1=["strong_exact"], v2=wrong)
+        ),
+        "turned_shortcut": repo.v(
+            _replay_count(**where, v1=["shortcut"], v2=wrong)
+        ),
+    }
+
+
+def _replay_counts(
+    repo: Repo, captures: Captures, last: Mapping[str, int], readings: Readings
+) -> Node:
+    """What the replay holds: answers, passes, probes and unscorable cases.
+
+    Also the witness frames of the first probe's tail, which every probe
+    shares, and from the readings, which ``_read_readings`` holds to the
+    turned answers, the exhibits and the witnesses that turn an answer.
+    """
+    first = captures.index(next(iter(last)))
+    return {
+        **{
+            key: repo.v(["len", EXHIBITS, pointer(*_REPLAYED, key)])
+            for key in ("answers", "runs", "probes")
+        },
+        "tail_only": repo.v(
+            ["len", EXHIBITS, pointer(*_REPLAYED, "unscorable_cases")]
+        ),
+        "tail_frames": repo.v(
+            count(
+                CAPTURES,
+                {"kind": ["witness"]},
+                pointer("probes", first, "frames"),
+            )
+        ),
+        "exhibits": repo.v(["len", READINGS, "/cases"]),
+        "killing_witnesses": repo.v(
+            [
+                "sum",
+                [
+                    [
+                        "len",
+                        READINGS,
+                        pointer("witness_notes", group, "witnesses"),
+                    ]
+                    for group in range(readings.groups)
+                ],
+            ]
+        ),
+    }
+
+
+def _replay_probe(
+    repo: Repo, captures: Captures, index: int, probe_id: str
+) -> Node:
+    """One replayed probe: its frames, both captures' digests, its table."""
+    at = ("probes", captures.index(probe_id))
+    return {
+        "probe_id": repo.t(ptr(CAPTURES, *at, "probe_id")),
+        "frames": repo.v(["len", CAPTURES, pointer(*at, "frames")]),
+        "benchmark_frames": repo.v(ptr(CAPTURES, *at, "benchmark_frames")),
+        "tail_frames": repo.v(
+            count(CAPTURES, {"kind": ["witness"]}, pointer(*at, "frames"))
+        ),
+        "alone_sha256": repo.t(
+            ptr(EXHIBITS, *_REPLAYED, "probes", index, "v1_capture_sha256")
+        ),
+        "tail_sha256": repo.t(ptr(CAPTURES, *at, "capture_sha256")),
+        **frame_table(repo, captures, probe_id),
+    }
+
+
+def _replay_row(
+    repo: Repo,
+    shown: Shown,
+    answers: Sequence[Replayed],
+    placed: Mapping[int, Node],
+) -> Node:
+    """One pool pass: its counts and one square per replayed answer.
+
+    A square links its receipt and, for a turned answer, its place among
+    the exhibits.
+    """
+    run = shown.run
+    return {
+        **run_header(repo, run),
+        "role": shown.role,
+        "answers": repo.v(_replay_count(run_id=[run.run_id])),
+        **_verdicts(repo, run_id=[run.run_id]),
+        "squares": [
+            {
+                **{name: repo.t(answer.src(key)) for name, key in _SQUARE},
+                "receipt": run.receipt(answer.label, answer.item_id),
+                "turned": placed.get(answer.index),
+            }
+            for answer in answers
+            if answer.shown.run is run
+        ],
+    }
+
+
+def _exhibit_answer(
+    repo: Repo, captures: Captures, answer: Replayed, readings: Readings
+) -> Node:
+    """One turned answer: request, filters, verdicts, receipt and strips.
+
+    Each strip is the receipt's probe as ``probe_nodes`` gives it, with the
+    count of its disagreeing frames.
+    """
+    run = answer.shown.run
+    condition = run.condition(answer.label)
+    receipt = run.receipt(answer.label, answer.item_id)
+    strips = probe_nodes(repo, captures, receipt, run.spec(answer.case_id))
+    for index, strip in enumerate(strips):
+        strip["disagreeing"] = repo.v(
+            [
+                "sum",
+                [
+                    ["len", receipt, pointer("probes", index, side)]
+                    for side in ("candidate_only", "reference_only")
+                ],
+            ]
+        )
+    added = readings.addenda.get(answer.key)
+    return {
+        **run_header(repo, run),
+        "role": answer.shown.role,
+        "condition": repo.t(answer.src("condition")),
+        "item_id": repo.t(answer.src("item_id")),
+        **{
+            name: repo.t(ptr(run.prepare, "conditions", condition.index, key))
+            for name, key in (
+                ("contract", "output_contract"),
+                ("retrieval", "retrieval"),
+            )
+        },
+        "request": repo.t(
+            ["input", condition.prepared, answer.item_id, "/intent"]
+        ),
+        "reference": repo.t(ptr(receipt, "reference_filter")),
+        "filter": repo.t(ptr(receipt, "candidate_filter")),
+        "alone": repo.t(answer.src("v1")),
+        "tail": repo.t(answer.src("v2")),
+        "receipt": receipt,
+        "sha256": repo.t(["sha256", receipt]),
+        "addendum": (
+            None
+            if added is None
+            else repo.t(
+                ptr(READINGS, "cases", added[0], "addenda", added[1], "text")
+            )
+        ),
+        "disagreeing": repo.v(disagreeing_src(repo, receipt)),
+        "probes": strips,
+    }
+
+
+def _exhibit(
+    repo: Repo,
+    captures: Captures,
+    readings: Readings,
+    last: Mapping[str, int],
+    answers: Sequence[Replayed],
+) -> Node:
+    """One case's turned answers, its reading and its witnesses' notes.
+
+    The witnesses run in tail order, which every probe shares, and each
+    note lists the case's witnesses its group holds, in that order.
+    """
+    first = answers[0]
+    spots: dict[str, tuple[int, str, int]] = {}
+    for answer in answers:
+        for probe_id, frame, witness in answer.killing:
+            spots.setdefault(witness, (frame - last[probe_id], probe_id, frame))
+    witnesses = sorted(spots, key=lambda name: (spots[name], name))
+    lines: dict[int, list[Node]] = {}
+    for witness in witnesses:
+        group, position = readings.notes[witness]
+        lines.setdefault(group, []).append(
+            repo.t(ptr(READINGS, "witness_notes", group, "witnesses", position))
+        )
+    return {
+        "case": first.case_id,
+        "case_id": repo.t(first.src("case_id")),
+        "reading": repo.t(
+            ptr(READINGS, "cases", readings.cases[first.case_id], "reading")
+        ),
+        "turned": repo.v(
+            _replay_count(
+                case_id=[first.case_id], v1=_ACCEPTED, v2=["silent_wrong"]
+            )
+        ),
+        "witnesses": [
+            repo.t(
+                frame_src(
+                    captures.index(spots[witness][1]),
+                    spots[witness][2],
+                    "name",
+                )
+            )
+            for witness in witnesses
+        ],
+        "notes": [
+            {
+                "witnesses": names,
+                "note": repo.t(ptr(READINGS, "witness_notes", group, "note")),
+            }
+            for group, names in lines.items()
+        ],
+        "spec": first.shown.run.spec(first.case_id),
+        "answers": [
+            _exhibit_answer(repo, captures, answer, readings)
+            for answer in answers
+        ],
+    }
+
+
+def _tail_only(
+    repo: Repo,
+    captures: Captures,
+    answers: Sequence[Replayed],
+    index: int,
+    case_id: str,
+) -> Node:
+    """A case no benchmark frame is labelled in, and its answers' verdicts.
+
+    Its gold comes from its first answer's pass; each label is a witness
+    frame, named from the frame tables.
+    """
+    first = next(answer for answer in answers if answer.case_id == case_id)
+    spec = first.shown.run.spec(case_id)
+    return {
+        "case": case_id,
+        "case_id": repo.t(ptr(EXHIBITS, *_REPLAYED, "unscorable_cases", index)),
+        "intent": repo.t(ptr(spec, "intent")),
+        "reference": repo.t(ptr(spec, "reference_filter")),
+        "spec": spec,
+        "answers": repo.v(_replay_count(case_id=[case_id])),
+        "tail": {
+            verdict: repo.v(
+                _replay_count(
+                    case_id=[case_id], v1=["unscorable"], v2=[verdict]
+                )
+            )
+            for verdict in _EXECUTED
+        },
+        "probes": _case_probes(repo, captures, spec),
+    }
+
+
+def build_exhibits(
+    repo: Repo, captures: Captures, selection: Selection
+) -> Document:
+    """The Reel pool's test answers on the captures alone and with the tail.
+
+    Args:
+        repo: The repository.
+        captures: The committed frame tables.
+        selection: The shown runs and the pool, from ``select``.
+
+    Returns:
+        ``replay`` null outside the test phase or before the replay is
+        committed; else its counts, notes, probes, one row per pool pass,
+        one exhibit per case the tail turns an answer of, ordered by the
+        most turned answers and then by case id, and the cases only the
+        tail can score.
+
+    Raises:
+        ExportError: As ``_replay_source`` and ``_read_readings`` raise.
+        ContractError: With code ``exhibits_inconsistent`` when the replay
+            does not name the Reel's test pool, says other than its passes'
+            scored files, or lists other unscorable cases than its
+            answers', or when the readings do not cover the exhibits.
+    """
+    if not (selection.test_phase and repo.exists(EXHIBITS)):
+        return {"schema": "web-exhibits/1.0", "replay": None}
+    source = _replay_source(repo, selection)
+    last = _replay_probes(repo, captures, source)
+    answers = _replayed(repo, captures, selection.pool, source, last)
+    unscorable = [
+        _text(each, f"{EXHIBITS} unscorable case")
+        for each in _arr(source.get("unscorable_cases"), EXHIBITS)
+    ]
+    if unscorable != sorted(
+        {answer.case_id for answer in answers if answer.alone == "unscorable"}
+    ):
+        raise ContractError(
+            "exhibits_inconsistent", f"{EXHIBITS} lists other unscorable cases"
+        )
+    readings = _read_readings(repo, answers)
+    turned: dict[str, list[Replayed]] = {}
+    for answer in answers:
+        if answer.turned:
+            turned.setdefault(answer.case_id, []).append(answer)
+    order = sorted(turned, key=lambda case: (-len(turned[case]), case))
+    placed: dict[int, Node] = {
+        answer.index: {"exhibit": place, "answer": position}
+        for place, case in enumerate(order)
+        for position, answer in enumerate(turned[case])
+    }
+    return {
+        "schema": "web-exhibits/1.0",
+        "replay": {
+            "counts": _replay_counts(repo, captures, last, readings),
+            **_verdicts(repo),
+            "notes": repo.listed(READINGS, "notes"),
+            "probes": [
+                _replay_probe(repo, captures, index, probe_id)
+                for index, probe_id in enumerate(last)
+            ],
+            "rows": [
+                _replay_row(repo, shown, answers, placed)
+                for shown in selection.pool
+            ],
+            "exhibits": [
+                _exhibit(repo, captures, readings, last, turned[case])
+                for case in order
+            ],
+            "tail_only": {
+                "tail": {
+                    verdict: repo.v(
+                        _replay_count(v1=["unscorable"], v2=[verdict])
+                    )
+                    for verdict in _EXECUTED
+                },
+                "cases": [
+                    _tail_only(repo, captures, answers, index, case_id)
+                    for index, case_id in enumerate(unscorable)
+                ],
+            },
+        },
+    }
+
+
 def build_site(
     repo: Repo, selection: Selection, source_commit: str
 ) -> Document:
@@ -4226,6 +5033,7 @@ def export(root: Path, source_commit: str) -> dict[str, bytes]:
     files["reel.json"] = render(build_reel(repo, captures, selection))
     files["training.json"] = render(build_training(repo))
     files["analysis.json"] = render(build_analysis(repo, captures))
+    files["exhibits.json"] = render(build_exhibits(repo, captures, selection))
     files["routes.json"] = render(
         {
             "schema": "web-routes/1.0",

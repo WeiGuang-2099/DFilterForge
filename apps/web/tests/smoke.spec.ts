@@ -29,6 +29,12 @@ const PAGES = [
     heading:
       /^Fine-tuning made [0-9]+( to [0-9]+)? of [0-9]+ loud failures run\. [0-9]+( to [0-9]+)? of them now fail silently\.$/,
   },
+  {
+    path: 'exhibits/',
+    status: 200,
+    heading:
+      /^Without the witness packets, the verifier passes [0-9]+ answers as exact\. [0-9]+ of them are wrong\.$/,
+  },
   {path: 'methodology/', status: 200, heading: 'Evidence has a boundary.'},
   {path: 'no-such-page/', status: 404, heading: 'This page does not exist.'},
 ] as const;

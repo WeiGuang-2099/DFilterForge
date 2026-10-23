@@ -48,8 +48,34 @@ Data moves one way, through three layers:
    records the receipt's path and SHA-256, and for each scored probe the
    frames where the answer and the labels disagree, with each leaf of
    both filters and the frames among those that tshark matched it on.
-   `check` rebuilds both files and compares them byte for byte, so it runs
+
+   [`exhibits.json`](evidence/web/exhibits.json) (`verifier-exhibits/1.0`)
+   replays the Reel pool's test answers on verifier v1, the three scored
+   test captures with their 33-packet witness tail cut off: the benchmark
+   captures as ablation 005's Simplified arm read them. Every published
+   score stays on verifier v2. `export_web_evidence.py exhibits --write`
+   builds it through `dfilterforge.witness_replay`. It proves each v2
+   capture is its v1 capture plus the tail, and matches the v1 digests to
+   005's capture manifest and the v2 digests to the held-out freeze
+   record. It then runs each case's reference and each distinct answer
+   filter once per probe with the pinned tshark, and stops unless the
+   reference selects exactly the v1 labels (the v2 labels cut to the
+   benchmark frames) and every answer's v1 frames are its receipt's v2
+   frames cut the same way. For each executed ready answer it records the
+   receipt's path and SHA-256 and both verdicts; an answer that v1 accepts
+   and v2 finds silent-wrong also lists each witness frame it gets wrong.
+   `check` rebuilds all three and compares them byte for byte, so it runs
    in the test image, which has tshark and the frozen catalog.
+
+   [`exhibit-readings.json`](evidence/web/exhibit-readings.json)
+   (`exhibit-readings/1.0`) is written by hand, not rebuilt: a reading of
+   each case whose answers the tail turns, an addendum to some single
+   answers, and for each witness that turns one the comment above it in
+   `src/dfilterforge/witnesses.py`, one note per comment. The readings were
+   written after the answers were known and decide nothing.
+   `tests/test_export_web_data.py` holds each note to its comment, verbatim
+   with the lines joined, and the readings to the replay's turned cases and
+   witnesses.
 3. **`scripts/export_web_data.py`.** It uses the standard library only, starts
    no process, opens no socket and reads no clock, environment variable or git
    state. Its output in `apps/web/data/` is ignored by git and rebuilt for
@@ -299,6 +325,20 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   item carries its request, reference and, when silent-wrong, the first
   disagreeing frame of its receipt with that frame's name from
   `captures.json`. Each seed's logged loss points into its run manifest.
+- `exhibits.json`: the Reel pool's test answers on the captures alone and
+  with the witness tail, for `/exhibits`, null outside the test phase or
+  until `evidence/web/exhibits.json` exists. Every count is a `count` op
+  over the replay's answers, by verdict, overall and per pool pass, and
+  each answer is one square with both verdicts. One exhibit per case the
+  tail turns an answer of, most turned answers first, holds the reading,
+  the witnesses' notes and each answer's request, filters, receipt digest,
+  addendum and frame strips; each replayed probe carries its frame table
+  and packet list, as the Reel's strips do. A replay that does not name the
+  Reel's test pool in pool order, or that records an answer otherwise than
+  its receipt and outcome row, stops the export (`exhibits_inconsistent`):
+  its verdict alone must be the receipt's frames cut to the benchmark
+  frames, and its verdict with the tail the scored outcome. So do readings
+  that miss or add a turned case or a witness that turns one.
 - `cases/<case_id>.json`.
 - `receipts/<run_slug>/<condition>/<item_id>.json`, one per executed answer.
 
@@ -458,10 +498,14 @@ the key's rated correct, with the other squares its rated incorrect.
   exact.
   `<Outcome>` renders a scored outcome code as the protocol's words, with
   `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and a code the
-  table does not list fails the build. `<Word>` does the same for two more
-  codes: a frame's kind in `captures.json` (`frame_kind`: "recipe" or
-  "witness") and an IR's root operator (`join`: `all` reads "every
-  leaf"). `<Num link={false}>` leaves out the link where numbers stand
+  table does not list fails the build. The table has one code the scorer
+  never writes: the exhibits replay's `unscorable`, a verdict on the
+  captures alone for a case with no label left, reads "not scorable".
+  `<Word>` does the same for two more codes: a frame's kind in
+  `captures.json` (`frame_kind`: "recipe" or "witness") and an IR's root
+  operator (`join`: `all` reads "every leaf"). Both render through
+  `CodeText` in `lib/sourced-text.tsx`, which a client island uses for the
+  same markup. `<Num link={false}>` leaves out the link where numbers stand
   close, as on the ladder's axis.
   `<Term>` renders a reviewed name that holds a digit; the list in
   `lib/terms.ts` is `IPv4`, `SHA-256` and `repair@1`. `verdict` shows a
@@ -524,12 +568,15 @@ the key's rated correct, with the other squares its rated incorrect.
   Reel says in fixed words or draws, which no value check sees: each
   ladder row's direction from `packets.json`; the readout's request and
   filter words and its agree or disagree from the pick's receipt; and each
-  leaf's true, false or dash from the committed trace. On `/methodology`
-  it re-derives the judge figure the same way: each row's pass and counts
-  in pool order, and each square in its pass's outcome-row order, with the
-  condition and item that label it and its letter in each mode, c rated
-  correct or i rated incorrect, from the table's lists of false
-  acceptances; and it pins the headline pointers the lead and the
+  leaf's true, false or dash from the committed trace. On `/exhibits/` it
+  re-derives each pool pass's squares, as verdict pairs and rings, from the
+  committed replay, and each turned answer's tape cells and killing frames,
+  with the words beside them, from its receipt and the frame tables. On
+  `/methodology` it re-derives the judge figure the same way: each row's
+  pass and counts in pool order, and each square in its pass's outcome-row
+  order, with the condition and item that label it and its letter in each
+  mode, c rated correct or i rated incorrect, from the table's lists of
+  false acceptances; and it pins the headline pointers the lead and the
   paragraph after it read, in order.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
@@ -563,14 +610,21 @@ and pool checks, which leaves the frozen-prompt guard and the pylint line
 untouched:
 1. pylint on the two web scripts;
 2. `export_web_evidence.py check`, with `docs/` mounted read-only. It
-   regenerates `captures.json` in pure Python, and `packets.json` and
-   every committed trace with the image's tshark;
+   regenerates `captures.json` in pure Python, and `packets.json`, every
+   committed trace and `exhibits.json` with the image's tshark;
 3. the two scripts' tests, with `docs/` mounted, so the committed-tree cases
    run instead of skipping;
 4. two exports of the committed tree, compared with `diff -r`.
 
 Each step that needs `docs/` starts with `test -d`, so a missing mount fails
 the step.
+
+The exhibits replay made steps 2 and 3 slower by about 90 s each: step 2
+replays every pool answer with tshark, and step 3 runs the committed-tree
+replay test, which exports the committed tree. On the development host in
+the test image, step 2 took 96 to 100 s at d1716f8 with the replay, against
+7 s at 54c056f, and step 3 took 202 to 218 s for 216 to 232 tests, against
+92.9 s for 189 at 0a1617c.
 
 The web job runs the composite action. It builds `out/` through the
 Dockerfile, then runs typecheck, lint and the Playwright suite on the runner
@@ -883,6 +937,96 @@ Measured at 0a1617c on `site-board` (2026-10-06):
 - The test image ran the 189 exporter and evidence tests in 92.9 s.
 - Playwright ran 168 tests on the Docker build in 18.0 s.
 
+### The exhibits page
+
+`/exhibits/` shows what the witness tail is for. It opens with the replay's
+headline: on the captures alone the verifier passes 731 answers as exact,
+and 11 of them are silent-wrong with the tail. Then it shows:
+- every replayed answer as one square, a row per pool pass, with a verifier
+  switch between the tail and the captures alone; the 12 answers the tail
+  turns are ringed links to their exhibits;
+- one exhibit per case the tail turns an answer of, most turned answers
+  first: the request, the reference, the answer and both verdicts beside
+  the reading, the witnesses' notes and the receipt, then three frame
+  tapes and the killing frames as tshark's packet list prints them, with
+  the exhibit's own verifier switch;
+- the cases only the tail can score, each pool pass's counts and Limits.
+
+The page is `app/exhibits/page.tsx` with its components in
+`app/_components/exhibits/`. `lib/exhibits-data.ts` checks the document,
+against the closed code lists of `lib/exhibits-codes.ts`, and
+`lib/exhibits-check.ts` checks that its parts line up. Every value an
+island can show is in the server's HTML, and an island switches the view,
+the answer and the probe with data attributes and a style rule, as the
+Reel's stage does. The two readouts are the exception: they render the
+square or the frame being read out from the same exported nodes, through
+`lib/sourced-text.tsx`, and a square's readout formats its verdict codes
+with fmt's outcome kind, the one copy of those words, which the overview's
+key names its swatches with too. A square stays read
+out while the pointer is on the overview, or while the keyboard's focus is
+in it, so its line's links stay in reach; on a touch screen a tap reads a
+frame out. A square holds no text and a tape cell no number: both are
+geometry from codes, which the consistency test re-derives (What fails).
+Each square carries its place in its row as a style property, which
+staggers its change of colour when the verifier switches, and an
+exhibit's stamp fades; under reduced motion nothing moves. Answers of one
+case whose frame states agree share their tapes and packet lists. An
+exhibit's groups of buttons are named by a fixed word and the case id its
+heading shows, so no two groups share a name. In the By model table a
+turned answer that is a shortcut on the captures alone says so, since the
+column before it counts only the strong exact ones.
+
+Below 640 px nothing scrolls sideways. A tape puts its probe above two
+rows, the benchmark frames and then the tail; up to 900 px the probe
+stays beside the two rows, and wider each tape is one row. Each table
+stacks: a row becomes a block of its values, each after its column's name,
+and every part of a table states its role, since a table laid out that way
+can lose its semantics in some browsers. An exhibit's stamp sits under its
+switch, so switching the verifier moves nothing below it, and neither a
+case id nor a witness name breaks at its hyphens. Between 640 px and a
+window about 960 px wide a packet list still scrolls sideways, so its box
+stays a region the keyboard can focus, named by its caption; up to about
+770 px the two tables below the exhibits scroll too, and their links take
+the keyboard there.
+
+`tests/exhibits.spec.ts` checks that each control changes only what is
+shown, the captures alone folding each tail to no width and no height, so
+no tape grows; that every square is drawn as the key draws its verdict,
+in both views; that each readout names what it reads out, every ringed
+square from the keyboard and a frame of each probe's tape, and keeps its
+line's links in reach of the pointer and of Tab; and that a ringed square
+or a turned answer's link opens its exhibit on that answer.
+`tests/exhibits-phone.spec.ts` checks at 400 px that neither the page nor
+a tape, packet list or table scrolls sideways, whichever answer and probe
+an exhibit shows, and that every table cell is on screen; that each
+probe's name sits above its two rows, its tail on screen once its tapes
+are; that a tap reads a frame out; and that axe finds no violation.
+
+The masthead links the page between Training and Methodology, so the three
+older cards were recorded again; only their navigation row changed.
+
+Measured on the Docker `--target out` build of d1716f8 with the page
+uncommitted and its phone-width, tail-fold and stamp fixes in, on
+`exhibits` (2026-10-21):
+- The Docker static export has 66 files in 17,101,423 bytes.
+  `exhibits/index.html` is 2,033,844 bytes, 112,389 after `gzip -9`, and
+  renders 906 sourced values: 555 strings, 284 integers, 49 outcomes and 18
+  digests, with 971 squares and 1,110 tape cells. The markup, the file
+  less its script elements, is 457,843 bytes. The script elements carry the
+  server payload, 1,378,020 bytes once decoded, in which the overview's
+  readout facts take 592,937 bytes and the replayed frame tables, sent once
+  and shared by every exhibit's readout, 192,698, each counted as its JSON
+  value.
+- Against the build before the fixes, the page renders 5 more sourced
+  values, the tail-only table's probe names and the By model table's
+  shortcut mark, and is 96,511 bytes larger, mostly each square's stagger,
+  the tables' roles and the cells' column names. The 1,134 tape cells
+  counted then included the six tape keys' 24 swatches.
+- The Docker `--target out` build took 10 s, with cached dependency and
+  export layers.
+- Playwright ran 215 tests on the Docker build in 47.6 s on the host, on
+  each of two runs.
+
 ## Commands
 
 From the repository root in Git Bash. `MSYS_NO_PATHCONV=1` keeps Docker's
@@ -907,8 +1051,9 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## Limits
 
-- The methodology page, the Reel on `/` and the board render values today.
-  The case and receipt pages come next.
+- The Reel on `/`, the board, the methodology page, the two training pages
+  and the exhibits page render values today. The case and receipt pages
+  come next.
 - The Reel draws the chosen prototype's figure: one ladder diagram per
   scored probe of the pick, with an arrow and the Info column per frame
   and each run of agreeing witness frames collapsed into one break row,
