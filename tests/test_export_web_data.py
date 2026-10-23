@@ -1173,6 +1173,7 @@ def test_methodology_sources_the_protocol_constants(fixture: Fixture) -> None:
     assert len(methodology["probes"]) == 8
     assert methodology["mutants"]["all"]["killed"]["v"] == 8
     assert methodology["not_measured"][0]["key"] == "repair_at_1"
+    assert methodology["judge"] is None
     assert methodology["admitted_count"] == {
         "v": 1,
         "src": ["len", _FREEZE, "/admitted_prepares"],
@@ -3705,6 +3706,438 @@ def test_a_pool_file_of_other_rounds_stops_the_export(
     assert caught.value.code == "repair_inconsistent"
 
 
+# The judge study's test table and the published run it counts.
+_JUDGE_TABLE = "docs/results/judge-v2/table.json"
+_JUDGE_RUN = "docs/results/judge-v2/test/manifest.json"
+
+
+def _verdicts(exact: int, correct: int = 0, incorrect: int = 0) -> Document:
+    """Answers by tshark outcome and rating, every strong-exact one correct.
+
+    ``correct`` and ``incorrect`` count the silent-wrong answers.
+    """
+    return {
+        "strong_exact": {"correct": exact, "incorrect": 0, "none": 0},
+        "shortcut": {"correct": 0, "incorrect": 0, "none": 0},
+        "silent_wrong": {"correct": correct, "incorrect": incorrect, "none": 0},
+    }
+
+
+# The pool's silent-wrong answers under _judged, in pool order and in each
+# pass's outcome-row order: pass, condition, item, the frames where it and
+# the reference part, and whether the judge rated it correct, a false
+# acceptance, with the request alone and with the reference filter. The
+# frontier winner's pass is the judge's own.
+_JUDGED = (
+    (_PASS_A, "C3", "i-1001", 1, True, False),
+    (_PASS_A, "C4", "i-1002", 2, True, True),
+    (_TEST_SMALL, "C4", "i-1001", 2, False, True),
+    (_TEST_FRONT, "C2", "i-1002", 1, True, False),
+)
+_JUDGE_MODES = ("primary", "secondary")
+
+
+def _judged(fixture: Fixture) -> Path:
+    """Builds the test phase with _JUDGED's four silent-wrong pool answers.
+
+    ``_settled`` gives pass A's C4 i-1002 and the small winner's C4 i-1001;
+    pass A's C3 i-1001 and the judge's own pass's C2 i-1002 are added, so
+    one pass holds two and the judge's own pass holds one. The pool's other
+    28 executed answers are strong exact.
+    """
+    _settled(fixture)
+    fixture.answers[(_PASS_A, "C3", "i-1001")] = _wrong((2,), (1,), (4, 5))
+    fixture.answers[(_TEST_FRONT, "C2", "i-1002")] = _wrong(
+        (2, 3, 6), (1,), (4, 5)
+    )
+    return fixture.build()
+
+
+def _accepted(run_id: str, label: str, item_id: str) -> Document:
+    """A false acceptance as the table lists it."""
+    receipts = f"docs/results/{run_id}/scored/receipts"
+    return {
+        "condition": label,
+        "item_id": item_id,
+        "receipt": f"{receipts}/{label}/{item_id}.json",
+        "run": run_id,
+    }
+
+
+def _judge(root: Path) -> None:
+    """Writes a judge-table/1.0 table and the manifest of the run it counts.
+
+    The table counts _JUDGED's verdicts over the pool's 32 answers, each
+    pass's 8, and rates every strong-exact answer correct. The 12 requests
+    per mode are arbitrary: the exporter checks no request count.
+    """
+
+    def tally(runs: tuple[str, ...], mode: int) -> Document:
+        wrong = [answer for answer in _JUDGED if answer[0] in runs]
+        correct = sum(1 for answer in wrong if answer[4 + mode])
+        return _verdicts(
+            8 * len(runs) - len(wrong), correct, len(wrong) - correct
+        )
+
+    modes: Document = {}
+    for index, mode in enumerate(_JUDGE_MODES):
+        accepted = [answer for answer in _JUDGED if answer[4 + index]]
+        modes[mode] = {
+            "headline": {
+                "self_silent_wrong": 1,
+                "self_silent_wrong_rated_correct": sum(
+                    1 for answer in accepted if answer[0] == _TEST_FRONT
+                ),
+                "silent_wrong": len(_JUDGED),
+                "silent_wrong_rated_correct": len(accepted),
+            },
+            "overall": {
+                "all": tally(_POOL_RUNS, index),
+                "others": tally(_POOL_RUNS[:3], index),
+                "self": tally((_TEST_FRONT,), index),
+            },
+            "runs": {run_id: tally((run_id,), index) for run_id in _POOL_RUNS},
+            "silent_wrong_rated_correct": [
+                _accepted(*answer[:3]) for answer in accepted
+            ],
+        }
+    _write(
+        root / _JUDGE_TABLE,
+        {
+            "answers": 32,
+            "modes": modes,
+            "requests_per_mode": 12,
+            "schema_version": "judge-table/1.0",
+            "self_run": _TEST_FRONT,
+            "split": "test",
+        },
+    )
+    _write(
+        root / _JUDGE_RUN,
+        {
+            "schema_version": "judge-run/1.0",
+            "settings": {"model_id": f"vendor/{_TEST_FRONT}"},
+            "split": "test",
+        },
+    )
+
+
+def _judged_answer(
+    run_id: str,
+    label: str,
+    item_id: str,
+    frames: int,
+    *verdicts: bool,
+) -> Document:
+    """One answer of the judge block's rows, as _JUDGED gives it."""
+    outcomes = f"docs/results/{run_id}/scored/outcomes.jsonl"
+    receipt = f"docs/results/{run_id}/scored/receipts/{label}/{item_id}.json"
+    keys = {"condition": label, "item_id": item_id}
+    return {
+        **{
+            key: {"t": value, "src": ["row", outcomes, keys, f"/{key}"]}
+            for key, value in (
+                ("condition", label),
+                ("item_id", item_id),
+                ("case_id", "case-t"),
+            )
+        },
+        "typed": label in _TYPED,
+        "filter": {
+            "t": f"filter for {item_id}",
+            "src": ["ptr", receipt, "/candidate_filter"],
+        },
+        "reference": {
+            "t": "dns.qry.type == 28",
+            "src": ["ptr", receipt, "/reference_filter"],
+        },
+        "disagreeing": {
+            "v": frames,
+            "src": [
+                "sum",
+                [
+                    ["len", receipt, f"/probes/{probe}/{side}"]
+                    for probe in range(3)
+                    for side in ("candidate_only", "reference_only")
+                ],
+            ],
+        },
+        "receipt": receipt,
+        "verdicts": {
+            mode: {
+                "v": int(verdict),
+                "src": [
+                    "count",
+                    _JUDGE_TABLE,
+                    f"/modes/{mode}/silent_wrong_rated_correct",
+                    {
+                        "run": [run_id],
+                        "condition": [label],
+                        "item_id": [item_id],
+                    },
+                ],
+            }
+            for mode, verdict in zip(_JUDGE_MODES, verdicts, strict=True)
+        },
+    }
+
+
+def _judged_rows() -> list[Document]:
+    """The judge block's rows under _judged: the pool passes, in pool order."""
+    roles = {run_id: role for role, run_id in _PLANNED}
+    rows: list[Document] = []
+    for run_id in _POOL_RUNS:
+        mine = [answer for answer in _JUDGED if answer[0] == run_id]
+        rows.append(
+            {
+                "run": run_id,
+                "role": roles[run_id],
+                "model_id": {
+                    "t": f"vendor/{run_id}",
+                    "src": [
+                        "ptr",
+                        f"docs/results/{run_id}/scored/summary.json",
+                        "/model_id",
+                    ],
+                },
+                "self": run_id == _TEST_FRONT,
+                "silent_wrong": {
+                    "v": len(mine),
+                    "src": [
+                        "count",
+                        f"docs/results/{run_id}/scored/outcomes.jsonl",
+                        None,
+                        {
+                            "gold_status": ["ready"],
+                            "outcome": ["silent_wrong"],
+                        },
+                    ],
+                },
+                "rated_correct": {
+                    mode: {
+                        "v": sum(1 for answer in mine if answer[4 + index]),
+                        "src": [
+                            "count",
+                            _JUDGE_TABLE,
+                            f"/modes/{mode}/silent_wrong_rated_correct",
+                            {"run": [run_id]},
+                        ],
+                    }
+                    for index, mode in enumerate(_JUDGE_MODES)
+                },
+                "answers": [_judged_answer(*answer) for answer in mine],
+            }
+        )
+    return rows
+
+
+def _source_files(src: list[Any]) -> Iterator[str]:
+    """The files a source op reads, a sum's operands' included."""
+    if src[0] == "sum":
+        for operand in src[1]:
+            yield from _source_files(operand)
+    else:
+        yield src[1]
+
+
+def test_the_judge_table_gives_the_methodology_its_block(
+    fixture: Fixture,
+) -> None:
+    root = _judged(fixture)
+    before = _methodology(root)
+    _judge(root)
+
+    methodology = _methodology(root)
+
+    assert before["judge"] is None
+    judge = methodology["judge"]
+    assert sorted(judge) == [
+        "answers",
+        "model_id",
+        "modes",
+        "requests_per_mode",
+        "rows",
+        "self_run",
+    ]
+    assert judge["model_id"] == {
+        "t": f"vendor/{_TEST_FRONT}",
+        "src": ["ptr", _JUDGE_RUN, "/settings/model_id"],
+    }
+    # One square per silent-wrong answer, in pool order and row order, each
+    # with its mark per mode: three false acceptances with the request
+    # alone, two with the reference filter, so a mark set shortened,
+    # reordered or taken from the other mode differs here.
+    assert judge["rows"] == _judged_rows()
+    primary, secondary = judge["modes"]["primary"], judge["modes"]["secondary"]
+    # The lead: silent-wrong answers the judge rated correct, of the 4.
+    assert primary["headline"]["silent_wrong_rated_correct"] == {
+        "v": 3,
+        "src": [
+            "ptr",
+            _JUDGE_TABLE,
+            "/modes/primary/headline/silent_wrong_rated_correct",
+        ],
+    }
+    # Each cell holds its ratings and their sum; the judge's own model's
+    # answers are counted apart.
+    at = "/modes/secondary/overall/self/strong_exact"
+    cell = secondary["self"]["strong_exact"]
+    assert {key: node["v"] for key, node in cell.items()} == {
+        "answers": 7,
+        "correct": 7,
+        "incorrect": 0,
+        "none": 0,
+    }
+    assert cell["incorrect"]["src"] == ["ptr", _JUDGE_TABLE, f"{at}/incorrect"]
+    assert cell["answers"]["src"] == [
+        "sum",
+        [
+            ["ptr", _JUDGE_TABLE, f"{at}/{rating}"]
+            for rating in ("correct", "incorrect", "none")
+        ],
+    ]
+    assert secondary["all"]["silent_wrong"]["incorrect"]["v"] == 2
+    # The table's others group and its counts per condition and per pass
+    # stay in the table.
+    assert sorted(primary) == ["all", "headline", "self"]
+    # Every value comes from the table, the published run or the pool
+    # passes' files; pass B and the dev passes are never read.
+    files = {
+        file for node in _nodes(judge) for file in _source_files(node["src"])
+    }
+    pools = tuple(f"docs/results/{run_id}/" for run_id in _POOL_RUNS)
+    strays = files - {_JUDGE_TABLE, _JUDGE_RUN}
+    assert {_JUDGE_TABLE, _JUDGE_RUN} < files
+    assert [file for file in strays if not file.startswith(pools)] == []
+    check_sources(root, {"methodology.json": methodology})
+
+
+def test_a_judge_table_outside_the_test_phase_is_not_shown(
+    fixture: Fixture,
+) -> None:
+    # The dev pool is not the pool the table judges. Before the test phase
+    # the exporter reads no judge file, so site.json's inputs stay as well.
+    root = fixture.build()
+    before = exporter.export(root, "abc1234")
+    _judge(root)
+
+    assert exporter.export(root, "abc1234") == before
+
+
+@pytest.mark.parametrize(
+    ("file", "keys", "value", "code"),
+    [
+        (
+            _JUDGE_TABLE,
+            ("schema_version",),
+            "judge-table/0.9",
+            "schema_invalid",
+        ),
+        (_JUDGE_TABLE, ("split",), "dev", "judge_inconsistent"),
+        # Pass B, never pooled, counted in place of pass A in one mode.
+        (
+            _JUDGE_TABLE,
+            ("modes", "secondary", "runs"),
+            dict.fromkeys(
+                (_PASS_B, _TEST_SMALL, _TEST_MID, _TEST_FRONT), _verdicts(8)
+            ),
+            "judge_inconsistent",
+        ),
+        # The judge's own pass outside the pool.
+        (_JUDGE_TABLE, ("self_run",), _PASS_B, "judge_inconsistent"),
+        # Other answers than the Reel's 32, or silent-wrong ones than its 4.
+        (_JUDGE_TABLE, ("answers",), 31, "judge_inconsistent"),
+        (
+            _JUDGE_TABLE,
+            ("modes", "secondary", "headline", "silent_wrong"),
+            3,
+            "judge_inconsistent",
+        ),
+        # A judge of another model than its own pass's.
+        (
+            _JUDGE_RUN,
+            ("settings", "model_id"),
+            "vendor/m",
+            "judge_inconsistent",
+        ),
+        # A silent-wrong answer without a verdict, which a 0 mark would
+        # show as rated incorrect.
+        (
+            _JUDGE_TABLE,
+            ("modes", "primary", "overall", "all", "silent_wrong", "none"),
+            1,
+            "judge_inconsistent",
+        ),
+        # A list one short of its headline count.
+        (
+            _JUDGE_TABLE,
+            ("modes", "secondary", "silent_wrong_rated_correct"),
+            [_accepted(_PASS_A, "C4", "i-1002")],
+            "judge_inconsistent",
+        ),
+        # An entry that names a strong-exact answer, so the marks sum short.
+        (
+            _JUDGE_TABLE,
+            ("modes", "secondary", "silent_wrong_rated_correct"),
+            [
+                _accepted(_PASS_A, "C4", "i-1002"),
+                _accepted(_TEST_MID, "C4", "i-1001"),
+            ],
+            "judge_inconsistent",
+        ),
+        # An entry twice, which marks one answer 2 though the sum holds.
+        (
+            _JUDGE_TABLE,
+            ("modes", "secondary", "silent_wrong_rated_correct"),
+            [_accepted(_PASS_A, "C4", "i-1002")] * 2,
+            "judge_inconsistent",
+        ),
+        # An entry beyond the marks, here an answer of pass B, never pooled.
+        (
+            _JUDGE_TABLE,
+            ("modes", "secondary", "silent_wrong_rated_correct"),
+            [
+                _accepted(_PASS_A, "C4", "i-1002"),
+                _accepted(_TEST_SMALL, "C4", "i-1001"),
+                _accepted(_PASS_B, "C4", "i-1001"),
+            ],
+            "judge_inconsistent",
+        ),
+        # The judge's own pass's marks summing to another count.
+        (
+            _JUDGE_TABLE,
+            (
+                "modes",
+                "primary",
+                "headline",
+                "self_silent_wrong_rated_correct",
+            ),
+            0,
+            "judge_inconsistent",
+        ),
+    ],
+)
+def test_a_judge_table_of_other_answers_stops_the_export(
+    fixture: Fixture, file: str, keys: tuple[str, ...], value: object, code: str
+) -> None:
+    root = _judged(fixture)
+    _judge(root)
+
+    def put(document: Any) -> None:
+        for key in keys[:-1]:
+            document = document[key]
+        document[keys[-1]] = value
+
+    _edit(root / file, put)
+
+    with pytest.raises(exporter.ExportError) as caught:
+        exporter.export(root, "abc1234")
+    assert caught.value.code == code
+    # A table of another schema cannot be read, which exits 2; any other
+    # table breaks the data contract, which exits 1.
+    assert caught.value.exit_status == (2 if code == "schema_invalid" else 1)
+
+
 @pytest.mark.parametrize("phase", ["dev", "test"])
 def test_the_reel_hashes_the_ruling(fixture: Fixture, phase: str) -> None:
     _settled(fixture)
@@ -3862,6 +4295,65 @@ def test_the_committed_tree_exports_every_executed_answer() -> None:
     ]
     assert line["not_run"] == []
     assert check_sources(_ROOT, documents) > 150_000
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_exports_the_judge_table() -> None:
+    methodology = _documents(_committed())["methodology.json"]
+    judge = methodology["judge"]
+
+    # The Reel's 971 answers, judged in 508 requests per mode.
+    assert (judge["answers"]["v"], judge["requests_per_mode"]["v"]) == (
+        971,
+        508,
+    )
+    assert judge["model_id"]["t"] == "deepseek/deepseek-v4-pro-0813"
+    assert judge["self_run"]["t"] == "test-deepseek-v4-pro-0813-2026-09-26"
+    headlines = [
+        judge["modes"][mode]["headline"] for mode in ("primary", "secondary")
+    ]
+    # Each mode counts the Reel's 165 silent-wrong answers, 27 of them
+    # the judge's own model's.
+    assert [
+        (each["silent_wrong"]["v"], each["self_silent_wrong"]["v"])
+        for each in headlines
+    ] == [(165, 27), (165, 27)]
+    # The published counts: the silent-wrong answers rated correct, over
+    # all 165 and over the judge's own 27, with the request alone and with
+    # the reference filter.
+    assert [
+        (
+            each["silent_wrong_rated_correct"]["v"],
+            each["self_silent_wrong_rated_correct"]["v"],
+        )
+        for each in headlines
+    ] == [(58, 8), (62, 3)]
+    # One row per pool pass, in pool order, the judge's own pass last; one
+    # square per silent-wrong answer, whose marks add up to each row's
+    # rated-correct count and over the rows to the headline counts.
+    rows = judge["rows"]
+    assert [
+        (row["role"], row["model_id"]["t"], row["self"], len(row["answers"]))
+        for row in rows
+    ] == [
+        ("aa_pass_a", "qwen/qwen3-32b", False, 49),
+        ("winner_small", "qwen/qwen3.5-9b", False, 51),
+        ("winner_mid", "qwen/qwen3.5-122b-a10b", False, 38),
+        ("winner_frontier", "deepseek/deepseek-v4-pro-0813", True, 27),
+    ]
+    for mode, total, own in (("primary", 58, 8), ("secondary", 62, 3)):
+        marks = [
+            [answer["verdicts"][mode]["v"] for answer in row["answers"]]
+            for row in rows
+        ]
+        assert [sum(each) for each in marks] == [
+            row["rated_correct"][mode]["v"] for row in rows
+        ]
+        assert (sum(map(sum, marks)), sum(marks[-1])) == (total, own)
+    assert [row["silent_wrong"]["v"] for row in rows] == [49, 51, 38, 27]
+    check_sources(_ROOT, {"methodology.json": methodology})
 
 
 @pytest.mark.skipif(

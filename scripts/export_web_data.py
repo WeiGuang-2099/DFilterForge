@@ -133,6 +133,30 @@ round's line: split, model, triggered items, each arm's repaired count and
 any arm the gate stopped. A round summary that names another pass or split
 stops the export (``repair_inconsistent``).
 
+methodology.json's ``judge`` holds the judge study's test table once
+docs/results/judge-v2/table.json (judge-table/1.0) exists in the test
+phase, and is null otherwise: per mode, the headline and the answers by
+tshark outcome and rating over every answer and over the judge's own
+model's apart, each cell with its answers as a ``sum`` of its ratings, all
+pointers into the table; the answers, requests per mode and the judge's own
+pass from the table; the judge's model from
+docs/results/judge-v2/test/manifest.json; and, to draw one square per
+answer, one row per Reel test-pool pass in pool order: its slug, role and
+model, whether it is the judge's own pass, its silent-wrong answers counted
+over its outcome rows and, per mode, a ``count`` of the false acceptances
+that name it, and each ready silent-wrong answer in row order, with its
+condition, item and case from its outcome row, whether its condition is
+typed, the filter that ran, the reference and the frames where they part
+from its receipt, the receipt's path, and per mode its mark: a ``count`` of
+the mode's false acceptances that name it, 1 or 0. A table of another
+schema exits 2; one that is not the test split's, counts other passes than
+the Reel's test pool, names a judge pass outside it, counts other answers
+or silent-wrong answers than the Reel's headline, or whose run names
+another model than that pass's, stops the export (``judge_inconsistent``),
+and so does a mode that leaves a silent-wrong answer without a verdict, or
+whose marks are not 0 or 1 or do not sum to its headline's rated-correct
+counts, over all answers and the judge's own, and to its list's length.
+
 board.json's ``test.repair`` holds the test repair round once
 docs/results/repair-pool/test.json exists: the pooled arms and
 comparisons, then each pool pass's arms and comparisons from its
@@ -203,6 +227,24 @@ SHORTCUTS = "docs/ablations/evidence/006-shortcut-policy.json"
 FREEZE = "src/dfilterforge/held_out_freeze.json"
 # The test repair round pooled over the test pool's passes (repair-pool/1.0).
 REPAIR_POOL = "docs/results/repair-pool/test.json"
+# The judge study's counts (judge-table/1.0, scripts/judge_study.py table)
+# and the published test run they count (judge-run/1.0).
+JUDGE_TABLE = "docs/results/judge-v2/table.json"
+JUDGE_RUN = "docs/results/judge-v2/test/manifest.json"
+_JUDGE_SCHEMA = "judge-table/1.0"
+# The request alone, then the request with the reference filter.
+_JUDGE_MODES = ("primary", "secondary")
+# Every judged answer, then the judge's own model's; the table's others
+# group and its cells per condition and per pass stay in the table.
+_JUDGE_GROUPS = ("all", "self")
+# An answer's rating: its request's verdict, or none when no reply gave one.
+_JUDGE_RATINGS = ("correct", "incorrect", "none")
+_JUDGE_HEADLINE = (
+    "silent_wrong",
+    "silent_wrong_rated_correct",
+    "self_silent_wrong",
+    "self_silent_wrong_rated_correct",
+)
 # The SFT headline (sft-headline/1.0), scripts/sft_headline.py's output.
 HEADLINE = "docs/results/sft-v1/headline.json"
 # The self-served rerun (docs/decisions/self-served-runs.md, "Seed 2026's
@@ -2491,12 +2533,315 @@ def build_repair(repo: Repo, selection: Selection) -> Node | None:
     }
 
 
+def _judge_mode(repo: Repo, mode: str) -> Node:
+    """One mode's headline and its answers by tshark outcome and rating.
+
+    The answers are counted over every judged answer and over the judge's
+    own model's apart, all pointers into JUDGE_TABLE. Each cell also holds
+    its answers, a sum over its three ratings, so a page can say how many
+    answers a rating is out of without adding them up itself.
+    """
+    at = ("modes", mode)
+
+    def cell(group: str, outcome: str) -> Node:
+        tokens = (*at, "overall", group, outcome)
+        return {
+            **repo.numbers(JUDGE_TABLE, _JUDGE_RATINGS, *tokens),
+            "answers": repo.v(
+                [
+                    "sum",
+                    [
+                        ptr(JUDGE_TABLE, *tokens, rating)
+                        for rating in _JUDGE_RATINGS
+                    ],
+                ]
+            ),
+        }
+
+    return {
+        "headline": repo.numbers(JUDGE_TABLE, _JUDGE_HEADLINE, *at, "headline"),
+        **{
+            group: {outcome: cell(group, outcome) for outcome in _EXECUTED}
+            for group in _JUDGE_GROUPS
+        },
+    }
+
+
+def _silent_wrong(run: Run) -> list[tuple[str, str]]:
+    """A pass's ready silent-wrong answers, in its outcome rows' order."""
+    return [
+        key
+        for key, item in run.rows.items()
+        if item.get("gold_status") == "ready"
+        and run.outcome(*key) == "silent_wrong"
+    ]
+
+
+def _judge_mark(mode: str, run: Run, label: str, item_id: str) -> Src:
+    """Counts a mode's false acceptances that name one answer.
+
+    A mode's silent_wrong_rated_correct lists each silent-wrong answer the
+    judge rated correct by pass, condition and item. Once ``_check_marks``
+    holds every mark to 0 or 1 and every silent-wrong answer to a verdict,
+    1 is a false acceptance and 0 an answer rated incorrect.
+    """
+    return count(
+        JUDGE_TABLE,
+        {"run": [run.run_id], "condition": [label], "item_id": [item_id]},
+        pointer("modes", mode, "silent_wrong_rated_correct"),
+    )
+
+
+def _check_marks(repo: Repo, selection: Selection, own: Run) -> None:
+    """Refuses a mode whose false acceptances are not marks on the pool.
+
+    Each mode marks every silent-wrong answer of the pool with
+    ``_judge_mark``. No silent-wrong answer may lack a verdict, or a 0
+    would not tell rated incorrect from no verdict, and no mark may pass 1.
+    The marks must sum to the headline's silent_wrong_rated_correct and to
+    the list's length, so every entry names one silent-wrong answer of the
+    pool, and the own pass's marks to self_silent_wrong_rated_correct.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for a count or list of
+            the wrong type.
+        ContractError: With code ``judge_inconsistent`` for any of these.
+    """
+    answers = [
+        (shown.run, label, item_id)
+        for shown in selection.pool
+        for label, item_id in _silent_wrong(shown.run)
+    ]
+
+    def number(mode: str, *tokens: str) -> int:
+        return _int(
+            repo.resolve(ptr(JUDGE_TABLE, "modes", mode, *tokens)),
+            f"{JUDGE_TABLE} {pointer('modes', mode, *tokens)}",
+        )
+
+    for mode in _JUDGE_MODES:
+        marks = [
+            _int(repo.resolve(_judge_mark(mode, *answer)), f"{mode} mark")
+            for answer in answers
+        ]
+        listed = _arr(
+            repo.resolve(
+                ptr(JUDGE_TABLE, "modes", mode, "silent_wrong_rated_correct")
+            ),
+            f"{JUDGE_TABLE} {mode} silent_wrong_rated_correct",
+        )
+        owned = sum(
+            mark
+            for mark, (run, _, _) in zip(marks, answers, strict=True)
+            if run.run_id == own.run_id
+        )
+        rated = number(mode, "headline", "silent_wrong_rated_correct")
+        rated_own = number(mode, "headline", "self_silent_wrong_rated_correct")
+        if (
+            number(mode, "overall", "all", "silent_wrong", "none") != 0
+            or any(mark > 1 for mark in marks)
+            or sum(marks) != rated
+            or len(listed) != rated
+            or owned != rated_own
+        ):
+            raise ContractError(
+                "judge_inconsistent",
+                f"{JUDGE_TABLE} {mode} rates other answers correct than its "
+                "counts, or leaves a silent-wrong answer without a verdict",
+            )
+
+
+def _check_judge(repo: Repo, selection: Selection) -> Run:
+    """Refuses a judge table that does not count the Reel's test pool.
+
+    docs/protocol.md (Judge study) judges the answers of the Disproof Reel's
+    test pool. So the table must be the test split's, count the pool's
+    passes in each mode, name one of them as the judge's own, and count the
+    answers and, in each mode's headline, the silent-wrong answers that the
+    Reel's headline counts. The published run must name that pass's model,
+    and each mode's false acceptances must pass ``_check_marks``.
+
+    Returns:
+        The judge's own pass.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for a table whose schema
+            is not judge-table/1.0 or a field of the wrong type, and as
+            ``Repo.resolve`` raises for a missing file or field.
+        ContractError: With code ``judge_inconsistent`` for a table of
+            another split, passes or counts, a run of another model, or
+            false acceptances ``_check_marks`` refuses.
+    """
+    table = _obj(repo.json(JUDGE_TABLE), JUDGE_TABLE)
+    if table.get("schema_version") != _JUDGE_SCHEMA:
+        raise ExportError(
+            "schema_invalid", f"{JUDGE_TABLE} is not {_JUDGE_SCHEMA}"
+        )
+    pool = {shown.run.run_id: shown.run for shown in selection.pool}
+    counted = [
+        sorted(
+            _obj(
+                repo.resolve(ptr(JUDGE_TABLE, "modes", mode, "runs")),
+                f"{JUDGE_TABLE} {mode} runs",
+            )
+        )
+        for mode in _JUDGE_MODES
+    ]
+    own = pool.get(_text(table.get("self_run"), f"{JUDGE_TABLE} self_run"))
+    if (
+        table.get("split") != "test"
+        or any(runs != sorted(pool) for runs in counted)
+        or own is None
+    ):
+        raise ContractError(
+            "judge_inconsistent",
+            f"{JUDGE_TABLE} does not judge the Reel's test pool",
+        )
+    # The Reel's headline counts, the answers that ran and the silent-wrong
+    # ones, as build_reel sources them.
+    compiled, silent = [
+        repo.resolve(
+            [
+                "sum",
+                [
+                    shown.run.count(
+                        {"gold_status": ["ready"], "outcome": outcomes}
+                    )
+                    for shown in selection.pool
+                ],
+            ]
+        )
+        for outcomes in (list(_EXECUTED), ["silent_wrong"])
+    ]
+    headlines = [
+        _int(
+            repo.resolve(
+                ptr(JUDGE_TABLE, "modes", mode, "headline", "silent_wrong")
+            ),
+            f"{JUDGE_TABLE} {mode} silent_wrong",
+        )
+        for mode in _JUDGE_MODES
+    ]
+    if _int(table.get("answers"), f"{JUDGE_TABLE} answers") != compiled or any(
+        found != silent for found in headlines
+    ):
+        raise ContractError(
+            "judge_inconsistent",
+            f"{JUDGE_TABLE} counts other answers than the Reel's headline",
+        )
+    model = repo.resolve(ptr(JUDGE_RUN, "settings", "model_id"))
+    if model != repo.resolve(ptr(own.summary, "model_id")):
+        raise ContractError(
+            "judge_inconsistent",
+            f"{JUDGE_RUN} names another model than {own.run_id}",
+        )
+    _check_marks(repo, selection, own)
+    return own
+
+
+def _judge_answer(repo: Repo, run: Run, label: str, item_id: str) -> Node:
+    """One silent-wrong answer as the judge study's figure reads it out.
+
+    Its condition, item and case from its outcome row; whether its condition
+    is typed, so the page can say the filter that ran was compiled from its
+    IR; that filter, the reference and the frames where they part from its
+    receipt, whose path the page links; and its mark in each mode.
+    """
+    keys = {"condition": label, "item_id": item_id}
+    receipt = run.receipt(label, item_id)
+    return {
+        **{
+            key: repo.t(row(run.outcomes, keys, key))
+            for key in ("condition", "item_id", "case_id")
+        },
+        "typed": run.condition(label).typed,
+        "filter": repo.t(ptr(receipt, "candidate_filter")),
+        "reference": repo.t(ptr(receipt, "reference_filter")),
+        "disagreeing": repo.v(disagreeing_src(repo, receipt)),
+        "receipt": receipt,
+        "verdicts": {
+            mode: repo.v(_judge_mark(mode, run, label, item_id))
+            for mode in _JUDGE_MODES
+        },
+    }
+
+
+def _judge_row(repo: Repo, shown: Shown, own: Run) -> Node:
+    """One pool pass's silent-wrong answers, with its counts per mode.
+
+    Its silent-wrong count counts its outcome rows, and its rated-correct
+    count in a mode the mode's false acceptances that name it. The page
+    draws them beside its answers and compares no pass with another.
+    """
+    run = shown.run
+    return {
+        "run": run.slug,
+        "role": shown.role,
+        "model_id": repo.t(ptr(run.summary, "model_id")),
+        "self": run.run_id == own.run_id,
+        "silent_wrong": repo.v(
+            run.count({"gold_status": ["ready"], "outcome": ["silent_wrong"]})
+        ),
+        "rated_correct": {
+            mode: repo.v(
+                count(
+                    JUDGE_TABLE,
+                    {"run": [run.run_id]},
+                    pointer("modes", mode, "silent_wrong_rated_correct"),
+                )
+            )
+            for mode in _JUDGE_MODES
+        },
+        "answers": [
+            _judge_answer(repo, run, label, item_id)
+            for label, item_id in _silent_wrong(run)
+        ],
+    }
+
+
+def build_judge(repo: Repo, selection: Selection) -> Node | None:
+    """The judge study's test table, as the methodology page shows it.
+
+    docs/protocol.md (Judge study) counts an LLM judge's verdicts on the
+    answers of the Disproof Reel's test pool, per mode. Every judge count
+    is a pointer into JUDGE_TABLE, which scripts/judge_study.py table
+    writes and CI rebuilds with --check, or a count over its false
+    acceptances, and the judge's model comes from JUDGE_RUN: plain counts,
+    with the table's counts per condition and per pass left in the table.
+    Beside them, one row per pool pass, in pool order, holds its
+    silent-wrong answers, counted over its outcome rows, with their marks
+    and what the page reads out for each, which it draws as one square.
+    None outside the test phase, whose Reel pool the table does not judge,
+    or before the table exists.
+
+    Raises:
+        ExportError: As ``_check_judge`` raises for a table of another
+            schema or an input it cannot read.
+        ContractError: As ``_check_judge`` raises for a table that does not
+            count the Reel's test pool.
+    """
+    if not (selection.test_phase and repo.exists(JUDGE_TABLE)):
+        return None
+    own = _check_judge(repo, selection)
+    return {
+        "model_id": repo.t(ptr(JUDGE_RUN, "settings", "model_id")),
+        "self_run": repo.t(ptr(JUDGE_TABLE, "self_run")),
+        "answers": repo.v(ptr(JUDGE_TABLE, "answers")),
+        "requests_per_mode": repo.v(ptr(JUDGE_TABLE, "requests_per_mode")),
+        "modes": {mode: _judge_mode(repo, mode) for mode in _JUDGE_MODES},
+        "rows": [_judge_row(repo, shown, own) for shown in selection.pool],
+    }
+
+
 def build_methodology(repo: Repo, selection: Selection) -> Document:
     """Conditions, bootstrap, environment, gates and what is unmeasured.
 
     The conditions, top_k, bootstrap and environment come from the dev
     anchor in either phase, and the not_measured statuses, each with its
     split, and the repair line from ``repair_status_run`` and its round.
+    The judge block comes from the judge study's table and its run, and its
+    rows from the pool passes' outcome rows and receipts, in the test phase
+    only (``build_judge``).
     The rest comes from no run: probes and witnesses from CAPTURES, mutants
     and their categories from GATE, shortcuts from SHORTCUTS and admitted
     prepares from FREEZE.
@@ -2584,6 +2929,7 @@ def build_methodology(repo: Repo, selection: Selection) -> Document:
         },
         "not_measured": not_measured,
         "repair": _repair_line(repo, measured),
+        "judge": build_judge(repo, selection),
         "admitted_prepares": repo.listed(FREEZE, "admitted_prepares"),
         "admitted_count": repo.v(["len", FREEZE, "/admitted_prepares"]),
     }
