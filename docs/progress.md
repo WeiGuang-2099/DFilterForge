@@ -1,23 +1,19 @@
 # Implementation Progress
 
-Last updated: 2026-10-21
+Last updated: 2026-10-23
 
 ## Current slice
 
-Plan week R2 runs three slices on three branches. `passb` (plan slice 4)
-is measured: sent the frozen test prompts a second time on 2026-10-20,
-seed 2026's adapter changed 33 of its 448 answers and flipped none of the
-40 ready C4 cases ([pair
-report](decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json));
-its result PR points the headline and the training pages to that report.
+Plan week R2's slices. `passb` (plan slice 4) is merged (PR #41).
 `judge-study` (slice 5) asks an LLM judge whether each of the 971 test
 filters that ran is right and compares its verdicts with tshark's; its
-runner merged in PR #40, and its dev check, sent on 2026-10-20, showed a
-defect that a correction in the judge note fixes before any test
-request. `exhibits` (slice 6), in progress on `exhibits`, replays the
-hosted test answers without the witness packets and shows, on a new
-page, the wrong filters that only a witness frame disproves. No other
-published number changes until each one's result is committed.
+`judge-v2` dev check passed (PR #43), and the owner sends the test study
+on 2026-10-23, after which the maintainer publishes it, writes the table
+and adds the `/methodology` block and the README sentence. `exhibits`
+(slice 6), on `exhibits`, replays the hosted test answers without the
+witness packets and shows, on the new `/exhibits` page, the 11 answers
+the captures alone pass that a witness frame disproves. No other
+published number changes until the judge study's result is committed.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2704,6 +2700,37 @@ PR #40 merged `judge-study` into `main` as 65d15e0: the judge study's
 owner runner, `scripts/judge_study.py`, the socket-free module that
 builds its requests and counts its verdicts, `src/dfilterforge/judge.py`,
 their tests and the judge note's first correction (J7's cap ratio).
+
+## PR #41 merged: 2026-10-21
+
+PR #41 merged `passb` into `main` as 89184f6. Seed 2026's second test
+pass, sent on 2026-10-20, changed 33 of the adapter's 448 answers and
+flipped none of the 40 ready C4 cases ([pair
+report](decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json));
+the SFT headline and the training pages quote it, and the [self-served
+note](decisions/self-served-runs.md) holds its bill, USD 0.29, which
+brings Modal's total to USD 5.16. PR #42 landed 20 s later, so CI on
+main ran on 407d383, which holds this merge, and passed.
+
+## PR #42 merged: 2026-10-21
+
+PR #42 merged `judge-study` into `main` as 407d383. It publishes the
+judge-v1 dev check (`results/judge-v1/dev/`): all 282 requests got a
+completed reply, for USD 0.2306, but 114 replies gave no verdict, 109 of
+them at the 256-token limit. The [judge note](decisions/judge-study.md)'s
+correction of 2026-10-21 moves the prompts to `judge-v2`, which asks for
+the verdict before the reason, and the parser reads the verdict a reply
+opens with; every other rule stays. Hosted CI passed on main.
+
+## PR #43 merged: 2026-10-21
+
+PR #43 merged `judge-study` into `main` as b0efe50. It publishes the
+judge-v2 dev check (`results/judge-v2/dev/`), sent on 2026-10-21: all 282
+requests got a completed reply on their first attempt and every reply
+gave a verdict, which passes step 4 and leaves DeepInfra standing under
+J2, for USD 0.1459. Read in full, 6 replies open with "incorrect" and
+end with a reason that calls the filter correct; the note's Limits say
+so. Hosted CI passed on main.
 
 ## Planned next
 
