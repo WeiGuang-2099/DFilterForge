@@ -4,13 +4,17 @@ Frame tables are regenerated from the split and feedback generators and
 checked against the benchmark recipes and the witness names directly; the
 packet lists come from the pinned tshark. The anchor files of a temporary
 repository are written from the regenerated documents, then edited to fail
-one check at a time. The test of the committed files, the Reel pick's
-predicate trace included, skips where the test image carries no docs/ tree.
+one check at a time; its Reel pool is one run whose receipts the pinned
+tshark gives. The test of the committed files, the Reel pick's predicate
+trace and the verifier v1 replay included, skips where the test image
+carries no docs/ tree.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
+from datetime import timezone
 import hashlib
 import importlib.util
 import json
@@ -23,8 +27,16 @@ import pytest
 
 from dfilterforge.benchmark import BenchmarkProbe
 from dfilterforge.benchmark import generate_benchmark
+from dfilterforge.evaluation import aggregate_metrics
+from dfilterforge.evaluation import evaluate_probe
+from dfilterforge.evaluation import EvaluationReceiptV1
 from dfilterforge.model_split import generate_model_split
 from dfilterforge.packet_list import PacketListRunner
+from dfilterforge.score_summary import ConditionLabel
+from dfilterforge.score_summary import ItemOutcomeV1
+from dfilterforge.score_summary import OutcomeV1
+from dfilterforge.shortcuts import ShortcutHitV1
+from dfilterforge.shortcuts import ShortcutRule
 from dfilterforge.witnesses import WITNESS_NAMES
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +57,74 @@ _FREEZE = Path("src/dfilterforge/held_out_freeze.json")
 _SPEC = Path("docs/results/dev-fixture-2026-01-01/scored/specs/case-a.json")
 _CAPTURES = Path("docs/decisions/evidence/web/captures.json")
 _PACKETS = Path("docs/decisions/evidence/web/packets.json")
+_EXHIBITS = Path("docs/decisions/evidence/web/exhibits.json")
+_REGISTRY = Path("docs/decisions/evidence/test-runs.json")
+_ADEQUACY = Path("docs/ablations/evidence/005-probe-adequacy-simplified.json")
+_RUN = "test-fixture-2026-01-01"
+_SCORED = Path("docs/results") / _RUN / "scored"
+_TEST_PROBES = ("semantic-31", "semantic-37", "semantic-43")
+# The fixture pool's executed answers, with a shortcut token or None and
+# their v1 and v2 verdicts: a witness-only miss, the reference, a miss a
+# benchmark frame shows, a shortcut, the reference again from a typed
+# condition, and a case only the witness tail can score.
+_ANSWERS: tuple[
+    tuple[ConditionLabel, str, str, str, str | None, str, str], ...
+] = (
+    (
+        "C1",
+        "mei-1031",
+        "tcp-destination-not-https",
+        "tcp && !(tcp.port == 443)",
+        None,
+        "strong_exact",
+        "silent_wrong",
+    ),
+    (
+        "C1",
+        "mei-1032",
+        "tcp-destination-not-https",
+        "tcp.dstport != 443",
+        None,
+        "strong_exact",
+        "strong_exact",
+    ),
+    (
+        "C2",
+        "mei-1031",
+        "tcp-destination-not-https",
+        "tcp.dstport == 53",
+        None,
+        "silent_wrong",
+        "silent_wrong",
+    ),
+    (
+        "C2",
+        "mei-1032",
+        "tcp-destination-not-https",
+        "tcp.dstport != 443 && frame.number >= 1",
+        "frame.number",
+        "shortcut",
+        "shortcut",
+    ),
+    (
+        "C3",
+        "mei-1031",
+        "tcp-destination-not-https",
+        "tcp.dstport != 443",
+        None,
+        "strong_exact",
+        "strong_exact",
+    ),
+    (
+        "C1",
+        "mei-1067",
+        "ttl-between",
+        "ip.ttl > 1 && ip.ttl < 64",
+        None,
+        "unscorable",
+        "strong_exact",
+    ),
+)
 Document = dict[str, Any]
 
 
@@ -91,8 +171,181 @@ def _manifest_row(row: Document) -> Document:
     }
 
 
+def _freeze(document: Document) -> Document:
+    """A freeze record holding the regenerated test captures' digests."""
+    return {
+        "digests": {
+            "gold": "0" * 64,
+            **{
+                row["probe_id"]: row["capture_sha256"]
+                for row in document["probes"]
+                if row["split"] == "test"
+            },
+        }
+    }
+
+
+def _row(
+    condition: ConditionLabel,
+    item_id: str,
+    case_id: str,
+    outcome: OutcomeV1,
+    **fields: Any,
+) -> bytes:
+    """One outcome row as the scorer writes it, with one trailing LF."""
+    return (
+        ItemOutcomeV1(
+            condition=condition,
+            item_id=item_id,
+            case_id=case_id,
+            outcome=outcome,
+            gold_field_count=1,
+            latency_ms=0.0,
+            **fields,
+        ).model_dump_json()
+        + "\n"
+    ).encode("utf-8")
+
+
+@pytest.fixture(name="exhibit_inputs", scope="module")
+def fixture_exhibit_inputs(
+    document: Document, tmp_path_factory: pytest.TempPathFactory
+) -> dict[Path, bytes]:
+    """A one-run Reel pool, its v1 anchor and the exhibits it replays to.
+
+    Each receipt holds the frames the pinned tshark gives on the scored
+    captures. Pass B and an unused row stay out of the pool, and neither a
+    non-executed answer nor non-ready gold enters the replay.
+    """
+    root = tmp_path_factory.mktemp("exhibits")
+    split = generate_model_split(root / "split")
+    benchmark = {
+        probe.probe_id: probe.capture_path.read_bytes()
+        for probe in generate_benchmark(root / "benchmark")
+    }
+    captures = {probe.probe_id: probe.capture_path for probe in split.probes}
+    specs = {case.case_id: case.spec for case in split.gold.cases}
+    runner = PacketListRunner()
+    files: dict[Path, bytes] = {
+        _REGISTRY: json.dumps(
+            {
+                "runs": [
+                    {
+                        "role": "aa_pass_a",
+                        "run_id": _RUN,
+                        "status": "published",
+                    },
+                    {
+                        "role": "aa_pass_b",
+                        "run_id": "test-fixture-passb-2026-01-01",
+                        "status": "published",
+                    },
+                    {
+                        "role": "winner_small",
+                        "run_id": "test-fixture-small-2026-01-01",
+                        "status": "unused",
+                    },
+                ]
+            }
+        ).encode("utf-8"),
+        _ADEQUACY: json.dumps(
+            {
+                "measurement_identity": {
+                    "capture_manifest": [
+                        {
+                            "probe_id": probe_id,
+                            "capture_sha256": hashlib.sha256(
+                                benchmark[probe_id]
+                            ).hexdigest(),
+                        }
+                        for probe_id in _TEST_PROBES
+                    ]
+                }
+            }
+        ).encode("utf-8"),
+    }
+    rows: list[bytes] = []
+    for condition, item_id, case_id, answer, token, _, _ in _ANSWERS:
+        spec = specs[case_id]
+        files[_SCORED / "specs" / f"{case_id}.json"] = (
+            spec.model_dump_json().encode("utf-8")
+        )
+        probes = tuple(
+            evaluate_probe(
+                expected.probe_id,
+                expected.expected_frames,
+                runner.run(captures[expected.probe_id], answer).frames,
+                0.0,
+            )
+            for expected in spec.probes
+        )
+        files[_SCORED / "receipts" / condition / f"{item_id}.json"] = (
+            EvaluationReceiptV1(
+                run_id=_RUN,
+                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                code_revision="fixture",
+                environment_hash="0" * 64,
+                data_hash="0" * 64,
+                candidate_filter=answer,
+                reference_filter=spec.reference_filter,
+                probes=probes,
+                metrics=aggregate_metrics(probes),
+            )
+            .model_dump_json()
+            .encode("utf-8")
+        )
+        exact = tuple(probe.exact for probe in probes)
+        hits = (
+            ()
+            if token is None
+            else (
+                ShortcutHitV1(rule=ShortcutRule.CAPTURE_POSITION, token=token),
+            )
+        )
+        outcome = OutcomeV1.SILENT_WRONG
+        if all(exact):
+            outcome = OutcomeV1.SHORTCUT if hits else OutcomeV1.STRONG_EXACT
+        rows.append(
+            _row(
+                condition,
+                item_id,
+                case_id,
+                outcome,
+                candidate_filter=answer if condition in ("C1", "C2") else None,
+                probe_exact=exact,
+                shortcuts=hits,
+            )
+        )
+    rows.append(
+        _row("C4", "mei-1031", "tcp-destination-not-https", OutcomeV1.INVALID)
+    )
+    rows.append(
+        _row(
+            "C1",
+            "mei-1501",
+            "unnamed-server",
+            OutcomeV1.FALSE_READY,
+            gold_status="needs_clarification",
+        )
+    )
+    files[_SCORED / "outcomes.jsonl"] = b"".join(rows)
+    for path, data in files.items():
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_bytes(data)
+    _write_json(root / _FREEZE, _freeze(document))
+    files[_EXHIBITS] = evidence.render(
+        evidence.build_exhibits_document(root, runner)
+    )
+    return files
+
+
 @pytest.fixture(name="repo")
-def fixture_repo(tmp_path: Path, document: Document, packets: Document) -> Path:
+def fixture_repo(
+    tmp_path: Path,
+    document: Document,
+    packets: Document,
+    exhibit_inputs: dict[Path, bytes],
+) -> Path:
     """A repository whose anchors all agree with the regenerated document."""
     rows: list[Document] = document["probes"]
     _write_json(
@@ -112,19 +365,7 @@ def fixture_repo(tmp_path: Path, document: Document, packets: Document) -> Path:
             }
         },
     )
-    _write_json(
-        tmp_path / _FREEZE,
-        {
-            "digests": {
-                "gold": "0" * 64,
-                **{
-                    row["probe_id"]: row["capture_sha256"]
-                    for row in rows
-                    if row["split"] == "test"
-                },
-            }
-        },
-    )
+    _write_json(tmp_path / _FREEZE, _freeze(document))
     _write_json(
         tmp_path / _SPEC,
         {
@@ -158,6 +399,9 @@ def fixture_repo(tmp_path: Path, document: Document, packets: Document) -> Path:
     (tmp_path / _CAPTURES).parent.mkdir(parents=True)
     (tmp_path / _CAPTURES).write_bytes(evidence.render(document))
     (tmp_path / _PACKETS).write_bytes(evidence.render(packets))
+    for path, data in exhibit_inputs.items():
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_bytes(data)
     return tmp_path
 
 
@@ -526,6 +770,183 @@ def test_a_probe_without_its_tail_or_frames_is_refused(tmp_path: Path) -> None:
             BenchmarkProbe("semantic-99", capture, recipes), "dev", "scored"
         )
     assert caught.value.code == "frame_count_mismatch"
+
+
+def test_the_pool_replays_each_executed_ready_answer_once(
+    exhibit_inputs: dict[Path, bytes],
+) -> None:
+    document = json.loads(exhibit_inputs[_EXHIBITS])
+    source = document["sources"]["hosted_test"]
+    benchmark_frames = {
+        row["probe_id"]: row["v1_frames"] for row in source["probes"]
+    }
+
+    assert document["schema_version"] == "verifier-exhibits/1.0"
+    assert "witness tail" in document["notes"][0]
+    assert source["runs"] == [_RUN]
+    assert [
+        (row["probe_id"], row["v1_frames"], row["v2_frames"])
+        for row in source["probes"]
+    ] == [
+        ("semantic-31", 26, 59),
+        ("semantic-37", 27, 60),
+        ("semantic-43", 33, 66),
+    ]
+    assert source["unscorable_cases"] == ["ttl-between"]
+    answers = source["answers"]
+    assert [
+        (row["condition"], row["item_id"], row["case_id"], row["v1"], row["v2"])
+        for row in answers
+    ] == [(c, i, k, v1, v2) for c, i, k, _, _, v1, v2 in _ANSWERS]
+    receipt = _SCORED / "receipts" / "C1" / "mei-1031.json"
+    assert answers[0]["receipt"] == receipt.as_posix()
+    assert answers[0]["receipt_sha256"] == (
+        hashlib.sha256(exhibit_inputs[receipt]).hexdigest()
+    )
+    assert [row for row in answers if "witness_frames" in row] == answers[:1]
+    frames = answers[0]["witness_frames"]
+    assert {frame["witness"] for frame in frames} == {
+        "server-ack",
+        "server-ack-next",
+        "keepalive-server-ack",
+        "server-syn",
+        "server-fin-ack",
+    }
+    for frame in frames:
+        assert frame["n"] > benchmark_frames[frame["probe_id"]]
+        assert (frame["answer_matched"], frame["should_match"]) == (False, True)
+
+
+def test_exhibits_write_restores_and_check_refuses_an_edit(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    committed = (repo / _EXHIBITS).read_bytes()
+    (repo / _EXHIBITS).unlink()
+
+    assert evidence.main(["--repo", str(repo), "exhibits", "--check"]) == 1
+    assert evidence.main(["--repo", str(repo), "exhibits", "--write"]) == 0
+    assert (repo / _EXHIBITS).read_bytes() == committed
+    assert evidence.main(["--repo", str(repo), "exhibits", "--check"]) == 0
+    (repo / _EXHIBITS).write_bytes(
+        committed.replace(b'"v1": "strong_exact"', b'"v1": "silent_wrong"', 1)
+    )
+    assert evidence.main(["--repo", str(repo), "exhibits", "--check"]) == 1
+    assert evidence.main(["--repo", str(repo), "check"]) == 1
+    out, err = capsys.readouterr()
+    assert [json.loads(line) for line in out.splitlines()] == 2 * [
+        {
+            "path": _EXHIBITS.as_posix(),
+            "sha256": hashlib.sha256(committed).hexdigest(),
+            "size_bytes": len(committed),
+        }
+    ]
+    assert [
+        json.loads(line)["error"]["message"] for line in err.splitlines()
+    ] == [
+        f"{_EXHIBITS.as_posix()} is missing",
+        f"{_EXHIBITS.as_posix()} differs from a replay",
+        f"{_EXHIBITS.as_posix()} differs from a replay",
+    ]
+
+
+def _reseal_v1_anchor(repo: Path) -> None:
+    def edit(value: Any) -> None:
+        manifest = value["measurement_identity"]["capture_manifest"]
+        manifest[1]["capture_sha256"] = "0" * 64
+
+    _edit_json(repo / _ADEQUACY, edit)
+
+
+def _relabel_spec(repo: Path) -> None:
+    def edit(value: Any) -> None:
+        probe = value["probes"][0]
+        probe["expected_frames"] = probe["expected_frames"][1:]
+
+    _edit_json(
+        repo / _SCORED / "specs" / "tcp-destination-not-https.json", edit
+    )
+
+
+def _retouch_receipt(repo: Path) -> None:
+    path = repo / _SCORED / "receipts" / "C1" / "mei-1032.json"
+    receipt = EvaluationReceiptV1.model_validate_json(path.read_bytes())
+    first = receipt.probes[0]
+    probes = (
+        evaluate_probe(
+            first.probe_id,
+            first.expected_frames,
+            first.candidate_frames[1:],
+            0.0,
+        ),
+        *receipt.probes[1:],
+    )
+    update = {"probes": probes, "metrics": aggregate_metrics(probes)}
+    path.write_text(
+        receipt.model_copy(update=update).model_dump_json(), encoding="utf-8"
+    )
+
+
+def _break_registry(repo: Path) -> None:
+    (repo / _REGISTRY).write_text("[]", encoding="utf-8")
+
+
+def _break_outcomes(repo: Path) -> None:
+    path = repo / _SCORED / "outcomes.jsonl"
+    path.write_bytes(path.read_bytes() + b"{}\n")
+
+
+@pytest.mark.parametrize(
+    ("change", "code"),
+    [
+        (_reseal_v1_anchor, "anchor_mismatch"),
+        (_relabel_spec, "gold_invalid"),
+        (_retouch_receipt, "replay_mismatch"),
+        (_break_registry, "input_invalid"),
+        (_break_outcomes, "input_invalid"),
+    ],
+)
+def test_an_exhibit_input_failing_its_check_exits_two(
+    repo: Path,
+    capsys: pytest.CaptureFixture[str],
+    change: Callable[[Path], None],
+    code: str,
+) -> None:
+    change(repo)
+
+    assert evidence.main(["--repo", str(repo), "exhibits", "--check"]) == 2
+    assert json.loads(capsys.readouterr().err)["error"]["code"] == code
+
+
+@pytest.mark.skipif(
+    not (_ROOT / "docs" / "results").is_dir(),
+    reason="The test image carries no docs/ tree",
+)
+def test_the_committed_exhibits_are_a_replay_of_the_reel_pool() -> None:
+    assert evidence.exhibits_failures(_ROOT, PacketListRunner()) == []
+    document = json.loads((_ROOT / _EXHIBITS).read_text(encoding="utf-8"))
+    answers = document["sources"]["hosted_test"]["answers"]
+    accepted = [row for row in answers if row["v1"] == "strong_exact"]
+    killed = [row for row in accepted if row["v2"] == "silent_wrong"]
+    assert (len(answers), len(accepted), len(killed)) == (971, 731, 11)
+    # The one shortcut on v1 that only a witness frame shows to be wrong.
+    (pick,) = (
+        row
+        for row in answers
+        if row["v1"] == "shortcut" and row["v2"] == "silent_wrong"
+    )
+    assert (pick["run_id"], pick["condition"], pick["item_id"]) == (
+        "test-qwen3.5-9b-2026-09-26",
+        "C3",
+        "mei-1066",
+    )
+    assert [
+        (frame["probe_id"], frame["n"], frame["witness"])
+        for frame in pick["witness_frames"]
+    ] == [
+        ("semantic-31", 58, "dns-query-to-private-low"),
+        ("semantic-37", 59, "dns-query-to-private-low"),
+        ("semantic-43", 65, "dns-query-to-private-low"),
+    ]
 
 
 @pytest.mark.skipif(

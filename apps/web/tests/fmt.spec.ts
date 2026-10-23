@@ -161,7 +161,9 @@ test('outcome shows a scored outcome code as the protocol words it', () => {
   expect(fmt('silent_wrong', 'outcome')).toBe('silent-wrong');
   expect(fmt('provider_failed', 'outcome')).toBe('provider failed');
   expect(fmt('false_ready', 'outcome')).toBe('false ready');
-  for (const value of ['exact', 'silent-wrong', '', 'toString', 3, null]) {
+  // The replay's verdict on the captures alone for a case with no label left.
+  expect(fmt('unscorable', 'outcome')).toBe('not scorable');
+  for (const value of ['exact', 'silent-wrong', 'not scorable', '', 'toString', 3, null]) {
     expect(() => fmt(value, 'outcome'), JSON.stringify(value)).toThrow(TypeError);
   }
 });

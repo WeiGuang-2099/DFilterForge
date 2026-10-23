@@ -1,0 +1,122 @@
+{
+  "cases": [
+    {
+      "addenda": [
+        {
+          "answers": [
+            {
+              "condition": "C1",
+              "item_id": "mei-1031",
+              "run_id": "test-qwen3.5-9b-2026-09-26"
+            },
+            {
+              "condition": "C2",
+              "item_id": "mei-1031",
+              "run_id": "test-qwen3.5-9b-2026-09-26"
+            },
+            {
+              "condition": "C1",
+              "item_id": "mei-1031",
+              "run_id": "test-deepseek-v4-pro-0813-2026-09-26"
+            },
+            {
+              "condition": "C2",
+              "item_id": "mei-1031",
+              "run_id": "test-deepseek-v4-pro-0813-2026-09-26"
+            }
+          ],
+          "text": "tcp.port matches either end of a segment, so excluding 443 there also excludes everything sent from port 443."
+        },
+        {
+          "answers": [
+            {
+              "condition": "C2",
+              "item_id": "mei-1032",
+              "run_id": "test-deepseek-v4-pro-0813-2026-09-26"
+            }
+          ],
+          "text": "This answer excludes segments sent from port 443 to another port outright, the traffic the request asks to keep."
+        }
+      ],
+      "case_id": "tcp-destination-not-https",
+      "reading": "The request asks for the return traffic from port 443 in so many words. No benchmark frame is a segment from port 443, so on the captures alone the answers select exactly the labelled frames. The tail adds five segments sent from port 443 on each probe, and every answer here drops them."
+    },
+    {
+      "addenda": [],
+      "case_id": "ack-outside-testnet",
+      "reading": "A bare tcp.flags.ack asks only whether the field exists, and every TCP header carries it, so the answer keeps every TCP segment from outside TEST-NET-1. On the benchmark frames each such segment has ACK set, so the captures alone cannot tell. The tail adds a SYN sent from port 443 with ACK clear; the answer keeps it."
+    },
+    {
+      "addenda": [],
+      "case_id": "dns-response-not-nxdomain",
+      "reading": "The protocol name dns does not match mDNS, which tshark dissects as its own protocol over the same dns.* fields. The request says mDNS included. The benchmark frames hold mDNS queries but no mDNS response; the tail adds one on each probe, and the answer misses it."
+    },
+    {
+      "addenda": [],
+      "case_id": "high-udp-source-testnet",
+      "reading": "ip.addr matches either address, so the answer also keeps UDP sent to TEST-NET-1 from elsewhere. No benchmark frame is such a packet. The tail's SERVFAIL response goes from a server to the client's port above 5353; the answer keeps it, and the request asks for source addresses only."
+    },
+    {
+      "addenda": [],
+      "case_id": "udp-not-from-testnet",
+      "reading": "!(ip.addr == 192.0.2.0/24) drops a packet when either address is in TEST-NET-1, so the answer also drops UDP sent to the client, which the request keeps in so many words. No benchmark frame is such a packet. The tail adds four DNS responses from servers to the client, and the answer misses all four."
+    },
+    {
+      "addenda": [],
+      "case_id": "unicast-dns-udp-queries",
+      "reading": "The answer finds DNS by udp.port == 53; the request says to judge DNS by the packet itself, whatever the port. No benchmark frame is a DNS query off port 53. The tail's query to 10.2.3.6 on another port is DNS by its contents, and the answer misses it. The scorer had already flagged this answer as a shortcut for the three multicast and broadcast addresses it names."
+    }
+  ],
+  "notes": [
+    "The case readings and the addenda to single answers were written on 2026-10-20, after every answer they describe had been scored and replayed on the captures alone. They describe the answers and decide nothing: no score, label, witness, case or prompt changed because of them.",
+    "Each witness note quotes the comment above its witnesses in src/dfilterforge/witnesses.py, its lines joined with single spaces; witnesses under one comment share one note. The comments were written on 2026-09-23 and 2026-09-24, before any test answer was requested."
+  ],
+  "schema_version": "exhibit-readings/1.0",
+  "witness_notes": [
+    {
+      "note": "ACK sent from port 443, then a second ACK on the same stream whose relative acknowledgment number is not 1.",
+      "witnesses": [
+        "server-ack",
+        "server-ack-next"
+      ]
+    },
+    {
+      "note": "An ACK from port 443 that opens its stream by acknowledging the client's sequence number plus one, then a client ACK to 443 at that sequence number, shaped like a keep-alive probe. tshark takes the client's base sequence from the first ACK, so the client segment shows relative sequence 0 with no SYN, no reset and no analysis flag.",
+      "witnesses": [
+        "keepalive-server-ack"
+      ]
+    },
+    {
+      "note": "SYN sent from port 443.",
+      "witnesses": [
+        "server-syn"
+      ]
+    },
+    {
+      "note": "DNS codes other than A, AAAA, NOERROR and NXDOMAIN.",
+      "witnesses": [
+        "dns-servfail"
+      ]
+    },
+    {
+      "note": "Successful responses that each break one conjunct of \"from port 53, not to port 53\": both ports 53, mDNS, and a destination below 53.",
+      "witnesses": [
+        "dns-response-53-to-53",
+        "mdns-response",
+        "dns-response-to-low-port"
+      ]
+    },
+    {
+      "note": "A DNS query to a private address on a port that is not 53: DNS by its dissector, not by its port. Both ports lack a dissector, so no registered ephemeral port can claim it first.",
+      "witnesses": [
+        "dns-query-to-private-low"
+      ]
+    },
+    {
+      "note": "FIN together with ACK, as a server closes its side of a stream.",
+      "witnesses": [
+        "server-fin-ack"
+      ]
+    }
+  ]
+}

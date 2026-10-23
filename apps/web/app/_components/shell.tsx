@@ -8,6 +8,7 @@ const navigation = [
   {href: '/', label: 'Reel'},
   {href: '/board', label: 'Board'},
   {href: '/training', label: 'Training'},
+  {href: '/exhibits', label: 'Exhibits'},
   {href: '/methodology', label: 'Methodology'},
 ] as const;
 

@@ -209,8 +209,10 @@ jobs:
         # Regenerates captures.json in pure Python, compares it byte for
         # byte and matches every capture hash to the test-freeze gate
         # receipt, the scored specifications and the held-out freeze record;
-        # then rebuilds packets.json and every committed predicate trace
-        # with the image's tshark and compares them byte for byte.
+        # then rebuilds packets.json, every committed predicate trace and
+        # exhibits.json, the Reel pool's test answers replayed on the scored
+        # captures without their witness tail, with the image's tshark and
+        # compares them byte for byte.
         run: >-
           docker compose --profile dev run --rm
           --volume "$PWD/docs:/workspace/docs:ro"
@@ -219,7 +221,7 @@ jobs:
       - name: Test the web exporters against the committed tree
         # The suite above skips these files' committed-tree cases, which
         # need docs/: the exporter's values re-derived by an independent
-        # resolver and the committed frame tables.
+        # resolver, the committed frame tables and the verifier v1 replay.
         run: >-
           docker compose --profile dev run --rm
           --volume "$PWD/docs:/workspace/docs:ro"

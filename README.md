@@ -4,7 +4,7 @@ By [WeiGuang-2099](https://github.com/WeiGuang-2099).
 
 An LLM writes a Wireshark display filter from a plain-English request. A pinned tshark 4.6.8 runs it on synthetic captures whose every frame is labelled by the recipe that built it, never by a filter. A filter that fails to compile is easy to catch; one that compiles, runs and selects the wrong frames is not. DFilterForge calls that answer *silent-wrong*, and sends the frame that disproves it back to the model for one repair turn. The same verifier scores a small model fine-tuned here: on the frozen test requests, Qwen3-1.7B's strong-exact rate with typed intent and field context (C4) rises from 0.063 to 0.396 after supervised fine-tuning, the mean of three seeds, with 29 test cases better and 1 worse ([below](#fine-tuning-a-small-model)).
 
-**[Live site](https://weiguang-2099.github.io/DFilterForge/)** | [Board](https://weiguang-2099.github.io/DFilterForge/board/) | [Training](https://weiguang-2099.github.io/DFilterForge/training/) | [What SFT fixed](https://weiguang-2099.github.io/DFilterForge/training/analysis/) | [Methodology](https://weiguang-2099.github.io/DFilterForge/methodology/) | [Locked test result](docs/results/locked-test-v1.md) | [Protocol](docs/protocol.md) | [Usage](docs/usage.md) | [![CI](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml/badge.svg)](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml)
+**[Live site](https://weiguang-2099.github.io/DFilterForge/)** | [Board](https://weiguang-2099.github.io/DFilterForge/board/) | [Training](https://weiguang-2099.github.io/DFilterForge/training/) | [What SFT fixed](https://weiguang-2099.github.io/DFilterForge/training/analysis/) | [Exhibits](https://weiguang-2099.github.io/DFilterForge/exhibits/) | [Methodology](https://weiguang-2099.github.io/DFilterForge/methodology/) | [Locked test result](docs/results/locked-test-v1.md) | [Protocol](docs/protocol.md) | [Usage](docs/usage.md) | [![CI](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml/badge.svg)](https://github.com/WeiGuang-2099/DFilterForge/actions/workflows/ci.yml)
 
 [![The Disproof Reel: tshark sweeps a probe capture and stops at frame 60, which disproves the model's filter](docs/media/reel.gif)](https://weiguang-2099.github.io/DFilterForge/)
 
@@ -17,6 +17,8 @@ On the frozen test split, four hosted models wrote 971 filters that compiled and
 | Resample: the same prompt again | 4 / 75 | 0.053 [0.014, 0.113] |
 
 Pooled over the four models and counted by case, all three arm comparisons are conclusive. Per model, the registered primary, counterexample against bare, reads only for qwen/qwen3.5-122b-a10b; the other three have too few discordant cases.
+
+Every score here reads probe captures that end in 33 witness packets. Replayed without them, the verifier would pass 731 of those 971 answers as strong exact, and 11 of them are silent-wrong ([exhibits](https://weiguang-2099.github.io/DFilterForge/exhibits/), [replay](docs/decisions/evidence/web/exhibits.json)).
 
 ## Fine-tuning a small model
 

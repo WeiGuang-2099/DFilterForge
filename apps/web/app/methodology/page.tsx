@@ -1,4 +1,5 @@
 import type {Metadata} from 'next';
+import Link from 'next/link';
 import {Fragment} from 'react';
 import type {ReactNode} from 'react';
 
@@ -207,7 +208,9 @@ export default function MethodologyPage() {
         </div>
         <p>
           Witness packets separate near misses that the benchmark recipes alone cannot. The first
-          probe capture holds <Count node={data.witnesses.count} /> of them.
+          probe capture holds <Count node={data.witnesses.count} /> of them. The{' '}
+          <Link href="/exhibits">exhibits</Link> replay the test answers without them and show the
+          answers they catch.
         </p>
         <details className="mth-more">
           <summary>The witness generators of the first probe capture</summary>

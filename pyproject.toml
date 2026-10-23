@@ -173,6 +173,7 @@ forbidden_modules = [
   "dfilterforge.repair_report",
   "dfilterforge.repair_round",
   "dfilterforge.repair_summary",
+  "dfilterforge.witness_replay",
 ]
 
 [[tool.importlinter.contracts]]
@@ -208,3 +209,12 @@ forbidden_modules = [
   "dfilterforge.repair_round",
   "dfilterforge.repair_summary",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Scoring never imports the verifier v1 replay"
+type = "forbidden"
+source_modules = [
+  "dfilterforge.run_store",
+  "dfilterforge.scoring",
+]
+forbidden_modules = ["dfilterforge.witness_replay"]
