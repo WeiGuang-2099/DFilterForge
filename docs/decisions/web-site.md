@@ -992,8 +992,9 @@ pnpm --filter @dfilterforge/web test:e2e
 
 ## Limits
 
-- The methodology page, the Reel on `/` and the board render values today.
-  The case and receipt pages come next.
+- The Reel on `/`, the board, the methodology page, the two training pages
+  and the exhibits page render values today. The case and receipt pages
+  come next.
 - The Reel draws the chosen prototype's figure: one ladder diagram per
   scored probe of the pick, with an arrow and the Info column per frame
   and each run of agreeing witness frames collapsed into one break row,
