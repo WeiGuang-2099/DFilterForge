@@ -428,7 +428,14 @@ tag is not `judge-table/1.0`, each `schema_invalid`; and a ruling path
 outside the allowed roots (`path_refused`).
 
 On the web side, `lib/data.ts` checks every document's schema id, closed key
-sets and source ops before a page renders.
+sets and source ops before a page renders, and `lib/judge-check.ts` fails
+the build unless the methodology page's judge squares are what its counts
+say: one row is the judge's own pass, each row holds one square per
+silent-wrong answer, the squares add up to the headline's silent-wrong
+counts, over every answer and the judge's own pass's, each mark is 0 or
+1, and in each mode the marks add up to each row's rated-correct count,
+to the headline's, over every answer and the judge's own pass's, and to
+the key's rated correct, with the other squares its rated incorrect.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
@@ -517,7 +524,13 @@ sets and source ops before a page renders.
   Reel says in fixed words or draws, which no value check sees: each
   ladder row's direction from `packets.json`; the readout's request and
   filter words and its agree or disagree from the pick's receipt; and each
-  leaf's true, false or dash from the committed trace.
+  leaf's true, false or dash from the committed trace. On `/methodology`
+  it re-derives the judge figure the same way: each row's pass and counts
+  in pool order, and each square in its pass's outcome-row order, with the
+  condition and item that label it and its letter in each mode, c rated
+  correct or i rated incorrect, from the table's lists of false
+  acceptances; and it pins the headline pointers the lead and the
+  paragraph after it read, in order.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool,
@@ -943,6 +956,26 @@ pnpm --filter @dfilterforge/web test:e2e
 - The methodology page's repair line shows counts for the cited run's round
   only, pass A's in the test phase; the board shows repair@1, its
   intervals and every pool pass's round.
+- The methodology page's judge block shows plain counts, never a rate or an
+  interval, and leaves out the table's cells per condition and per pass; a
+  row's rated-correct count is a `count` op over the mode's list of false
+  acceptances. Its rows, one per pool pass, exist to draw one square per
+  silent-wrong answer: no sentence compares the passes or the modes, and
+  none reads a count as a property of the answering models, which the
+  protocol rules out. A verdict on a strong-exact or shortcut answer is
+  shown as agreement or disagreement, never as a judge error: strong exact
+  holds on three probes, not on every capture. Every square's detail block
+  is in the server HTML, hidden until its square is read out, so the
+  island renders no value; the page opens with the first false acceptance
+  from the request alone read out. `tests/judge.spec.ts` checks that the
+  mode switch fills exactly the squares each mode's headline counts, that
+  the page opens with that square held, that pointing reads out another
+  square while one is pressed, that a pressed square reads out its own
+  answer and receipt whenever the pointer is off the squares, until Escape
+  or a second press, that the arrow keys move the figure's one tab stop,
+  that nothing scrolls sideways at 320 and 400 px, and that axe finds no
+  violation in the block at 400 px and none serious or critical at the
+  default width.
 - The A/A pair is not wired in: `board.json` keeps `aa` null, and no
   committed file holds the confound notes `locked-test-v1.md` attaches to
   the comparisons between conditions. So the board leaves those

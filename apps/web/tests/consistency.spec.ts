@@ -564,6 +564,112 @@ test('the methodology page names the round its repair line describes', async ({p
   );
 });
 
+interface Accepted {
+  readonly run: string;
+  readonly condition: string;
+  readonly item_id: string;
+}
+
+test("the methodology page's judge figure draws the table's verdicts on the pool", async ({
+  page,
+}) => {
+  // A square's fill is a letter in its markup, c rated correct or i rated
+  // incorrect, which no value check sees, and a count passes the value
+  // checks whatever table pointer or pass it reads. So each row is derived
+  // again from the Reel's pool, in order: its model, its counts and its
+  // squares, each with the condition and item that label it and its two
+  // letters, one per mode, from the committed table's lists of false
+  // acceptances; and the lead and the paragraph after it must read the
+  // headline counts in their order.
+  const table = 'docs/results/judge-v2/table.json';
+  const manifest = 'docs/results/judge-v2/test/manifest.json';
+  await page.goto('methodology/');
+  const section = page.locator('section[aria-labelledby="m-judge"]');
+  if (!resolver.exists(table)) {
+    await expect(section).toHaveCount(0);
+    return;
+  }
+  const sourcesOf = (index: number) =>
+    section
+      .locator('.mth-body > p')
+      .nth(index)
+      .evaluate((element) =>
+        Array.from(element.querySelectorAll('[data-src]'), (node): unknown =>
+          JSON.parse(node.getAttribute('data-src') ?? 'null'),
+        ),
+      );
+  const headline = (mode: string, key: string) => ['ptr', table, `/modes/${mode}/headline/${key}`];
+  expect(await sourcesOf(0)).toEqual([
+    headline('primary', 'silent_wrong_rated_correct'),
+    headline('primary', 'silent_wrong'),
+    headline('primary', 'self_silent_wrong_rated_correct'),
+    headline('primary', 'self_silent_wrong'),
+  ]);
+  expect(await sourcesOf(1)).toEqual([
+    ['ptr', manifest, '/settings/model_id'],
+    headline('secondary', 'silent_wrong_rated_correct'),
+    headline('secondary', 'silent_wrong'),
+    headline('secondary', 'self_silent_wrong_rated_correct'),
+    headline('secondary', 'self_silent_wrong'),
+  ]);
+
+  const accepted = (mode: string) => {
+    const list = `/modes/${mode}/silent_wrong_rated_correct`;
+    const entries = resolver.resolve(['ptr', table, list]) as readonly Accepted[];
+    return new Set(entries.map((entry) => `${entry.run} ${entry.condition} ${entry.item_id}`));
+  };
+  const [primary, secondary] = [accepted('primary'), accepted('secondary')];
+  const drawn = await section.locator('.jd-row').evaluateAll((rows) =>
+    rows.map((row) => {
+      const source = (node: Element | null): unknown =>
+        JSON.parse(node?.getAttribute('data-src') ?? 'null');
+      return {
+        model: source(row.querySelector('.jd-id [data-src]')),
+        counts: Array.from(row.querySelectorAll('.jd-n [data-src]'), source),
+        squares: Array.from(row.querySelectorAll('.jd-q'), (square) => {
+          const label = document.getElementById(`jd-n-${square.getAttribute('data-q') ?? ''}`);
+          return {
+            label: Array.from(label?.querySelectorAll('[data-src]') ?? [], source),
+            letters: `${square.getAttribute('data-p') ?? '?'}${square.getAttribute('data-s') ?? '?'}`,
+          };
+        }),
+      };
+    }),
+  );
+  const pool = resolver.reelPool();
+  expect(drawn.map(({model}) => model)).toEqual(
+    pool.map((run) => ['ptr', `docs/results/${run}/scored/summary.json`, '/model_id']),
+  );
+  drawn.forEach(({counts, squares}, index) => {
+    const run = pool[index] ?? '';
+    const outcomes = `docs/results/${run}/scored/outcomes.jsonl`;
+    const wrong = resolver
+      .rows(outcomes)
+      .filter((row) => row['gold_status'] === 'ready' && row['outcome'] === 'silent_wrong');
+    const total = ['count', outcomes, null, {gold_status: ['ready'], outcome: ['silent_wrong']}];
+    const correct = (mode: string) => [
+      'count',
+      table,
+      `/modes/${mode}/silent_wrong_rated_correct`,
+      {run: [run]},
+    ];
+    expect(counts, run).toEqual([correct('primary'), total, correct('secondary'), total]);
+    expect(squares, run).toEqual(
+      wrong.map((row) => {
+        const keys = {condition: row['condition'], item_id: row['item_id']};
+        const key = `${run} ${String(keys.condition)} ${String(keys.item_id)}`;
+        return {
+          label: [
+            ['row', outcomes, keys, '/condition'],
+            ['row', outcomes, keys, '/item_id'],
+          ],
+          letters: `${primary.has(key) ? 'c' : 'i'}${secondary.has(key) ? 'c' : 'i'}`,
+        };
+      }),
+    );
+  });
+});
+
 test('the board shows the pool in its order and repair numbers from the allowed files', () => {
   // A value read from another file passes the value checks. The board's
   // passes must be the Reel's pool in pool order, never ranked, both as

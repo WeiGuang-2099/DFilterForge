@@ -2,10 +2,12 @@ import type {Metadata} from 'next';
 import {Fragment} from 'react';
 import type {ReactNode} from 'react';
 
+import {JudgeStudy} from '@/app/_components/methodology/judge';
 import {loadMethodology} from '@/lib/data';
 import type {Methodology, NumNode, StrNode} from '@/lib/data';
 import {Digest, Num, repositoryFile, Split, Str, Term, Unmeasured} from '@/lib/sourced';
 
+import '@/app/_components/methodology/judge.css';
 import './methodology.css';
 
 export const metadata: Metadata = {
@@ -220,6 +222,16 @@ export default function MethodologyPage() {
           </ul>
         </details>
       </Section>
+
+      {data.judge === null ? null : (
+        <Section
+          id="m-judge"
+          summary="An LLM judge rated the test answers that tshark had already scored."
+          title="Judge study"
+        >
+          <JudgeStudy judge={data.judge} />
+        </Section>
+      )}
 
       <Section
         id="m-environment"
