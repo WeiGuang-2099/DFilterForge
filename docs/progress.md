@@ -4,17 +4,18 @@ Last updated: 2026-10-23
 
 ## Current slice
 
-Plan week R2 runs three slices. `passb` (plan slice 4) merged in PR #41.
-`judge-study` (slice 5) asks an LLM judge whether each of the 971 test
-filters that ran is right and compares its verdicts with tshark's; its
-`judge-v2` dev check passed (PR #43), the owner sent the test study on
-2026-10-23, and its result branch publishes the replies, the table, the
-`/methodology` block and the README sentence. `exhibits` (slice 6), on
-`exhibits`, replays the hosted test answers without the witness packets
-and shows, on the new `/exhibits` page, the 11 answers the captures alone
-pass that a witness frame disproves. No published number other than the
-exhibits' replay counts changes until the judge study's result is
-committed.
+Plan week R2 ran three slices. `passb` (plan slice 4) merged in PR #41
+and `exhibits` (slice 6) in PR #44: `/exhibits` shows the 11 answers the
+captures alone pass as exact that a witness frame disproves.
+`judge-study` (slice 5) is measured: the owner sent the test study on
+2026-10-23, and deepseek/deepseek-v4-pro-0813, as an LLM judge, rated 58
+of the 165 silent-wrong test answers correct from the request alone, 8 of
+the 27 its own model wrote ([table](results/judge-v2/table.json)). Its
+branch publishes the replies, the table, the `/methodology` figure and
+the README paragraph. Next is slice 7, `selfserved-baselines` (plan week
+R3): the runner's circuit breaker first, then the base model's
+constrained-decoding and few-shot rows, the 1.7B repair round and a cost
+benchmark, in a Modal session the owner runs from home.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2736,6 +2737,40 @@ J2, for USD 0.1459. Read in full, 6 replies open with "incorrect" and
 end with a reason that calls the filter correct; the [judge
 note](decisions/judge-study.md)'s Limits say so. Hosted CI passed on
 main.
+
+## Judge test study: 2026-10-23, branch judge-study
+
+The owner sent the judge-v2 test study from `judge-study` at ba46263. Its
+first two invocations, at 07:54 and 08:03 UTC, each stopped at HTTP 401
+on its first request and charged nothing: OpenRouter refused the first
+key, and the second was a management key, which `GET /api/v1/key`
+accepts but every chat request refuses. The third, 08:13 to 08:42 UTC,
+completed all 1,016 requests, 0 failed, for at most USD 0.5689
+(OpenRouter reported 0.5684) against the 1.50 cap
+([run](results/judge-v2/test/manifest.json)). From the request alone
+deepseek/deepseek-v4-pro-0813 rated 58 of the 165 silent-wrong answers
+correct, 8 of them among its own model's 27; shown the reference filter,
+62, 3 of the 27 ([table](results/judge-v2/table.json)). It rated 117 of
+the 804 strong-exact answers incorrect from the request alone and 105
+with the reference: disagreements, not judge errors, since strong exact
+holds on three probes. CI rebuilds the table with `--check`,
+`/methodology` draws one square per silent-wrong answer, and the README
+quotes the headline; its spend line is now USD 8.48.
+
+## PR #44 merged: 2026-10-23
+
+PR #44 merged `exhibits` into `main` as 6089046.
+`src/dfilterforge/witness_replay.py` replays the four hosted test passes'
+971 executed answers on the test captures without their 33-packet
+witness tail: 731 are strong exact on the captures alone, and with the
+tail 11 of them, and 1 answer the scorer had already flagged as a
+shortcut, miss a labelled witness or match one the labels leave out
+([replay](decisions/evidence/web/exhibits.json), which CI rebuilds with
+the pinned tshark). The new `/exhibits` page draws every answer as a
+square under a verifier switch, with six exhibits, one per case the tail
+turns. The README and ablation 005's addendum quote the counts, and the
+methodology's witness paragraph links the page. No published score
+changes. Hosted CI passed on main.
 
 ## Planned next
 
