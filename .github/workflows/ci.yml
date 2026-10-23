@@ -164,6 +164,16 @@ jobs:
           --volume "$PWD/docs:/workspace/docs:ro"
           test sh -c 'test -d /workspace/docs/results
           && python scripts/sft_analysis.py --check'
+      - name: Rebuild the judge study's table from its published run
+        # After the re-score above, so the table counts tshark outcomes CI
+        # has just reproduced. It refuses a published test run that answers
+        # other requests than the committed code builds, and the committed
+        # table must equal its rebuild byte for byte.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python scripts/judge_study.py table --check'
       - name: Check committed repair plans and rounds offline
         # While no arm run sits beside its pass, each plan is derived again
         # from the pass and the feedback probe and compared byte for byte.

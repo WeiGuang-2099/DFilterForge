@@ -205,6 +205,59 @@ const ENVIRONMENT = object({
 
 const MUTANTS = object({executed: numNode, killed: numNode, survived: numNode, waived: numNode});
 
+// The judge study's answers by tshark outcome and rating; none counts the
+// answers that got no verdict, and answers sums the three.
+const RATED = object({answers: numNode, correct: numNode, incorrect: numNode, none: numNode});
+const BY_OUTCOME = object({strong_exact: RATED, shortcut: RATED, silent_wrong: RATED});
+
+// One judge mode: the headline, and the answers over every answer and over
+// the judge's own model's.
+const JUDGE_MODE = object({
+  headline: object({
+    silent_wrong: numNode,
+    silent_wrong_rated_correct: numNode,
+    self_silent_wrong: numNode,
+    self_silent_wrong_rated_correct: numNode,
+  }),
+  all: BY_OUTCOME,
+  self: BY_OUTCOME,
+});
+
+// A value per mode: a pass's rated-correct count, or an answer's mark.
+const BY_MODE = object({primary: numNode, secondary: numNode});
+
+// A pool pass's silent-wrong answers, one square each on the page.
+const JUDGE_ROW = object({
+  run: text,
+  role: text,
+  model_id: strNode,
+  self: flag,
+  silent_wrong: numNode,
+  rated_correct: BY_MODE,
+  answers: array(
+    object({
+      condition: strNode,
+      item_id: strNode,
+      case_id: strNode,
+      typed: flag,
+      filter: strNode,
+      reference: strNode,
+      disagreeing: numNode,
+      receipt: inputPath,
+      verdicts: BY_MODE,
+    }),
+  ),
+});
+
+const JUDGE = object({
+  model_id: strNode,
+  self_run: strNode,
+  answers: numNode,
+  requests_per_mode: numNode,
+  modes: object({primary: JUDGE_MODE, secondary: JUDGE_MODE}),
+  rows: array(JUDGE_ROW),
+});
+
 const METHODOLOGY = object({
   schema: literal('web-methodology/1.0'),
   conditions: array(object({label: strNode, output_contract: strNode, retrieval: strNode})),
@@ -248,6 +301,9 @@ const METHODOLOGY = object({
       not_run: array(object({arm: text, reason: strNode})),
     }),
   ),
+  // The judge study's test table, null outside the test phase or before
+  // the table is committed.
+  judge: nullable(JUDGE),
   admitted_prepares: array(strNode),
   admitted_count: numNode,
 });
@@ -257,6 +313,9 @@ export type Site = Guarded<typeof SITE>;
 
 /** methodology.json: conditions, bootstrap, environment, gates. */
 export type Methodology = Guarded<typeof METHODOLOGY>;
+
+/** The judge study's test table: its counts per mode and the pool's squares. */
+export type Judge = NonNullable<Methodology['judge']>;
 
 const loaded = new Map<string, unknown>();
 

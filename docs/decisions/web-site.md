@@ -207,6 +207,11 @@ allowed source:
 - a repair number: a pass's `repair/summary.json` or
   `docs/results/repair-pool/test.json`, the two sources
   [`disproof-reel.md`](disproof-reel.md) ("Repair trajectory") allows;
+- a judge count: `docs/results/judge-v2/table.json`, which
+  `scripts/judge_study.py table` writes and CI rebuilds with `--check`, as
+  a pointer or a `count` op over its lists of false acceptances; the
+  judge's model from `docs/results/judge-v2/test/manifest.json`; no page
+  reads `judge-v1/` or `judge-v2/dev/`;
 - never an arm run's (`-res`, `-bare` or `-cx`) `scored/summary.json`. The
   [repair note](repair-round.md) calls that file a scoring record, never a
   reported number. The Reel's repair turn reads the pass's
@@ -253,7 +258,32 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   line. Once that run's `repair/summary.json` exists, `repair_at_1` is left
   out of `not_measured`, and `repair` holds the round's line: split, model,
   triggered items, each arm's repaired count and any arm the gate stopped,
-  all pointers into that summary. Before, `repair` is null.
+  all pointers into that summary. Before, `repair` is null. `judge` is
+  null outside the test phase or until `docs/results/judge-v2/table.json`
+  (`judge-table/1.0`) exists. Then per mode (`primary`, the request alone;
+  `secondary`, with the reference filter too) it holds the headline and
+  the answers by tshark outcome and rating (`correct`, `incorrect`,
+  `none`) over every answer and over the judge's own model's apart, each
+  cell with its `answers`, a `sum` op over its three ratings; beside them,
+  the answers, the requests per mode and the judge's own pass. All are
+  pointers into the table, and the judge's model points into the published
+  run's `manifest.json`. `rows` holds one row per Reel test-pool pass, in
+  pool order, to draw one square per silent-wrong answer: the pass's slug
+  and role, its model from its `scored/summary.json`, whether it is the
+  judge's own pass, its silent-wrong answers as a `count` op over its
+  outcome rows, per mode its rated-correct count as a `count` op over the
+  mode's `silent_wrong_rated_correct` list that names the pass, and its
+  ready silent-wrong answers in row order. Each answer holds its
+  condition, item and case as `row` ops into its outcome row; whether its
+  condition is typed; the filter that ran and the reference as pointers
+  into its receipt; the frames where they part as a `sum` op over the
+  receipt's `candidate_only` and `reference_only` lists; the receipt's
+  path, for the link; and per mode its mark, a `count` op over the mode's
+  list that names its pass, condition and item: 1 for a false acceptance,
+  0 for an answer rated incorrect. The rows exist to draw the figure, and
+  no page compares them or reads them as a property of the answering
+  models. The table's cells per condition and per pass, and its `others`
+  group, stay in the table.
 - `reel.json`: the Disproof Reel projected by rule `reel-v1`, step 5
   included. `repair` is null with no pick. Before the pick's pass has a
   scored round it has `reason` `no_round` and a null `turn`; after, a null
@@ -413,16 +443,39 @@ are:
   frontier slot's repair trajectory instead. That fallback is not built and
   no committed data needs it, so the export stops rather than drop the
   trajectory. `reelRepair()` in `tests/support/resolve.ts` refuses the same
-  picks.
+  picks;
+- a judge table that does not count the Reel's test pool
+  (`judge_inconsistent`), read in the test phase once
+  `docs/results/judge-v2/table.json` exists: a `split` other than `test`;
+  passes in either mode's `runs` other than the pool's; a `self_run`
+  outside the pool; an `answers` count other than the pool's executed ready
+  answers, or a mode's headline `silent_wrong` other than the pool's
+  silent-wrong answers, the Reel's headline counts M and N; a published
+  run whose `settings.model_id` is not the `model_id` in the self run's
+  `scored/summary.json`; a mode whose silent-wrong `none` count is not 0,
+  since a 0 mark would not tell rated incorrect from no verdict; or a mode
+  whose marks, one per silent-wrong answer of the pool, are not each 0 or
+  1, or do not sum to its headline's `silent_wrong_rated_correct` and to
+  its list's length, so that every entry names one silent-wrong answer of
+  the pool, or whose judge's own pass's marks do not sum to
+  `self_silent_wrong_rated_correct`.
 
 It exits 2 when an input cannot be read, a flag is invalid or the output
 directory is not empty. That includes a registry whose schema tag is not
-`test-runs/1.0`, and a ruling whose schema tag is not `bakeoff-ruling/1.0`
-or that has a slot without a winner run id (`schema_invalid`), and a
-ruling path outside the allowed roots (`path_refused`).
+`test-runs/1.0`, a ruling whose schema tag is not `bakeoff-ruling/1.0` or
+that has a slot without a winner run id, and a judge table whose schema
+tag is not `judge-table/1.0`, each `schema_invalid`; and a ruling path
+outside the allowed roots (`path_refused`).
 
 On the web side, `lib/data.ts` checks every document's schema id, closed key
-sets and source ops before a page renders.
+sets and source ops before a page renders, and `lib/judge-check.ts` fails
+the build unless the methodology page's judge squares are what its counts
+say: one row is the judge's own pass, each row holds one square per
+silent-wrong answer, the squares add up to the headline's silent-wrong
+counts, over every answer and the judge's own pass's, each mark is 0 or
+1, and in each mode the marks add up to each row's rated-correct count,
+to the headline's, over every answer and the judge's own pass's, and to
+the key's rated correct, with the other squares its rated incorrect.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
@@ -518,7 +571,13 @@ sets and source ops before a page renders.
   leaf's true, false or dash from the committed trace. On `/exhibits/` it
   re-derives each pool pass's squares, as verdict pairs and rings, from the
   committed replay, and each turned answer's tape cells and killing frames,
-  with the words beside them, from its receipt and the frame tables.
+  with the words beside them, from its receipt and the frame tables. On
+  `/methodology` it re-derives the judge figure the same way: each row's
+  pass and counts in pool order, and each square in its pass's outcome-row
+  order, with the condition and item that label it and its letter in each
+  mode, c rated correct or i rated incorrect, from the table's lists of
+  false acceptances; and it pins the headline pointers the lead and the
+  paragraph after it read, in order.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool,
@@ -539,8 +598,8 @@ sets and source ops before a page renders.
 - **The Python side.** `tests/test_export_web_data.py` holds a second
   independent resolver and an AST allowlist that keeps the exporter on the
   standard library. Its committed-tree tests export the committed files and
-  pin the test-phase Reel pick, its step 5 turn and the methodology's
-  repair line, and
+  pin the test-phase Reel pick, its step 5 turn, the methodology's repair
+  line and its judge block, and
   `test_the_committed_dev_pool_picks_the_registered_dev_reel` repeats the
   dev check that `disproof-reel.md` recorded (Measured).
 
@@ -1042,6 +1101,26 @@ pnpm --filter @dfilterforge/web test:e2e
 - The methodology page's repair line shows counts for the cited run's round
   only, pass A's in the test phase; the board shows repair@1, its
   intervals and every pool pass's round.
+- The methodology page's judge block shows plain counts, never a rate or an
+  interval, and leaves out the table's cells per condition and per pass; a
+  row's rated-correct count is a `count` op over the mode's list of false
+  acceptances. Its rows, one per pool pass, exist to draw one square per
+  silent-wrong answer: no sentence compares the passes or the modes, and
+  none reads a count as a property of the answering models, which the
+  protocol rules out. A verdict on a strong-exact or shortcut answer is
+  shown as agreement or disagreement, never as a judge error: strong exact
+  holds on three probes, not on every capture. Every square's detail block
+  is in the server HTML, hidden until its square is read out, so the
+  island renders no value; the page opens with the first false acceptance
+  from the request alone read out. `tests/judge.spec.ts` checks that the
+  mode switch fills exactly the squares each mode's headline counts, that
+  the page opens with that square held, that pointing reads out another
+  square while one is pressed, that a pressed square reads out its own
+  answer and receipt whenever the pointer is off the squares, until Escape
+  or a second press, that the arrow keys move the figure's one tab stop,
+  that nothing scrolls sideways at 320 and 400 px, and that axe finds no
+  violation in the block at 400 px and none serious or critical at the
+  default width.
 - The A/A pair is not wired in: `board.json` keeps `aa` null, and no
   committed file holds the confound notes `locked-test-v1.md` attaches to
   the comparisons between conditions. So the board leaves those

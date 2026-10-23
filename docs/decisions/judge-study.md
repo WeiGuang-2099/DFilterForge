@@ -161,7 +161,8 @@ it against a fake provider on 127.0.0.1. Each line below runs in Windows
 PowerShell 5.1 at the root of a checkout of the branch that holds the
 runner and every correction, at its head, pushed before the call:
 `judge-study` until its pull request merges. The judge-v2 dev check went
-out from dcc96f7. Only `call` sends a request, and only with the key set. It
+out from dcc96f7, and the test study from ba46263. Only `call` sends a
+request, and only with the key set. It
 sends one request at a time, paced at 1 s, and sends a timeout, a transport
 error or HTTP 408, 429 or 5xx again in a later sweep, 60 s on, at most three
 attempts per request. The spend counts a timeout or a transport error at
