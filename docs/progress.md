@@ -4,16 +4,17 @@ Last updated: 2026-10-23
 
 ## Current slice
 
-Plan week R2's slices. `passb` (plan slice 4) is merged (PR #41).
+Plan week R2 runs three slices. `passb` (plan slice 4) merged in PR #41.
 `judge-study` (slice 5) asks an LLM judge whether each of the 971 test
 filters that ran is right and compares its verdicts with tshark's; its
-`judge-v2` dev check passed (PR #43), and the owner sends the test study
-on 2026-10-23, after which the maintainer publishes it, writes the table
-and adds the `/methodology` block and the README sentence. `exhibits`
-(slice 6), on `exhibits`, replays the hosted test answers without the
-witness packets and shows, on the new `/exhibits` page, the 11 answers
-the captures alone pass that a witness frame disproves. No other
-published number changes until the judge study's result is committed.
+`judge-v2` dev check passed (PR #43), the owner sent the test study on
+2026-10-23, and its result branch publishes the replies, the table, the
+`/methodology` block and the README sentence. `exhibits` (slice 6), on
+`exhibits`, replays the hosted test answers without the witness packets
+and shows, on the new `/exhibits` page, the 11 answers the captures alone
+pass that a witness frame disproves. No published number other than the
+exhibits' replay counts changes until the judge study's result is
+committed.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2707,10 +2708,12 @@ PR #41 merged `passb` into `main` as 89184f6. Seed 2026's second test
 pass, sent on 2026-10-20, changed 33 of the adapter's 448 answers and
 flipped none of the 40 ready C4 cases ([pair
 report](decisions/evidence/aa-test-qwen3-1.7b-sft-s2026-2026-10-07.json));
-the SFT headline and the training pages quote it, and the [self-served
-note](decisions/self-served-runs.md) holds its bill, USD 0.29, which
-brings Modal's total to USD 5.16. PR #42 landed 20 s later, so CI on
-main ran on 407d383, which holds this merge, and passed.
+the SFT headline points to it, the training pages and the README quote
+it, and the [self-served note](decisions/self-served-runs.md) holds its
+bill, USD 0.29, which brings Modal's total to USD 5.16 and the README's
+spend line to USD 7.53. PR #42 landed 20 s later and cancelled CI on
+89184f6, so CI on main ran on 407d383, which holds this merge, and
+passed.
 
 ## PR #42 merged: 2026-10-21
 
@@ -2720,7 +2723,8 @@ completed reply, for USD 0.2306, but 114 replies gave no verdict, 109 of
 them at the 256-token limit. The [judge note](decisions/judge-study.md)'s
 correction of 2026-10-21 moves the prompts to `judge-v2`, which asks for
 the verdict before the reason, and the parser reads the verdict a reply
-opens with; every other rule stays. Hosted CI passed on main.
+opens with; every other rule stays, and `protocol.md`'s Judge study
+section is amended to match. Hosted CI passed on main.
 
 ## PR #43 merged: 2026-10-21
 
@@ -2729,8 +2733,9 @@ judge-v2 dev check (`results/judge-v2/dev/`), sent on 2026-10-21: all 282
 requests got a completed reply on their first attempt and every reply
 gave a verdict, which passes step 4 and leaves DeepInfra standing under
 J2, for USD 0.1459. Read in full, 6 replies open with "incorrect" and
-end with a reason that calls the filter correct; the note's Limits say
-so. Hosted CI passed on main.
+end with a reason that calls the filter correct; the [judge
+note](decisions/judge-study.md)'s Limits say so. Hosted CI passed on
+main.
 
 ## Planned next
 
