@@ -456,6 +456,24 @@ def test_prepare_honours_a_shallower_retrieval_depth(
         assert max(depths) == 3
 
 
+def test_prepare_writes_only_the_chosen_conditions(
+    catalog: _Catalog, prepared: Path, tmp_path: Path
+) -> None:
+    """A row that answers C4 alone gets the full prepare's C4 prompts."""
+    output_dir = tmp_path / "dev-c4-only"
+
+    assert _prepare(catalog.path, output_dir, "--conditions", "C4") == 0
+
+    manifest = _manifest(output_dir)
+    assert [condition.label for condition in manifest.conditions] == ["C4"]
+    assert [path.name for path in (output_dir / "prepared").iterdir()] == [
+        "C4.json"
+    ]
+    assert (output_dir / "prepared" / "C4.json").read_bytes() == (
+        prepared / "prepared" / "C4.json"
+    ).read_bytes()
+
+
 @pytest.mark.parametrize(
     ("option", "value"),
     [
@@ -463,6 +481,7 @@ def test_prepare_honours_a_shallower_retrieval_depth(
         ("--top-k", "33"),
         ("--source-revision", " "),
         ("--split", "train"),
+        ("--conditions", "C5"),
     ],
 )
 def test_prepare_rejects_arguments_outside_their_bounds(

@@ -31,7 +31,7 @@ freeze record admits its prepare.json.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
@@ -385,15 +385,18 @@ def _write_conditions(
     split: ModelSplit,
     none_inputs: Sequence[GenerationInputV1],
     lexical_inputs: Sequence[GenerationInputV1],
+    labels: Collection[str],
 ) -> tuple[PreparedConditionV1, ...]:
-    """Writes one hashed prompt file per condition, in protocol order.
+    """Writes one hashed prompt file per chosen condition, in protocol order.
 
     Args:
         prepared_dir: Existing directory that receives ``C1.json`` to
-            ``C4.json``.
+            ``C4.json``, or the chosen ones among them.
         split: The split every prompt must be from.
         none_inputs: Items prepared for the no-retrieval conditions.
         lexical_inputs: Items prepared for the lexical conditions.
+        labels: The conditions to write, such as C4 alone for a row that
+            answers only C4.
 
     Returns:
         One record per written file, in protocol order.
@@ -405,6 +408,8 @@ def _write_conditions(
     conditions: list[PreparedConditionV1] = []
     for contract, retrieval in _CONDITIONS:
         label: ConditionLabel = condition_label(contract, retrieval)
+        if label not in labels:
+            continue
         lexical = retrieval is RetrievalV1.LEXICAL
         batch = prepare_batch(
             lexical_inputs if lexical else none_inputs,
@@ -461,7 +466,11 @@ def _build_prepare(
     identity, results = _retrieved(catalog, items, top_k)
     none_inputs, lexical_inputs = _generation_inputs(items, results)
     conditions = _write_conditions(
-        staging / "prepared", split, none_inputs, lexical_inputs
+        staging / "prepared",
+        split,
+        none_inputs,
+        lexical_inputs,
+        cast(list[str], arguments.conditions),
     )
     manifest = PrepareManifestV1(
         prepare_id=cast(Path, arguments.output_dir).name,
@@ -483,7 +492,7 @@ def _build_prepare(
 
 
 def _prepare(arguments: argparse.Namespace) -> int:
-    """Writes four hashed prompt files and their manifest, without network.
+    """Writes the chosen hashed prompt files and their manifest, offline.
 
     Args:
         arguments: The parsed ``prepare`` arguments.
@@ -2245,7 +2254,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser(
         "prepare",
-        help="Write the four prepared prompt files and their manifest",
+        help="Write the prepared prompt files and their manifest",
     )
     prepare.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG_PATH)
     prepare.add_argument("--output-dir", type=Path, required=True)
@@ -2254,6 +2263,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare.add_argument("--top-k", type=_top_k, default=_DEFAULT_TOP_K)
     prepare.add_argument("--split", choices=("dev", "test"), default="dev")
+    prepare.add_argument(
+        "--conditions", nargs="+", choices=_LABELS, default=list(_LABELS)
+    )
     prepare.set_defaults(handler=_prepare)
     call = commands.add_parser(
         "call",
