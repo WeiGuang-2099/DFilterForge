@@ -133,12 +133,13 @@ The [protocol](protocol.md) defines what is measured.
    a file, and `publish` refuses any file holding it or a token-shaped string.
 4. Save the third line below as `artifacts/call-config.json` (ignored) with
    the provider's prices filled in; prices cannot be added after the run.
-5. Call on the host. On exit 1, read the printed `stop_reason`.
-   `transient_failure`: the pass stopped at its first HTTP 5xx, 408 or 429,
+5. Call on the host. On exit 1, read the printed `stop_reason`. `null`:
+   items met HTTP 429 and are pending; re-run with `--resume`.
+   `transient_failure`: the pass stopped at its first HTTP 5xx or 408,
    timeout or dropped connection, which used one attempt of that one item;
    wait, then re-run with `--resume`. `fatal_http`: fix the key or credit,
-   then resume. `budget`:
-   the 0.25 USD cap cannot cover the next request; the run cannot be published.
+   then resume. `budget`: the 0.25 USD cap cannot cover the next request;
+   the run cannot be published.
    `thinking_not_honoured` (`--gate-first`, on by default) ends the run: move
    `artifacts/model-eval/RUN/runs/RUN` out of `runs/`, change the provider or
    model (a new model needs a new `RUN`) and call again without `--resume`.
@@ -278,9 +279,13 @@ Two rules come from the sessions of 2026-10-08 and 2026-10-18:
   way on 2026-10-08), a server lost mid-pass did the same to every
   remaining item, and the 2026-10-18 resume session ran each call under a
   PowerShell watchdog that stopped it at the first failed answer. The call
-  step now stops itself at its first transient failure with
-  `stop_reason` `transient_failure`, so an outage costs one attempt of one
-  item and no watchdog is needed: wake the server, then resume.
+  step now stops itself at its first HTTP 5xx or 408, timeout or dropped
+  connection, with `stop_reason` `transient_failure`, so an outage costs
+  one attempt of one item and no watchdog is needed. The resume re-sends
+  that item first, so wake the server until `/v1/models` lists the model
+  before every resume: each resume into a server that is still down
+  spends another attempt of the same item, and a third failure is final
+  and scores as `provider_failed`.
 
 ### Base model: dev, then test
 

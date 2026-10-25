@@ -14,10 +14,10 @@ data, never deriving one.
 
 The call step is the only one that opens a connection. It reads the
 credential from the environment, sends each prepared prompt at most once
-per pass, ends the pass at its first transient failure, and writes
-neither the credential nor the endpoint URL into any file it produces. A
-test prompt set is answered only when the committed freeze record admits
-its prepare.json.
+per pass, ends the pass at its first transient failure other than a rate
+limit, and writes neither the credential nor the endpoint URL into any
+file it produces. A test prompt set is answered only when the committed
+freeze record admits its prepare.json.
 """
 
 # The four subcommands still share one file, which is over the size this
@@ -126,6 +126,12 @@ _LABELS: tuple[ConditionLabel, ...] = ("C1", "C2", "C3", "C4")
 _STOP_STATUSES = frozenset({401, 402, 403})
 _RETRY_STATUSES = frozenset({408, 429})
 _RETRY_CODES = frozenset({"timeout", "transport_error"})
+# A rate limit is retried but does not end the pass: the server is up and
+# the next request may pass. Hosted routes answer hundreds of them (776 in
+# test-deepseek's 1,202 attempts) and the self-served server none, so
+# ending a pass at each would leave a hosted run more passes than a
+# manifest may record.
+_RATE_LIMIT = 429
 _SCHEMA_MESSAGE = "Input does not match the required schema"
 _IO_MESSAGE = "File operation failed"
 # Every file that decides what a request contains: the items, the prompt
@@ -738,10 +744,11 @@ def _retry_class(
     """Decides whether one recorded attempt may be sent again.
 
     A ``stop`` attempt ends the invocation immediately and is re-sent by
-    the next resume. A ``retry`` attempt ends it too, and is re-sent while
-    the item has an attempt left: a server that failed one request will
-    most likely fail the next, and the pass would otherwise spend an
-    attempt on every remaining item. A ``final`` attempt is never re-sent.
+    the next resume. A ``retry`` attempt other than a rate limit ends it
+    too, and every ``retry`` attempt is re-sent while the item has an
+    attempt left: a server that failed one request will most likely fail
+    the next, and the pass would otherwise spend an attempt on every
+    remaining item. A ``final`` attempt is never re-sent.
     ``provider_error`` and ``empty_content`` are deliberately final: they
     are answers the model gave, not transport faults, and re-sending them
     would spend the budget on the same answer.
@@ -1266,7 +1273,10 @@ class _CallPass:
             if retry == "stop":
                 self._state.stop_reason = "fatal_http"
                 return False
-            if retry == "retry":
+            if (
+                retry == "retry"
+                and attempt.completion.http_status != _RATE_LIMIT
+            ):
                 self._state.stop_reason = "transient_failure"
                 return False
             if self._gate(attempt.completion):

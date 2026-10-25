@@ -675,14 +675,10 @@ def _dropped(ordinal: int) -> tuple[int, bytes]:
 
 
 def _flaky(ordinal: int) -> tuple[int, bytes]:
-    """Answers request three with 429 and request five with 400.
-
-    The 429 ends the first pass, so request four is the resume re-sending
-    item three and request five is item four's first.
-    """
+    """Answers request three with 429 and request four with 400."""
     if ordinal == 3:
         return 429, _ERROR_BODY
-    if ordinal == 5:
+    if ordinal == 4:
         return 400, _ERROR_BODY
     return 200, _OK
 
@@ -981,7 +977,10 @@ def test_budget_is_checked_before_every_request_and_resume_continues(
 def test_resume_resends_only_transient_failures_and_keeps_every_attempt(
     prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A rate limit is re-sent; a rejected request is recorded as it is."""
+    """A rate limit is re-sent; a rejected request is recorded as it is.
+
+    Neither ends the pass: the server answered both.
+    """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
     prepare_dir = _workspace(prepared, tmp_path)
     config = tmp_path / "call.json"
@@ -989,7 +988,8 @@ def test_resume_resends_only_transient_failures_and_keeps_every_attempt(
     with _provider(_flaky) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
-        assert len(provider.received) == 3
+        assert len(provider.received) == _PASS_REQUESTS
+        assert _run_manifest(prepare_dir).invocations[-1].stop_reason is None
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 1
 
