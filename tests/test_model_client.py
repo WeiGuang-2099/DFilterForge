@@ -17,6 +17,8 @@ from typing import Any, cast, Protocol
 import pytest
 
 from dfilterforge import model_client
+from dfilterforge.answer_schema import response_format
+from dfilterforge.answer_schema import TYPED_IR_V1
 from dfilterforge.completions import CompletionBatchV1
 from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import OpenRouterOptionsV1
@@ -426,6 +428,12 @@ def test_a_second_turn_is_sent_as_four_ordered_messages() -> None:
                     "require_parameters": True,
                 },
             },
+        ),
+        (
+            RequestSettingsV1(
+                model_id="m", seed=None, response_schema=TYPED_IR_V1
+            ),
+            {"response_format": response_format(TYPED_IR_V1)},
         ),
     ],
 )

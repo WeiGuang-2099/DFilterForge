@@ -141,6 +141,7 @@ _IO_MESSAGE = "File operation failed"
 # run records the settings it sent whole, and an exception shapes no byte.
 _MODEL_SIDE_FILES: tuple[str, ...] = (
     "scripts/model_run.py",
+    "src/dfilterforge/answer_schema.py",
     "src/dfilterforge/canonical.py",
     "src/dfilterforge/field_catalog.py",
     "src/dfilterforge/field_retrieval.py",
@@ -1058,6 +1059,16 @@ def _call_plan(arguments: argparse.Namespace) -> _CallPlan:
             "Model-side source files changed since preparation",
         )
     config = _read_config(cast(Path, arguments.config))
+    # A schema describes the typed-IR envelope; a display-filter prompt
+    # sent under it could only be answered in the wrong shape.
+    if config.settings.response_schema is not None and any(
+        condition.output_contract is not OutputContractV1.TYPED_IR
+        for condition in prepare.conditions
+    ):
+        raise RunError(
+            "schema_contract_mismatch",
+            "A response schema applies only to typed-IR conditions",
+        )
     if not os.environ.get(API_KEY_ENV):
         raise RunError("api_key_missing", "The model API credential is not set")
     return _CallPlan(

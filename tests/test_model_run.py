@@ -25,6 +25,8 @@ import pytest
 
 from dfilterforge import cli as cli_module
 from dfilterforge import held_out
+from dfilterforge.answer_schema import response_format
+from dfilterforge.answer_schema import TYPED_IR_V1
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
@@ -1623,6 +1625,16 @@ def _free_prices(bench: _Bench) -> tuple[str, ...]:
     return ()
 
 
+def _schema_over_display_filters(bench: _Bench) -> tuple[str, ...]:
+    """Asks for the typed-IR schema over a prepare that holds C1 and C2."""
+    _write_config(
+        bench.config,
+        bench.provider.url,
+        settings={"response_schema": TYPED_IR_V1},
+    )
+    return ()
+
+
 def _unparsable_prompt(bench: _Bench) -> tuple[str, ...]:
     """Records a prepared file that is no longer a prompt batch."""
     _rewrite_condition(bench.prepare_dir, "C1", {"not": "a batch"})
@@ -1661,6 +1673,7 @@ def _swapped_condition(bench: _Bench) -> tuple[str, ...]:
         (_missing_prompt_file, "prepare_hash_mismatch"),
         (_missing_config, "config_invalid"),
         (_free_prices, "config_invalid"),
+        (_schema_over_display_filters, "schema_contract_mismatch"),
         (_unparsable_prompt, "prepare_invalid"),
         (_swapped_condition, "condition_mismatch"),
     ],
@@ -2478,6 +2491,30 @@ def fixture_c4_run(
     finally:
         patch.undo()
     return workspace / "runs" / _C4_RUN_ID
+
+
+def test_a_c4_prompt_set_is_sent_under_the_typed_ir_schema(
+    prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The schema row's requests carry the schema, and its run records it."""
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    prepare_dir = _workspace(prepared, tmp_path)
+    _keep_conditions(prepare_dir, ("C4",))
+    config = tmp_path / "call.json"
+
+    with _provider(_healthy) as provider:
+        _write_config(
+            config, provider.url, settings={"response_schema": TYPED_IR_V1}
+        )
+        assert _call(prepare_dir, config) == 0
+        formats = [
+            json.loads(entry.body)["response_format"]
+            for entry in provider.received
+        ]
+
+    assert len(formats) == _DEV_ITEMS
+    assert all(sent == response_format(TYPED_IR_V1) for sent in formats)
+    assert _run_manifest(prepare_dir).settings.response_schema == TYPED_IR_V1
 
 
 def test_a_run_over_fewer_conditions_is_published_and_scored(
@@ -4178,4 +4215,4 @@ def test_model_side_files_are_the_request_builders_import_closure() -> None:
             for name in closure | set(_CASE_TABLES)
         ),
     }
-    assert len(side_files) == len(set(side_files)) == 12
+    assert len(side_files) == len(set(side_files)) == 13

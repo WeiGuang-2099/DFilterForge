@@ -37,7 +37,9 @@ from typing import Annotated, cast, Literal
 
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_serializer
 from pydantic import model_validator
+from pydantic import SerializerFunctionWrapHandler
 
 from dfilterforge.canonical import canonical_json
 from dfilterforge.generation import ConditionLabel
@@ -282,12 +284,36 @@ class RequestSettingsV1(FrozenModel):
     )
     json_mode: bool = True
     openrouter: OpenRouterOptionsV1 | None = None
+    # A schema from answer_schema, sent instead of plain JSON mode.
+    response_schema: Literal["typed-ir/1"] | None = None
 
     @field_validator("model_id")
     @classmethod
     def validate_model_id(cls, value: str) -> str:
         """Bounds the recorded provider model identifier."""
         return validate_text(value, MAX_METADATA_BYTES, "model_id")
+
+    @model_validator(mode="after")
+    def validate_schema_mode(self) -> "RequestSettingsV1":
+        """Requires JSON mode under a schema, which is a stricter JSON mode."""
+        if self.response_schema is not None and not self.json_mode:
+            raise ValueError("response_schema requires json_mode")
+        return self
+
+    @model_serializer(mode="wrap")
+    def drop_unset_schema(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Leaves response_schema out of the record while it is unset.
+
+        Every committed batch, run manifest and receipt hashes these
+        settings as they were written before the field existed, so unset
+        settings must still serialize to the same bytes.
+        """
+        data = cast(dict[str, object], handler(self))
+        if self.response_schema is None:
+            data.pop("response_schema", None)
+        return data
 
 
 class CompletionBatchV1(FrozenModel):
