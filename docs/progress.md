@@ -1,21 +1,17 @@
 # Implementation Progress
 
-Last updated: 2026-10-23
+Last updated: 2026-10-25
 
 ## Current slice
 
-Plan week R2 ran three slices. `passb` (plan slice 4) merged in PR #41
-and `exhibits` (slice 6) in PR #44: `/exhibits` shows the 11 answers the
-captures alone pass as exact that a witness frame disproves.
-`judge-study` (slice 5) is measured: the owner sent the test study on
-2026-10-23, and deepseek/deepseek-v4-pro-0813, as an LLM judge, rated 58
-of the 165 silent-wrong test answers correct from the request alone, 8 of
-the 27 its own model wrote ([table](results/judge-v2/table.json)). Its
-branch publishes the replies, the table, the `/methodology` figure and
-the README paragraph. Next is slice 7, `selfserved-baselines` (plan week
-R3): the runner's circuit breaker first, then the base model's
-constrained-decoding and few-shot rows, the 1.7B repair round and a cost
-benchmark, in a Modal session the owner runs from home.
+Plan week R2's slices are merged: `passb` (plan slice 4) in PR #41,
+`exhibits` (slice 6) in PR #44 and `judge-study` (slice 5) in PR #45.
+Slice 7, `selfserved-baselines` (plan week R3), is under way on its
+branch. Its first change is the runner's circuit breaker: a call pass
+now stops at its first HTTP 5xx or 408, timeout or dropped connection,
+while an HTTP 429 is retried by the next pass as before. Then come the
+base model's constrained-decoding and few-shot rows, the 1.7B repair
+round and a cost benchmark, in a Modal session the owner runs from home.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
