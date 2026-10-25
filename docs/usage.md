@@ -133,8 +133,11 @@ The [protocol](protocol.md) defines what is measured.
    a file, and `publish` refuses any file holding it or a token-shaped string.
 4. Save the third line below as `artifacts/call-config.json` (ignored) with
    the provider's prices filled in; prices cannot be added after the run.
-5. Call on the host. On exit 1, read the printed `stop_reason`. `null`: re-run
-   with `--resume`. `fatal_http`: fix the key or credit, then resume. `budget`:
+5. Call on the host. On exit 1, read the printed `stop_reason`.
+   `transient_failure`: the pass stopped at its first HTTP 5xx, 408 or 429,
+   timeout or dropped connection, which used one attempt of that one item;
+   wait, then re-run with `--resume`. `fatal_http`: fix the key or credit,
+   then resume. `budget`:
    the 0.25 USD cap cannot cover the next request; the run cannot be published.
    `thinking_not_honoured` (`--gate-first`, on by default) ends the run: move
    `artifacts/model-eval/RUN/runs/RUN` out of `runs/`, change the provider or
@@ -270,20 +273,22 @@ Two rules come from the sessions of 2026-10-08 and 2026-10-18:
   proxy settings, and use another network, such as a phone hotspot, if
   either gets no status.
 - Wake the server before every call, not once per session. It scales to
-  zero after 5 idle minutes, and a call that starts while it is down gets
-  503 for every item and spends one attempt on each: dev s17 lost a whole
-  pass that way on 2026-10-08. A server lost mid-pass does the same to
-  every remaining item at the call's 1 s pacing, so the 2026-10-18 resume
-  session ran each call under a watchdog that stopped it at the first
-  failed answer.
+  zero after 5 idle minutes. Until 2026-10-25 a call that started while it
+  was down spent one attempt on every item (dev s17 lost a whole pass that
+  way on 2026-10-08), a server lost mid-pass did the same to every
+  remaining item, and the 2026-10-18 resume session ran each call under a
+  PowerShell watchdog that stopped it at the first failed answer. The call
+  step now stops itself at its first transient failure with
+  `stop_reason` `transient_failure`, so an outage costs one attempt of one
+  item and no watchdog is needed: wake the server, then resume.
 
 ### Base model: dev, then test
 
 One command per run (paid). Exit 0 means the run is complete. On exit 1,
-read the printed `stop_reason`: `null` means items are pending after
-transient failures (a scaled-down server answers 503); wake the server
-again and re-run the same command with `--resume`. Send the test run only
-after the dev run is complete; the note fixes that rule.
+read the printed `stop_reason`: `transient_failure` means the pass stopped
+at its first transient failure (a scaled-down server answers 503); wake
+the server again and re-run the same command with `--resume`. Send the
+test run only after the dev run is complete; the note fixes that rule.
 
 ```powershell
 uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-2026-10-07 --run-id dev-qwen3-1.7b-2026-10-07 --config artifacts/modal/qwen3-1.7b.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0

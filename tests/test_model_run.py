@@ -675,17 +675,25 @@ def _dropped(ordinal: int) -> tuple[int, bytes]:
 
 
 def _flaky(ordinal: int) -> tuple[int, bytes]:
-    """Answers request three with 429 and request four with 400."""
+    """Answers request three with 429 and request five with 400.
+
+    The 429 ends the first pass, so request four is the resume re-sending
+    item three and request five is item four's first.
+    """
     if ordinal == 3:
         return 429, _ERROR_BODY
-    if ordinal == 4:
+    if ordinal == 5:
         return 400, _ERROR_BODY
     return 200, _OK
 
 
 def _always_failing_third(ordinal: int) -> tuple[int, bytes]:
-    """Answers 503 to one item on the first pass and on both resumes."""
-    if ordinal in (3, _PASS_REQUESTS + 1, _PASS_REQUESTS + 2):
+    """Answers 503 to item three on the first pass and on both resumes.
+
+    Each 503 ends its pass, so the three failures are requests three to
+    five.
+    """
+    if ordinal in (3, 4, 5):
         return 503, _ERROR_BODY
     return 200, _OK
 
@@ -981,7 +989,7 @@ def test_resume_resends_only_transient_failures_and_keeps_every_attempt(
     with _provider(_flaky) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
-        assert len(provider.received) == _PASS_REQUESTS
+        assert len(provider.received) == 3
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 1
 
@@ -1013,6 +1021,8 @@ def test_transient_failures_are_abandoned_after_three_attempts(
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
         assert _call(prepare_dir, config, "--resume") == 1
+        assert _call(prepare_dir, config, "--resume") == 1
+        assert len(provider.received) == 5
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 2
         assert _call(prepare_dir, config, "--resume") == 0
@@ -1029,6 +1039,43 @@ def test_transient_failures_are_abandoned_after_three_attempts(
     answers = {a.item_id: a for a in _answers(prepare_dir, "C1").completions}
     assert answers["mei-0003"].status is CompletionStatusV1.FAILED
     assert answers["mei-0003"].http_status == 503
+
+
+def test_an_outage_mid_pass_costs_one_attempt_not_one_per_item(
+    prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first transient failure ends the pass; a resume re-sends it."""
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    prepare_dir = _workspace(prepared, tmp_path)
+    config = tmp_path / "call.json"
+    down = [True]
+
+    def _lost_after_two(ordinal: int) -> tuple[int, bytes]:
+        if ordinal > 2 and down[0]:
+            return 503, _ERROR_BODY
+        return 200, _OK
+
+    with _provider(_lost_after_two) as provider:
+        _write_config(config, provider.url)
+        assert _call(prepare_dir, config) == 1
+        assert len(provider.received) == 3
+        stopped = _run_manifest(prepare_dir)
+        assert stopped.invocations[-1].stop_reason == "transient_failure"
+        assert stopped.invocations[-1].requests_sent == 3
+        assert stopped.status == "incomplete"
+
+        down[0] = False
+        assert _call(prepare_dir, config, "--resume") == 0
+        assert len(provider.received) == _PASS_REQUESTS + 1
+        assert provider.received[3].body == provider.received[2].body
+
+    manifest = _run_manifest(prepare_dir)
+    assert manifest.status == "complete"
+    assert manifest.invocations[-1].stop_reason is None
+    census = {c.label: c.attempts for c in manifest.conditions}
+    assert census["C1"]["mei-0003"] == 2
+    counts = [n for attempts in census.values() for n in attempts.values()]
+    assert sum(counts) == _PASS_REQUESTS + 1
 
 
 def test_fatal_http_status_stops_the_run_before_more_spend(
@@ -1738,7 +1785,7 @@ def test_a_dropped_connection_is_retried_and_charged_in_full(
     with _provider(_dropped) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
-        assert len(provider.received) == _PASS_REQUESTS
+        assert len(provider.received) == 3
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 1
 

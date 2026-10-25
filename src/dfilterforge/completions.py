@@ -397,7 +397,13 @@ class InvocationV1(FrozenModel):
     max_usd: float = Field(gt=0, le=12, allow_inf_nan=False)
     requests_sent: int = Field(ge=0, le=4096, strict=True)
     stop_reason: (
-        Literal["budget", "fatal_http", "thinking_not_honoured"] | None
+        Literal[
+            "budget",
+            "fatal_http",
+            "thinking_not_honoured",
+            "transient_failure",
+        ]
+        | None
     ) = None
 
     @field_validator("started_at", "finished_at")

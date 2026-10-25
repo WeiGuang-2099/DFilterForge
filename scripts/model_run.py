@@ -14,9 +14,10 @@ data, never deriving one.
 
 The call step is the only one that opens a connection. It reads the
 credential from the environment, sends each prepared prompt at most once
-per pass, and writes neither the credential nor the endpoint URL into any
-file it produces. A test prompt set is answered only when the committed
-freeze record admits its prepare.json.
+per pass, ends the pass at its first transient failure, and writes
+neither the credential nor the endpoint URL into any file it produces. A
+test prompt set is answered only when the committed freeze record admits
+its prepare.json.
 """
 
 # The four subcommands still share one file, which is over the size this
@@ -624,7 +625,9 @@ class _CallPlan(NamedTuple):
         return hashlib.sha256(self.prepare_bytes).hexdigest()
 
 
-_StopReason = Literal["budget", "fatal_http", "thinking_not_honoured"]
+_StopReason = Literal[
+    "budget", "fatal_http", "thinking_not_honoured", "transient_failure"
+]
 
 
 @dataclass
@@ -735,10 +738,13 @@ def _retry_class(
     """Decides whether one recorded attempt may be sent again.
 
     A ``stop`` attempt ends the invocation immediately and is re-sent by
-    the next resume; a ``final`` attempt is never re-sent. ``provider_error``
-    and ``empty_content`` are deliberately final: they are answers the
-    model gave, not transport faults, and re-sending them would spend the
-    budget on the same answer.
+    the next resume. A ``retry`` attempt ends it too, and is re-sent while
+    the item has an attempt left: a server that failed one request will
+    most likely fail the next, and the pass would otherwise spend an
+    attempt on every remaining item. A ``final`` attempt is never re-sent.
+    ``provider_error`` and ``empty_content`` are deliberately final: they
+    are answers the model gave, not transport faults, and re-sending them
+    would spend the budget on the same answer.
     """
     if completion.status is CompletionStatusV1.COMPLETED:
         return "final"
@@ -1256,8 +1262,12 @@ class _CallPass:
             entries.append(attempt)
             self._state.spent_micro_usd += attempt.charged_micro_usd
             self._state.requests_sent += 1
-            if _retry_class(attempt.completion) == "stop":
+            retry = _retry_class(attempt.completion)
+            if retry == "stop":
                 self._state.stop_reason = "fatal_http"
+                return False
+            if retry == "retry":
+                self._state.stop_reason = "transient_failure"
                 return False
             if self._gate(attempt.completion):
                 return False
