@@ -65,6 +65,7 @@ from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import ConditionRunV1
 from dfilterforge.completions import ENDPOINT_KIND
+from dfilterforge.completions import FewShotSpecV1
 from dfilterforge.completions import InvocationV1
 from dfilterforge.completions import MAX_RECORDED_USD
 from dfilterforge.completions import PreparedConditionV1
@@ -75,6 +76,11 @@ from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import thinking_state
 from dfilterforge.completions import TokenPricesV1
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.few_shot import FEW_SHOT_K
+from dfilterforge.few_shot import load_pool
+from dfilterforge.few_shot import POOL_PATH
+from dfilterforge.few_shot import RULE
+from dfilterforge.few_shot import select_examples
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
 from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.field_retrieval import retrieve_fields
@@ -143,6 +149,7 @@ _MODEL_SIDE_FILES: tuple[str, ...] = (
     "scripts/model_run.py",
     "src/dfilterforge/answer_schema.py",
     "src/dfilterforge/canonical.py",
+    "src/dfilterforge/few_shot.py",
     "src/dfilterforge/field_catalog.py",
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
@@ -441,6 +448,29 @@ def _write_conditions(
     return tuple(conditions)
 
 
+def _few_shot_inputs(
+    inputs: Sequence[GenerationInputV1],
+) -> tuple[tuple[GenerationInputV1, ...], FewShotSpecV1]:
+    """Gives each lexical input the training examples the rule picks.
+
+    Returns:
+        The inputs with their examples, and the record of how they were
+        chosen.
+    """
+    pool = load_pool(_PROJECT_ROOT / POOL_PATH)
+    return (
+        tuple(
+            item.model_copy(
+                update={"examples": select_examples(item.intent, pool)}
+            )
+            for item in inputs
+        ),
+        FewShotSpecV1(
+            rule=RULE, k=FEW_SHOT_K, pool=POOL_PATH, pool_sha256=pool.sha256
+        ),
+    )
+
+
 def _build_prepare(
     staging: Path,
     arguments: argparse.Namespace,
@@ -465,6 +495,9 @@ def _build_prepare(
     split = cast(ModelSplit, arguments.split)
     identity, results = _retrieved(catalog, items, top_k)
     none_inputs, lexical_inputs = _generation_inputs(items, results)
+    few_shot = None
+    if cast(bool, arguments.few_shot):
+        lexical_inputs, few_shot = _few_shot_inputs(lexical_inputs)
     conditions = _write_conditions(
         staging / "prepared",
         split,
@@ -486,6 +519,7 @@ def _build_prepare(
             result.item_id for result in results if not result.fields
         ),
         conditions=conditions,
+        few_shot=few_shot,
     )
     _write_json(staging / "prepare.json", manifest)
     return manifest
@@ -511,6 +545,12 @@ def _prepare(arguments: argparse.Namespace) -> int:
             "prepare_id_invalid",
             "The output directory name is not a valid prepare id",
         )
+    if cast(bool, arguments.few_shot) and set(
+        cast(list[str], arguments.conditions)
+    ) != {"C4"}:
+        raise RunError(
+            "few_shot_conditions", "A few-shot prepare holds C4 alone"
+        )
     if output_dir.exists():
         raise RunError("output_exists", "The prepare directory already exists")
     source_files = _source_manifest()
@@ -532,21 +572,20 @@ def _prepare(arguments: argparse.Namespace) -> int:
         # A half-written prepare directory must never be publishable.
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    print(
-        canonical_json(
-            {
-                "prepare_id": prepare_id,
-                "output_dir": output_dir.as_posix(),
-                "items": len(items),
-                "top_k": manifest.top_k,
-                "empty_contexts": len(manifest.empty_context_item_ids),
-                "conditions": {
-                    condition.label: condition.sha256
-                    for condition in manifest.conditions
-                },
-            }
-        )
-    )
+    report: dict[str, object] = {
+        "prepare_id": prepare_id,
+        "output_dir": output_dir.as_posix(),
+        "items": len(items),
+        "top_k": manifest.top_k,
+        "empty_contexts": len(manifest.empty_context_item_ids),
+        "conditions": {
+            condition.label: condition.sha256
+            for condition in manifest.conditions
+        },
+    }
+    if manifest.few_shot is not None:
+        report["few_shot"] = manifest.few_shot
+    print(canonical_json(report))
     return 0
 
 
@@ -2199,6 +2238,13 @@ def _follow_up(arguments: argparse.Namespace) -> int:
     manifest, manifest_sha256, first, answers = _follow_up_source(
         cast(Path, arguments.from_run), any_split=arm is not None
     )
+    # No second turn is registered for the few-shot row, and one written
+    # here would carry its examples under a manifest without the rule,
+    # which scoring refuses only after the requests were paid for.
+    if manifest.prepare.few_shot is not None:
+        raise RunError(
+            "few_shot_follow_up", "A few-shot run has no second turn"
+        )
     if arm is not None:
         _check_plan(arm, manifest, manifest_sha256, prepare_id)
     batch = PreparedBatchV1(
@@ -2266,6 +2312,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--conditions", nargs="+", choices=_LABELS, default=list(_LABELS)
     )
+    # The few-shot row: C4 alone, with eight training examples per prompt.
+    prepare.add_argument("--few-shot", action="store_true")
     prepare.set_defaults(handler=_prepare)
     call = commands.add_parser(
         "call",

@@ -363,6 +363,19 @@ class PreparedConditionV1(FrozenModel):
     prompt_count: int = Field(ge=1, le=_MAX_ITEMS_PER_CONDITION)
 
 
+class FewShotSpecV1(FrozenModel):
+    """How a few-shot prepare chose the training examples it shows.
+
+    ``pool_sha256`` is the digest of the decompressed pool, so a reader can
+    rebuild every prompt's examples from the same rows with the same rule.
+    """
+
+    rule: Literal["word-overlap/1"]
+    k: int = Field(ge=1, le=16)
+    pool: Literal["data/train/v1/sft.jsonl.gz"]
+    pool_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class PrepareManifestV1(FrozenModel):
     """Everything the preparation step fixed before any request was sent.
 
@@ -390,12 +403,37 @@ class PrepareManifestV1(FrozenModel):
     conditions: tuple[PreparedConditionV1, ...] = Field(
         min_length=1, max_length=4
     )
+    few_shot: FewShotSpecV1 | None = None
 
     @field_validator("created_at")
     @classmethod
     def validate_created_at(cls, value: datetime) -> datetime:
         """Requires an aware timestamp and stores it as UTC."""
         return _utc(value)
+
+    @model_validator(mode="after")
+    def validate_few_shot(self) -> "PrepareManifestV1":
+        """Keeps the few-shot row to C4, the only condition it answers."""
+        if self.few_shot is not None and tuple(
+            condition.label for condition in self.conditions
+        ) != ("C4",):
+            raise ValueError("a few-shot prepare holds C4 alone")
+        return self
+
+    @model_serializer(mode="wrap")
+    def drop_unset_few_shot(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Leaves few_shot out of the record while the prepare has none.
+
+        Committed prepare manifests, and the freeze record that admits the
+        test ones by digest, were written before the field existed, so a
+        prepare without examples must still serialize to the same bytes.
+        """
+        data = cast(dict[str, object], handler(self))
+        if self.few_shot is None:
+            data.pop("few_shot", None)
+        return data
 
 
 class TokenPricesV1(FrozenModel):

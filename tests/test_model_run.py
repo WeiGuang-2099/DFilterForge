@@ -40,6 +40,8 @@ from dfilterforge.completions import RepairPlanV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import TokenPricesV1
+from dfilterforge.few_shot import POOL_SHA256
+from dfilterforge.few_shot import RULE
 from dfilterforge.field_catalog import FieldType
 from dfilterforge.field_retrieval import FieldRetrievalError
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
@@ -472,6 +474,38 @@ def test_prepare_writes_only_the_chosen_conditions(
     assert (output_dir / "prepared" / "C4.json").read_bytes() == (
         prepared / "prepared" / "C4.json"
     ).read_bytes()
+
+
+def test_prepare_few_shot_shows_eight_examples_on_each_c4_prompt(
+    catalog: _Catalog,
+    prepared: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The few-shot row's prepare: C4 alone, the system prompt unchanged."""
+    output_dir = tmp_path / "dev-fs8"
+
+    assert (
+        _prepare(catalog.path, output_dir, "--conditions", "C4", "--few-shot")
+        == 0
+    )
+
+    manifest = _manifest(output_dir)
+    assert manifest.few_shot is not None
+    assert (manifest.few_shot.rule, manifest.few_shot.k) == (RULE, 8)
+    assert manifest.few_shot.pool_sha256 == POOL_SHA256
+    (condition,) = manifest.conditions
+    assert condition.system_prompt_sha256 == (
+        _manifest(prepared).conditions[3].system_prompt_sha256
+    )
+    batch = _batch(output_dir, "C4")
+    assert {len(prompt.examples or ()) for prompt in batch.prompts} == {8}
+    assert json.loads(capsys.readouterr().out)["few_shot"]["k"] == 8
+
+    refused = _prepare(catalog.path, tmp_path / "dev-fs8-all", "--few-shot")
+    assert refused == 2
+    error = json.loads(capsys.readouterr().err)
+    assert error["error"]["code"] == "few_shot_conditions"
 
 
 @pytest.mark.parametrize(
@@ -2958,6 +2992,35 @@ def test_follow_up_refuses_unusable_sources_and_outputs(
     assert not list(tmp_path.glob(".*.partial"))
 
 
+def test_follow_up_refuses_a_few_shot_run(
+    catalog: _Catalog,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No second turn is registered for the few-shot row, so none is made."""
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    workspace = tmp_path / "dev-fs8"
+    assert (
+        _prepare(catalog.path, workspace, "--conditions", "C4", "--few-shot")
+        == 0
+    )
+    answers = _GoldReplies(_dev_routing(generate_model_split(tmp_path / "x")))
+    config = tmp_path / "call.json"
+    with _provider(answers) as provider:
+        answers.received = provider.received
+        _write_config(config, provider.url)
+        assert _call(workspace, config, run_id=_C4_RUN_ID) == 0
+    output = tmp_path / _FOLLOW_UP_ID
+    capsys.readouterr()
+
+    assert _follow_up(workspace / "runs" / _C4_RUN_ID, output) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "few_shot_follow_up"
+    assert not output.exists()
+
+
 def test_follow_up_refuses_an_output_made_while_it_wrote(
     c4_run: Path,
     tmp_path: Path,
@@ -4171,7 +4234,12 @@ def test_readme_call_config_is_the_recorded_first_run() -> None:
 # The request builders: every module they import decides a request byte,
 # except errors, whose exceptions shape none, and completions, whose request
 # settings every run manifest records whole.
-_REQUEST_BUILDERS = ("generation", "field_retrieval", "model_client")
+_REQUEST_BUILDERS = (
+    "generation",
+    "field_retrieval",
+    "model_client",
+    "few_shot",
+)
 _CLOSURE_STOPS = frozenset({"completions", "errors"})
 # The case tables and the split writer decide every intent a prompt holds.
 _CASE_TABLES = (
@@ -4234,4 +4302,4 @@ def test_model_side_files_are_the_request_builders_import_closure() -> None:
             for name in closure | set(_CASE_TABLES)
         ),
     }
-    assert len(side_files) == len(set(side_files)) == 13
+    assert len(side_files) == len(set(side_files)) == 14

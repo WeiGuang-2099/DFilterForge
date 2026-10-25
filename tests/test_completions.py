@@ -14,6 +14,7 @@ from dfilterforge.canonical import canonical_json
 from dfilterforge.completions import CatalogIdentityV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import ConditionRunV1
+from dfilterforge.completions import FewShotSpecV1
 from dfilterforge.completions import InvocationV1
 from dfilterforge.completions import PreparedConditionV1
 from dfilterforge.completions import PrepareManifestV1
@@ -183,6 +184,34 @@ def _prepare(**overrides: Any) -> PrepareManifestV1:
     }
     values.update(overrides)
     return PrepareManifestV1(**values)
+
+
+def test_a_few_shot_spec_is_recorded_only_on_a_c4_prepare() -> None:
+    """A prepare without examples keeps the bytes every committed one hashed."""
+    spec = FewShotSpecV1(
+        rule="word-overlap/1",
+        k=8,
+        pool="data/train/v1/sft.jsonl.gz",
+        pool_sha256="a" * 64,
+    )
+    c4 = PreparedConditionV1(
+        label="C4",
+        output_contract=OutputContractV1.TYPED_IR,
+        retrieval=RetrievalV1.LEXICAL,
+        path="prepared/C4.json",
+        sha256="f" * 64,
+        system_prompt_sha256="0" * 64,
+        prompt_count=2,
+    )
+    few_shot = _prepare(conditions=(c4,), few_shot=spec)
+
+    assert "few_shot" not in json.loads(canonical_json(_prepare()))
+    assert json.loads(canonical_json(few_shot))["few_shot"]["k"] == 8
+    assert PrepareManifestV1.model_validate_json(canonical_json(few_shot)) == (
+        few_shot
+    )
+    with pytest.raises(ValidationError, match="C4 alone"):
+        _prepare(few_shot=spec)
 
 
 def _run_manifest(**overrides: Any) -> RunManifestV1:

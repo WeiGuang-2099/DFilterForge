@@ -158,6 +158,7 @@ type = "forbidden"
 source_modules = [
   "dfilterforge.answer_schema",
   "dfilterforge.completions",
+  "dfilterforge.few_shot",
   "dfilterforge.field_retrieval",
   "dfilterforge.generation",
   "dfilterforge.held_out",
