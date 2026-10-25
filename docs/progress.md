@@ -1,6 +1,6 @@
 # Implementation Progress
 
-Last updated: 2026-10-23
+Last updated: 2026-10-25
 
 ## Current slice
 
@@ -2771,6 +2771,26 @@ square under a verifier switch, with six exhibits, one per case the tail
 turns. The README and ablation 005's addendum quote the counts, and the
 methodology's witness paragraph links the page. No published score
 changes. Hosted CI passed on main.
+
+## PR #45 merged: 2026-10-24
+
+PR #45 merged `judge-study` into `main` as 7eeaf89. It publishes the
+judge-v2 test study above: the replies (`results/judge-v2/test/`), the
+[table](results/judge-v2/table.json), which CI rebuilds with
+`judge_study.py table --check`, the `/methodology` figure with one square
+per silent-wrong answer, and the README paragraph. The headline is
+unchanged: from the request alone the judge rated 58 of the 165
+silent-wrong test answers correct, 8 of the 27 its own model wrote.
+Hosted CI passed on main, and the live `/methodology` serves the figure.
+
+## PR #46 merged: 2026-10-25
+
+PR #46 merged `certifi-bump` into `main` as c900656. `training/uv.lock`
+moves certifi from 2026.7.22 to 2026.10.19, whose CA bundle drops the
+emSign ECC Root CA - G3 behind the revoked eMudhra intermediates
+(GHSA-6q48-6c7w-9gw2). The CPU smoke image and the Modal training image
+take it at their next build; no published number changes. Hosted CI
+passed on main.
 
 ## Planned next
 
