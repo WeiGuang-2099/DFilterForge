@@ -19,6 +19,7 @@ dev = [
   "hypothesis>=6.125,<7",
   "import-linter>=2.1,<3",
   "isort>=5.13,<7",
+  "jsonschema>=4.26,<5",
   "pyink>=26.5.1,<27",
   "pylint>=3.3,<5",
   "pyright>=1.1.390,<2",
@@ -155,7 +156,9 @@ ignore_imports = [
 name = "Prompts and model completions never see gold"
 type = "forbidden"
 source_modules = [
+  "dfilterforge.answer_schema",
   "dfilterforge.completions",
+  "dfilterforge.few_shot",
   "dfilterforge.field_retrieval",
   "dfilterforge.generation",
   "dfilterforge.held_out",

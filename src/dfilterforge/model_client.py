@@ -23,6 +23,7 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
 
+from dfilterforge.answer_schema import response_format
 from dfilterforge.canonical import canonical_json
 from dfilterforge.completions import CODE_PATTERN
 from dfilterforge.completions import CompletionBatchV1
@@ -295,7 +296,9 @@ def _request_body(
     }
     if settings.seed is not None:
         body["seed"] = settings.seed
-    if settings.json_mode:
+    if settings.response_schema is not None:
+        body["response_format"] = response_format(settings.response_schema)
+    elif settings.json_mode:
         body["response_format"] = {"type": "json_object"}
     options = settings.openrouter
     if options is None:

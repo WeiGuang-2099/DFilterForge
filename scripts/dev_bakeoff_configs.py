@@ -19,10 +19,11 @@ the call step's pre-request bound stops being an upper bound if the
 discount ends during a run.
 
 Every ``RequestSettingsV1`` and ``OpenRouterOptionsV1`` field is written
-out, and every file is validated with ``CallConfigV1`` before it is
-written. A configuration that already exists is never changed without
-``--force``, because a resumed run refuses a configuration whose settings
-or prices differ from its manifest.
+out but ``response_schema``, which no bake-off row sends, and every file
+is validated with ``CallConfigV1`` before it is written. A configuration
+that already exists is never changed without ``--force``, because a
+resumed run refuses a configuration whose settings or prices differ
+from its manifest.
 """
 
 from __future__ import annotations

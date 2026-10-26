@@ -19,7 +19,9 @@ from typing import Annotated, cast, Literal, TypeAlias
 
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_serializer
 from pydantic import model_validator
+from pydantic import SerializerFunctionWrapHandler
 from pydantic import ValidationError
 
 from dfilterforge.canonical import canonical_json
@@ -47,6 +49,8 @@ _MAX_ASSUMPTIONS = 32
 _MAX_RETRIEVED_FIELDS = 64
 _MAX_FIELD_TEXT_BYTES = 1024
 _MAX_ENUM_VALUES = 64
+_MAX_EXAMPLES = 16
+_MAX_EXAMPLE_RESULT_BYTES = 4 * 1024
 _INPUT_PREFIX = "INPUT_JSON\n"
 # The two message shapes a prepared prompt may take: a first turn, and that
 # turn continued by the model's own answer and one more user turn.
@@ -140,11 +144,58 @@ class RetrievedFieldV1(FrozenModel):
         return values
 
 
+class ShownExampleV1(FrozenModel):
+    """One training example a few-shot prompt shows beside its request.
+
+    The prompt shows ``intent`` and ``result``; ``train_id`` is recorded
+    so a reader can find the row, and is never shown. ``result`` is the
+    row's training target exactly as the SFT set holds it, so it must
+    parse as a typed-IR answer.
+    """
+
+    train_id: str = Field(pattern=r"^train-[0-9]{4}$")
+    intent: str
+    result: str
+
+    @field_validator("intent")
+    @classmethod
+    def validate_intent(cls, value: str) -> str:
+        """Bounds the example's request as a request is bounded."""
+        return validate_text(value, MAX_INTENT_BYTES, "example intent")
+
+    @field_validator("result")
+    @classmethod
+    def validate_result(cls, value: str) -> str:
+        """Requires a bounded answer the typed-IR parser accepts."""
+        validate_utf8(value, _MAX_EXAMPLE_RESULT_BYTES, "example result")
+        parse_typed_ir_response(value)
+        return value
+
+
+ShownExamples: TypeAlias = Annotated[
+    tuple[ShownExampleV1, ...],
+    Field(min_length=1, max_length=_MAX_EXAMPLES),
+]
+
+
+def _unique_examples(
+    examples: tuple[ShownExampleV1, ...] | None,
+) -> tuple[ShownExampleV1, ...] | None:
+    """Refuses an example list that shows one training row twice."""
+    if examples is not None:
+        ids = [example.train_id for example in examples]
+        if len(set(ids)) != len(ids):
+            raise ValueError("examples must be distinct training rows")
+    return examples
+
+
 class GenerationInputV1(FrozenModel):
     """One opaque evaluation item before deterministic prompt preparation.
 
     ``retrieved_fields`` is ``None`` when retrieval was not run for this
-    item and ``()`` when it ran and matched no catalog field.
+    item and ``()`` when it ran and matched no catalog field. ``examples``
+    is ``None`` except on the few-shot row, which shows training examples
+    inside the input.
     """
 
     item_id: str
@@ -160,12 +211,21 @@ class GenerationInputV1(FrozenModel):
         | None
     ) = None
     split: str | None = None
+    examples: ShownExamples | None = None
 
     @field_validator("item_id")
     @classmethod
     def validate_item_id(cls, value: str) -> str:
         """Bounds the opaque join key without assigning it semantics."""
         return validate_text(value, _MAX_ITEM_ID_BYTES, "item_id")
+
+    @field_validator("examples")
+    @classmethod
+    def validate_examples(
+        cls, value: tuple[ShownExampleV1, ...] | None
+    ) -> tuple[ShownExampleV1, ...] | None:
+        """Refuses one training row shown twice."""
+        return _unique_examples(value)
 
     @field_validator("intent")
     @classmethod
@@ -228,9 +288,9 @@ class PreparedPromptV1(FrozenModel):
     A prompt is a first turn (system, user) or that turn continued by the
     model's own answer and one more user turn (system, user, assistant,
     user). The recorded ``retrieved_fields`` must equal the field context
-    visible inside the first user message, so a report can never claim
-    context the model did not see. Every message counts toward the one
-    byte budget.
+    visible inside the first user message, and the recorded ``examples``
+    the examples visible there, so a report can never claim context the
+    model did not see. Every message counts toward the one byte budget.
     """
 
     item_id: str
@@ -240,6 +300,7 @@ class PreparedPromptV1(FrozenModel):
     retrieved_fields: tuple[RetrievedFieldV1, ...] = Field(
         default=(), max_length=_MAX_RETRIEVED_FIELDS
     )
+    examples: ShownExamples | None = None
     messages: tuple[ChatMessageV1, ...] = Field(
         min_length=len(_FIRST_TURN), max_length=len(_SECOND_TURN)
     )
@@ -249,6 +310,29 @@ class PreparedPromptV1(FrozenModel):
     def validate_item_id(cls, value: str) -> str:
         """Applies the same bound as the source evaluation item."""
         return validate_text(value, _MAX_ITEM_ID_BYTES, "item_id")
+
+    @field_validator("examples")
+    @classmethod
+    def validate_examples(
+        cls, value: tuple[ShownExampleV1, ...] | None
+    ) -> tuple[ShownExampleV1, ...] | None:
+        """Refuses one training row shown twice."""
+        return _unique_examples(value)
+
+    @model_serializer(mode="wrap")
+    def drop_unset_examples(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Leaves examples out of the record while none were shown.
+
+        Every committed prompt file was written before the field existed,
+        and its digest is recorded, so a prompt without examples must
+        still serialize to the same bytes.
+        """
+        data = cast(dict[str, object], handler(self))
+        if self.examples is None:
+            data.pop("examples", None)
+        return data
 
     @model_validator(mode="after")
     def validate_prompt(self) -> "PreparedPromptV1":
@@ -290,6 +374,8 @@ class PreparedBatchV1(FrozenModel):
         for prompt in self.prompts:
             if (prompt.output_contract, prompt.retrieval) != condition:
                 raise ValueError("prompt condition does not match the batch")
+        if len({prompt.examples is None for prompt in self.prompts}) > 1:
+            raise ValueError("either every prompt shows examples or none does")
         return self
 
 
@@ -433,11 +519,21 @@ def _input_payload(
     }
     if include_fields:
         payload["retrieved_fields"] = item.retrieved_fields or ()
+    if item.examples is not None:
+        payload["examples"] = _shown(item.examples)
     return payload
 
 
+def _shown(examples: Sequence[ShownExampleV1]) -> list[dict[str, str]]:
+    """Returns the part of each example a prompt shows: no training id."""
+    return [
+        {"intent": example.intent, "result": example.result}
+        for example in examples
+    ]
+
+
 def _validate_field_context(prompt: PreparedPromptV1, lexical: bool) -> None:
-    """Checks that recorded retrieval context equals model-visible context."""
+    """Checks that recorded context, fields and examples, is the visible one."""
     user_content = prompt.messages[1].content
     if not user_content.startswith(_INPUT_PREFIX):
         raise ValueError("user message must contain INPUT_JSON")
@@ -447,7 +543,15 @@ def _validate_field_context(prompt: PreparedPromptV1, lexical: bool) -> None:
         raise ValueError("user message must contain valid input JSON") from None
     if not isinstance(payload, dict):
         raise ValueError("user input must be one JSON object")
-    visible = cast(dict[str, object], payload).get("retrieved_fields")
+    inputs = cast(dict[str, object], payload)
+    if prompt.examples is None:
+        if "examples" in inputs:
+            raise ValueError("a prompt cannot show examples it does not record")
+    elif inputs.get("examples") != _shown(prompt.examples):
+        raise ValueError("recorded examples differ from the prompt's examples")
+    elif prompt.output_contract is not OutputContractV1.TYPED_IR:
+        raise ValueError("examples are shown only to typed-IR prompts")
+    visible = inputs.get("retrieved_fields")
     if not lexical:
         if visible is not None:
             raise ValueError("no-retrieval prompts cannot expose fields")
@@ -478,6 +582,15 @@ def _prepare_prompt(
             "retrieval_forbidden",
             "The no-retrieval treatment cannot receive retrieved fields",
         )
+    if (
+        item.examples is not None
+        and output_contract is not OutputContractV1.TYPED_IR
+    ):
+        raise GenerationError(
+            "examples_forbidden",
+            "Training examples are typed-IR answers; a display-filter "
+            "prompt cannot show them",
+        )
     system = (
         _SYSTEM_PROMPT_VERSIONS[output_contract][version - 1]
         + "\n"
@@ -496,6 +609,7 @@ def _prepare_prompt(
         output_contract=output_contract,
         retrieval=retrieval,
         retrieved_fields=item.retrieved_fields or (),
+        examples=item.examples,
         messages=(
             ChatMessageV1(role="system", content=system),
             ChatMessageV1(role="user", content=user),
@@ -629,6 +743,7 @@ def follow_up_prompt(
         output_contract=prompt.output_contract,
         retrieval=prompt.retrieval,
         retrieved_fields=prompt.retrieved_fields,
+        examples=prompt.examples,
         messages=(
             *prompt.messages,
             ChatMessageV1(role="assistant", content=answer),

@@ -282,6 +282,7 @@ def check_prepare(prepare: PrepareManifestV1, prepared: PreparedFiles) -> None:
             f"{undescribed[0]}: manifest and committed prompts disagree",
         )
     declared = set(prepare.item_ids)
+    shown = None if prepare.few_shot is None else prepare.few_shot.k
     for label, (batch, digest) in prepared.items():
         condition = described[label]
         committed = {prompt.item_id for prompt in batch.prompts}
@@ -291,6 +292,13 @@ def check_prepare(prepare: PrepareManifestV1, prepared: PreparedFiles) -> None:
             or (condition.output_contract, condition.retrieval)
             != (batch.output_contract, batch.retrieval)
             or not committed <= declared
+            # A few-shot prepare shows k examples on every prompt, and any
+            # other prepare shows none.
+            or any(
+                (None if prompt.examples is None else len(prompt.examples))
+                != shown
+                for prompt in batch.prompts
+            )
         ):
             raise ScoringError(
                 "manifest_mismatch",
@@ -488,6 +496,7 @@ def _rebuilt(
                     else None
                 ),
                 split=item.split,
+                examples=prompt.examples,
             )
         ],
         output_contract=prompt.output_contract,

@@ -29,6 +29,7 @@ from dfilterforge.generation import PreparedPromptV1
 from dfilterforge.generation import prompt_versions
 from dfilterforge.generation import RetrievalV1
 from dfilterforge.generation import RetrievedFieldV1
+from dfilterforge.generation import ShownExampleV1
 from dfilterforge.intent_ir import GenerationResultV1
 from dfilterforge.intent_ir import GenerationStatus
 from dfilterforge.intent_ir import MissingSlot
@@ -549,6 +550,90 @@ def test_recorded_context_cannot_diverge_from_the_visible_prompt() -> None:
             retrieval=RetrievalV1.NONE,
             prompts=lexical.prompts,
         )
+
+
+_EXAMPLE_RESULT = (
+    '{"schema_version":"1.0","status":"not_expressible","assumptions":[],'
+    '"clarifying_question":null,"missing_slots":[],"intent_ir":null}'
+)
+_EXAMPLES = tuple(
+    ShownExampleV1(
+        train_id=f"train-000{number}",
+        intent=f"Show packets that carry marker {number}.",
+        result=_EXAMPLE_RESULT,
+    )
+    for number in (1, 2)
+)
+
+
+def _c4_prompt(
+    examples: tuple[ShownExampleV1, ...] | None, item_id: str = "item-1"
+) -> PreparedPromptV1:
+    item = _item(item_id, retrieved_fields=_FIELDS)
+    return prepare_batch(
+        [item.model_copy(update={"examples": examples})],
+        output_contract=OutputContractV1.TYPED_IR,
+        retrieval=RetrievalV1.LEXICAL,
+    ).prompts[0]
+
+
+def test_examples_change_only_the_user_message() -> None:
+    """The few-shot row adds one INPUT_JSON key and nothing else."""
+    plain = _c4_prompt(None)
+    shown = _c4_prompt(_EXAMPLES)
+
+    assert shown.messages[0] == plain.messages[0]
+    assert shown.retrieved_fields == plain.retrieved_fields
+    prefix = "INPUT_JSON\n"
+    payload = json.loads(shown.messages[1].content.removeprefix(prefix))
+    assert list(payload)[0] == "examples"
+    assert payload.pop("examples") == [
+        {"intent": example.intent, "result": example.result}
+        for example in _EXAMPLES
+    ]
+    assert prefix + canonical_json(payload) == plain.messages[1].content
+    assert shown.examples == _EXAMPLES
+    assert "examples" not in json.loads(canonical_json(plain))
+    assert json.loads(canonical_json(shown))["examples"][0]["train_id"] == (
+        "train-0001"
+    )
+    assert follow_up_prompt(shown, _EXAMPLE_RESULT).examples == _EXAMPLES
+
+
+def test_a_prompt_must_record_exactly_the_examples_it_shows() -> None:
+    shown = _c4_prompt(_EXAMPLES).model_dump(mode="json")
+    plain = _c4_prompt(None).model_dump(mode="json")
+    unrecorded = {
+        key: value for key, value in shown.items() if key != "examples"
+    }
+
+    with pytest.raises(ValueError, match="does not record"):
+        PreparedPromptV1.model_validate(unrecorded)
+    with pytest.raises(ValueError, match="differ from the prompt's examples"):
+        PreparedPromptV1.model_validate(plain | {"examples": shown["examples"]})
+    with pytest.raises(ValueError, match="differ from the prompt's examples"):
+        PreparedPromptV1.model_validate(
+            shown | {"examples": shown["examples"][::-1]}
+        )
+    with pytest.raises(ValueError, match="distinct training rows"):
+        _c4_prompt((_EXAMPLES[0], _EXAMPLES[0]))
+    with pytest.raises(ValueError, match="every prompt shows examples or none"):
+        PreparedBatchV1(
+            output_contract=OutputContractV1.TYPED_IR,
+            retrieval=RetrievalV1.LEXICAL,
+            prompts=(_c4_prompt(_EXAMPLES), _c4_prompt(None, "item-2")),
+        )
+    with pytest.raises(GenerationError) as refused:
+        prepare_batch(
+            [
+                _item(retrieved_fields=_FIELDS).model_copy(
+                    update={"examples": _EXAMPLES}
+                )
+            ],
+            output_contract=OutputContractV1.DISPLAY_FILTER,
+            retrieval=RetrievalV1.LEXICAL,
+        )
+    assert refused.value.code == "examples_forbidden"
 
 
 @pytest.mark.parametrize(

@@ -14,6 +14,7 @@ from dfilterforge.canonical import canonical_json
 from dfilterforge.completions import CatalogIdentityV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import ConditionRunV1
+from dfilterforge.completions import FewShotSpecV1
 from dfilterforge.completions import InvocationV1
 from dfilterforge.completions import PreparedConditionV1
 from dfilterforge.completions import PrepareManifestV1
@@ -79,11 +80,35 @@ def test_stored_batches_load_without_the_network_stack() -> None:
         {"openrouter": {"provider_order": ["a", "b", "c", "d", "e"]}},
         {"openrouter": {"reasoning": "exclude"}},
         {"openrouter": {"sort": "price"}},
+        {"response_schema": "typed-ir/2"},
+        {"response_schema": "typed-ir/1", "json_mode": False},
     ],
 )
 def test_request_settings_are_bounded(overrides: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         RequestSettingsV1.model_validate({"model_id": "m", **overrides})
+
+
+def test_a_response_schema_is_recorded_only_when_one_was_sent() -> None:
+    """Settings without a schema keep the bytes every committed run hashed."""
+    plain = RequestSettingsV1(model_id="m")
+    schema = RequestSettingsV1(model_id="m", response_schema="typed-ir/1")
+
+    assert json.loads(canonical_json(plain)) == {
+        "model_id": "m",
+        "temperature": 0.0,
+        "seed": 17,
+        "max_output_tokens": 2048,
+        "timeout_seconds": 120.0,
+        "json_mode": True,
+        "openrouter": None,
+    }
+    assert json.loads(canonical_json(schema))["response_schema"] == (
+        "typed-ir/1"
+    )
+    assert RequestSettingsV1.model_validate_json(canonical_json(schema)) == (
+        schema
+    )
 
 
 @pytest.mark.parametrize(
@@ -159,6 +184,34 @@ def _prepare(**overrides: Any) -> PrepareManifestV1:
     }
     values.update(overrides)
     return PrepareManifestV1(**values)
+
+
+def test_a_few_shot_spec_is_recorded_only_on_a_c4_prepare() -> None:
+    """A prepare without examples keeps the bytes every committed one hashed."""
+    spec = FewShotSpecV1(
+        rule="word-overlap/1",
+        k=8,
+        pool="data/train/v1/sft.jsonl.gz",
+        pool_sha256="a" * 64,
+    )
+    c4 = PreparedConditionV1(
+        label="C4",
+        output_contract=OutputContractV1.TYPED_IR,
+        retrieval=RetrievalV1.LEXICAL,
+        path="prepared/C4.json",
+        sha256="f" * 64,
+        system_prompt_sha256="0" * 64,
+        prompt_count=2,
+    )
+    few_shot = _prepare(conditions=(c4,), few_shot=spec)
+
+    assert "few_shot" not in json.loads(canonical_json(_prepare()))
+    assert json.loads(canonical_json(few_shot))["few_shot"]["k"] == 8
+    assert PrepareManifestV1.model_validate_json(canonical_json(few_shot)) == (
+        few_shot
+    )
+    with pytest.raises(ValidationError, match="C4 alone"):
+        _prepare(few_shot=spec)
 
 
 def _run_manifest(**overrides: Any) -> RunManifestV1:

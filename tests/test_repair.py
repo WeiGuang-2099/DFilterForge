@@ -2938,6 +2938,40 @@ def test_the_cli_writes_and_checks_a_pool_from_the_bases_it_names(
     assert not (results / "repair-pool" / "dev.json").exists()
 
 
+def test_a_named_pool_sits_beside_the_split_pool(
+    tmp_path: Path,
+    source: ModelSplitArtifacts,
+    spy: _Spy,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Seeds of one recipe pool apart from the hosted models' split pool."""
+    base_dir = _round(tmp_path, source)
+    round_run(base_dir, code_revision="rev")
+    results = base_dir.parent
+    other = _other_model(results, _summary(base_dir), "b")
+    pools = results / "repair-pool"
+    args = ["repair-pool", "--results-dir", str(results), "--split", "dev"]
+    args += ["--code-revision", "rev"]
+    assert main([*args, "--base", base_dir.name, "--base", other]) == 0
+    split_pool = (pools / "dev.json").read_bytes()
+    named = [*args, "--name", "qwen3-1.7b-sft"]
+    capsys.readouterr()
+
+    assert main([*named, "--base", base_dir.name, "--base", other]) == 0
+    written = json.loads(capsys.readouterr().out)
+    assert main([*named, "--check"]) == 0
+    checked = json.loads(capsys.readouterr().out)
+    assert written["pool_path"].endswith("dev-qwen3-1.7b-sft.json")
+    assert checked["differences"] == []
+    assert (pools / "dev-qwen3-1.7b-sft.md").is_file()
+    assert (pools / "dev-qwen3-1.7b-sft.json").read_bytes() == split_pool
+    assert (pools / "dev.json").read_bytes() == split_pool
+    for name in ("Bad", "-x", "a/b", "a" * 42):
+        assert main([*args, f"--name={name}", "--base", base_dir.name]) == 2
+        refused = json.loads(capsys.readouterr().err)
+        assert refused["error"]["code"] == "repair_pool_name_invalid"
+
+
 @pytest.mark.parametrize(
     ("bases", "code"),
     [

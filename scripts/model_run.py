@@ -14,7 +14,8 @@ data, never deriving one.
 
 The call step is the only one that opens a connection. It reads the
 credential from the environment, sends each prepared prompt at most once
-per pass, and writes neither the credential nor the endpoint URL into any
+per pass, ends the pass at its first transient failure other than a rate
+limit, and writes neither the credential nor the endpoint URL into any
 file it produces. A test prompt set is answered only when the committed
 freeze record admits its prepare.json.
 """
@@ -30,7 +31,7 @@ freeze record admits its prepare.json.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
@@ -64,6 +65,7 @@ from dfilterforge.completions import CompletionStatusV1
 from dfilterforge.completions import CompletionV1
 from dfilterforge.completions import ConditionRunV1
 from dfilterforge.completions import ENDPOINT_KIND
+from dfilterforge.completions import FewShotSpecV1
 from dfilterforge.completions import InvocationV1
 from dfilterforge.completions import MAX_RECORDED_USD
 from dfilterforge.completions import PreparedConditionV1
@@ -74,6 +76,11 @@ from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import thinking_state
 from dfilterforge.completions import TokenPricesV1
 from dfilterforge.errors import DFilterForgeError
+from dfilterforge.few_shot import FEW_SHOT_K
+from dfilterforge.few_shot import load_pool
+from dfilterforge.few_shot import POOL_PATH
+from dfilterforge.few_shot import RULE
+from dfilterforge.few_shot import select_examples
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
 from dfilterforge.field_retrieval import FieldRetrievalResultV1
 from dfilterforge.field_retrieval import retrieve_fields
@@ -125,6 +132,12 @@ _LABELS: tuple[ConditionLabel, ...] = ("C1", "C2", "C3", "C4")
 _STOP_STATUSES = frozenset({401, 402, 403})
 _RETRY_STATUSES = frozenset({408, 429})
 _RETRY_CODES = frozenset({"timeout", "transport_error"})
+# A rate limit is retried but does not end the pass: the server is up and
+# the next request may pass. Hosted routes answer hundreds of them (776 in
+# test-deepseek's 1,202 attempts) and the self-served server none, so
+# ending a pass at each would leave a hosted run more passes than a
+# manifest may record.
+_RATE_LIMIT = 429
 _SCHEMA_MESSAGE = "Input does not match the required schema"
 _IO_MESSAGE = "File operation failed"
 # Every file that decides what a request contains: the items, the prompt
@@ -134,7 +147,9 @@ _IO_MESSAGE = "File operation failed"
 # run records the settings it sent whole, and an exception shapes no byte.
 _MODEL_SIDE_FILES: tuple[str, ...] = (
     "scripts/model_run.py",
+    "src/dfilterforge/answer_schema.py",
     "src/dfilterforge/canonical.py",
+    "src/dfilterforge/few_shot.py",
     "src/dfilterforge/field_catalog.py",
     "src/dfilterforge/field_retrieval.py",
     "src/dfilterforge/generation.py",
@@ -377,15 +392,18 @@ def _write_conditions(
     split: ModelSplit,
     none_inputs: Sequence[GenerationInputV1],
     lexical_inputs: Sequence[GenerationInputV1],
+    labels: Collection[str],
 ) -> tuple[PreparedConditionV1, ...]:
-    """Writes one hashed prompt file per condition, in protocol order.
+    """Writes one hashed prompt file per chosen condition, in protocol order.
 
     Args:
         prepared_dir: Existing directory that receives ``C1.json`` to
-            ``C4.json``.
+            ``C4.json``, or the chosen ones among them.
         split: The split every prompt must be from.
         none_inputs: Items prepared for the no-retrieval conditions.
         lexical_inputs: Items prepared for the lexical conditions.
+        labels: The conditions to write, such as C4 alone for a row that
+            answers only C4.
 
     Returns:
         One record per written file, in protocol order.
@@ -397,6 +415,8 @@ def _write_conditions(
     conditions: list[PreparedConditionV1] = []
     for contract, retrieval in _CONDITIONS:
         label: ConditionLabel = condition_label(contract, retrieval)
+        if label not in labels:
+            continue
         lexical = retrieval is RetrievalV1.LEXICAL
         batch = prepare_batch(
             lexical_inputs if lexical else none_inputs,
@@ -428,6 +448,29 @@ def _write_conditions(
     return tuple(conditions)
 
 
+def _few_shot_inputs(
+    inputs: Sequence[GenerationInputV1],
+) -> tuple[tuple[GenerationInputV1, ...], FewShotSpecV1]:
+    """Gives each lexical input the training examples the rule picks.
+
+    Returns:
+        The inputs with their examples, and the record of how they were
+        chosen.
+    """
+    pool = load_pool(_PROJECT_ROOT / POOL_PATH)
+    return (
+        tuple(
+            item.model_copy(
+                update={"examples": select_examples(item.intent, pool)}
+            )
+            for item in inputs
+        ),
+        FewShotSpecV1(
+            rule=RULE, k=FEW_SHOT_K, pool=POOL_PATH, pool_sha256=pool.sha256
+        ),
+    )
+
+
 def _build_prepare(
     staging: Path,
     arguments: argparse.Namespace,
@@ -452,8 +495,15 @@ def _build_prepare(
     split = cast(ModelSplit, arguments.split)
     identity, results = _retrieved(catalog, items, top_k)
     none_inputs, lexical_inputs = _generation_inputs(items, results)
+    few_shot = None
+    if cast(bool, arguments.few_shot):
+        lexical_inputs, few_shot = _few_shot_inputs(lexical_inputs)
     conditions = _write_conditions(
-        staging / "prepared", split, none_inputs, lexical_inputs
+        staging / "prepared",
+        split,
+        none_inputs,
+        lexical_inputs,
+        cast(list[str], arguments.conditions),
     )
     manifest = PrepareManifestV1(
         prepare_id=cast(Path, arguments.output_dir).name,
@@ -469,13 +519,14 @@ def _build_prepare(
             result.item_id for result in results if not result.fields
         ),
         conditions=conditions,
+        few_shot=few_shot,
     )
     _write_json(staging / "prepare.json", manifest)
     return manifest
 
 
 def _prepare(arguments: argparse.Namespace) -> int:
-    """Writes four hashed prompt files and their manifest, without network.
+    """Writes the chosen hashed prompt files and their manifest, offline.
 
     Args:
         arguments: The parsed ``prepare`` arguments.
@@ -493,6 +544,12 @@ def _prepare(arguments: argparse.Namespace) -> int:
         raise RunError(
             "prepare_id_invalid",
             "The output directory name is not a valid prepare id",
+        )
+    if cast(bool, arguments.few_shot) and set(
+        cast(list[str], arguments.conditions)
+    ) != {"C4"}:
+        raise RunError(
+            "few_shot_conditions", "A few-shot prepare holds C4 alone"
         )
     if output_dir.exists():
         raise RunError("output_exists", "The prepare directory already exists")
@@ -515,21 +572,20 @@ def _prepare(arguments: argparse.Namespace) -> int:
         # A half-written prepare directory must never be publishable.
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    print(
-        canonical_json(
-            {
-                "prepare_id": prepare_id,
-                "output_dir": output_dir.as_posix(),
-                "items": len(items),
-                "top_k": manifest.top_k,
-                "empty_contexts": len(manifest.empty_context_item_ids),
-                "conditions": {
-                    condition.label: condition.sha256
-                    for condition in manifest.conditions
-                },
-            }
-        )
-    )
+    report: dict[str, object] = {
+        "prepare_id": prepare_id,
+        "output_dir": output_dir.as_posix(),
+        "items": len(items),
+        "top_k": manifest.top_k,
+        "empty_contexts": len(manifest.empty_context_item_ids),
+        "conditions": {
+            condition.label: condition.sha256
+            for condition in manifest.conditions
+        },
+    }
+    if manifest.few_shot is not None:
+        report["few_shot"] = manifest.few_shot
+    print(canonical_json(report))
     return 0
 
 
@@ -624,7 +680,9 @@ class _CallPlan(NamedTuple):
         return hashlib.sha256(self.prepare_bytes).hexdigest()
 
 
-_StopReason = Literal["budget", "fatal_http", "thinking_not_honoured"]
+_StopReason = Literal[
+    "budget", "fatal_http", "thinking_not_honoured", "transient_failure"
+]
 
 
 @dataclass
@@ -735,10 +793,14 @@ def _retry_class(
     """Decides whether one recorded attempt may be sent again.
 
     A ``stop`` attempt ends the invocation immediately and is re-sent by
-    the next resume; a ``final`` attempt is never re-sent. ``provider_error``
-    and ``empty_content`` are deliberately final: they are answers the
-    model gave, not transport faults, and re-sending them would spend the
-    budget on the same answer.
+    the next resume. A ``retry`` attempt other than a rate limit ends it
+    too, and every ``retry`` attempt is re-sent while the item has an
+    attempt left: a server that failed one request will most likely fail
+    the next, and the pass would otherwise spend an attempt on every
+    remaining item. A ``final`` attempt is never re-sent.
+    ``provider_error`` and ``empty_content`` are deliberately final: they
+    are answers the model gave, not transport faults, and re-sending them
+    would spend the budget on the same answer.
     """
     if completion.status is CompletionStatusV1.COMPLETED:
         return "final"
@@ -1045,6 +1107,16 @@ def _call_plan(arguments: argparse.Namespace) -> _CallPlan:
             "Model-side source files changed since preparation",
         )
     config = _read_config(cast(Path, arguments.config))
+    # A schema describes the typed-IR envelope; a display-filter prompt
+    # sent under it could only be answered in the wrong shape.
+    if config.settings.response_schema is not None and any(
+        condition.output_contract is not OutputContractV1.TYPED_IR
+        for condition in prepare.conditions
+    ):
+        raise RunError(
+            "schema_contract_mismatch",
+            "A response schema applies only to typed-IR conditions",
+        )
     if not os.environ.get(API_KEY_ENV):
         raise RunError("api_key_missing", "The model API credential is not set")
     return _CallPlan(
@@ -1256,8 +1328,15 @@ class _CallPass:
             entries.append(attempt)
             self._state.spent_micro_usd += attempt.charged_micro_usd
             self._state.requests_sent += 1
-            if _retry_class(attempt.completion) == "stop":
+            retry = _retry_class(attempt.completion)
+            if retry == "stop":
                 self._state.stop_reason = "fatal_http"
+                return False
+            if (
+                retry == "retry"
+                and attempt.completion.http_status != _RATE_LIMIT
+            ):
+                self._state.stop_reason = "transient_failure"
                 return False
             if self._gate(attempt.completion):
                 return False
@@ -2159,6 +2238,13 @@ def _follow_up(arguments: argparse.Namespace) -> int:
     manifest, manifest_sha256, first, answers = _follow_up_source(
         cast(Path, arguments.from_run), any_split=arm is not None
     )
+    # No second turn is registered for the few-shot row, and one written
+    # here would carry its examples under a manifest without the rule,
+    # which scoring refuses only after the requests were paid for.
+    if manifest.prepare.few_shot is not None:
+        raise RunError(
+            "few_shot_follow_up", "A few-shot run has no second turn"
+        )
     if arm is not None:
         _check_plan(arm, manifest, manifest_sha256, prepare_id)
     batch = PreparedBatchV1(
@@ -2214,7 +2300,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser(
         "prepare",
-        help="Write the four prepared prompt files and their manifest",
+        help="Write the prepared prompt files and their manifest",
     )
     prepare.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG_PATH)
     prepare.add_argument("--output-dir", type=Path, required=True)
@@ -2223,6 +2309,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare.add_argument("--top-k", type=_top_k, default=_DEFAULT_TOP_K)
     prepare.add_argument("--split", choices=("dev", "test"), default="dev")
+    prepare.add_argument(
+        "--conditions", nargs="+", choices=_LABELS, default=list(_LABELS)
+    )
+    # The few-shot row: C4 alone, with eight training examples per prompt.
+    prepare.add_argument("--few-shot", action="store_true")
     prepare.set_defaults(handler=_prepare)
     call = commands.add_parser(
         "call",

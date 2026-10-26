@@ -1,21 +1,23 @@
 # Implementation Progress
 
-Last updated: 2026-10-25
+Last updated: 2026-10-26
 
 ## Current slice
 
-Plan week R2 ran three slices. `passb` (plan slice 4) merged in PR #41
-and `exhibits` (slice 6) in PR #44: `/exhibits` shows the 11 answers the
-captures alone pass as exact that a witness frame disproves.
-`judge-study` (slice 5) is measured: the owner sent the test study on
-2026-10-23, and deepseek/deepseek-v4-pro-0813, as an LLM judge, rated 58
-of the 165 silent-wrong test answers correct from the request alone, 8 of
-the 27 its own model wrote ([table](results/judge-v2/table.json)). Its
-branch publishes the replies, the table, the `/methodology` figure and
-the README paragraph. Next is slice 7, `selfserved-baselines` (plan week
-R3): the runner's circuit breaker first, then the base model's
-constrained-decoding and few-shot rows, the 1.7B repair round and a cost
-benchmark, in a Modal session the owner runs from home.
+Plan week R2's slices are merged: `passb` (plan slice 4) in PR #41,
+`exhibits` (slice 6) in PR #44 and `judge-study` (slice 5) in PR #45.
+Slice 7, `selfserved-baselines` (plan week R3), has its code, prompt
+sets and registration on its branch, before any request. The call step
+stops a pass at its first HTTP 5xx or 408, timeout or dropped
+connection. Two untrained rows of the base model are registered: base +
+JSON schema (`dfilterforge.answer_schema`) and base + eight training
+examples + schema (`dfilterforge.few_shot`), C4 only. So is the 1.7B
+repair round on the three SFT seeds, with its plans and dev arm prompt
+sets committed. The rules are in the protocol's amendments of
+2026-10-26 and the [self-served note](decisions/self-served-runs.md).
+Next is the Modal session the owner runs from home (`usage.md`,
+Baseline rows and the 1.7B repair round), then the ladder code, before
+any test row is scored, and the /training page.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2791,6 +2793,17 @@ emSign ECC Root CA - G3 behind the revoked eMudhra intermediates
 (GHSA-6q48-6c7w-9gw2). The CPU smoke image and the Modal training image
 take it at their next build; no published number changes. Hosted CI
 passed on main.
+
+## PR #47 merged: 2026-10-25
+
+PR #47 merged `dep-alerts` into `main` as 18633a9 and closed the open
+Dependabot alerts but one. Next.js and eslint-config-next moved to
+16.4.1 (two remote code execution advisories and a denial of service,
+none reachable on the static export), an override lifted zod to 4.6.6,
+pyink to 26.5.1 took black past its cache-file advisory, and filelock
+4.2.1 and setuptools 84.1.0 entered the training lock. black's GitHub
+Action advisory stays open, since this repository does not use that
+action. No published number changed. Hosted CI passed on main.
 
 ## Planned next
 

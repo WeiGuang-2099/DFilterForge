@@ -25,6 +25,8 @@ import pytest
 
 from dfilterforge import cli as cli_module
 from dfilterforge import held_out
+from dfilterforge.answer_schema import response_format
+from dfilterforge.answer_schema import TYPED_IR_V1
 from dfilterforge.canonical import canonical_json
 from dfilterforge.canonical import content_sha256
 from dfilterforge.catalog_runtime import DEFAULT_CATALOG_PATH
@@ -38,6 +40,8 @@ from dfilterforge.completions import RepairPlanV1
 from dfilterforge.completions import RequestSettingsV1
 from dfilterforge.completions import RunManifestV1
 from dfilterforge.completions import TokenPricesV1
+from dfilterforge.few_shot import POOL_SHA256
+from dfilterforge.few_shot import RULE
 from dfilterforge.field_catalog import FieldType
 from dfilterforge.field_retrieval import FieldRetrievalError
 from dfilterforge.field_retrieval import FieldRetrievalItemV1
@@ -454,6 +458,56 @@ def test_prepare_honours_a_shallower_retrieval_depth(
         assert max(depths) == 3
 
 
+def test_prepare_writes_only_the_chosen_conditions(
+    catalog: _Catalog, prepared: Path, tmp_path: Path
+) -> None:
+    """A row that answers C4 alone gets the full prepare's C4 prompts."""
+    output_dir = tmp_path / "dev-c4-only"
+
+    assert _prepare(catalog.path, output_dir, "--conditions", "C4") == 0
+
+    manifest = _manifest(output_dir)
+    assert [condition.label for condition in manifest.conditions] == ["C4"]
+    assert [path.name for path in (output_dir / "prepared").iterdir()] == [
+        "C4.json"
+    ]
+    assert (output_dir / "prepared" / "C4.json").read_bytes() == (
+        prepared / "prepared" / "C4.json"
+    ).read_bytes()
+
+
+def test_prepare_few_shot_shows_eight_examples_on_each_c4_prompt(
+    catalog: _Catalog,
+    prepared: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The few-shot row's prepare: C4 alone, the system prompt unchanged."""
+    output_dir = tmp_path / "dev-fs8"
+
+    assert (
+        _prepare(catalog.path, output_dir, "--conditions", "C4", "--few-shot")
+        == 0
+    )
+
+    manifest = _manifest(output_dir)
+    assert manifest.few_shot is not None
+    assert (manifest.few_shot.rule, manifest.few_shot.k) == (RULE, 8)
+    assert manifest.few_shot.pool_sha256 == POOL_SHA256
+    (condition,) = manifest.conditions
+    assert condition.system_prompt_sha256 == (
+        _manifest(prepared).conditions[3].system_prompt_sha256
+    )
+    batch = _batch(output_dir, "C4")
+    assert {len(prompt.examples or ()) for prompt in batch.prompts} == {8}
+    assert json.loads(capsys.readouterr().out)["few_shot"]["k"] == 8
+
+    refused = _prepare(catalog.path, tmp_path / "dev-fs8-all", "--few-shot")
+    assert refused == 2
+    error = json.loads(capsys.readouterr().err)
+    assert error["error"]["code"] == "few_shot_conditions"
+
+
 @pytest.mark.parametrize(
     ("option", "value"),
     [
@@ -461,6 +515,7 @@ def test_prepare_honours_a_shallower_retrieval_depth(
         ("--top-k", "33"),
         ("--source-revision", " "),
         ("--split", "train"),
+        ("--conditions", "C5"),
     ],
 )
 def test_prepare_rejects_arguments_outside_their_bounds(
@@ -684,8 +739,12 @@ def _flaky(ordinal: int) -> tuple[int, bytes]:
 
 
 def _always_failing_third(ordinal: int) -> tuple[int, bytes]:
-    """Answers 503 to one item on the first pass and on both resumes."""
-    if ordinal in (3, _PASS_REQUESTS + 1, _PASS_REQUESTS + 2):
+    """Answers 503 to item three on the first pass and on both resumes.
+
+    Each 503 ends its pass, so the three failures are requests three to
+    five.
+    """
+    if ordinal in (3, 4, 5):
         return 503, _ERROR_BODY
     return 200, _OK
 
@@ -973,7 +1032,10 @@ def test_budget_is_checked_before_every_request_and_resume_continues(
 def test_resume_resends_only_transient_failures_and_keeps_every_attempt(
     prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A rate limit is re-sent; a rejected request is recorded as it is."""
+    """A rate limit is re-sent; a rejected request is recorded as it is.
+
+    Neither ends the pass: the server answered both.
+    """
     monkeypatch.setenv(API_KEY_ENV, _API_KEY)
     prepare_dir = _workspace(prepared, tmp_path)
     config = tmp_path / "call.json"
@@ -982,6 +1044,7 @@ def test_resume_resends_only_transient_failures_and_keeps_every_attempt(
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
         assert len(provider.received) == _PASS_REQUESTS
+        assert _run_manifest(prepare_dir).invocations[-1].stop_reason is None
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 1
 
@@ -1013,6 +1076,8 @@ def test_transient_failures_are_abandoned_after_three_attempts(
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
         assert _call(prepare_dir, config, "--resume") == 1
+        assert _call(prepare_dir, config, "--resume") == 1
+        assert len(provider.received) == 5
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 2
         assert _call(prepare_dir, config, "--resume") == 0
@@ -1029,6 +1094,43 @@ def test_transient_failures_are_abandoned_after_three_attempts(
     answers = {a.item_id: a for a in _answers(prepare_dir, "C1").completions}
     assert answers["mei-0003"].status is CompletionStatusV1.FAILED
     assert answers["mei-0003"].http_status == 503
+
+
+def test_an_outage_mid_pass_costs_one_attempt_not_one_per_item(
+    prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first transient failure ends the pass; a resume re-sends it."""
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    prepare_dir = _workspace(prepared, tmp_path)
+    config = tmp_path / "call.json"
+    down = [True]
+
+    def _lost_after_two(ordinal: int) -> tuple[int, bytes]:
+        if ordinal > 2 and down[0]:
+            return 503, _ERROR_BODY
+        return 200, _OK
+
+    with _provider(_lost_after_two) as provider:
+        _write_config(config, provider.url)
+        assert _call(prepare_dir, config) == 1
+        assert len(provider.received) == 3
+        stopped = _run_manifest(prepare_dir)
+        assert stopped.invocations[-1].stop_reason == "transient_failure"
+        assert stopped.invocations[-1].requests_sent == 3
+        assert stopped.status == "incomplete"
+
+        down[0] = False
+        assert _call(prepare_dir, config, "--resume") == 0
+        assert len(provider.received) == _PASS_REQUESTS + 1
+        assert provider.received[3].body == provider.received[2].body
+
+    manifest = _run_manifest(prepare_dir)
+    assert manifest.status == "complete"
+    assert manifest.invocations[-1].stop_reason is None
+    census = {c.label: c.attempts for c in manifest.conditions}
+    assert census["C1"]["mei-0003"] == 2
+    counts = [n for attempts in census.values() for n in attempts.values()]
+    assert sum(counts) == _PASS_REQUESTS + 1
 
 
 def test_fatal_http_status_stops_the_run_before_more_spend(
@@ -1576,6 +1678,16 @@ def _free_prices(bench: _Bench) -> tuple[str, ...]:
     return ()
 
 
+def _schema_over_display_filters(bench: _Bench) -> tuple[str, ...]:
+    """Asks for the typed-IR schema over a prepare that holds C1 and C2."""
+    _write_config(
+        bench.config,
+        bench.provider.url,
+        settings={"response_schema": TYPED_IR_V1},
+    )
+    return ()
+
+
 def _unparsable_prompt(bench: _Bench) -> tuple[str, ...]:
     """Records a prepared file that is no longer a prompt batch."""
     _rewrite_condition(bench.prepare_dir, "C1", {"not": "a batch"})
@@ -1614,6 +1726,7 @@ def _swapped_condition(bench: _Bench) -> tuple[str, ...]:
         (_missing_prompt_file, "prepare_hash_mismatch"),
         (_missing_config, "config_invalid"),
         (_free_prices, "config_invalid"),
+        (_schema_over_display_filters, "schema_contract_mismatch"),
         (_unparsable_prompt, "prepare_invalid"),
         (_swapped_condition, "condition_mismatch"),
     ],
@@ -1738,7 +1851,7 @@ def test_a_dropped_connection_is_retried_and_charged_in_full(
     with _provider(_dropped) as provider:
         _write_config(config, provider.url)
         assert _call(prepare_dir, config) == 1
-        assert len(provider.received) == _PASS_REQUESTS
+        assert len(provider.received) == 3
         assert _call(prepare_dir, config, "--resume") == 0
         assert len(provider.received) == _PASS_REQUESTS + 1
 
@@ -2433,6 +2546,30 @@ def fixture_c4_run(
     return workspace / "runs" / _C4_RUN_ID
 
 
+def test_a_c4_prompt_set_is_sent_under_the_typed_ir_schema(
+    prepared: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The schema row's requests carry the schema, and its run records it."""
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    prepare_dir = _workspace(prepared, tmp_path)
+    _keep_conditions(prepare_dir, ("C4",))
+    config = tmp_path / "call.json"
+
+    with _provider(_healthy) as provider:
+        _write_config(
+            config, provider.url, settings={"response_schema": TYPED_IR_V1}
+        )
+        assert _call(prepare_dir, config) == 0
+        formats = [
+            json.loads(entry.body)["response_format"]
+            for entry in provider.received
+        ]
+
+    assert len(formats) == _DEV_ITEMS
+    assert all(sent == response_format(TYPED_IR_V1) for sent in formats)
+    assert _run_manifest(prepare_dir).settings.response_schema == TYPED_IR_V1
+
+
 def test_a_run_over_fewer_conditions_is_published_and_scored(
     c4_run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2853,6 +2990,35 @@ def test_follow_up_refuses_unusable_sources_and_outputs(
     assert output.exists() == existed
     assert not existed or not any(output.iterdir())
     assert not list(tmp_path.glob(".*.partial"))
+
+
+def test_follow_up_refuses_a_few_shot_run(
+    catalog: _Catalog,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No second turn is registered for the few-shot row, so none is made."""
+    monkeypatch.setenv(API_KEY_ENV, _API_KEY)
+    workspace = tmp_path / "dev-fs8"
+    assert (
+        _prepare(catalog.path, workspace, "--conditions", "C4", "--few-shot")
+        == 0
+    )
+    answers = _GoldReplies(_dev_routing(generate_model_split(tmp_path / "x")))
+    config = tmp_path / "call.json"
+    with _provider(answers) as provider:
+        answers.received = provider.received
+        _write_config(config, provider.url)
+        assert _call(workspace, config, run_id=_C4_RUN_ID) == 0
+    output = tmp_path / _FOLLOW_UP_ID
+    capsys.readouterr()
+
+    assert _follow_up(workspace / "runs" / _C4_RUN_ID, output) == 2
+
+    error = cast(dict[str, Any], json.loads(capsys.readouterr().err))
+    assert error["error"]["code"] == "few_shot_follow_up"
+    assert not output.exists()
 
 
 def test_follow_up_refuses_an_output_made_while_it_wrote(
@@ -4068,7 +4234,12 @@ def test_readme_call_config_is_the_recorded_first_run() -> None:
 # The request builders: every module they import decides a request byte,
 # except errors, whose exceptions shape none, and completions, whose request
 # settings every run manifest records whole.
-_REQUEST_BUILDERS = ("generation", "field_retrieval", "model_client")
+_REQUEST_BUILDERS = (
+    "generation",
+    "field_retrieval",
+    "model_client",
+    "few_shot",
+)
 _CLOSURE_STOPS = frozenset({"completions", "errors"})
 # The case tables and the split writer decide every intent a prompt holds.
 _CASE_TABLES = (
@@ -4131,4 +4302,4 @@ def test_model_side_files_are_the_request_builders_import_closure() -> None:
             for name in closure | set(_CASE_TABLES)
         ),
     }
-    assert len(side_files) == len(set(side_files)) == 12
+    assert len(side_files) == len(set(side_files)) == 14

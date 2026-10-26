@@ -391,6 +391,7 @@ def _repair_pool(arguments: argparse.Namespace) -> object:
         arguments.base or (),
         code_revision=arguments.code_revision,
         check=arguments.check,
+        name=arguments.name,
     )
     if report.differences:
         arguments.exit_code = 1
@@ -449,8 +450,9 @@ _REPAIR_HELP = (
 _REPAIR_POOL_HELP = (
     "Pool the committed repair summaries of several base passes of one "
     "split into repair-pool/<split>.json and .md under the results "
-    "directory; --check derives them again and compares bytes, from the "
-    "bases the committed pool names unless --base is given."
+    "directory, or repair-pool/<split>-<name>.json with --name for another "
+    "pool of that split; --check derives them again and compares bytes, "
+    "from the bases the committed pool names unless --base is given."
 )
 _PAIR_HELP = (
     "Report two scored passes over the same items: per condition the "
@@ -607,6 +609,7 @@ def build_parser() -> argparse.ArgumentParser:
     repair_pool.add_argument("--base", action="append")
     repair_pool.add_argument("--code-revision", required=True)
     repair_pool.add_argument("--check", action="store_true")
+    repair_pool.add_argument("--name")
     repair_pool.set_defaults(handler=_repair_pool)
 
     pair = commands.add_parser("pair", help=_PAIR_HELP, description=_PAIR_HELP)

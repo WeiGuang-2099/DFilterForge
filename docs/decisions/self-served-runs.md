@@ -130,6 +130,15 @@ An outage re-run adds `-r2` after the tag, before the date
 - Scoring is offline in the lab container, as for every run. The adapter
   rows' C1 to C3 are marked untrained conditions and C4 is reported split by
   field coverage (protocol, Training rules).
+- Added 2026-10-26, for every run sent from that day on. The call step now
+  ends a pass at its first HTTP 5xx or 408, timeout or dropped connection,
+  with `stop_reason` `transient_failure`, while an HTTP 429 is retried by
+  the next pass as before. Such a pass is resumed with `--resume` once the
+  server answers again, not re-run, so "ends with no completed answer"
+  above means a run that holds no completed answer when the session stops
+  calling it. Every reply must carry the fingerprint
+  `vllm-0.21.0-84f508c7` and the deploy must reuse the image of
+  2026-10-08; a run that breaks either is reported as such and not read.
 
 ## Seed 2026's test pass, sent twice
 
@@ -192,6 +201,140 @@ holds the other conditions' counts, the outcome transitions, the items
 whose outcome changed and the flipped cases. Greedy decoding on this
 stack does not repeat itself exactly across sessions; for contrast, the
 hosted A/A pair changed 39 to 46 of 112 answers per condition.
+
+## Baseline rows
+
+Added 2026-10-26, before their requests (protocol, Training rules, amended
+2026-10-26; owner rulings of 2026-10-25 and 2026-10-26). Two rows of the
+base model ask whether constrained decoding or prompting closes what
+fine-tuning closed.
+When this was written every self-served row had been scored on dev and
+test (base test C4 strong exact 0.063, three-seed SFT mean 0.396), so both
+rows are post hoc and labelled so.
+
+| Row | Dev run id | Test run id |
+| --- | --- | --- |
+| base + JSON schema | `dev-qwen3-1.7b-schema-2026-10-26` | `test-qwen3-1.7b-schema-2026-10-26` |
+| base + 8 examples + JSON schema | `dev-qwen3-1.7b-fs8-2026-10-26` | `test-qwen3-1.7b-fs8-2026-10-26` |
+
+An outage re-run adds `-r2` after the tag (`test-qwen3-1.7b-fs8-r2-2026-10-26`).
+
+- Prompts: each row answers the prepare named after its first run id,
+  made at 32660dc in the test image and seeded in `docs/results/<id>/`;
+  `prepare.json` SHA-256 prefixes `f8d348edb9d2` and `0e6c9e04df1a`
+  (schema, dev and test) and `7eb5fee3c38f` and `b2477f881d92`
+  (few-shot). The two test prepares are admitted 15th and 16th in
+  `src/dfilterforge/held_out_freeze.json`. The schema prepares hold C4
+  alone (`prepare --conditions C4`), and their `C4.json` are byte for
+  byte the base row's (`7d4c9ec4`, `874e5166`), so that row differs from
+  base only in how it decodes.
+- Examples: the few-shot prepares (`--conditions C4 --few-shot`) put
+  eight training examples in each prompt's INPUT_JSON as `examples`: the
+  request and SFT target of rows of `data/train/v1/sft.jsonl.gz`
+  (decompressed SHA-256 prefix `4677e902ebd4`), chosen by the words they
+  share with the item's request (`word-overlap/1` in
+  `dfilterforge.few_shot`), best last. The system prompt is unchanged,
+  byte for byte the base row's and the SFT prompt's, so the row differs
+  from the schema row only in that key. About nine in ten ready examples
+  use a field outside the item's retrieved list, which the C4 clause tells
+  the model to keep to; the SFT targets override that rule the same way
+  (protocol, Training rules, amended 2026-10-06).
+- Settings: the base row's config with `"response_schema": "typed-ir/1"`,
+  as `artifacts/modal/qwen3-1.7b-schema.json`, so the server gets
+  `response_format` `json_schema` with `dfilterforge.answer_schema`'s
+  schema instead of `json_object`; every other setting, call option, cap
+  and the endpoint host are the base row's. The schema follows the
+  scorer's parser as far as JSON Schema can and names no field;
+  `tests/test_answer_schema.py` lists where it is looser or stricter.
+- Probe: after a wake and before the schema row's dev pass the session
+  sends one request, dev `mei-0001`'s C4 prompt under the schema, which
+  must come back with HTTP 200 and an answer the parser reads. A 503, a
+  502 or a timeout means the server was not up, and the probe is sent
+  again after another wake. Any other failure means neither row is run,
+  and this note says why. The probe is not a run and its answer is
+  never scored.
+- Order: both dev passes, then each test pass only if its own dev pass
+  settled every item.
+- Reading (protocol): the schema row minus the base row, the few-shot row
+  minus the schema row and the three-seed SFT mean minus the few-shot row,
+  each paired by case on test C4 strong exact and read only if its
+  interval excludes 0 and at least 10 cases are discordant. Outcome counts
+  and the field-coverage split are shown and never read. The dev passes
+  are pipeline checks.
+- Cost: the session's Modal bill over the requests it sent, beside the GPU
+  time the runs' latencies sum to at USD 0.80 an hour; both cover the
+  repair round's runs too.
+
+## Repair round
+
+Added 2026-10-26, before its first request (protocol, Repair, amended
+2026-10-26; owner rulings of that day). The three SFT adapters' test
+passes are repaired with the hosted round's trigger, arms and cards, and
+first their dev passes, as a pipeline check never read as an effect. When
+this was written every 1.7B score, seed 2026's second test pass and the
+hosted round's results (pooled test repair@1: counterexample 35 of 75,
+bare 21, resample 4) were known, so the round is post hoc. Where this
+restates the protocol, the protocol holds.
+
+Plans, written by `lab repair` at 203f0f2 and committed with
+`--check`, one per pass; every triggered item has a card, frames for a
+silent-wrong answer and an error for an invalid one:
+
+| Pass | Triggered | Silent-wrong / invalid | Cases |
+| --- | ---: | ---: | ---: |
+| `dev-qwen3-1.7b-sft-s17-2026-10-07` | 14 | 10 / 4 | 9 of 12 |
+| `dev-qwen3-1.7b-sft-s42-2026-10-07` | 17 | 11 / 6 | 10 of 12 |
+| `dev-qwen3-1.7b-sft-s2026-2026-10-07` | 15 | 10 / 5 | 10 of 12 |
+| `test-qwen3-1.7b-sft-s17-2026-10-07` | 45 | 32 / 13 | 31 of 40 |
+| `test-qwen3-1.7b-sft-s42-2026-10-07` | 44 | 32 / 12 | 30 of 40 |
+| `test-qwen3-1.7b-sft-s2026-2026-10-07` | 36 | 25 / 11 | 26 of 40 |
+
+The 125 test items are 58 distinct items in 36 of the 40 cases.
+
+- Arm runs: the pass's id with `-res`, `-bare` or `-cx` before its date
+  (`test-qwen3-1.7b-sft-s17-cx-2026-10-07`), and an outage re-run with
+  `-r2` after the tag (`dev-qwen3-1.7b-sft-s2026-bare-r2-2026-10-07`):
+  eighteen runs, 513 requests, 46 per arm on dev and 125 per arm on test.
+  The nine dev arm prompt sets were written by `follow-up --plan --arm` at
+  203f0f2 and are seeded in `docs/results/<arm id>/`.
+- Settings: each arm sends its pass's config
+  (`artifacts/modal/qwen3-1.7b-sft-s<seed>.json`), endpoint host and call
+  options, under the caps above (0.05 dev, 0.10 test); `lab repair`
+  refuses an arm whose settings or host differ from its pass.
+- Order: in the session, the nine dev arm runs first (seeds 17, 42, 2026;
+  resample, bare, counterexample within each), then the baseline rows.
+  Meanwhile the dev arms are published and scored, the three dev rounds
+  and the dev pool written and checked, and the dev round reviewed for
+  defects. Only then are the nine test arm prompt sets prepared,
+  committed, admitted in a commit of their own and pushed, and the test
+  arm runs sent. If that point is not reached in the session, the test
+  arms run in a later one.
+- A dev defect is a refused follow-up, call, publish, score,
+  `repair --check` or `repair-pool --check`, a reply with another
+  fingerprint, or a think block. A low repair@1, malformed second turns
+  or loops are results.
+- Outages: as under Rules; a test `-r2` answers its arm's admitted
+  prompt set and waits for a later session. An arm lost after its `-r2`,
+  or sent across a host or image change, is not run under Rules; `lab
+  repair` records only a gate stop as not run, so the owner rules how
+  that round is summarized before its summary is written, and no seed
+  pool is written while any seed has an arm not run.
+- Reading (protocol): per seed, counterexample against bare (primary),
+  counterexample against resample and bare against resample; the same
+  three pooled over the seeds by case in
+  `repair-pool/<split>-qwen3-1.7b-sft.json` (secondary). A comparison
+  reads as a difference only if its interval excludes 0 and at least 10
+  cases are discordant. The resample arm is shown as "the same prompt
+  again (repeatability check)": seed 2026's second test pass repeated 34
+  of its 36 triggered answers byte for byte and made none strong exact.
+  No seed-against-seed, base or hosted comparison is read.
+- Outputs: six `repair/plan.json`, eighteen arm runs, six
+  `repair/summary.json` and `.md`, and
+  `repair-pool/{dev,test}-qwen3-1.7b-sft.json` and `.md`.
+- Limits: the adapters were trained on single-turn prompts, so bare and
+  counterexample are four-message chats they never saw in training; the
+  interval covers case sampling with the three adapters fixed; the spend
+  columns of the repair summaries are nominal, never a cost.
 
 ## Measured
 

@@ -37,7 +37,9 @@ from typing import Annotated, cast, Literal
 
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_serializer
 from pydantic import model_validator
+from pydantic import SerializerFunctionWrapHandler
 
 from dfilterforge.canonical import canonical_json
 from dfilterforge.generation import ConditionLabel
@@ -282,12 +284,36 @@ class RequestSettingsV1(FrozenModel):
     )
     json_mode: bool = True
     openrouter: OpenRouterOptionsV1 | None = None
+    # A schema from answer_schema, sent instead of plain JSON mode.
+    response_schema: Literal["typed-ir/1"] | None = None
 
     @field_validator("model_id")
     @classmethod
     def validate_model_id(cls, value: str) -> str:
         """Bounds the recorded provider model identifier."""
         return validate_text(value, MAX_METADATA_BYTES, "model_id")
+
+    @model_validator(mode="after")
+    def validate_schema_mode(self) -> "RequestSettingsV1":
+        """Requires JSON mode under a schema, which is a stricter JSON mode."""
+        if self.response_schema is not None and not self.json_mode:
+            raise ValueError("response_schema requires json_mode")
+        return self
+
+    @model_serializer(mode="wrap")
+    def drop_unset_schema(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Leaves response_schema out of the record while it is unset.
+
+        Every committed batch, run manifest and receipt hashes these
+        settings as they were written before the field existed, so unset
+        settings must still serialize to the same bytes.
+        """
+        data = cast(dict[str, object], handler(self))
+        if self.response_schema is None:
+            data.pop("response_schema", None)
+        return data
 
 
 class CompletionBatchV1(FrozenModel):
@@ -337,6 +363,19 @@ class PreparedConditionV1(FrozenModel):
     prompt_count: int = Field(ge=1, le=_MAX_ITEMS_PER_CONDITION)
 
 
+class FewShotSpecV1(FrozenModel):
+    """How a few-shot prepare chose the training examples it shows.
+
+    ``pool_sha256`` is the digest of the decompressed pool, so a reader can
+    rebuild every prompt's examples from the same rows with the same rule.
+    """
+
+    rule: Literal["word-overlap/1"]
+    k: int = Field(ge=1, le=16)
+    pool: Literal["data/train/v1/sft.jsonl.gz"]
+    pool_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class PrepareManifestV1(FrozenModel):
     """Everything the preparation step fixed before any request was sent.
 
@@ -364,12 +403,37 @@ class PrepareManifestV1(FrozenModel):
     conditions: tuple[PreparedConditionV1, ...] = Field(
         min_length=1, max_length=4
     )
+    few_shot: FewShotSpecV1 | None = None
 
     @field_validator("created_at")
     @classmethod
     def validate_created_at(cls, value: datetime) -> datetime:
         """Requires an aware timestamp and stores it as UTC."""
         return _utc(value)
+
+    @model_validator(mode="after")
+    def validate_few_shot(self) -> "PrepareManifestV1":
+        """Keeps the few-shot row to C4, the only condition it answers."""
+        if self.few_shot is not None and tuple(
+            condition.label for condition in self.conditions
+        ) != ("C4",):
+            raise ValueError("a few-shot prepare holds C4 alone")
+        return self
+
+    @model_serializer(mode="wrap")
+    def drop_unset_few_shot(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Leaves few_shot out of the record while the prepare has none.
+
+        Committed prepare manifests, and the freeze record that admits the
+        test ones by digest, were written before the field existed, so a
+        prepare without examples must still serialize to the same bytes.
+        """
+        data = cast(dict[str, object], handler(self))
+        if self.few_shot is None:
+            data.pop("few_shot", None)
+        return data
 
 
 class TokenPricesV1(FrozenModel):
@@ -397,7 +461,13 @@ class InvocationV1(FrozenModel):
     max_usd: float = Field(gt=0, le=12, allow_inf_nan=False)
     requests_sent: int = Field(ge=0, le=4096, strict=True)
     stop_reason: (
-        Literal["budget", "fatal_http", "thinking_not_honoured"] | None
+        Literal[
+            "budget",
+            "fatal_http",
+            "thinking_not_honoured",
+            "transient_failure",
+        ]
+        | None
     ) = None
 
     @field_validator("started_at", "finished_at")

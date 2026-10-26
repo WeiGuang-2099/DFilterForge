@@ -34,7 +34,8 @@ With every arm run published and scored it writes or checks
 ``repair/summary.json`` and ``repair/summary.md``, which
 :mod:`dfilterforge.repair_summary` derives and
 :mod:`dfilterforge.repair_report` prints. :func:`pool_run` does the same for
-``repair-pool/<split>.json`` from the committed summaries of several bases.
+``repair-pool/<split>.json``, or ``repair-pool/<split>-<name>.json`` for a
+named pool, from the committed summaries of several bases.
 
 ``score --check`` rebuilds only a prompt's first turn, so the counted
 answer and follow-up of a second turn are checked here alone, and only in
@@ -113,6 +114,9 @@ SUMMARY_PATH = Path("repair") / "summary.json"
 NOT_RUN_PATH = Path("repair") / "not_run.json"
 SUMMARY_REPORT_PATH = Path("repair") / "summary.md"
 POOL_DIR = "repair-pool"
+# A named pool holds several seeds of one recipe, such as the three
+# self-served SFT adapters, beside the split pool of the hosted models.
+_POOL_NAME = re.compile(r"[a-z0-9][a-z0-9.-]{0,40}")
 
 _DATE_LENGTH = 10
 _GATE_STOP: NotRunReason = "thinking_not_honoured"
@@ -830,6 +834,8 @@ def _read_summary(
     return summary, hashlib.sha256(data).hexdigest()
 
 
+# The keyword-only options mirror the repair-pool command's flags.
+# pylint: disable-next=too-many-arguments
 def pool_run(
     results_dir: Path,
     split: Literal["dev", "test"],
@@ -837,8 +843,9 @@ def pool_run(
     *,
     code_revision: str,
     check: bool = False,
+    name: str | None = None,
 ) -> PoolReportV1:
-    """Writes or checks ``repair-pool/<split>.json`` and its report.
+    """Writes or checks ``repair-pool/<split>[-<name>].json`` and its report.
 
     Args:
         results_dir: The directory holding every base pass.
@@ -848,6 +855,9 @@ def pool_run(
         code_revision: The revision this pass ran at; it is reported and
             never written into any file.
         check: Compare with the committed files instead of writing them.
+        name: None for the split's pool of the hosted models, or the
+            name of another pool of that split, such as the seeds of
+            one recipe; each base is still read as its own model.
 
     Returns:
         What was written, or which committed files differ.
@@ -855,7 +865,13 @@ def pool_run(
     Raises:
         RoundError: When the bases cannot be pooled, as its codes say.
     """
-    rendered_path = Path(POOL_DIR) / f"{split}.json"
+    if name is not None and _POOL_NAME.fullmatch(name) is None:
+        raise RoundError(
+            "repair_pool_name_invalid",
+            "A pool name is lowercase letters, digits, dots and dashes",
+        )
+    stem = split if name is None else f"{split}-{name}"
+    rendered_path = Path(POOL_DIR) / f"{stem}.json"
     named = tuple(bases)
     if not named and check:
         named = _committed_bases(results_dir / rendered_path)

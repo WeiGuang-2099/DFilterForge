@@ -252,6 +252,38 @@ section applies (OD7). The six DeepInfra runs are reported not run and kept as
 evidence (OD6). The repair note gives the new run ids and the maintainer
 defaults behind them (OD6 to OD8).
 
+Amended 2026-10-26, before any 1.7B repair request (owner rulings of that
+day; the [self-served note](decisions/self-served-runs.md), Repair round,
+holds the run ids, plans and order). When this was written every
+self-served row, seed 2026's second test pass and the hosted repair round
+had been scored. The three SFT adapters' 2026-10-07 test passes (seeds 17,
+42 and 2026) are repaired too, and first, as a pipeline check never
+reported as an effect, the same adapters' dev passes. Every rule of this
+section applies, each adapter read as a model: the trigger, the arms, the
+card, the follow-up text, scoring, repair@1 and its parts, the per-model
+comparisons with counterexample against bare primary, the plan committed
+first, each test arm prompt set admitted in its own commit, the 64 KiB rule,
+and a dev defect corrected before any test repair prompt is prepared. These
+differ:
+
+- Each arm sends its pass's self-served config, endpoint host and call
+  options, under the self-served note's nominal caps (0.05 on dev, 0.10 on
+  test) instead of the caps above. The gate cannot stop these runs, and an
+  outage is handled under the self-served note's rules.
+- The secondary comparisons pool the three seeds by case, the OD9 unit, in
+  `repair-pool/<split>-qwen3-1.7b-sft.json`, never with the hosted models.
+- A comparison, per seed or pooled, reads as a difference only if its
+  interval excludes 0 and at least 10 cases are discordant, as the SFT
+  headline is read under Training rules. That is stricter than the round
+  and pool summaries' verdict, which counts discordant cases only, and an
+  interval with an endpoint at 0 does not exclude 0; where a summary
+  prints "conclusive" and this rule does not hold, this rule holds.
+- On greedy single-stream serving the resample arm re-sends identical bytes
+  to an unchanged stack, so it measures whether the stack repeats itself
+  across sessions, not a second chance, and it is labelled so.
+- These rounds are never compared with the hosted rounds, and their cards
+  and arm answers never enter training or preference data.
+
 ## Judge study
 
 Registered 2026-10-20, before any judge request. The [judge
@@ -565,6 +597,43 @@ note](decisions/self-served-runs.md). The second pass is not a row, no
 comparison is read against it, and it sets no noise bound. "Self-served
 rerun noise is not measured" above holds until its pair report is
 committed; from then on the headline and the pages point to that report.
+
+Amended 2026-10-26, before any of their requests: two untrained baseline
+rows (owner rulings of 2026-10-25 and 2026-10-26; the [self-served
+note](decisions/self-served-runs.md), Baseline rows, holds the run ids and
+rules). They ask whether constrained decoding or prompting closes what
+fine-tuning closed. Both serve the base model (thinking off) on C4 alone,
+each on its own admitted prompt sets, dev first and test only if dev
+settles every item, with the base row's settings otherwise. The schema row
+decodes under the typed-IR JSON schema (`response_schema` `typed-ir/1`,
+from `dfilterforge.answer_schema`) instead of plain JSON mode, on prompts
+byte for byte the base row's C4 prompts. The few-shot row adds to the same
+prompts eight training examples from `data/train/v1` (rule
+`word-overlap/1`, `dfilterforge.few_shot`) and decodes under the same
+schema, so it differs from the schema row in the examples alone. The
+system prompt is unchanged in both. For these rows only, this overrides
+"JSON mode" under Models (amended 2026-10-07) and the self-served note's
+"Every row answers these two prompt sets". Both were designed after every
+base and SFT test score was known, and the schema row after reading the
+base row's malformed test answers, against the 2026-10-18 rule above that
+no later design choice changes because of the descriptive analyses. That
+is why both are labelled post hoc wherever they are shown, and they change
+no registered row, headline or training choice. Three differences are
+read, each paired by case over the 40
+ready test cases on C4 strong exact with the SFT headline's estimator and
+reading rule above: the schema row minus the base row, the few-shot row
+minus the schema row, and the three-seed SFT mean minus the few-shot row,
+the mean taken inside each resample. Each reads as a gain or a loss only if
+its interval excludes 0 and at least 10 cases are discordant. Per row, over
+the 80 ready test C4 items, the outcome counts are shown, malformed split
+into truncated (finish reason `length`) and the rest, and C4 is split by
+field coverage with the estimator above; these describe and are never read
+as a gain or a loss. The cost of these rows and of the 1.7B repair round is
+reported as the Modal bills of the sessions that sent them, summed, over
+the requests those sessions sent, beside the GPU time their latencies sum
+to at the L4 price; neither is a price for any other serving. Code committed before these rows' test passes are scored
+computes every number here, and CI rebuilds its output with `--check`;
+where that code and this text differ, this text holds.
 
 ## Claim boundary
 

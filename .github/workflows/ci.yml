@@ -40,9 +40,10 @@ jobs:
         # the freeze quote test, the self-served note's check against the
         # Modal glue, the judge study's tests of the committed answer sets,
         # pins and requests against its note (the system prompts byte for
-        # byte, no reference filter in a primary request), and the
-        # frozen-prompt guard, so a commit that lets the note and the
-        # registry drift fails here.
+        # byte, no reference filter in a primary request), the replay of
+        # every committed few-shot prompt's examples from the training
+        # pool, and the frozen-prompt guard, so a commit that lets the note
+        # and the registry drift fails here.
         # The guard fails a branch that edits a prepare-hashed file while a
         # prompt set still awaits its call, rather than at the call step's
         # prepare_code_mismatch. The hosted test-run registry,
@@ -65,7 +66,8 @@ jobs:
           tests/test_hosted_test_runs.py tests/test_dev_bakeoff.py
           tests/test_test_passes.py tests/test_repair_arms.py
           tests/test_held_out.py tests/test_modal_glue.py
-          tests/test_judge.py'
+          tests/test_judge.py
+          tests/test_few_shot.py::test_committed_few_shot_prompts_replay_from_the_pool'
       - name: Re-count the committed A/A reruns with the pair report
         # The suite above skips these tests for the same missing docs/
         # tree, and they are the only checks of the pair report against
@@ -198,14 +200,22 @@ jobs:
           echo "checked $checked committed repair plans"
       - name: Check committed repair pools offline
         # Each pool is derived again from the committed summaries of the
-        # bases it names; zero pools is not a failure.
+        # bases it names; zero pools is not a failure. <split>.json pools
+        # the hosted models; <split>-<name>.json is a named pool, such as
+        # the self-served SFT seeds.
         run: |
           checked=0
           for pooled in docs/results/repair-pool/*.json; do
             [ -f "$pooled" ] || continue
+            stem="$(basename "$pooled" .json)"
+            split="${stem%%-*}"
+            named=()
+            if [ "$stem" != "$split" ]; then
+              named=(--name "${stem#*-}")
+            fi
             docker compose --profile pilot run --rm lab repair-pool \
               --results-dir /workspace/results \
-              --split "$(basename "$pooled" .json)" \
+              --split "$split" "${named[@]}" \
               --check --code-revision "${{ github.sha }}"
             checked=$((checked + 1))
           done

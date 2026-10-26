@@ -133,9 +133,13 @@ The [protocol](protocol.md) defines what is measured.
    a file, and `publish` refuses any file holding it or a token-shaped string.
 4. Save the third line below as `artifacts/call-config.json` (ignored) with
    the provider's prices filled in; prices cannot be added after the run.
-5. Call on the host. On exit 1, read the printed `stop_reason`. `null`: re-run
-   with `--resume`. `fatal_http`: fix the key or credit, then resume. `budget`:
-   the 0.25 USD cap cannot cover the next request; the run cannot be published.
+5. Call on the host. On exit 1, read the printed `stop_reason`. `null`:
+   items met HTTP 429 and are pending; re-run with `--resume`.
+   `transient_failure`: the pass stopped at its first HTTP 5xx or 408,
+   timeout or dropped connection, which used one attempt of that one item;
+   wait, then re-run with `--resume`. `fatal_http`: fix the key or credit,
+   then resume. `budget`: the 0.25 USD cap cannot cover the next request;
+   the run cannot be published.
    `thinking_not_honoured` (`--gate-first`, on by default) ends the run: move
    `artifacts/model-eval/RUN/runs/RUN` out of `runs/`, change the provider or
    model (a new model needs a new `RUN`) and call again without `--resume`.
@@ -270,20 +274,26 @@ Two rules come from the sessions of 2026-10-08 and 2026-10-18:
   proxy settings, and use another network, such as a phone hotspot, if
   either gets no status.
 - Wake the server before every call, not once per session. It scales to
-  zero after 5 idle minutes, and a call that starts while it is down gets
-  503 for every item and spends one attempt on each: dev s17 lost a whole
-  pass that way on 2026-10-08. A server lost mid-pass does the same to
-  every remaining item at the call's 1 s pacing, so the 2026-10-18 resume
-  session ran each call under a watchdog that stopped it at the first
-  failed answer.
+  zero after 5 idle minutes. Until 2026-10-25 a call that started while it
+  was down spent one attempt on every item (dev s17 lost a whole pass that
+  way on 2026-10-08), a server lost mid-pass did the same to every
+  remaining item, and the 2026-10-18 resume session ran each call under a
+  PowerShell watchdog that stopped it at the first failed answer. The call
+  step now stops itself at its first HTTP 5xx or 408, timeout or dropped
+  connection, with `stop_reason` `transient_failure`, so an outage costs
+  one attempt of one item and no watchdog is needed. The resume re-sends
+  that item first, so wake the server until `/v1/models` lists the model
+  before every resume: each resume into a server that is still down
+  spends another attempt of the same item, and a third failure is final
+  and scores as `provider_failed`.
 
 ### Base model: dev, then test
 
 One command per run (paid). Exit 0 means the run is complete. On exit 1,
-read the printed `stop_reason`: `null` means items are pending after
-transient failures (a scaled-down server answers 503); wake the server
-again and re-run the same command with `--resume`. Send the test run only
-after the dev run is complete; the note fixes that rule.
+read the printed `stop_reason`: `transient_failure` means the pass stopped
+at its first transient failure (a scaled-down server answers 503); wake
+the server again and re-run the same command with `--resume`. Send the
+test run only after the dev run is complete; the note fixes that rule.
 
 ```powershell
 uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-2026-10-07 --run-id dev-qwen3-1.7b-2026-10-07 --config artifacts/modal/qwen3-1.7b.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
@@ -351,6 +361,75 @@ uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-e
 ```
 
 Seeds 42 and 2026 follow with `s42` and `s2026` in the names.
+
+### Baseline rows and the 1.7B repair round
+
+The note's Baseline rows and Repair round sections register these runs;
+its Rules hold. First, with no key and no GPU, write the schema config
+(the base row's with one key added) and copy every prompt set to where
+the call step reads it, so the session's keyless check below can reach
+them:
+
+```powershell
+(Get-Content artifacts/modal/qwen3-1.7b.json -Raw).Replace('"openrouter": null', '"openrouter": null, "response_schema": "typed-ir/1"') | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b-schema.json
+foreach ($id in (Get-ChildItem docs/results -Directory | Where-Object { $_.Name -match '^(dev|test)-qwen3-1\.7b-(schema|fs8)-2026-10-26$|^dev-qwen3-1\.7b-sft-s[0-9]+-(res|bare|cx)-2026-10-07$' }).Name) { New-Item -ItemType Directory -Force "artifacts/model-eval/$id" | Out-Null; Copy-Item "docs/results/$id/prepare.json", "docs/results/$id/prepared" "artifacts/model-eval/$id" -Recurse -Force }
+```
+
+Then open a session as above, its keyless check covering every call
+below, and wait until `$m.data.id` lists `Qwen/Qwen3-1.7B` and the three
+adapters. After the dev repair arms and before the schema rows, wake the
+server and send one probe request (paid, one request): dev `mei-0001`'s
+C4 prompt under the schema. It must print `completed 200` and then
+`parsed`. A `failed` line with 503, 502 or a timeout means the server
+was not up: wake it and send the probe again. Anything else stops the
+baseline rows and goes to the maintainer.
+
+```powershell
+uv run --frozen python -c "import json; from pathlib import Path; from dfilterforge.completions import RequestSettingsV1; from dfilterforge.generation import OutputContractV1, PreparedBatchV1, parse_response; from dfilterforge.model_client import OpenAiCompatibleBackend; c = json.loads(Path('artifacts/modal/qwen3-1.7b-schema.json').read_text()); b = PreparedBatchV1.model_validate_json(Path('docs/results/dev-qwen3-1.7b-schema-2026-10-26/prepared/C4.json').read_bytes()); r = OpenAiCompatibleBackend(c['endpoint_url'], RequestSettingsV1.model_validate(c['settings'])).complete(b.model_copy(update={'prompts': b.prompts[:1]})).completions[0]; print(r.status.value, r.http_status); parse_response(OutputContractV1.TYPED_IR, r.response_text or ''); print('parsed')"
+```
+
+The calls are the ones above with each run's id, config and cap, one
+command per run (paid). The nine dev repair arms go first, for example:
+
+```powershell
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --run-id dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --config artifacts/modal/qwen3-1.7b-sft-s17.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+```
+
+in the order s17, s42, s2026, and within each `res`, `bare`, `cx`. Then
+the baseline rows, each dev run before its test run:
+
+```powershell
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-schema-2026-10-26 --run-id dev-qwen3-1.7b-schema-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-fs8-2026-10-26 --run-id dev-qwen3-1.7b-fs8-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-schema-2026-10-26 --run-id test-qwen3-1.7b-schema-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-fs8-2026-10-26 --run-id test-qwen3-1.7b-fs8-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+```
+
+Exit 0 goes on to the next run. Exit 1 with `stop_reason`
+`transient_failure`: wake the server until `/v1/models` answers, then the
+same command with `--resume`. Any other stop ends the session (the two
+end-of-session lines above) and goes to the maintainer.
+
+While the baseline rows run, the maintainer builds the lab image once,
+publishes and scores each dev arm run, writes each dev round and the dev
+pool, checks each with `--check`, and reviews them:
+
+```powershell
+docker compose --profile pilot build lab
+uv run --frozen python scripts/model_run.py publish --run-dir artifacts/model-eval/dev-qwen3-1.7b-sft-s17-cx-2026-10-07/runs/dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --output docs/results/dev-qwen3-1.7b-sft-s17-cx-2026-10-07
+docker compose --profile pilot run --rm lab score --run-dir /workspace/results/dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/dev-qwen3-1.7b-sft-s17-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/dev-qwen3-1.7b-sft-s17-2026-10-07 --code-revision (git rev-parse --short HEAD) --check
+docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results --split dev --name qwen3-1.7b-sft --base dev-qwen3-1.7b-sft-s17-2026-10-07 --base dev-qwen3-1.7b-sft-s42-2026-10-07 --base dev-qwen3-1.7b-sft-s2026-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results --split dev --name qwen3-1.7b-sft --code-revision (git rev-parse --short HEAD) --check
+```
+
+With no defect, the maintainer writes the nine test arm prompt sets with
+`follow-up --plan --arm` from the test plans, commits them, admits them in
+a commit of their own and pushes on the owner's word. The owner then
+pulls, copies them as above (with `test` in the pattern) and sends the
+nine test arm runs in the same order, with `--max-usd 0.10`. If the
+session ends first, the test arms run in a later session.
 
 ## Judge study
 
