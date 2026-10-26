@@ -88,9 +88,9 @@ class RoundError(DFilterForgeError, RuntimeError):
     ``repair_settings_mismatch``, ``repair_arm_unscored``,
     ``repair_plan_changed``, ``repair_plan_unreadable``, ``base_unscored``,
     ``repair_not_run_invalid``, ``repair_pool_bases_invalid``,
-    ``repair_pool_unsummarized``, ``repair_pool_mismatch`` and
-    ``repair_pool_not_run``. A message names a run, an arm or an item id,
-    never model text.
+    ``repair_pool_name_invalid``, ``repair_pool_unsummarized``,
+    ``repair_pool_mismatch`` and ``repair_pool_not_run``. A message names
+    a run, an arm or an item id, never model text.
     """
 
 

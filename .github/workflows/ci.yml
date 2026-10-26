@@ -200,14 +200,22 @@ jobs:
           echo "checked $checked committed repair plans"
       - name: Check committed repair pools offline
         # Each pool is derived again from the committed summaries of the
-        # bases it names; zero pools is not a failure.
+        # bases it names; zero pools is not a failure. <split>.json pools
+        # the hosted models; <split>-<name>.json is a named pool, such as
+        # the self-served SFT seeds.
         run: |
           checked=0
           for pooled in docs/results/repair-pool/*.json; do
             [ -f "$pooled" ] || continue
+            stem="$(basename "$pooled" .json)"
+            split="${stem%%-*}"
+            named=()
+            if [ "$stem" != "$split" ]; then
+              named=(--name "${stem#*-}")
+            fi
             docker compose --profile pilot run --rm lab repair-pool \
               --results-dir /workspace/results \
-              --split "$(basename "$pooled" .json)" \
+              --split "$split" "${named[@]}" \
               --check --code-revision "${{ github.sha }}"
             checked=$((checked + 1))
           done
