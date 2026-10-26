@@ -362,6 +362,75 @@ uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-e
 
 Seeds 42 and 2026 follow with `s42` and `s2026` in the names.
 
+### Baseline rows and the 1.7B repair round
+
+The note's Baseline rows and Repair round sections register these runs;
+its Rules hold. First, with no key and no GPU, write the schema config
+(the base row's with one key added) and copy every prompt set to where
+the call step reads it, so the session's keyless check below can reach
+them:
+
+```powershell
+(Get-Content artifacts/modal/qwen3-1.7b.json -Raw).Replace('"openrouter": null', '"openrouter": null, "response_schema": "typed-ir/1"') | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b-schema.json
+foreach ($id in (Get-ChildItem docs/results -Directory | Where-Object { $_.Name -match '^(dev|test)-qwen3-1\.7b-(schema|fs8)-2026-10-26$|^dev-qwen3-1\.7b-sft-s[0-9]+-(res|bare|cx)-2026-10-07$' }).Name) { New-Item -ItemType Directory -Force "artifacts/model-eval/$id" | Out-Null; Copy-Item "docs/results/$id/prepare.json", "docs/results/$id/prepared" "artifacts/model-eval/$id" -Recurse -Force }
+```
+
+Then open a session as above, its keyless check covering every call
+below, and wait until `$m.data.id` lists `Qwen/Qwen3-1.7B` and the three
+adapters. After the dev repair arms and before the schema rows, wake the
+server and send one probe request (paid, one request): dev `mei-0001`'s
+C4 prompt under the schema. It must print `completed 200` and then
+`parsed`. A `failed` line with 503, 502 or a timeout means the server
+was not up: wake it and send the probe again. Anything else stops the
+baseline rows and goes to the maintainer.
+
+```powershell
+uv run --frozen python -c "import json; from pathlib import Path; from dfilterforge.completions import RequestSettingsV1; from dfilterforge.generation import OutputContractV1, PreparedBatchV1, parse_response; from dfilterforge.model_client import OpenAiCompatibleBackend; c = json.loads(Path('artifacts/modal/qwen3-1.7b-schema.json').read_text()); b = PreparedBatchV1.model_validate_json(Path('docs/results/dev-qwen3-1.7b-schema-2026-10-26/prepared/C4.json').read_bytes()); r = OpenAiCompatibleBackend(c['endpoint_url'], RequestSettingsV1.model_validate(c['settings'])).complete(b.model_copy(update={'prompts': b.prompts[:1]})).completions[0]; print(r.status.value, r.http_status); parse_response(OutputContractV1.TYPED_IR, r.response_text or ''); print('parsed')"
+```
+
+The calls are the ones above with each run's id, config and cap, one
+command per run (paid). The nine dev repair arms go first, for example:
+
+```powershell
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --run-id dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --config artifacts/modal/qwen3-1.7b-sft-s17.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+```
+
+in the order s17, s42, s2026, and within each `res`, `bare`, `cx`. Then
+the baseline rows, each dev run before its test run:
+
+```powershell
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-schema-2026-10-26 --run-id dev-qwen3-1.7b-schema-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-fs8-2026-10-26 --run-id dev-qwen3-1.7b-fs8-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-schema-2026-10-26 --run-id test-qwen3-1.7b-schema-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-fs8-2026-10-26 --run-id test-qwen3-1.7b-fs8-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+```
+
+Exit 0 goes on to the next run. Exit 1 with `stop_reason`
+`transient_failure`: wake the server until `/v1/models` answers, then the
+same command with `--resume`. Any other stop ends the session (the two
+end-of-session lines above) and goes to the maintainer.
+
+While the baseline rows run, the maintainer builds the lab image once,
+publishes and scores each dev arm run, writes each dev round and the dev
+pool, checks each with `--check`, and reviews them:
+
+```powershell
+docker compose --profile pilot build lab
+uv run --frozen python scripts/model_run.py publish --run-dir artifacts/model-eval/dev-qwen3-1.7b-sft-s17-cx-2026-10-07/runs/dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --output docs/results/dev-qwen3-1.7b-sft-s17-cx-2026-10-07
+docker compose --profile pilot run --rm lab score --run-dir /workspace/results/dev-qwen3-1.7b-sft-s17-cx-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/dev-qwen3-1.7b-sft-s17-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm lab repair --run-dir /workspace/results/dev-qwen3-1.7b-sft-s17-2026-10-07 --code-revision (git rev-parse --short HEAD) --check
+docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results --split dev --name qwen3-1.7b-sft --base dev-qwen3-1.7b-sft-s17-2026-10-07 --base dev-qwen3-1.7b-sft-s42-2026-10-07 --base dev-qwen3-1.7b-sft-s2026-2026-10-07 --code-revision (git rev-parse --short HEAD)
+docker compose --profile pilot run --rm lab repair-pool --results-dir /workspace/results --split dev --name qwen3-1.7b-sft --code-revision (git rev-parse --short HEAD) --check
+```
+
+With no defect, the maintainer writes the nine test arm prompt sets with
+`follow-up --plan --arm` from the test plans, commits them, admits them in
+a commit of their own and pushes on the owner's word. The owner then
+pulls, copies them as above (with `test` in the pattern) and sends the
+nine test arm runs in the same order, with `--max-usd 0.10`. If the
+session ends first, the test arms run in a later session.
+
 ## Judge study
 
 The [judge note](decisions/judge-study.md) registers the study and its
