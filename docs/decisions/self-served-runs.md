@@ -265,6 +265,75 @@ An outage re-run adds `-r2` after the tag (`test-qwen3-1.7b-fs8-r2-2026-10-26`).
   time the runs' latencies sum to at USD 0.80 an hour; both cover the
   repair round's runs too.
 
+Corrected 2026-10-31, before the re-runs' requests (protocol, Training
+rules, amended 2026-10-31; owner ruling of 2026-10-29). The dev passes
+sent on 2026-10-28 showed a pipeline defect, not a result: the client sent
+each request body through `canonical_json`, which sorts object keys, so
+the schema reached vLLM with its properties in alphabetical order, and
+xgrammar, vLLM 0.21.0's default grammar engine, emits them in declared
+order. Once an answer opened with `schema_version` and `status`, only
+`not_expressible` could follow, and both dev passes wrote the object
+`{"schema_version": "1.0", "status": "not_expressible"}` on all 80 items
+(c3374bf): one answer each, where the base row gave 40 different answers
+to the schema row's 40 prompts. The client now encodes the body with each
+object's keys in the order the code built them (`_encode_body` in
+`dfilterforge.model_client`, 548084b), and `tests/test_model_client.py`
+checks the order the server receives. Before this text, the body the
+corrected client sends for the probe was compiled offline as vLLM 0.21.0
+compiles it, with xgrammar 0.2.8 (vLLM 0.21.0 allows any xgrammar from 0.2
+to before 1.0, and the server image's own version is not recorded):
+`ready`, `needs_clarification` and `not_expressible` can each follow the
+prompt's opening, and it admits the same 22 of the base row's 40 dev C4
+answers as the schema in declared order, where the sorted body admits
+none. Both rows run again:
+
+| Row | Dev run id | Test run id |
+| --- | --- | --- |
+| base + JSON schema | `dev-qwen3-1.7b-schema-ord-2026-10-26` | `test-qwen3-1.7b-schema-ord-2026-10-26` |
+| base + 8 examples + JSON schema | `dev-qwen3-1.7b-fs8-ord-2026-10-26` | `test-qwen3-1.7b-fs8-ord-2026-10-26` |
+
+The tag `ord` names the one change, as `nb` named the frontier arms' new
+provider ([repair note](repair-round.md), OD6), and the date stays the
+rows' registration date. An outage re-run adds `-r2` after the tag
+(`test-qwen3-1.7b-fs8-ord-r2-2026-10-26`).
+
+- Prompts: each corrected row answers the prepare named after its first
+  run id, made at 548084b in the test image with the 2026-10-26 commands
+  and seeded in `docs/results/<id>/`; `prepare.json` SHA-256 prefixes
+  `f9c2a947612e` and `a22465598c3d` (schema, dev and test) and
+  `219677265037` and `64867837ab10` (few-shot). Each `prepared/C4.json` is
+  byte for byte its 2026-10-26 counterpart (`7d4c9ec4`, `874e5166`,
+  `79065612`, `21167efa`), and each manifest differs from its counterpart
+  only in its id, creation time, source revision and the digests of
+  `model_client.py` and `answer_schema.py`. The two test prepares are
+  admitted 26th and 27th in `src/dfilterforge/held_out_freeze.json`, which
+  leaves 5 of its 32 slots.
+- Order: both dev passes, then each test pass only if its own dev pass
+  settled every item and its completed answers are not all one string. A
+  dev pass whose answers are all one string shows the 2026-10-28 defect
+  again: its test pass waits for a later session, and the maintainer
+  checks the pipeline first. It compares whole answers and reads no
+  answer's status and no score.
+- Unchanged: the schema, the settings and config, the caps, the endpoint
+  host, the call options, the probe, and the reading above, which now
+  reads the corrected runs.
+- The 2026-10-26 runs: the two dev passes stay committed as the record of
+  the defect and are not rows. The two test passes,
+  `test-qwen3-1.7b-schema-2026-10-26` and
+  `test-qwen3-1.7b-fs8-2026-10-26`, are reported not run. They were never
+  published or scored, and the session scripts read them only for their
+  census (item and attempt counts, run status, fingerprints, think blocks)
+  and copied them into the owner's backups. They hold answers, so unlike
+  OD6's DeepInfra runs, which held none and are committed as evidence,
+  they stay out of the repository, unread, in the owner's ignored
+  `artifacts/` and its backups. Their seeded directories are removed with
+  this text, as a rerun reported not run is (Seed 2026's test pass, sent
+  twice), since no call may answer them; their admissions, 15th and 16th,
+  stay. Their requests were billed in the session of 2026-10-28; how they
+  enter the cost, which may not open them, is ruled before the cost is
+  written.
+- No other row, number or rule changes.
+
 ## Repair round
 
 Added 2026-10-26, before its first request (protocol, Repair, amended

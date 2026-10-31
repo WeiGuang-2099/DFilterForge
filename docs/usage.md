@@ -372,7 +372,7 @@ them:
 
 ```powershell
 (Get-Content artifacts/modal/qwen3-1.7b.json -Raw).Replace('"openrouter": null', '"openrouter": null, "response_schema": "typed-ir/1"') | Set-Content -Encoding ascii -NoNewline artifacts/modal/qwen3-1.7b-schema.json
-foreach ($id in (Get-ChildItem docs/results -Directory | Where-Object { $_.Name -match '^(dev|test)-qwen3-1\.7b-(schema|fs8)-2026-10-26$|^dev-qwen3-1\.7b-sft-s[0-9]+-(res|bare|cx)-2026-10-07$' }).Name) { New-Item -ItemType Directory -Force "artifacts/model-eval/$id" | Out-Null; Copy-Item "docs/results/$id/prepare.json", "docs/results/$id/prepared" "artifacts/model-eval/$id" -Recurse -Force }
+foreach ($id in (Get-ChildItem docs/results -Directory | Where-Object { $_.Name -match '^(dev|test)-qwen3-1\.7b-(schema|fs8)-ord-2026-10-26$|^dev-qwen3-1\.7b-sft-s[0-9]+-(res|bare|cx)-2026-10-07$' }).Name) { New-Item -ItemType Directory -Force "artifacts/model-eval/$id" | Out-Null; Copy-Item "docs/results/$id/prepare.json", "docs/results/$id/prepared" "artifacts/model-eval/$id" -Recurse -Force }
 ```
 
 Then open a session as above, its keyless check covering every call
@@ -385,7 +385,7 @@ was not up: wake it and send the probe again. Anything else stops the
 baseline rows and goes to the maintainer.
 
 ```powershell
-uv run --frozen python -c "import json; from pathlib import Path; from dfilterforge.completions import RequestSettingsV1; from dfilterforge.generation import OutputContractV1, PreparedBatchV1, parse_response; from dfilterforge.model_client import OpenAiCompatibleBackend; c = json.loads(Path('artifacts/modal/qwen3-1.7b-schema.json').read_text()); b = PreparedBatchV1.model_validate_json(Path('docs/results/dev-qwen3-1.7b-schema-2026-10-26/prepared/C4.json').read_bytes()); r = OpenAiCompatibleBackend(c['endpoint_url'], RequestSettingsV1.model_validate(c['settings'])).complete(b.model_copy(update={'prompts': b.prompts[:1]})).completions[0]; print(r.status.value, r.http_status); parse_response(OutputContractV1.TYPED_IR, r.response_text or ''); print('parsed')"
+uv run --frozen python -c "import json; from pathlib import Path; from dfilterforge.completions import RequestSettingsV1; from dfilterforge.generation import OutputContractV1, PreparedBatchV1, parse_response; from dfilterforge.model_client import OpenAiCompatibleBackend; c = json.loads(Path('artifacts/modal/qwen3-1.7b-schema.json').read_text()); b = PreparedBatchV1.model_validate_json(Path('docs/results/dev-qwen3-1.7b-schema-ord-2026-10-26/prepared/C4.json').read_bytes()); r = OpenAiCompatibleBackend(c['endpoint_url'], RequestSettingsV1.model_validate(c['settings'])).complete(b.model_copy(update={'prompts': b.prompts[:1]})).completions[0]; print(r.status.value, r.http_status); parse_response(OutputContractV1.TYPED_IR, r.response_text or ''); print('parsed')"
 ```
 
 The calls are the ones above with each run's id, config and cap, one
@@ -396,19 +396,34 @@ uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-e
 ```
 
 in the order s17, s42, s2026, and within each `res`, `bare`, `cx`. Then
-the baseline rows, each dev run before its test run:
+the baseline rows under the corrected ids (the note's Baseline rows,
+corrected 2026-10-31), each dev run before its test run, and a test run
+only if its dev run's answers are not all one string; the 2026-10-26
+test passes are reported not run, and no command here reads them. Every
+arm run is done, and since 548084b the call step refuses their prompt
+sets, so a session for the corrected rows checks and sends these four
+calls alone, after the probe:
 
 ```powershell
-uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-schema-2026-10-26 --run-id dev-qwen3-1.7b-schema-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
-uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-fs8-2026-10-26 --run-id dev-qwen3-1.7b-fs8-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
-uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-schema-2026-10-26 --run-id test-qwen3-1.7b-schema-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
-uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-fs8-2026-10-26 --run-id test-qwen3-1.7b-fs8-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-schema-ord-2026-10-26 --run-id dev-qwen3-1.7b-schema-ord-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/dev-qwen3-1.7b-fs8-ord-2026-10-26 --run-id dev-qwen3-1.7b-fs8-ord-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.05 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-schema-ord-2026-10-26 --run-id test-qwen3-1.7b-schema-ord-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
+uv run --frozen python scripts/model_run.py call --prepare-dir artifacts/model-eval/test-qwen3-1.7b-fs8-ord-2026-10-26 --run-id test-qwen3-1.7b-fs8-ord-2026-10-26 --config artifacts/modal/qwen3-1.7b-schema.json --max-usd 0.10 --source-revision (git rev-parse --short HEAD) --gate-first --max-attempts 3 --min-interval-seconds 1.0
 ```
 
 Exit 0 goes on to the next run. Exit 1 with `stop_reason`
 `transient_failure`: wake the server until `/v1/models` answers, then the
 same command with `--resume`. Any other stop ends the session (the two
 end-of-session lines above) and goes to the maintainer.
+
+After each complete dev run, count its answers (no key; it reads only
+that dev run), here for the schema row, then with `fs8`:
+
+```powershell
+uv run --frozen python -c "import json, sys; c = json.load(open(sys.argv[1], encoding='utf-8'))['completions']; t = {x['response_text'] for x in c if x['status'] == 'completed'}; print(len(c), 'answers,', len(t), 'distinct')" artifacts/model-eval/dev-qwen3-1.7b-schema-ord-2026-10-26/runs/dev-qwen3-1.7b-schema-ord-2026-10-26/completions/C4.json
+```
+
+`1 distinct` holds that row's test run and goes to the maintainer.
 
 While the baseline rows run, the maintainer builds the lab image once,
 publishes and scores each dev arm run, writes each dev round and the dev

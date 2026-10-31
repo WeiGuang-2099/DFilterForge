@@ -635,6 +635,42 @@ to at the L4 price; neither is a price for any other serving. Code committed bef
 computes every number here, and CI rebuilds its output with `--check`;
 where that code and this text differ, this text holds.
 
+Amended 2026-10-31, as the correction of a pipeline defect the two baseline
+rows' dev passes showed, before any request of their re-runs (owner ruling
+of 2026-10-29; the [self-served note](decisions/self-served-runs.md),
+Baseline rows, holds the run ids). The client sent each request body as
+canonical JSON, which sorts object keys, so the typed-IR schema reached
+vLLM with the keys of every object, its properties included, in
+alphabetical order, and xgrammar, vLLM 0.21.0's default grammar engine,
+emits properties in their declared order. Once an answer opened with
+`schema_version` and `status`, the order in which the prompt lists the
+keys, only `not_expressible` could follow: both rows' dev passes, sent on
+2026-10-28, answered the object
+`{"schema_version": "1.0", "status": "not_expressible"}` on all 80 items,
+where the base row, on the schema row's prompts byte for byte, abstained on
+none of its 40. Compiled offline as vLLM compiles it, with xgrammar 0.2.8,
+the schema as sent on 2026-10-28 admits none of the base row's 40 dev C4
+answers and allows only `n`, `no` and `not` at the status value; in
+declared order it admits 22 of them and allows `ready`, and llguidance
+1.3.0, vLLM's fallback engine, allows `ready` too; neither engine's version
+in the server image is recorded. The client now sends every object's keys
+in the order the code built them, and nothing else in a request changes.
+Both rows run again under new run ids, on new prepares whose prompt files
+are byte for byte the 2026-10-26 ones, with the same schema, settings, call
+options, caps, endpoint host, probe and reading, both dev passes first, and
+each test pass waits while every answer of its dev pass is one string, as
+both were on 2026-10-28, a check that reads no answer's status and no
+score. The two 2026-10-26 dev passes stay committed as the record of the
+defect and are not rows. The two 2026-10-26 test passes are reported not
+run: they were never published or scored, the session scripts read them
+only for their census (item and attempt counts, run status, fingerprints,
+think blocks) and copied them into the owner's backups, and they stay out
+of the repository, unread; their admissions stay in the freeze record.
+Their requests were billed in the session of 2026-10-28; how they enter the
+cost, which may not open them, is ruled before the cost is written. No
+other row, number or rule changes: every other row sent `json_object`,
+whose grammar has no properties to order.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
