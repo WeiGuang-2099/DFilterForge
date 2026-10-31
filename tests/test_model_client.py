@@ -62,6 +62,15 @@ _HUGE_BODY = json.dumps(
     {"choices": [{"message": {"content": "x" * MAX_RESPONSE_BYTES}}]}
 ).encode("utf-8")
 _PADDED_ERROR = b'{"error":{"code":503},"pad":"' + b"x" * 16_000 + b'"}'
+# The typed-IR prompt lists the answer's keys in this order (generation.py).
+_ENVELOPE_KEYS = [
+    "schema_version",
+    "status",
+    "assumptions",
+    "clarifying_question",
+    "missing_slots",
+    "intent_ir",
+]
 
 Responder = Callable[[BaseHTTPRequestHandler], None]
 
@@ -453,6 +462,27 @@ def test_request_controls_are_opt_in_and_recorded(
         **extra_keys,
     }
     assert result.settings == settings
+
+
+def test_a_response_schema_reaches_the_server_in_declared_order() -> None:
+    """The server receives each object's keys in the order they were built.
+
+    vLLM's grammar engine emits a schema's properties in declared order, so
+    a body sent with sorted keys let a schema row's answers reach no status
+    but not_expressible. Dict equality, as above, cannot see the order, and
+    the envelope's order must be the one the typed-IR prompt lists.
+    """
+    settings = RequestSettingsV1(model_id="m", response_schema=TYPED_IR_V1)
+
+    with _provider(_ok) as provider:
+        _backend(provider.url, settings=settings).complete(_prepared())
+
+    (request,) = provider.received
+    received = json.loads(request.body)["response_format"]
+    assert json.dumps(received) == json.dumps(response_format(TYPED_IR_V1))
+    envelopes = received["json_schema"]["schema"]["anyOf"]
+    orders = [list(envelope["properties"]) for envelope in envelopes]
+    assert orders == [_ENVELOPE_KEYS] * 3
 
 
 def test_environment_credential_is_used_only_when_no_key_is_given(

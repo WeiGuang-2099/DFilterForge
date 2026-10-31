@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import http.client
+import json
 import os
 import ssl
 import time
@@ -24,7 +25,6 @@ from pydantic import Field
 from pydantic import ValidationError
 
 from dfilterforge.answer_schema import response_format
-from dfilterforge.canonical import canonical_json
 from dfilterforge.completions import CODE_PATTERN
 from dfilterforge.completions import CompletionBatchV1
 from dfilterforge.completions import CompletionStatusV1
@@ -240,9 +240,7 @@ class OpenAiCompatibleBackend:
             connection.request(
                 "POST",
                 self._endpoint.path,
-                body=canonical_json(
-                    _request_body(self._settings, prompt)
-                ).encode("utf-8"),
+                body=_encode_body(_request_body(self._settings, prompt)),
                 headers=headers,
             )
             response = connection.getresponse()
@@ -315,6 +313,21 @@ def _request_body(
         provider["data_collection"] = options.data_collection
     body["provider"] = provider
     return body
+
+
+def _encode_body(body: dict[str, object]) -> bytes:
+    """Encodes a request body as canonical_json does, but in built order.
+
+    The separators, ensure_ascii and allow_nan are canonical_json's, and
+    _request_body builds only plain values, which json.dumps encodes as
+    canonical_json would. Only sort_keys is left out: vLLM's grammar
+    engine emits a schema's properties in declared order, and sorted,
+    typed-ir/1 let an answer that opened with schema_version and status
+    reach no status but not_expressible.
+    """
+    return json.dumps(
+        body, allow_nan=False, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
 
 
 def _parse_endpoint(endpoint_url: str) -> _Endpoint:
