@@ -25,7 +25,9 @@ stricter in one place: an IPv6 zone id may hold only letters, digits,
 '_', '.' and '-'. Recursion goes through a local
 ``$ref`` and ends at a predicate, with no depth bound. Properties are
 declared in the order the typed-IR prompt lists them, because the engine
-emits them in declared order.
+emits them in declared order. The client keeps that order on the wire;
+test_a_response_schema_reaches_the_server_in_declared_order in
+tests/test_model_client.py checks what the server receives.
 """
 
 from __future__ import annotations
