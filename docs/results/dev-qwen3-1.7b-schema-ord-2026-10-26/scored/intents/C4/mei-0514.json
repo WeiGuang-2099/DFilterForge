@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"browser","kind":"predicate","operator":"eq","value":"browser"},{"field":"dis.packets_sent","kind":"predicate","operator":"eq","value":"dis.packets_sent"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

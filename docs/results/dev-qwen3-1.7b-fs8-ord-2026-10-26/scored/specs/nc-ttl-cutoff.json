@@ -1,0 +1,1 @@
+{"case_id":"nc-ttl-cutoff","missing_slots":["value"],"rationale":"IPv4 packets whose TTL is strictly below a previously agreed cutoff; the cutoff number is never given.","split":"dev","status":"needs_clarification"}

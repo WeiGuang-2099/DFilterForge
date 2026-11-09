@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"eobi","kind":"predicate","operator":"eq","value":"eobi"},{"field":"eti","kind":"predicate","operator":"eq","value":"eti"},{"field":"xti","kind":"predicate","operator":"eq","value":"xti"},{"field":"conv","kind":"predicate","operator":"eq","value":"conv"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}
