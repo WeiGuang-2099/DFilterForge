@@ -71,6 +71,46 @@ ready cases. A report that does not pair seed 2026's test pass with its
 pass B on identical prompts and settings, or names another gold hash than
 the two passes' summaries, stops the export (``rerun_inconsistent``).
 
+Beside it, once each file exists and null before: ``baseline``, the
+untrained-baseline ladder from docs/results/sft-v1/ladder.json
+(baseline-ladder/1.0). It holds each row's rate, outcome counts, malformed
+split and coverage split, and each step's difference, counts and reading,
+all pointers into the ladder. Each row's ready C4 answers refused as too
+large are a ``count`` over its outcomes. The token cap and the schema come
+from the base and schema rows' run manifests, and the example count from
+the few-shot row's prepare.
+
+``repair`` is the SFT seeds' test repair round from
+docs/results/repair-pool/test-qwen3-1.7b-sft.json, then each seed's round
+from its pass's repair/summary.json, in seed order.
+
+``cost`` is the sessions' bills, requests and GPU time from
+docs/results/sft-v1/cost.json, its money kept as strings and its run lists
+counted by ``len`` sources.
+
+A ladder, pool or cost of another schema exits 2. The export stops
+(``baseline_inconsistent``) on a ladder that is not the test split's or
+whose metric, condition, cases, items, draws, rows, runs or rates, the seed
+mean's included, are not the headline's; whose post hoc rows are not the
+schema and few-shot rows; whose counts do not add up, or show a
+false-ready answer or a provider failure that is no oversized reply; whose
+rows ran under different token caps; or whose steps are not the registered
+three.
+
+It also stops (``repair_inconsistent``) on a pool that is not the test
+split's pool of the headline's seeds on the headline's draws, or whose arms
+were sent other answers than the seeds' triggered ones; on a seed without
+a scored round or with an arm not run; or on a comparison flagged
+conclusive that the 1.7B reading rule (docs/protocol.md, Repair, amended
+2026-10-26) does not read: its interval must exclude 0, an endpoint at 0
+not excluding it, and at least the headline's minimum of cases must be
+discordant. And it stops (``cost_inconsistent``) on a cost whose uncounted
+items are not the schema probes and the wake requests; whose passes
+reported not run are not one session's, counted by their prompts and left
+out of the GPU time; whose sessions do not list the schema and few-shot
+rows' test passes, every seed's arm runs and a dev pass; or whose unread
+passes are not test passes left unpublished.
+
 analysis.json holds the descriptive analyses of the self-served rows once
 docs/results/sft-v1/analysis.json exists, and ``analysis`` null before:
 the opening's counts and ranges, the self-served rerun as above, each
@@ -278,6 +318,35 @@ PAIR_SCHEMA = "pair-report/1.0"
 # output, and the one condition they describe.
 ANALYSIS = "docs/results/sft-v1/analysis.json"
 _ANALYSIS_CONDITION = "C4"
+# The untrained-baseline ladder (baseline-ladder/1.0),
+# scripts/baseline_ladder.py's output: the base row, the schema and few-shot
+# rows, then one SFT row per headline seed, and the three registered steps,
+# each its first row minus its second.
+LADDER = "docs/results/sft-v1/ladder.json"
+_LADDER_SCHEMA = "baseline-ladder/1.0"
+_BASELINES = ("base", "schema", "few_shot")
+# A row's malformed answers: cut at the token cap, and the rest.
+_MALFORMED = ("truncated", "other")
+# The rows designed after every base and SFT test score was known
+# (docs/protocol.md, Training rules, amended 2026-10-26).
+_POST_HOC = ("schema", "few_shot")
+_RUNGS = (
+    ("schema_minus_base", "schema", "base"),
+    ("few_shot_minus_schema", "few_shot", "schema"),
+    ("sft_mean_minus_few_shot", "sft_mean", "few_shot"),
+)
+# The draws the ladder and the 1.7B pool share with the headline.
+_BOOTSTRAP = ("seed", "resamples", "min_discordant_cases")
+# The SFT seeds' test repair rounds pooled by case (repair-pool/1.0), the
+# secondary comparisons of docs/protocol.md (Repair, amended 2026-10-26);
+# each seed's own round is its test pass's repair/summary.json.
+SFT_POOL = "docs/results/repair-pool/test-qwen3-1.7b-sft.json"
+_POOL_SCHEMA = "repair-pool/1.0"
+# The cost of the baseline rows and the 1.7B repair round (session-cost/1.0),
+# and the billed items the page's words name as not counted.
+COST = "docs/results/sft-v1/cost.json"
+_COST_SCHEMA = "session-cost/1.0"
+_NOT_COUNTED = ("schema_probes", "wake_requests")
 # The Reel pool's test answers replayed on the scored test captures without
 # their witness tail (verifier-exhibits/1.0, export_web_evidence.py
 # exhibits), and the readings written for the answers the tail turns
@@ -514,6 +583,17 @@ def _int(value: object, where: str) -> int:
 
 def _ints(value: object, where: str) -> list[int]:
     return [_int(item, where) for item in _arr(value, where)]
+
+
+def _objs(value: object, where: str) -> list[dict[str, object]]:
+    return [_obj(item, where) for item in _arr(value, where)]
+
+
+def _require(code: str, path: str, checks: Mapping[str, bool]) -> None:
+    """Raises a ContractError naming every check that failed, if any."""
+    failed = [name for name, passed in checks.items() if not passed]
+    if failed:
+        raise ContractError(code, f"{path} fails: {', '.join(failed)}")
 
 
 def check_path(path: str) -> str:
@@ -2406,6 +2486,24 @@ def repair_status_run(selection: Selection) -> Run | None:
     return selection.pool[0].run if selection.pool else None
 
 
+def _round_of(repo: Repo, run_id: str) -> str | None:
+    """The path of a pass's scored repair round, by the pass's run id.
+
+    Raises:
+        ContractError: With code ``repair_inconsistent`` when the summary
+            names another base run or split than the pass it sits in.
+    """
+    path = f"{RESULTS}/{run_id}/repair/summary.json"
+    if not repo.exists(path):
+        return None
+    document = _obj(repo.json(path), path)
+    if document.get("base_run") != run_id or (
+        document.get("split") != run_id.split("-", 1)[0]
+    ):
+        raise ContractError("repair_inconsistent", f"{path} names another pass")
+    return path
+
+
 def repair_round(repo: Repo, run: Run | None) -> str | None:
     """The path of a pass's scored repair round; None before one exists.
 
@@ -2416,17 +2514,7 @@ def repair_round(repo: Repo, run: Run | None) -> str | None:
         ContractError: With code ``repair_inconsistent`` when the summary
             names another base run or split than the pass it sits in.
     """
-    if run is None:
-        return None
-    path = f"{run.base}/repair/summary.json"
-    if not repo.exists(path):
-        return None
-    document = _obj(repo.json(path), path)
-    if document.get("base_run") != run.run_id or (
-        document.get("split") != run.split
-    ):
-        raise ContractError("repair_inconsistent", f"{path} names another pass")
-    return path
+    return None if run is None else _round_of(repo, run.run_id)
 
 
 def _not_measured(repo: Repo, run: Run | None, measured: bool) -> list[Node]:
@@ -3669,14 +3757,490 @@ def build_rerun(repo: Repo) -> Node:
     }
 
 
+def _too_large(run: str) -> Src:
+    """Counts a row's ready C4 answers the client refused as too large."""
+    return _ready_c4(
+        f"{RESULTS}/{run}/scored/outcomes.jsonl",
+        outcome=["provider_failed"],
+        error_code=["response_too_large"],
+    )
+
+
+def _adds_up(
+    entry: Mapping[str, object], items: object, too_large: object
+) -> bool:
+    """Whether a ladder row's counts draw each of its items once.
+
+    No answer is false-ready, which no outcome bar draws; the seven outcomes
+    sum to the items; the malformed answers are the truncated ones and the
+    rest; and every provider failure is a reply refused as too large.
+    """
+    outcomes = _obj(entry.get("outcomes"), f"{LADDER} outcomes")
+    malformed = _obj(entry.get("malformed"), f"{LADDER} malformed")
+    return (
+        _int(outcomes.get("false_ready"), "false_ready") == 0
+        and sum(_int(outcomes.get(code), code) for code in SEGMENTS) == items
+        and sum(_int(malformed.get(part), part) for part in _MALFORMED)
+        == outcomes.get("malformed")
+        and too_large == outcomes.get("provider_failed")
+    )
+
+
+def _check_ladder(
+    repo: Repo, ladder: Mapping[str, object], runs: Sequence[str]
+) -> None:
+    """Refuses a ladder whose rows, counts or steps the page cannot show.
+
+    The ladder must be the test split's, on the headline's metric,
+    condition, cases, items and draws. Its rows must be the base, schema and
+    few-shot rows, then the headline's seeds in order, on the headline's
+    runs and rates, the mean's included; post hoc on the schema and
+    few-shot rows alone; each with counts that ``_adds_up``; and all sent
+    under one token cap. Its steps must be the three registered ones.
+
+    Raises:
+        ContractError: With code ``baseline_inconsistent``, naming every
+            check that fails.
+    """
+    headline = _obj(repo.json(HEADLINE), HEADLINE)
+    seeds = _objs(headline.get("seeds"), f"{HEADLINE} seeds")
+    rows = _objs(ladder.get("rows"), f"{LADDER} rows")
+    # The rows the headline holds too, the base row then the seeds: the
+    # ladder's run and rate of each, and the headline's.
+    shared = [
+        (row.get("run"), row.get("rate"))
+        for row in (*rows[:1], *rows[len(_BASELINES) :])
+    ]
+    expected = [
+        (headline.get("base_run"), headline.get("base")),
+        *((seed.get("run"), seed.get("rate")) for seed in seeds),
+    ]
+    mean = _obj(ladder.get("sft_mean"), f"{LADDER} sft_mean")
+    draws = [
+        _obj(document.get("bootstrap"), f"{path} bootstrap")
+        for path, document in ((LADDER, ladder), (HEADLINE, headline))
+    ]
+    caps = {
+        _int(
+            repo.resolve(
+                ptr(
+                    f"{RESULTS}/{run}/run_manifest.json",
+                    "settings",
+                    "max_output_tokens",
+                )
+            ),
+            f"{run} max_output_tokens",
+        )
+        for run in runs
+    }
+    _require(
+        "baseline_inconsistent",
+        LADDER,
+        {
+            "the test split": ladder.get("split") == "test",
+            "the headline's metric, condition, cases and items": all(
+                ladder.get(key) == headline.get(key)
+                for key in ("metric", "condition", "cases", "items")
+            ),
+            "the headline's draws": all(
+                draws[0].get(key) == draws[1].get(key) for key in _BOOTSTRAP
+            ),
+            "the baseline rows, then the headline's seeds": (
+                [(row.get("row"), row.get("seed")) for row in rows]
+                == [
+                    *((name, None) for name in _BASELINES),
+                    *(("sft", seed.get("seed")) for seed in seeds),
+                ]
+            ),
+            "the headline's runs": (
+                [run for run, _ in shared] == [run for run, _ in expected]
+            ),
+            "the headline's rates": (
+                [rate for _, rate in shared] == [rate for _, rate in expected]
+            ),
+            "the headline's mean": (
+                mean.get("rate")
+                == _obj(headline.get("mean"), f"{HEADLINE} mean").get("rate")
+                and mean.get("seeds") == [seed.get("seed") for seed in seeds]
+            ),
+            "post hoc on the schema and few-shot rows alone": (
+                ladder.get("post_hoc") is True
+                and all(
+                    row.get("post_hoc") is (row.get("row") in _POST_HOC)
+                    for row in rows
+                )
+            ),
+            "counts that add up": all(
+                _adds_up(
+                    row, ladder.get("items"), repo.resolve(_too_large(run))
+                )
+                for row, run in zip(rows, runs, strict=True)
+            ),
+            "one token cap": len(caps) == 1,
+            "the registered steps": (
+                [
+                    (rung.get("rung"), rung.get("first"), rung.get("second"))
+                    for rung in _objs(ladder.get("rungs"), f"{LADDER} rungs")
+                ]
+                == list(_RUNGS)
+            ),
+        },
+    )
+
+
+def _ladder_row(repo: Repo, index: int, run: str) -> Node:
+    """A ladder row's rate, outcome counts, splits and oversized replies."""
+    at = ("rows", index)
+    return {
+        "rate": repo.numbers(LADDER, _BOUNDS, *at, "rate"),
+        "outcomes": repo.numbers(LADDER, SEGMENTS, *at, "outcomes"),
+        "malformed": repo.numbers(LADDER, _MALFORMED, *at, "malformed"),
+        "coverage": {
+            stratum: repo.numbers(LADDER, _BOUNDS, *at, "coverage", stratum)
+            for stratum in _STRATA
+        },
+        "too_large": repo.v(_too_large(run)),
+    }
+
+
+def build_baseline(repo: Repo) -> Node | None:
+    """The untrained-baseline ladder from docs/results/sft-v1/ladder.json.
+
+    Each row's rate, outcome counts, malformed split and coverage split, and
+    each registered step's difference, counts and reading, are pointers
+    into the ladder; each row's ready C4 answers refused as too large are a
+    count over its outcomes. The token cap, which every row shares, comes
+    from the base row's run manifest, the schema from the schema row's, and
+    the example count from the few-shot row's prepare. The few-shot row's
+    schema is the schema row's: CI's ``baseline_ladder.py --check`` proves
+    both rows were sent as the self-served note registers. None before the
+    ladder exists.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for a ladder of another
+            schema.
+        ContractError: With code ``baseline_inconsistent`` when
+            ``_check_ladder`` refuses the ladder.
+    """
+    if not repo.exists(LADDER):
+        return None
+    ladder = _obj(repo.json(LADDER), LADDER)
+    if ladder.get("schema_version") != _LADDER_SCHEMA:
+        raise ExportError("schema_invalid", f"{LADDER} is not {_LADDER_SCHEMA}")
+    runs = [
+        check_run_id(_text(row.get("run"), f"{LADDER} run"))
+        for row in _objs(ladder.get("rows"), f"{LADDER} rows")
+    ]
+    _check_ladder(repo, ladder, runs)
+    return {
+        "condition": repo.t(ptr(LADDER, "condition")),
+        **repo.numbers(LADDER, ("cases", "items")),
+        "bootstrap": repo.numbers(LADDER, _BOOTSTRAP, "bootstrap"),
+        "coverage_items": repo.numbers(LADDER, _STRATA, "coverage_items"),
+        "token_cap": repo.v(
+            ptr(
+                f"{RESULTS}/{runs[0]}/run_manifest.json",
+                "settings",
+                "max_output_tokens",
+            )
+        ),
+        "response_schema": repo.t(
+            ptr(
+                f"{RESULTS}/{runs[1]}/run_manifest.json",
+                "settings",
+                "response_schema",
+            )
+        ),
+        "examples": repo.v(
+            ptr(f"{RESULTS}/{runs[2]}/prepare.json", "few_shot", "k")
+        ),
+        **{
+            name: _ladder_row(repo, index, runs[index])
+            for index, name in enumerate(_BASELINES)
+        },
+        "seeds": [
+            {
+                "seed": repo.v(ptr(LADDER, "rows", index, "seed")),
+                **_ladder_row(repo, index, runs[index]),
+            }
+            for index in range(len(_BASELINES), len(runs))
+        ],
+        "sft_mean": {"rate": repo.numbers(LADDER, _BOUNDS, "sft_mean", "rate")},
+        "rungs": {
+            name: {
+                "difference": repo.numbers(
+                    LADDER, _BOUNDS, "rungs", index, "difference"
+                ),
+                **repo.numbers(LADDER, _PAIRED, "rungs", index),
+                "reading": repo.t(ptr(LADDER, "rungs", index, "reading")),
+            }
+            for index, (name, _, _) in enumerate(_RUNGS)
+        },
+    }
+
+
+def _seed_runs(repo: Repo) -> list[str]:
+    """The headline seeds' test passes, in the headline's seed order."""
+    return [
+        check_run_id(_text(seed.get("run"), f"{HEADLINE} seed run"))
+        for seed in _objs(
+            repo.resolve(ptr(HEADLINE, "seeds")), f"{HEADLINE} seeds"
+        )
+    ]
+
+
+def _conclusive_allowed(comparison: Mapping[str, object], minimum: int) -> bool:
+    """Whether a comparison's flag is one the 1.7B reading rule allows.
+
+    docs/protocol.md (Repair, amended 2026-10-26) reads a difference only
+    when its interval excludes 0, an endpoint at 0 not excluding it, and at
+    least ``minimum`` cases are discordant; the summaries' flag counts
+    discordant cases only. The page shows the flag as a verdict, so it may
+    say "conclusive" only where both hold.
+    """
+    if comparison.get("inconclusive") is True:
+        return True
+    difference = _obj(comparison.get("difference"), "comparison difference")
+    low, high = difference.get("low"), difference.get("high")
+    excludes = (isinstance(low, (int, float)) and low > 0) or (
+        isinstance(high, (int, float)) and high < 0
+    )
+    discordant = _int(comparison.get("discordant"), "discordant")
+    return excludes and discordant >= minimum
+
+
+def build_sft_repair(repo: Repo) -> Node | None:
+    """The SFT seeds' test repair round: the pool, then each seed's round.
+
+    Every value points into SFT_POOL or a seed's repair/summary.json, the
+    seeds in the headline's order and each labelled by its headline seed;
+    no arm run's files are read. None before the pool exists.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for a pool of another
+            schema.
+        ContractError: With code ``repair_inconsistent`` for a pool that is
+            not the test split's pool of the headline's seeds on the
+            headline's draws, or whose arms were sent other answers than
+            the seeds' triggered ones; for a seed without a scored round or
+            with an arm not run; for a comparison flagged conclusive that
+            the 1.7B reading rule does not read; and as ``repair_round``
+            raises.
+    """
+    if not repo.exists(SFT_POOL):
+        return None
+    pool = _obj(repo.json(SFT_POOL), SFT_POOL)
+    if pool.get("schema_version") != _POOL_SCHEMA:
+        raise ExportError("schema_invalid", f"{SFT_POOL} is not {_POOL_SCHEMA}")
+    runs = _seed_runs(repo)
+    rounds = [_round_of(repo, run) for run in runs]
+    paths = [path for path in rounds if path is not None]
+    documents = [_obj(repo.json(path), path) for path in paths]
+    headline = _obj(repo.json(HEADLINE), HEADLINE)
+    draws = _obj(headline.get("bootstrap"), f"{HEADLINE} bootstrap")
+    bases = _objs(pool.get("bases"), f"{SFT_POOL} bases")
+    triggered = sum(
+        _int(base.get("triggered_items"), f"{SFT_POOL} triggered_items")
+        for base in bases
+    )
+    minimum = _int(
+        draws.get("min_discordant_cases"), f"{HEADLINE} min_discordant_cases"
+    )
+    _require(
+        "repair_inconsistent",
+        SFT_POOL,
+        {
+            "the test split": pool.get("split") == "test",
+            "the headline seeds' passes": (
+                sorted(
+                    _text(base.get("run"), f"{SFT_POOL} base run")
+                    for base in bases
+                )
+                == sorted(runs)
+            ),
+            "a scored round per seed": len(paths) == len(runs),
+            "the headline's draws": (
+                pool.get("bootstrap")
+                == {
+                    "cases": headline.get("cases"),
+                    **{key: draws.get(key) for key in _BOOTSTRAP},
+                }
+            ),
+            "every arm sent the seeds' triggered answers": all(
+                arm.get("triggered_items") == triggered
+                for arm in _objs(pool.get("arms"), f"{SFT_POOL} arms")
+            ),
+            "every arm ran": not any(
+                _obj(document.get("arms_not_run", {}), "arms_not_run")
+                for document in documents
+            ),
+            "flags the 1.7B reading rule allows": all(
+                _conclusive_allowed(comparison, minimum)
+                for document in (pool, *documents)
+                for comparison in _objs(
+                    document.get("comparisons"), "comparisons"
+                )
+            ),
+        },
+    )
+    return {
+        **_repair_arms(repo, SFT_POOL, None),
+        "bootstrap": repo.numbers(
+            SFT_POOL, ("cases", *_BOOTSTRAP), "bootstrap"
+        ),
+        "seeds": [
+            {
+                "seed": repo.v(ptr(HEADLINE, "seeds", index, "seed")),
+                **repo.numbers(path, ("triggered_items", "triggered_cases")),
+                **_repair_arms(repo, path, ptr(path, "triggered_items")),
+            }
+            for index, path in enumerate(paths)
+        ],
+    }
+
+
+def _cost_runs(
+    repo: Repo, sessions: Sequence[Mapping[str, object]]
+) -> dict[str, bool]:
+    """Checks the sessions' run lists against the runs the page's words name.
+
+    The sessions must have sent the schema and few-shot rows' test passes,
+    once the ladder exists, every seed's arm runs, once its round exists,
+    and a dev pass. Each pass reported not run must be a test pass never
+    published; its directory is only looked for, never read.
+    """
+    sent = {
+        check_run_id(_text(run, f"{COST} run"))
+        for session in sessions
+        for run in _arr(session.get("runs"), f"{COST} runs")
+    }
+    unread = [
+        check_run_id(_text(run, f"{COST} unread run"))
+        for session in sessions
+        if session.get("unread") is not None
+        for run in _arr(
+            _obj(session.get("unread"), f"{COST} unread").get("runs"),
+            f"{COST} unread runs",
+        )
+    ]
+    named: list[str] = []
+    if repo.exists(LADDER):
+        rows = _objs(_obj(repo.json(LADDER), LADDER).get("rows"), LADDER)
+        named += [
+            _text(row.get("run"), f"{LADDER} run")
+            for row in rows
+            if row.get("row") in _POST_HOC
+        ]
+    for path in (_round_of(repo, run) for run in _seed_runs(repo)):
+        if path is not None:
+            arms = _objs(_obj(repo.json(path), path).get("arms"), path)
+            named += [_text(arm.get("run"), f"{path} run") for arm in arms]
+    return {
+        "the sessions sent the rows' and the arms' runs": set(named) <= sent,
+        "the sessions sent a dev pass": any(
+            run.startswith("dev-") for run in sent
+        ),
+        "the unread runs are test passes never published": all(
+            run.startswith("test-")
+            and not repo.exists(f"{RESULTS}/{run}/run_manifest.json")
+            for run in unread
+        ),
+    }
+
+
+def _unread(
+    repo: Repo, index: int, session: Mapping[str, object]
+) -> Node | None:
+    """A session's passes reported not run: how many, and their requests."""
+    if session.get("unread") is None:
+        return None
+    at = ("sessions", index, "unread")
+    return {
+        "count": repo.v(["len", COST, pointer(*at, "runs")]),
+        "requests": repo.v(ptr(COST, *at, "requests")),
+    }
+
+
+def build_cost(repo: Repo) -> Node | None:
+    """The sessions' cost, as docs/results/sft-v1/cost.json holds it.
+
+    The bills, the GPU's price, the GPU time's cost and the cost per
+    thousand requests stay the file's decimal strings; requests and GPU
+    hours are numbers, and run counts the ``len`` of their lists. None
+    before the cost exists.
+
+    Raises:
+        ExportError: With code ``schema_invalid`` for a cost of another
+            schema.
+        ContractError: With code ``cost_inconsistent`` for a cost whose
+            uncounted items are not the two the page names; whose passes
+            reported not run are not one session's, counted by their
+            prompts and left out of the GPU time; or whose run lists
+            ``_cost_runs`` refuses.
+    """
+    if not repo.exists(COST):
+        return None
+    cost = _obj(repo.json(COST), COST)
+    if cost.get("schema_version") != _COST_SCHEMA:
+        raise ExportError("schema_invalid", f"{COST} is not {_COST_SCHEMA}")
+    sessions = _objs(cost.get("sessions"), f"{COST} sessions")
+    unread = [
+        _obj(session.get("unread"), f"{COST} unread")
+        for session in sessions
+        if session.get("unread") is not None
+    ]
+    _require(
+        "cost_inconsistent",
+        COST,
+        {
+            "the uncounted items the page names": (
+                cost.get("not_counted") == list(_NOT_COUNTED)
+            ),
+            "one session with unread passes": len(unread) == 1,
+            "unread passes counted by prompt, without GPU time": all(
+                each.get("requests_from") == "prompt_count"
+                and each.get("latencies_in_gpu_time") is False
+                for each in unread
+            ),
+            **_cost_runs(repo, sessions),
+        },
+    )
+    return {
+        "usd_per_gpu_hour": repo.t(ptr(COST, "usd_per_gpu_hour")),
+        "total": {
+            **repo.texts(
+                COST, ("bill_usd", "gpu_usd", "usd_per_1000_requests"), "total"
+            ),
+            **repo.numbers(COST, ("requests", "gpu_hours"), "total"),
+        },
+        "session_count": repo.v(["len", COST, pointer("sessions")]),
+        "sessions": [
+            {
+                **repo.texts(COST, ("date", "bill_usd"), "sessions", index),
+                **repo.numbers(
+                    COST, ("requests", "gpu_hours"), "sessions", index
+                ),
+                "runs": repo.v(
+                    ["len", COST, pointer("sessions", index, "runs")]
+                ),
+                "unread": _unread(repo, index, session),
+            }
+            for index, session in enumerate(sessions)
+        ],
+        "excluded": repo.texts(COST, ("date", "bill_usd"), "excluded"),
+    }
+
+
 def build_training(repo: Repo) -> Document:
     """The SFT headline as docs/results/sft-v1/headline.json records it.
 
     Every rate, interval, count and reading is a pointer into the headline,
     which scripts/sft_headline.py writes and CI rebuilds; the untrained
     conditions and the dev gate are pointers into each row's summaries,
-    and each case's counts are counts over its outcomes. Before the
-    headline exists, ``headline`` is null.
+    and each case's counts are counts over its outcomes. Beside them sit
+    the baseline ladder, the SFT seeds' test repair round and the cost,
+    each null before its file exists. Before the headline exists,
+    ``headline`` is null.
     """
     if not repo.exists(HEADLINE):
         return {"schema": "web-training/1.0", "headline": None}
@@ -3736,6 +4300,9 @@ def build_training(repo: Repo) -> Document:
             "cases_detail": _training_cases(repo, test_runs),
             "test": [_row_conditions(repo, run) for run in test_runs],
             "dev": [_row_conditions(repo, run) for run in dev_runs],
+            "baseline": build_baseline(repo),
+            "repair": build_sft_repair(repo),
+            "cost": build_cost(repo),
         },
     }
 

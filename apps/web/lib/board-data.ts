@@ -86,7 +86,9 @@ const TEST_ROW = object({
 });
 
 // A repair round's arms and its comparisons by case, pooled or per pass.
-const ROUND = {
+// training-data.ts shares it for the SFT seeds' round, so the board's
+// components draw both rounds.
+export const ROUND = {
   arms: array(
     object({arm: strNode, repair_at_1: INTERVAL, repaired: numNode, triggered: numNode}),
   ),
