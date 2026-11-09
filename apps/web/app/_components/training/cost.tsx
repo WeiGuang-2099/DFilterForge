@@ -47,7 +47,7 @@ export function SessionCost({cost, unread}: SessionCostProps): ReactNode {
         and the repair turn, dev passes included.
       </p>
       <div className="tr-table-wrap">
-        <table className="tr-table tr-nowrap">
+        <table className="tr-table tr-nowrap tr-cost-table">
           <caption className="lab" style={{captionSide: 'top', textAlign: 'left'}}>
             Each session&apos;s Modal bill
           </caption>

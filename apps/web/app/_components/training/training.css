@@ -234,6 +234,11 @@
      stay in view beside it. */
   .tr-row-labels tbody th {min-width: 8.5rem; white-space: normal;}
 }
+/* On the narrowest phones the cost table's cells sit closer, so the bill,
+   its last number, stays whole in view and the words after it scroll. */
+@media (max-width: 360px) {
+  .tr-cost-table th, .tr-cost-table td {padding-right: 8px;}
+}
 /* Forced colours paint backgrounds over with Canvas and drop box shadows:
    an empty square keeps its outline, which they recolour, as the judge
    figure's empty squares keep their borders; a repaired square stays
