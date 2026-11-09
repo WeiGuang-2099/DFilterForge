@@ -763,6 +763,9 @@ interface LadderRow {
 
 interface LadderRung {
   readonly rung: string;
+  /** The rows the step subtracts, by name; sft_mean names the seed rows. */
+  readonly first: string;
+  readonly second: string;
   readonly reading: string;
   readonly discordant_cases: number;
   readonly difference: {readonly low: number; readonly high: number};
@@ -786,6 +789,29 @@ function sourcesIn(page: Page, selector: string): Promise<unknown[]> {
       ),
     );
 }
+
+/** The ladder rows that data-src values read, each once, in order. */
+function ladderRows(ladder: string, sources: readonly string[]): number[] {
+  const rows = sources.flatMap((source) => {
+    const [, file, at] = JSON.parse(source) as [string, string, unknown];
+    const found = file === ladder && typeof at === 'string' ? /^\/rows\/(\d+)\//.exec(at) : null;
+    return found === null ? [] : [Number(found[1])];
+  });
+  return [...new Set(rows)];
+}
+
+// The outcome table's columns in the page's order: the words each shows and
+// the keys it reads in a ladder row (steps.tsx, PARTS, which the bars share).
+const OUTCOME_COLUMNS = [
+  ['strong exact', 'outcomes/strong_exact'],
+  ['silent-wrong', 'outcomes/silent_wrong'],
+  ['invalid', 'outcomes/invalid'],
+  ['malformed, cut at the token cap', 'malformed/truncated'],
+  ['malformed, other', 'malformed/other'],
+  ['shortcut', 'outcomes/shortcut'],
+  ['abstained', 'outcomes/abstained'],
+  ['provider failed', 'outcomes/provider_failed'],
+] as const;
 
 test("the training page's receipts mark the rule's two tests as the ladder holds them", async ({
   page,
@@ -944,6 +970,146 @@ test("the training page's ledes and strip read each value in its place", async (
       `${arm(code)}/repaired`,
     ]),
   ]);
+});
+
+test("the training page's cost reads each amount in its place", async ({page}) => {
+  // The section sets values of one kind beside fixed words: four USD amounts
+  // in its lead and paragraph, and each session's requests, GPU hours and
+  // bill. Swapped, each still passes every value check: the bill would read
+  // as the cost per thousand requests. The table is read cell by cell under
+  // its header words, so a value moved to another column fails too.
+  const cost = 'docs/results/sft-v1/cost.json';
+  const at = (pointer: string) => ['ptr', cost, pointer];
+  const sessions = resolver.resolve(['ptr', cost, '/sessions']) as readonly {
+    readonly unread: unknown;
+  }[];
+  const unread = sessions.findIndex((session) => session.unread !== null);
+  const section = 'section[aria-labelledby="tr-cost"]';
+  await page.goto('training/');
+
+  expect(await sourcesIn(page, `${section} p.tr-cost-big`)).toEqual([
+    at('/total/usd_per_1000_requests'),
+  ]);
+  expect(await sourcesIn(page, `${section} p.tr-sub`)).toEqual([
+    at('/total/requests'),
+    ['len', cost, '/sessions'],
+    at('/total/bill_usd'),
+    at('/total/gpu_hours'),
+    at(`/sessions/${String(unread)}/unread/requests`),
+    at('/total/gpu_usd'),
+    at('/usd_per_gpu_hour'),
+  ]);
+  expect(await sourcesIn(page, `${section} p.tr-note`)).toEqual([
+    at('/excluded/date'),
+    at('/excluded/bill_usd'),
+  ]);
+  const table = await page.locator(`${section} table`).evaluate((element) => ({
+    head: Array.from(element.querySelectorAll('thead th'), (cell) => cell.textContent),
+    body: Array.from(element.querySelectorAll('tbody tr'), (row) =>
+      Array.from(row.children, (cell) =>
+        Array.from(cell.querySelectorAll('[data-src]'), (node): unknown =>
+          JSON.parse(node.getAttribute('data-src') ?? 'null'),
+        ),
+      ),
+    ),
+  }));
+  expect(table.head).toEqual(['Session', 'Requests', 'GPU hours', 'Bill', 'What it sent']);
+  expect(table.body).toEqual(
+    sessions.map((session, index) => {
+      const of = (key: string) => `/sessions/${String(index)}/${key}`;
+      return [
+        [at(of('date'))],
+        [at(of('requests'))],
+        [at(of('gpu_hours'))],
+        [at(of('bill_usd'))],
+        [
+          ['len', cost, of('runs')],
+          ...(session.unread === null
+            ? []
+            : [['len', cost, of('unread/runs')], at(of('unread/requests'))]),
+        ],
+      ];
+    }),
+  );
+});
+
+test("the training page's tables and questions read each count under its words", async ({
+  page,
+}) => {
+  // A count swapped with another of its row passes every value check, and
+  // the words above or beside it are fixed: silent-wrong and invalid, the two
+  // malformed parts, the two coverage strata, or a question's cases better
+  // and worse could trade places, and a question could draw another step's
+  // rows.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
+  const at = (pointer: string) => ['ptr', ladder, pointer];
+  const strata = [
+    ['every_gold_field_retrieved', 'Every gold field retrieved'],
+    ['some_gold_field_missing', 'Some gold field missing'],
+  ] as const;
+  await page.goto('training/');
+  const read = (labelledBy: string) =>
+    page.locator(`table[aria-labelledby="${labelledBy}"]`).evaluate((element) => {
+      const sources = (cell: Element) =>
+        Array.from(cell.querySelectorAll('[data-src]'), (node): unknown =>
+          JSON.parse(node.getAttribute('data-src') ?? 'null'),
+        );
+      return {
+        head: Array.from(element.querySelectorAll('thead th'), (cell) => ({
+          words: cell.textContent ?? '',
+          sources: sources(cell),
+        })),
+        body: Array.from(element.querySelectorAll('tbody tr'), (row) =>
+          Array.from(row.querySelectorAll('td'), sources),
+        ),
+      };
+    });
+  const outcomes = await read('tr-steps-outcomes');
+  expect(outcomes.head).toEqual(
+    ['Row', ...OUTCOME_COLUMNS.map(([words]) => words)].map((words) => ({words, sources: []})),
+  );
+  expect(outcomes.body).toEqual(
+    rows.map((_, index) => OUTCOME_COLUMNS.map(([, key]) => [at(`/rows/${String(index)}/${key}`)])),
+  );
+  const coverage = await read('tr-steps-coverage');
+  expect(coverage.head.map(({words, sources}) => ({words: words.split(',')[0], sources}))).toEqual([
+    {words: 'Row', sources: []},
+    ...strata.map(([key, words]) => ({words, sources: [at(`/coverage_items/${key}`)]})),
+  ]);
+  expect(coverage.body).toEqual(
+    rows.map((_, index) =>
+      strata.map(([key]) =>
+        ['value', 'low', 'high'].map((bound) =>
+          at(`/rows/${String(index)}/coverage/${key}/${bound}`),
+        ),
+      ),
+    ),
+  );
+  // A question's bars draw its first row or rows, then its second.
+  const rowsOf = (name: string) =>
+    rows.flatMap((row, index) =>
+      row.row === (name === 'sft_mean' ? 'sft' : name) ? [[index]] : [],
+    );
+  for (const [index, rung] of rungs.entries()) {
+    const question = `li.tr-q[data-rung="${rung.rung}"]`;
+    expect(await sourcesIn(page, `${question} .tr-of`), rung.rung).toEqual(
+      ['first', 'second'].map((side) => at(`/rungs/${String(index)}/${side}_better_cases`)),
+    );
+    const bars = await page.locator(`${question} .tr-mix`).evaluateAll((all) =>
+      all.map((mix) =>
+        Array.from(
+          mix.querySelectorAll('[data-src]'),
+          (node) => node.getAttribute('data-src') ?? '',
+        ),
+      ),
+    );
+    expect(bars.map((sources) => ladderRows(ladder, sources)), rung.rung).toEqual([
+      ...rowsOf(rung.first),
+      ...rowsOf(rung.second),
+    ]);
+  }
 });
 
 interface TracedProbe {
