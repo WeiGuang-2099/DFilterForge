@@ -480,14 +480,15 @@ the key's rated correct, with the other squares its rated incorrect.
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
   a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`,
-  `verdict`); the string-only kinds `text`, `unmeasured`, `split`,
+  `loss`, `verdict`); the string-only kinds `text`, `unmeasured`, `split`,
   `outcome`, `frame_kind`, `join` and `digest` are excluded from its `kind`
   prop, and
   `tests/fmt.spec.ts` fails typecheck
   when a kind added to `lib/fmt.ts` is neither excluded there nor listed
-  with a sample value in the spec. `rate` shows three decimals and
-  `runtime` one; both round the committed decimal digits by string
-  arithmetic, a value exactly halfway away from zero, as
+  with a sample value in the spec. `rate` shows three decimals, `runtime`
+  one, and `loss`, a training loss, two significant digits; each rounds
+  the committed decimal digits by string arithmetic, a value exactly
+  halfway away from zero, as
   [`locked-test-v1.md`](../results/locked-test-v1.md) rounds, so 0.6375
   shows as 0.638 where the binary float would give 0.637.
   `<Str>` renders a string the same way, without the link.
@@ -508,13 +509,13 @@ the key's rated correct, with the other squares its rated incorrect.
   same markup. `<Num link={false}>` leaves out the link where numbers stand
   close, as on the ladder's axis.
   `<Term>` renders a reviewed name that holds a digit; the list in
-  `lib/terms.ts` is `IPv4`, `SHA-256` and `repair@1`. `verdict` shows a
-  comparison's `inconclusive` flag as "inconclusive" or "conclusive", the
-  words of `locked-test-v1.md`; the consistency test fails the flag shown
-  any other way and the verdict words on any other value. `<Split>`
-  renders a run's split as the word that names its round, with
-  `data-fmt="split"`: `test` reads "Test" and `dev` reads "Dev", and any
-  other split fails the build.
+  `lib/terms.ts` is `IPv4`, `SHA-256`, `WeiGuang-2099` and `repair@1`.
+  `verdict` shows a comparison's `inconclusive` flag as "inconclusive" or
+  "conclusive", the words of `locked-test-v1.md`; the consistency test
+  fails the flag shown any other way and the verdict words on any other
+  value. `<Split>` renders a run's split as the word that names its round,
+  with `data-fmt="split"`: `test` reads "Test" and `dev` reads "Dev", and
+  any other split fails the build.
 - **Not measured yet.** A scored summary's `not_measured` status, such as
   `repair_at_1`, is never shown as written. The scorer writes `not_run` for
   a measurement no round has made, and `docs/protocol.md` keeps "not run"
