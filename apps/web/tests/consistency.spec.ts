@@ -214,7 +214,8 @@ function digestMismatches(value: Sourced, expected: unknown): string[] {
  * model text comes from the source, never from the page's data-cap, which
  * must agree with it. A not_measured status must be shown with the
  * unmeasured kind, and only it may be; so must a comparison's inconclusive
- * flag with the verdict kind, and a SHA-256 digest with the digest kind.
+ * flag with the verdict kind, and a SHA-256 digest with the digest kind. A
+ * USD amount, shown to the cent, keeps the exact amount in its title.
  */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
@@ -264,6 +265,11 @@ function mismatches(value: Sourced): string[] {
   const digest = digestMismatches(value, expected);
   if (digest.length > 0) {
     return digest;
+  }
+  // The sweep skips a sourced value's attributes, so the amount a pointer
+  // shows on hover is checked here.
+  if (value.kind === 'usd' && value.title !== expected) {
+    return [`${where}: the title holds ${JSON.stringify(value.title)}, not the amount`];
   }
   const text = fmt(expected, value.kind);
   if (value.text !== text) {
@@ -800,6 +806,18 @@ function ladderRows(ladder: string, sources: readonly string[]): number[] {
   return [...new Set(rows)];
 }
 
+/**
+ * The value of the one sourced node, of [data-src, data-v] pairs, whose
+ * pointer ends with the given keys; undefined unless exactly one does.
+ */
+function valueAt(shown: readonly (readonly (string | null)[])[], keys: string): unknown {
+  const found = shown.filter(([source]) => {
+    const at: unknown = (JSON.parse(source ?? 'null') as unknown[] | null)?.[2];
+    return typeof at === 'string' && at.endsWith(`/${keys}`);
+  });
+  return found.length === 1 ? JSON.parse(found[0]?.[1] ?? 'null') : undefined;
+}
+
 // The outcome table's columns in the page's order: the words each shows and
 // the keys it reads in a ladder row (steps.tsx, PARTS, which the bars share).
 const OUTCOME_COLUMNS = [
@@ -819,9 +837,10 @@ test("the training page's receipts mark the rule's two tests as the ladder holds
   // Each mark and the zero words beside it are fixed words chosen from
   // values, which no value check sees. baseline_ladder.py's rule: a step
   // reads only when its interval excludes zero, an endpoint at zero not
-  // excluding it, and at least the minimum of cases are discordant. A
-  // question's summary reads its own step and, besides it, only the
-  // example count, so no step stands under another step's title.
+  // excluding it, and at least the minimum of cases are discordant; it then
+  // reads a gain above zero and a loss below it. A question's summary reads
+  // its own step and, besides it, only the example count, so no step stands
+  // under another step's title.
   const ladder = 'docs/results/sft-v1/ladder.json';
   const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
   const minimum = resolver.resolve(['ptr', ladder, '/bootstrap/min_discordant_cases']) as number;
@@ -865,8 +884,11 @@ test("the training page's receipts mark the rule's two tests as the ladder holds
       ['discordant', enough ? 'yes' : 'no'],
     ]);
     expect(tests[0]?.text, rung.rung).toContain(zero ? 'excludes zero' : 'includes zero');
-    // The committed reading is the rule's: read only when both tests hold.
-    expect(zero && enough, rung.rung).toBe(rung.reading !== 'inconclusive');
+    // The committed reading is the rule's word, which the page shows: a gain
+    // or a loss only when both tests hold, by the interval's side of zero.
+    expect(rung.reading, rung.rung).toBe(
+      zero && enough ? (rung.difference.low > 0 ? 'gain' : 'loss') : 'inconclusive',
+    );
   });
 });
 
@@ -1109,6 +1131,70 @@ test("the training page's tables and questions read each count under its words",
       ...rowsOf(rung.first),
       ...rowsOf(rung.second),
     ]);
+  }
+});
+
+test('the training page draws each mark from the counts and bounds it shows', async ({page}) => {
+  // A square, a bar part's width and a scale's positions are geometry, which
+  // no value check sees. Each arm draws one square per failed answer and
+  // fills its repaired ones first, each part of a bar grows by the count it
+  // hides, and each question's interval and value sit at the bounds and value
+  // its summary shows. A style property left out reads as no number.
+  const pool = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  await page.goto('training/');
+  const arms = await page
+    .locator('section[aria-labelledby="tr-repair"] .tr-arm')
+    .evaluateAll((all) =>
+      all.map((arm) => ({
+        shown: Array.from(arm.querySelectorAll('[data-src]'), (node) => [
+          node.getAttribute('data-src'),
+          node.getAttribute('data-v'),
+        ]),
+        filled: Array.from(arm.querySelectorAll('.tr-sq'), (square) =>
+          square.classList.contains('tr-sq-on'),
+        ),
+      })),
+    );
+  expect(arms).toHaveLength(resolver.resolve(['len', pool, '/arms']) as number);
+  for (const {shown, filled} of arms) {
+    const [triggered, repaired] = [valueAt(shown, 'triggered_items'), valueAt(shown, 'repaired')];
+    expect(filled, `${String(repaired)} of ${String(triggered)}`).toEqual(
+      Array.from({length: Number(triggered)}, (_, index) => index < Number(repaired)),
+    );
+  }
+
+  const parts = await page.locator('.tr-mix .tr-seg').evaluateAll((all) =>
+    all.map((part) => ({
+      grow: part.style.flexGrow,
+      count: part.querySelector('[data-src]')?.getAttribute('data-v') ?? 'null',
+    })),
+  );
+  expect(parts.length).toBeGreaterThan(0);
+  expect(parts.map(({grow}) => (grow === '' ? null : Number(grow)))).toEqual(
+    parts.map(({count}): unknown => JSON.parse(count)),
+  );
+
+  const scales = await page.locator('li.tr-q').evaluateAll((items) =>
+    items.map((item) => {
+      const scale = item.querySelector<HTMLElement>('.tr-scale');
+      return {
+        drawn: ['--lo', '--hi', '--v'].map((name) => {
+          const text = scale?.style.getPropertyValue(name) ?? '';
+          return text === '' ? null : Number(text);
+        }),
+        shown: Array.from(item.querySelectorAll('.tr-val [data-src]'), (node) => [
+          node.getAttribute('data-src'),
+          node.getAttribute('data-v'),
+        ]),
+      };
+    }),
+  );
+  expect(scales).toHaveLength(resolver.resolve(['len', ladder, '/rungs']) as number);
+  for (const {drawn, shown} of scales) {
+    expect(drawn).toEqual(
+      ['low', 'high', 'value'].map((key) => valueAt(shown, `difference/${key}`)),
+    );
   }
 });
 
@@ -1429,6 +1515,28 @@ test('a SHA-256 digest shows its first twelve digits and keeps the whole digest'
   expect(mismatches(shown(digest, 'digest', short, short))).toHaveLength(1);
   expect(mismatches(shown(label, 'text', name, null))).toEqual([]);
   expect(mismatches(shown(label, 'digest', name, name))).toHaveLength(1);
+});
+
+test('a USD amount keeps the exact amount in its title', () => {
+  // The title is what a pointer shows on hover. Another amount there, or the
+  // amount rounded as the text shows it, would pass every other check.
+  const cost = 'docs/results/sft-v1/cost.json';
+  const bill = ['ptr', cost, '/total/bill_usd'];
+  const amount = String(resolver.resolve(bill));
+  const other = String(resolver.resolve(['ptr', cost, '/total/gpu_usd']));
+  const shown = (title: string | null): Sourced => ({
+    src: JSON.stringify(bill),
+    v: JSON.stringify(amount),
+    kind: 'usd',
+    cap: null,
+    text: fmt(amount, 'usd'),
+    title,
+  });
+
+  expect(mismatches(shown(amount))).toEqual([]);
+  expect(mismatches(shown(other))).toHaveLength(1);
+  expect(mismatches(shown(fmt(amount, 'usd')))).toHaveLength(1);
+  expect(mismatches(shown(null))).toHaveLength(1);
 });
 
 test('the sweep finds a number in any script, in a list start and outside the terms', async ({
