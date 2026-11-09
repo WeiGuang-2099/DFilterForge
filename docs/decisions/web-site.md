@@ -356,9 +356,11 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
     round from its test pass's `repair/summary.json`, in the headline's
     seed order: the seed, a pointer into the headline, its triggered items
     and cases, its arms and its comparisons. The pooled and the seeds'
-    arms and comparisons take the board's shape, so the board's components
-    draw them. No `model_id` or `not_run` list is exported: a seed labels
-    each round, and an arm not run stops the export;
+    arms and comparisons take the board's shape: the board's components
+    draw the seeds' arms and every comparison, and the pooled arms are
+    drawn as squares, one per failed answer, above the board's rate mark.
+    No `model_id` or `not_run` list is exported: a seed labels each
+    round, and an arm not run stops the export;
   - `cost`, the sessions' cost from `docs/results/sft-v1/cost.json`
     (`session-cost/1.0`): the GPU's price an hour; the total bill, GPU
     cost and cost per thousand requests as the file's decimal strings, and
@@ -1298,7 +1300,7 @@ pnpm --filter @dfilterforge/web test:e2e
   failing on a serious or critical finding as the smoke test does, and
   checks that the open page does not scroll sideways at 320 and 400 px;
   at those widths its tables scroll inside their wrappers, as the board's
-  do. The older sections' `details` are not checked open.
+  do. Axe does not run on the older sections with their `details` open.
 - Next 16.3.4 on Windows writes nested segment-prefetch files into
   subdirectories, where a Linux build writes flat names. The smoke test
   exempts exactly that case, so CI and Pages use the Linux build.

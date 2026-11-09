@@ -9,7 +9,10 @@ import type {Page} from '@playwright/test';
 // the three sections in light and in dark at smoke's bar, serious and
 // critical findings, and the open page fits a phone held upright, 320 and
 // 400 px wide, with nothing scrolling sideways. tests/consistency.spec.ts
-// holds every value, mark and label in them to the committed files.
+// holds every value in them to the committed files and re-derives the
+// receipts' marks, the tags, the primary labels, the questions' scales, the
+// bars' parts and the pooled arms' squares; it does not re-derive the
+// seeds' arm bars or the comparisons' interval marks.
 
 test.use({contextOptions: {reducedMotion: 'reduce'}});
 
