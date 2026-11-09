@@ -14,9 +14,13 @@ minus the schema row 0.013 [-0.088, 0.100], both inconclusive, and the
 three-seed SFT mean minus the few-shot row is 0.296 [0.196, 0.404], a
 gain; the schema and few-shot rows are post hoc
 ([ladder](results/sft-v1/ladder.json)). The three sessions cost USD 1.03
-per 1,000 requests ([cost](results/sft-v1/cost.json)). Next: the ladder
-section of `/training` in treatment B ("Three questions"), which the
-owner picked on 2026-11-09, its web export, the CI run and the PR.
+per 1,000 requests ([cost](results/sft-v1/cost.json)). `/training` now
+shows the ladder in treatment B ("Three questions"), which the owner
+picked on 2026-11-09, the SFT seeds' test repair round and the cost, and
+the README quotes all three; the PR's review fixes are in. Next: the
+push, hosted CI on the PR and the owner's merge. Then slice 8,
+`dpo-prereg`, which merges before any sampling and waits on the owner's
+approval and a November Modal budget of at least USD 15.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2900,12 +2904,16 @@ where an item says it is the maintainer's order.
   is planned, so the gap stays unfixed.
 - The Modal glue ran on 2026-10-08, 2026-10-18 and 2026-10-20: the base
   row's dev and test passes, three SFT seeds, the six adapter passes and
-  seed 2026's test rerun, with every bill in the [self-served
-  note](decisions/self-served-runs.md) (Measured); `docs/usage.md` keeps
-  the estimates. Not observed: a request without the token, which should
-  get 401, and scale to zero, since each session was stopped by hand.
-  `tests/test_modal_glue.py` checks only the glue's plain functions and
-  constants, the server's flags and the call config.
+  seed 2026's test rerun. It ran again on 2026-10-28, 2026-10-31 and
+  2026-11-05: the baseline rows' passes, before and after their
+  correction, and the 1.7B repair round's dev and test arms. Every bill
+  is in the [self-served note](decisions/self-served-runs.md) (Measured),
+  USD 6.32 in all, an app of 2026-10-29 that sent none of these requests
+  included; `docs/usage.md` keeps the estimates. Not observed: a request
+  without the token, which should get 401, and scale to zero, since each
+  session was stopped by hand. `tests/test_modal_glue.py` checks only the
+  glue's plain functions and constants, the server's flags and the call
+  config.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 
