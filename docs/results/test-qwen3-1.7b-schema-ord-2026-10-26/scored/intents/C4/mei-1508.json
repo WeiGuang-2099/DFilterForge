@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"cpfi.dst_port","kind":"predicate","operator":"eq","value":5000},{"field":"protocol","kind":"predicate","operator":"in","value":["mqttsn","cattp","cfm","cipio","cipio1","cltp","cotp","dccp"]}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

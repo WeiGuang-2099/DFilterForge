@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"ncp.user_info_logged_in","kind":"predicate","operator":"eq","value":true},{"children":[{"field":"acp133.member_of_group","kind":"predicate","operator":"eq","value":1},{"field":"ip.addr","kind":"predicate","operator":"in_subnet","value":"192.0.2.0/24"}],"kind":"any"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

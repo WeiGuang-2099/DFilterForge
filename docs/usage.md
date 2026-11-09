@@ -262,7 +262,8 @@ ready`, read the server's log with `modal app logs dfilterforge-vllm`
 Otherwise the last line prints the vLLM version, which must be 0.21.0;
 give it to the maintainer with the run.
 
-Two rules come from the sessions of 2026-10-08 and 2026-10-18:
+Three rules come from the sessions of 2026-10-08, 2026-10-18 and
+2026-10-27:
 
 - Check the network before the deploy. Without the key, `$url/v1/models`
   must return an HTTP status, since Modal's proxy answers 401 itself; a
@@ -286,6 +287,15 @@ Two rules come from the sessions of 2026-10-08 and 2026-10-18:
   before every resume: each resume into a server that is still down
   spends another attempt of the same item, and a third failure is final
   and scores as `provider_failed`.
+- A 503 for the whole 15-minute wait can be Modal's GPU capacity, not
+  the server. On 2026-10-27 the first session attempt of the baseline
+  rows and the 1.7B repair round got 503 for 15 minutes, and the app's
+  log said only that the function was waiting to be scheduled on a
+  GPU_L4 worker: no container started and nothing was billed. When the
+  log shows only that line, end the session and start it again another
+  day from the top of this section (after a stop, `modal app list` gives
+  the app's id for `modal app logs <id>`). Never switch the GPU type:
+  every row is served on the one L4 stack the self-served note pins.
 
 ### Base model: dev, then test
 

@@ -1,0 +1,1 @@
+{"case_id":"ne-lost-packets","missing_slots":[],"rationale":"The lost packets themselves, which never reached the capture; they are absent from the capture file. Contestable against the tcp.analysis lost-segment and retransmission idioms, which select packets beside a loss, not the lost ones.","split":"test","status":"not_expressible"}

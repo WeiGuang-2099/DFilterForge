@@ -6,10 +6,12 @@
  * the value it re-derives from the committed files the same way and compares
  * the text. fmt never scales, divides or localizes. A number is shown as the
  * committed file holds it, in the shortest form that reads back to the same
- * value, except under the two rounded kinds, rate and runtime. They round
- * that decimal form, never the binary float, so a value exactly halfway is
- * rounded away from zero as docs/results/locked-test-v1.md rounds it.
- * ESLint bans the number-formatting APIs everywhere else.
+ * value, except under the rounded kinds: rate, runtime and loss round a
+ * number's shortest decimal form, and usd rounds a decimal string to the
+ * cent. Each rounds on decimal digits, never on a binary float, so a value
+ * exactly halfway is rounded away from zero as
+ * docs/results/locked-test-v1.md rounds it. ESLint bans the number-formatting
+ * APIs everywhere else.
  */
 
 import {visible} from './visible';
@@ -31,6 +33,7 @@ export const FMT_KINDS = [
   'join',
   'verdict',
   'digest',
+  'usd',
 ] as const;
 
 // What a scored summary's not_measured status keys say on a page. A key is
@@ -99,6 +102,12 @@ const PLACES = {rate: 3, runtime: 1} as const;
 // Significant digits of a training loss, which falls by orders of magnitude
 // over a run, so no fixed count of decimal places shows its last values.
 const LOSS_DIGITS = 2;
+
+// A USD amount as scripts/session_cost.py writes one: a plain decimal
+// string, summed exactly with Decimal, never a float, a sign or an
+// exponent; and the places a page shows of it.
+const USD = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
+const CENTS = 2;
 
 /** One formatting kind. */
 export type FmtKind = (typeof FMT_KINDS)[number];
@@ -181,6 +190,25 @@ function significant(value: unknown, digits: number): string {
 }
 
 /**
+ * Rounds a USD amount to the cent by the same string arithmetic as
+ * rounded(), on the digits the cost file writes, never through a float.
+ * The first dropped digit decides: five or more rounds up, so an amount
+ * exactly halfway, never negative, goes away from zero. An amount with
+ * fewer places is padded with zeros.
+ */
+function cents(value: unknown): string {
+  if (typeof value !== 'string' || !USD.test(value)) {
+    throw new TypeError(`fmt: ${JSON.stringify(value)} is not a USD amount`);
+  }
+  const [whole = '', tail = ''] = value.split('.');
+  const padded = (whole + tail).padEnd(whole.length + CENTS + 1, '0');
+  const kept = padded.slice(0, whole.length + CENTS);
+  const result = (padded[whole.length + CENTS] ?? '0') >= '5' ? increment(kept) : kept;
+  const cut = result.length - CENTS;
+  return `${result.slice(0, cut)}.${result.slice(cut)}`;
+}
+
+/**
  * Formats one sourced value.
  *
  * @param value The value a sourced node holds.
@@ -197,7 +225,8 @@ function significant(value: unknown, digits: number): string {
  *     captures.json as a word; join, an intent IR's root operator as the
  *     words that join its leaves; verdict, a comparison's inconclusive
  *     flag as inconclusive or conclusive; digest, a SHA-256 digest in hex
- *     as its first twelve digits.
+ *     as its first twelve digits; usd, a USD amount, a decimal string as
+ *     the cost file writes one, to the cent.
  * @return The text the page shows.
  * @throws TypeError When the value does not fit the kind, so a build fails
  *     rather than show a value in the wrong form.
@@ -254,5 +283,7 @@ export function fmt(value: unknown, kind: FmtKind): string {
         throw new TypeError(`fmt: ${JSON.stringify(value)} is not a SHA-256 digest in hex`);
       }
       return value.slice(0, DIGEST_SHOWN);
+    case 'usd':
+      return cents(value);
   }
 }

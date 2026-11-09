@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"udp.dstport","kind":"predicate","operator":"lt","value":5353},{"field":"dns.qry.qu","kind":"predicate","operator":"eq","value":true},{"field":"dns.resp.ttl","kind":"predicate","operator":"ge","value":0},{"field":"dns.flags.response","kind":"predicate","operator":"eq","value":true}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

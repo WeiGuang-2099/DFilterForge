@@ -1,0 +1,1 @@
+{"case_id":"nc-os-default-ttl","missing_slots":["value"],"rationale":"IPv4 packets whose TTL is at least (inclusive) the operating-system default, with the OS unknown; the threshold is never given. Contestable.","split":"test","status":"needs_clarification"}

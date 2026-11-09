@@ -1,23 +1,26 @@
 # Implementation Progress
 
-Last updated: 2026-10-26
+Last updated: 2026-11-09
 
 ## Current slice
 
-Plan week R2's slices are merged: `passb` (plan slice 4) in PR #41,
-`exhibits` (slice 6) in PR #44 and `judge-study` (slice 5) in PR #45.
-Slice 7, `selfserved-baselines` (plan week R3), has its code, prompt
-sets and registration on its branch, before any request. The call step
-stops a pass at its first HTTP 5xx or 408, timeout or dropped
-connection. Two untrained rows of the base model are registered: base +
-JSON schema (`dfilterforge.answer_schema`) and base + eight training
-examples + schema (`dfilterforge.few_shot`), C4 only. So is the 1.7B
-repair round on the three SFT seeds, with its plans and dev arm prompt
-sets committed. The rules are in the protocol's amendments of
-2026-10-26 and the [self-served note](decisions/self-served-runs.md).
-Next is the Modal session the owner runs from home (`usage.md`,
-Baseline rows and the 1.7B repair round), then the ladder code, before
-any test row is scored, and the /training page.
+Slice 7's PRs #48 and #49 are merged: #48 registered the baseline rows
+and the 1.7B repair round, and #49 published the repair round and
+registered the rows' correction. The branch `baseline-ladder` holds the
+cost ruling of 2026-11-09, the corrected rows' dev and test passes, the
+ladder and the cost. On test C4 strong exact, paired by case, the schema
+row minus the base row is 0.025 [0.000, 0.063] and the few-shot row
+minus the schema row 0.013 [-0.088, 0.100], both inconclusive, and the
+three-seed SFT mean minus the few-shot row is 0.296 [0.196, 0.404], a
+gain; the schema and few-shot rows are post hoc
+([ladder](results/sft-v1/ladder.json)). The three sessions cost USD 1.03
+per 1,000 requests ([cost](results/sft-v1/cost.json)). `/training` now
+shows the ladder in treatment B ("Three questions"), which the owner
+picked on 2026-11-09, the SFT seeds' test repair round and the cost, and
+the README quotes all three; the PR's review fixes are in. Next: the
+push, hosted CI on the PR and the owner's merge. Then slice 8,
+`dpo-prereg`, which merges before any sampling and waits on the owner's
+approval and a November Modal budget of at least USD 15.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
@@ -2805,6 +2808,44 @@ pyink to 26.5.1 took black past its cache-file advisory, and filelock
 Action advisory stays open, since this repository does not use that
 action. No published number changed. Hosted CI passed on main.
 
+## PR #48 merged: 2026-10-26
+
+PR #48 merged `selfserved-baselines` into `main` as bffc33b, before any
+of its requests. The call step now stops a pass at its first HTTP 5xx or
+408, timeout or dropped connection. Two untrained rows of the base model
+are registered: base + the typed-IR JSON schema
+(`dfilterforge.answer_schema`) and base + eight training examples + the
+schema (`dfilterforge.few_shot`), C4 only, with their dev and test
+prompt sets seeded and the test ones admitted 15th and 16th. So is the
+1.7B repair round on the three SFT seeds, with its six plans and nine
+dev arm prompt sets. The rules are the protocol's amendments of
+2026-10-26 and the self-served note's Baseline rows and Repair round. No
+published number changed. The PR was merged within a minute of opening;
+hosted CI, which finished later, passed on the PR and on main.
+
+## PR #49 merged: 2026-10-31
+
+PR #49 merged `selfserved-results` into `main` as 1d739af. The 1.7B
+repair round ran on the three SFT seeds in the sessions of 2026-10-28
+(dev) and 2026-10-31 (test). On dev no arm repaired any of the 46
+triggered items. On test the counterexample arm repaired 0 of the 125
+triggered items, the bare arm 2 and the resample arm 1, and no
+comparison reads as a difference: counterexample minus bare is -0.016
+[-0.041, 0.000] with 2 discordant cases
+([pool](results/repair-pool/test-qwen3-1.7b-sft.json)). The baseline
+rows' dev passes answered one string on all 80 items: the client sorted
+the schema's keys, so once an answer opened with `schema_version` and
+`status`, as the prompt lists them, the server's grammar allowed only
+`not_expressible`. 548084b sends each body's
+keys in the order they were built, the protocol's correction of
+2026-10-31 registers the re-runs under ids tagged `ord`, their test
+prompt sets are admitted 26th and 27th, and the two 2026-10-26 test
+passes are reported not run. The first session attempt, on 2026-10-27,
+waited 15 minutes for an L4 and ran nothing, at no charge; the rule it
+gave is in `docs/usage.md` (Each session). The PR was merged within a
+minute of opening; hosted CI, which finished later, passed on the PR and
+on main.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
@@ -2863,12 +2904,16 @@ where an item says it is the maintainer's order.
   is planned, so the gap stays unfixed.
 - The Modal glue ran on 2026-10-08, 2026-10-18 and 2026-10-20: the base
   row's dev and test passes, three SFT seeds, the six adapter passes and
-  seed 2026's test rerun, with every bill in the [self-served
-  note](decisions/self-served-runs.md) (Measured); `docs/usage.md` keeps
-  the estimates. Not observed: a request without the token, which should
-  get 401, and scale to zero, since each session was stopped by hand.
-  `tests/test_modal_glue.py` checks only the glue's plain functions and
-  constants, the server's flags and the call config.
+  seed 2026's test rerun. It ran again on 2026-10-28, 2026-10-31 and
+  2026-11-05: the baseline rows' passes, before and after their
+  correction, and the 1.7B repair round's dev and test arms. Every bill
+  is in the [self-served note](decisions/self-served-runs.md) (Measured),
+  USD 6.32 in all, an app of 2026-10-29 that sent none of these requests
+  included; `docs/usage.md` keeps the estimates. Not observed: a request
+  without the token, which should get 401, and scale to zero, since each
+  session was stopped by hand. `tests/test_modal_glue.py` checks only the
+  glue's plain functions and constants, the server's flags and the call
+  config.
 - Container limits and process controls do not constitute an exhaustive
   host/network escape audit.
 

@@ -198,6 +198,45 @@ test('digest shows the first twelve hex digits of a SHA-256 digest', () => {
   }
 });
 
+test('usd rounds a committed USD string to the cent, halves away from zero', () => {
+  // The cost file's amounts, exact decimal strings session_cost.py sums
+  // with Decimal; rounded on the digits, never through a float.
+  expect(fmt('1.02591808', 'usd')).toBe('1.03');
+  expect(fmt('1.15005417', 'usd')).toBe('1.15');
+  expect(fmt('0.78940267', 'usd')).toBe('0.79');
+  expect(fmt('0.80', 'usd')).toBe('0.80');
+  expect(fmt('0.27048514', 'usd')).toBe('0.27');
+  expect(fmt('0.26759328', 'usd')).toBe('0.27');
+  expect(fmt('0.61197575', 'usd')).toBe('0.61');
+  expect(fmt('0.01076822', 'usd')).toBe('0.01');
+  expect(fmt('0.00089460', 'usd')).toBe('0.00');
+  // A half goes up, and a carry runs on into the whole amount.
+  expect(fmt('0.005', 'usd')).toBe('0.01');
+  expect(fmt('0.995', 'usd')).toBe('1.00');
+  expect(fmt('9.995', 'usd')).toBe('10.00');
+  expect(fmt('1', 'usd')).toBe('1.00');
+  // A sign, an exponent, a leading zero, an empty part, any other text and
+  // anything but a string are no amount the cost file writes.
+  for (const value of [
+    '',
+    '.5',
+    '1.',
+    '-1.00',
+    '+1',
+    '1e-3',
+    '01.5',
+    '00',
+    'USD 1',
+    ' 1.00',
+    '1.00\n',
+    1.5,
+    null,
+    true,
+  ]) {
+    expect(() => fmt(value, 'usd'), JSON.stringify(value)).toThrow(TypeError);
+  }
+});
+
 test('visible keeps layout whitespace and ordinary text', () => {
   expect(visible('a\tb\nc')).toBe('a\tb\nc');
   expect(visible('tcp.port == 443 && ip.addr == 192.0.2.1')).toBe(
@@ -280,6 +319,7 @@ test('every kind is named', () => {
     'join',
     'verdict',
     'digest',
+    'usd',
   ]);
   for (const kind of FMT_KINDS) {
     expect(isFmtKind(kind)).toBe(true);
@@ -304,6 +344,7 @@ test('Num accepts exactly the kinds that format a number node', () => {
     'frame_kind',
     'join',
     'digest',
+    'usd',
   ]);
   for (const kind of others) {
     for (const value of Object.values(NUM_KIND_SAMPLES)) {

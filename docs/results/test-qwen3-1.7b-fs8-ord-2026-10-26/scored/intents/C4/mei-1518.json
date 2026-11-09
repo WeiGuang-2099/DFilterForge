@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"https.request.method","kind":"predicate","operator":"eq","value":"POST"},{"field":"https.request.path","kind":"predicate","operator":"eq","value":"/login"}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

@@ -12,7 +12,9 @@ rerun reads. A test resolver written apart from the exporter re-derives
 every sourced value from those raw files. The
 tests of the committed tree skip where the test image carries no docs/
 tree; one of them repeats the registered dev Reel check on a copy of the
-tree with the planned test runs registered again.
+tree with the planned test runs registered again, and the refusals of the
+baseline ladder, the 1.7B repair round and the cost edit a copy of the
+committed files those three blocks read.
 """
 
 from __future__ import annotations
@@ -4881,6 +4883,600 @@ def test_the_committed_tree_exports_the_sft_headline() -> None:
         for key in ("changed_answers", "flipped_cases", "ready_cases")
     ] == [5, 0, 40]
     check_sources(_ROOT, {"training.json": documents["training.json"]})
+
+
+# The files of training.json's three blocks beside the headline, and the
+# passes the refusal cases below name.
+_LADDER = "docs/results/sft-v1/ladder.json"
+_SFT_POOL = "docs/results/repair-pool/test-qwen3-1.7b-sft.json"
+_COST = "docs/results/sft-v1/cost.json"
+_RUNGS = (
+    "schema_minus_base",
+    "few_shot_minus_schema",
+    "sft_mean_minus_few_shot",
+)
+_BASE_PASS = "test-qwen3-1.7b-2026-10-07"
+_SEED_PASSES = {
+    seed: f"test-qwen3-1.7b-sft-s{seed}-2026-10-07" for seed in (17, 42, 2026)
+}
+# The schema row's first test pass, reported not run and never published.
+_UNREAD_PASS = "test-qwen3-1.7b-schema-2026-10-26"
+
+
+def _seed_round(seed: int) -> str:
+    return f"docs/results/{_SEED_PASSES[seed]}/repair/summary.json"
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_exports_the_baseline_ladder() -> None:
+    headline = _documents(_committed())["training.json"]["headline"]
+    ladder = headline["baseline"]
+    rungs = [ladder["rungs"][name] for name in _RUNGS]
+    rows = [ladder[name] for name in ("base", "schema", "few_shot")]
+    rows += ladder["seeds"]
+
+    # The readings the page states, step by step, and their discordant
+    # cases.
+    assert [rung["reading"]["t"] for rung in rungs] == [
+        "inconclusive",
+        "inconclusive",
+        "gain",
+    ]
+    assert [rung["discordant_cases"]["v"] for rung in rungs] == [2, 12, 28]
+    # The labels: eight examples, the token cap and the typed-IR schema.
+    assert (
+        ladder["examples"]["v"],
+        ladder["token_cap"]["v"],
+        ladder["response_schema"]["t"],
+    ) == (8, 2048, "typed-ir/1")
+    assert [row["rate"]["value"]["v"] for row in rows[:3]] == [
+        0.0625,
+        0.0875,
+        0.1,
+    ]
+    # The same mean the headline above it shows.
+    assert ladder["sft_mean"]["rate"]["value"]["v"] == (
+        headline["mean"]["rate"]["value"]["v"]
+    )
+    # The schema and few-shot rows' one provider failure each is a reply
+    # refused as too large.
+    assert [row["too_large"]["v"] for row in rows] == [0, 1, 1, 0, 0, 0]
+    assert [seed["seed"]["v"] for seed in ladder["seeds"]] == [17, 42, 2026]
+    assert (
+        ladder["coverage_items"]["every_gold_field_retrieved"]["v"],
+        ladder["coverage_items"]["some_gold_field_missing"]["v"],
+    ) == (28, 52)
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_exports_the_sft_repair_round() -> None:
+    repair = _documents(_committed())["training.json"]["headline"]["repair"]
+
+    # The pool's squares: of the 125 failed answers, each arm's repaired.
+    assert {
+        arm["arm"]["t"]: (arm["repaired"]["v"], arm["triggered"]["v"])
+        for arm in repair["arms"]
+    } == {"counterexample": (0, 125), "bare": (2, 125), "resample": (1, 125)}
+    comparisons = repair["comparisons"]
+    assert [item["inconclusive"]["v"] for item in comparisons] == [True] * 3
+    assert [item["discordant"]["v"] for item in comparisons] == [2, 1, 3]
+    # Each seed's round in seed order, with its failed answers and cases.
+    assert [
+        (
+            seed["seed"]["v"],
+            seed["triggered_items"]["v"],
+            seed["triggered_cases"]["v"],
+        )
+        for seed in repair["seeds"]
+    ] == [(17, 45, 31), (42, 44, 30), (2026, 36, 26)]
+    assert [arm["repaired"]["v"] for arm in repair["seeds"][1]["arms"]] == [
+        1,
+        2,
+        0,
+    ]
+    assert all(
+        item["inconclusive"]["v"] is True
+        for seed in repair["seeds"]
+        for item in seed["comparisons"]
+    )
+    # The sources the board allows a repair number, here the pool and the
+    # seeds' rounds, and the headline for each seed; never an arm run.
+    files = {
+        file for node in _nodes(repair) for file in _source_files(node["src"])
+    }
+    assert files == {
+        _SFT_POOL,
+        _SFT_HEADLINE,
+        *(_seed_round(seed) for seed in _SEED_PASSES),
+    }
+    assert not [file for file in files if re.search(r"-(cx|bare|res)-", file)]
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_the_committed_tree_exports_the_session_cost() -> None:
+    cost = _documents(_committed())["training.json"]["headline"]["cost"]
+    total = cost["total"]
+    sessions = cost["sessions"]
+
+    # Money as the cost file writes it; the page rounds it to the cent.
+    assert (
+        total["usd_per_1000_requests"]["t"],
+        total["bill_usd"]["t"],
+        total["gpu_usd"]["t"],
+        cost["usd_per_gpu_hour"]["t"],
+    ) == ("1.02591808", "1.15005417", "0.78940267", "0.80")
+    assert (
+        total["requests"]["v"],
+        total["gpu_hours"]["v"],
+        cost["session_count"]["v"],
+    ) == (1121, 0.986753, 3)
+    assert [session["date"]["t"] for session in sessions] == [
+        "2026-10-28",
+        "2026-10-31",
+        "2026-11-05",
+    ]
+    assert [session["runs"]["v"] for session in sessions] == [11, 9, 4]
+    # The first session's two test passes reported not run, counted by
+    # their prompts.
+    assert [
+        (
+            None
+            if session["unread"] is None
+            else {key: node["v"] for key, node in session["unread"].items()}
+        )
+        for session in sessions
+    ] == [{"count": 2, "requests": 224}, None, None]
+    assert (
+        cost["excluded"]["date"]["t"],
+        cost["excluded"]["bill_usd"]["t"],
+    ) == ("2026-10-29", "0.01076822")
+
+
+@pytest.fixture(name="training_tree")
+def training_tree_fixture(tmp_path: Path) -> Path:
+    """A copy of the committed files the three training blocks read.
+
+    The headline, the ladder, the 1.7B pool and the cost; each ladder row's
+    run manifest and outcomes, and the few-shot row's prepare; and each
+    headline seed's repair round. The lists come from the committed ladder
+    and headline, about 20 files.
+    """
+    ladder = json.loads((_ROOT / _LADDER).read_text(encoding="utf-8"))
+    headline = json.loads((_ROOT / _SFT_HEADLINE).read_text(encoding="utf-8"))
+    files = [
+        _SFT_HEADLINE,
+        _LADDER,
+        _SFT_POOL,
+        _COST,
+        *(
+            f"docs/results/{row['run']}/{name}"
+            for row in ladder["rows"]
+            for name in ("run_manifest.json", "scored/outcomes.jsonl")
+        ),
+        *(
+            f"docs/results/{row['run']}/prepare.json"
+            for row in ladder["rows"]
+            if row["row"] == "few_shot"
+        ),
+        *(
+            f"docs/results/{seed['run']}/repair/summary.json"
+            for seed in headline["seeds"]
+        ),
+    ]
+    root = tmp_path / "training"
+    for relative in files:
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(_ROOT / relative, root / relative)
+    return root
+
+
+# One refusal case's change to one copied file: the (keys, value) pairs one
+# _edit sets, "deleted", or "published" for {} written where no file was.
+_Change = list[tuple[tuple[str | int, ...], object]] | str
+
+
+def _change(root: Path, file: str, change: _Change) -> None:
+    path = root / file
+    if change == "deleted":
+        path.unlink()
+        return
+    if change == "published":
+        assert not path.exists(), file
+        _write(path, {})
+        return
+    assert not isinstance(change, str), change
+    edits = change
+
+    def put(document: Any) -> None:
+        for keys, value in edits:
+            target = document
+            for key in keys[:-1]:
+                target = target[key]
+            target[keys[-1]] = value
+
+    _edit(path, put)
+
+
+# Each block's file, and the builder that is null without it.
+_BLOCKS = (
+    (_LADDER, "build_baseline"),
+    (_SFT_POOL, "build_sft_repair"),
+    (_COST, "build_cost"),
+)
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+@pytest.mark.parametrize(("file", "builder"), _BLOCKS)
+def test_each_training_block_is_null_until_its_file_is_committed(
+    training_tree: Path, file: str, builder: str
+) -> None:
+    _change(training_tree, file, "deleted")
+    repo = exporter.Repo(training_tree)
+
+    assert getattr(exporter, builder)(repo) is None
+    # Nothing is read, so site.json lists no input for the block.
+    assert repo.inputs == {}
+    assert all(
+        getattr(exporter, other)(exporter.Repo(training_tree)) is not None
+        for _, other in _BLOCKS
+        if other != builder
+    )
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+@pytest.mark.parametrize(("file", "builder"), _BLOCKS)
+def test_a_training_file_of_another_schema_exits_two(
+    training_tree: Path, file: str, builder: str
+) -> None:
+    schema = json.loads((training_tree / file).read_text(encoding="utf-8"))[
+        "schema_version"
+    ]
+    family = schema.split("/")[0]
+    _change(training_tree, file, [(("schema_version",), f"{family}/0.9")])
+
+    with pytest.raises(exporter.ExportError) as caught:
+        getattr(exporter, builder)(exporter.Repo(training_tree))
+    assert (caught.value.code, caught.value.exit_status) == (
+        "schema_invalid",
+        2,
+    )
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+@pytest.mark.parametrize(
+    ("file", "keys", "value", "check"),
+    [
+        (_LADDER, ("split",), "dev", "the test split"),
+        # Not the headline's cases.
+        (
+            _LADDER,
+            ("cases",),
+            41,
+            "the headline's metric, condition, cases and items",
+        ),
+        # Not the draws of every row above it.
+        (_LADDER, ("bootstrap", "seed"), 18, "the headline's draws"),
+        # Not the headline's base row, or its seeds out of order.
+        (_LADDER, ("rows", 0, "run"), _SEED_PASSES[17], "the headline's runs"),
+        (
+            _LADDER,
+            ("rows", 3, "seed"),
+            2026,
+            "the baseline rows, then the headline's seeds",
+        ),
+        # The schema row not tagged post hoc.
+        (
+            _LADDER,
+            ("rows", 1, "post_hoc"),
+            False,
+            "post hoc on the schema and few-shot rows alone",
+        ),
+        # A base rate other than the one the page's h1 shows, and a mean
+        # other than the headline's.
+        (_LADDER, ("rows", 0, "rate", "value"), 0.0875, "the headline's rates"),
+        (_LADDER, ("sft_mean", "rate", "value"), 0.4, "the headline's mean"),
+        # A false-ready answer no bar draws, outcomes that do not sum to the
+        # items, and malformed parts that do not add up.
+        (
+            _LADDER,
+            ("rows", 2, "outcomes", "false_ready"),
+            1,
+            "counts that add up",
+        ),
+        (_LADDER, ("rows", 0, "outcomes", "invalid"), 29, "counts that add up"),
+        (
+            _LADDER,
+            ("rows", 0, "malformed", "truncated"),
+            5,
+            "counts that add up",
+        ),
+        # A step other than the three registered.
+        (_LADDER, ("rungs", 2, "first"), "few_shot", "the registered steps"),
+        # A row sent under another token cap than the legend's.
+        (
+            f"docs/results/{_SEED_PASSES[2026]}/run_manifest.json",
+            ("settings", "max_output_tokens"),
+            4096,
+            "one token cap",
+        ),
+    ],
+    ids=[
+        "split",
+        "cases",
+        "draws",
+        "base_run",
+        "seed_order",
+        "post_hoc",
+        "rate",
+        "mean",
+        "false_ready",
+        "outcome_sum",
+        "malformed_split",
+        "steps",
+        "token_cap",
+    ],
+)
+def test_a_ladder_that_is_not_the_headlines_rows_stops_the_export(
+    training_tree: Path,
+    file: str,
+    keys: tuple[str | int, ...],
+    value: object,
+    check: str,
+) -> None:
+    _change(training_tree, file, [(keys, value)])
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.build_baseline(exporter.Repo(training_tree))
+    assert caught.value.code == "baseline_inconsistent"
+    # The case's own check and no other: another check that refuses it
+    # would hide the loss of this one.
+    assert str(caught.value) == f"{_LADDER} fails: {check}"
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+def test_a_provider_failure_that_is_no_oversized_reply_stops_the_export(
+    training_tree: Path,
+) -> None:
+    ladder = json.loads((training_tree / _LADDER).read_text(encoding="utf-8"))
+    (schema,) = [row["run"] for row in ladder["rows"] if row["row"] == "schema"]
+    path = training_tree / f"docs/results/{schema}/scored/outcomes.jsonl"
+    text = path.read_text(encoding="utf-8")
+    assert text.count('"response_too_large"') == 1
+    path.write_text(
+        text.replace('"response_too_large"', '"response_invalid"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.build_baseline(exporter.Repo(training_tree))
+    assert caught.value.code == "baseline_inconsistent"
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+@pytest.mark.parametrize(
+    ("file", "change"),
+    [
+        (_SFT_POOL, [(("split",), "dev")]),
+        # The base row's pass pooled in a seed's place.
+        (_SFT_POOL, [(("bases", 0, "run"), _BASE_PASS)]),
+        # Not the draws used above.
+        (_SFT_POOL, [(("bootstrap", "resamples"), 999)]),
+        # An arm sent other answers than the seeds' 125.
+        (_SFT_POOL, [(("arms", 0, "triggered_items"), 124)]),
+        # A seed's round of another pass, with an arm not run, or missing.
+        (_seed_round(42), [(("base_run",), _SEED_PASSES[17])]),
+        (_seed_round(17), [(("arms_not_run",), {"bare": "stopped"})]),
+        (_seed_round(2026), "deleted"),
+        # Flagged conclusive where the 1.7B rule does not read: neither test
+        # holds, [-0.018519, 0.036364] with 3 discordant cases; an endpoint
+        # at 0 does not exclude 0, [-0.113636, 0.0] or [0.0, 0.036364] with
+        # 10; and both tests must hold, an interval that excludes 0 with 9.
+        (_SFT_POOL, [(("comparisons", 2, "inconclusive"), False)]),
+        (
+            _seed_round(42),
+            [
+                (("comparisons", 0, "discordant"), 10),
+                (("comparisons", 0, "inconclusive"), False),
+            ],
+        ),
+        (
+            _SFT_POOL,
+            [
+                (("comparisons", 2, "difference", "low"), 0.0),
+                (("comparisons", 2, "discordant"), 10),
+                (("comparisons", 2, "inconclusive"), False),
+            ],
+        ),
+        (
+            _seed_round(42),
+            [
+                (("comparisons", 0, "difference", "high"), -0.01),
+                (("comparisons", 0, "discordant"), 9),
+                (("comparisons", 0, "inconclusive"), False),
+            ],
+        ),
+    ],
+    ids=[
+        "split",
+        "bases",
+        "draws",
+        "triggered",
+        "round_of_another_pass",
+        "arm_not_run",
+        "round_missing",
+        "neither_test",
+        "endpoint_at_zero",
+        "low_endpoint_at_zero",
+        "nine_discordant",
+    ],
+)
+def test_a_pool_that_is_not_the_seeds_rounds_stops_the_export(
+    training_tree: Path, file: str, change: _Change
+) -> None:
+    _change(training_tree, file, change)
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.build_sft_repair(exporter.Repo(training_tree))
+    assert caught.value.code == "repair_inconsistent"
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+@pytest.mark.parametrize(
+    ("file", "index", "bound", "value"),
+    [
+        # Seed 42's counterexample against bare, -0.045455: below zero.
+        (_seed_round(42), 0, "high", -0.01),
+        # The pool's bare against resample, 0.008: above zero.
+        (_SFT_POOL, 2, "low", 0.001),
+    ],
+    ids=["below_zero", "above_zero"],
+)
+def test_a_conclusive_flag_the_reading_rule_allows_is_exported(
+    training_tree: Path, file: str, index: int, bound: str, value: float
+) -> None:
+    at = ("comparisons", index)
+    _change(
+        training_tree,
+        file,
+        [
+            ((*at, "difference", bound), value),
+            ((*at, "discordant"), 10),
+            ((*at, "inconclusive"), False),
+        ],
+    )
+
+    repair = exporter.build_sft_repair(exporter.Repo(training_tree))
+
+    # The page shows this flag as "conclusive".
+    src = ["ptr", file, f"/comparisons/{index}/inconclusive"]
+    assert [node for node in _nodes(repair) if node["src"] == src] == [
+        {"v": False, "src": src}
+    ]
+
+
+@pytest.mark.skipif(
+    not _HAS_DOCS, reason="The test image carries no docs/ tree"
+)
+@pytest.mark.parametrize(
+    ("file", "change"),
+    [
+        # Billed items left uncounted other than the two the note names.
+        (_COST, [(("not_counted",), ["schema_probes"])]),
+        # The unread passes' latencies in the GPU time, or their requests
+        # counted from attempts the cost may not open.
+        (_COST, [(("sessions", 0, "unread", "latencies_in_gpu_time"), True)]),
+        (_COST, [(("sessions", 0, "unread", "requests_from"), "attempts")]),
+        # Passes reported not run in two sessions.
+        (
+            _COST,
+            [
+                (
+                    ("sessions", 1, "unread"),
+                    {
+                        "latencies_in_gpu_time": False,
+                        "requests": 224,
+                        "requests_from": "prompt_count",
+                        "runs": [
+                            _UNREAD_PASS,
+                            "test-qwen3-1.7b-fs8-2026-10-26",
+                        ],
+                    },
+                )
+            ],
+        ),
+        # No session sent the schema row's test pass, or seed 42's
+        # counterexample arm.
+        (
+            _COST,
+            [
+                (
+                    ("sessions", 2, "runs"),
+                    [
+                        "dev-qwen3-1.7b-schema-ord-2026-10-26",
+                        "dev-qwen3-1.7b-fs8-ord-2026-10-26",
+                        "test-qwen3-1.7b-fs8-ord-2026-10-26",
+                    ],
+                )
+            ],
+        ),
+        (
+            _COST,
+            [
+                (
+                    ("sessions", 1, "runs"),
+                    [
+                        f"test-qwen3-1.7b-sft-s{seed}-{arm}-2026-10-07"
+                        for seed in _SEED_PASSES
+                        for arm in ("res", "bare", "cx")
+                        if (seed, arm) != (42, "cx")
+                    ],
+                )
+            ],
+        ),
+        # No dev pass sent.
+        (
+            _COST,
+            [
+                (("sessions", 0, "runs"), cast(list[str], [])),
+                (
+                    ("sessions", 2, "runs"),
+                    [
+                        "test-qwen3-1.7b-schema-ord-2026-10-26",
+                        "test-qwen3-1.7b-fs8-ord-2026-10-26",
+                    ],
+                ),
+            ],
+        ),
+        # A pass reported not run that is no test pass, or one published.
+        (
+            _COST,
+            [
+                (
+                    ("sessions", 0, "unread", "runs", 0),
+                    "dev-qwen3-1.7b-schema-r2-2026-10-26",
+                )
+            ],
+        ),
+        (f"docs/results/{_UNREAD_PASS}/run_manifest.json", "published"),
+    ],
+    ids=[
+        "not_counted",
+        "latencies_in_gpu_time",
+        "requests_from",
+        "unread_twice",
+        "schema_row_unsent",
+        "arm_unsent",
+        "no_dev_pass",
+        "unread_dev_pass",
+        "unread_published",
+    ],
+)
+def test_a_cost_the_page_cannot_word_stops_the_export(
+    training_tree: Path, file: str, change: _Change
+) -> None:
+    _change(training_tree, file, change)
+
+    with pytest.raises(exporter.ContractError) as caught:
+        exporter.build_cost(exporter.Repo(training_tree))
+    assert caught.value.code == "cost_inconsistent"
 
 
 @pytest.mark.skipif(

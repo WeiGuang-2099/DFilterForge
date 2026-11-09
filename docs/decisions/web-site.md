@@ -206,17 +206,34 @@ allowed source:
   [`evidence/aa-test-qwen3-32b-2026-09-26.json`](evidence/aa-test-qwen3-32b-2026-09-26.json);
 - a repair number: a pass's `repair/summary.json` or
   `docs/results/repair-pool/test.json`, the two sources
-  [`disproof-reel.md`](disproof-reel.md) ("Repair trajectory") allows;
+  [`disproof-reel.md`](disproof-reel.md) ("Repair trajectory") allows; for
+  the SFT seeds' round on `/training`, a seed's test pass's
+  `repair/summary.json` or their pool,
+  `docs/results/repair-pool/test-qwen3-1.7b-sft.json`, which CI derives
+  again from those summaries;
 - a judge count: `docs/results/judge-v2/table.json`, which
   `scripts/judge_study.py table` writes and CI rebuilds with `--check`, as
   a pointer or a `count` op over its lists of false acceptances; the
   judge's model from `docs/results/judge-v2/test/manifest.json`; no page
   reads `judge-v1/` or `judge-v2/dev/`;
+- the untrained-baseline ladder on `/training`: a pointer into
+  `docs/results/sft-v1/ladder.json`, which `scripts/baseline_ladder.py`
+  writes and CI rebuilds with `--check`; the token cap, a pointer into the
+  base row's `run_manifest.json`, the response schema, into the schema
+  row's, and the example count, into the few-shot row's `prepare.json`;
+  and a row's ready C4 replies refused as too large, a `count` op over its
+  `scored/outcomes.jsonl`;
+- a cost: `docs/results/sft-v1/cost.json`, which `scripts/session_cost.py`
+  writes and CI rebuilds with `--check`. Its amounts are pointers to the
+  file's exact decimal strings, which only `lib/fmt.ts` rounds, and the
+  sessions, each session's runs and its passes reported not run are
+  counted by `len` ops;
 - never an arm run's (`-res`, `-bare` or `-cx`) `scored/summary.json`. The
   [repair note](repair-round.md) calls that file a scoring record, never a
   reported number. The Reel's repair turn reads the pass's
   `repair/plan.json` and `repair/summary.json`, and of the `-cx` arm run only
-  its completion, outcome row, receipt and specification.
+  its completion, outcome row, receipt and specification. The SFT seeds'
+  round reads no file of an arm run.
 
 ### Outputs
 
@@ -313,6 +330,45 @@ sorted keys, compact separators, `ensure_ascii=False` and one trailing LF:
   self-served rerun, in this file and in `analysis.json`, is pointers and
   `sum` ops into the pair report the headline names; a report that does
   not pair seed 2026's test pass with its pass B stops the export.
+  Beside them the headline holds three blocks, each null until its own
+  file exists, and nothing is read for one before then:
+  - `baseline`, the untrained-baseline ladder of
+    `docs/results/sft-v1/ladder.json` (`baseline-ladder/1.0`). Pointers
+    into the ladder give the condition, cases, items, bootstrap settings
+    and each coverage stratum's items; the base, schema and few-shot rows
+    by name, then one row per seed in the headline's order, each with its
+    strong exact and interval, its ready C4 answers by outcome, its
+    malformed answers split into those cut at the token cap and the rest,
+    and its strong exact per coverage stratum; the seed mean's rate; and
+    the three registered steps, each with its difference and interval, its
+    cases better, worse and discordant, and its reading. Each row's ready
+    C4 replies refused as too large are a `count` op over its outcomes.
+    The token cap, which every row shares, points into the base row's run
+    manifest, the response schema into the schema row's and the example
+    count into the few-shot row's `prepare.json`. The rows' `post_hoc`
+    flags and false-ready counts are checked and not exported: the page
+    tags the schema and few-shot rows post hoc by their place, on rows the
+    exporter has proved post hoc;
+  - `repair`, the SFT seeds' test repair round: the arms (repair@1 with its
+    interval, repaired and triggered answers), the three comparisons and
+    the bootstrap settings of
+    `docs/results/repair-pool/test-qwen3-1.7b-sft.json`, then each seed's
+    round from its test pass's `repair/summary.json`, in the headline's
+    seed order: the seed, a pointer into the headline, its triggered items
+    and cases, its arms and its comparisons. The pooled and the seeds'
+    arms and comparisons take the board's shape: the board's components
+    draw the seeds' arms and every comparison, and the pooled arms are
+    drawn as squares, one per failed answer, above the board's rate mark.
+    No `model_id` or `not_run` list is exported: a seed labels each
+    round, and an arm not run stops the export;
+  - `cost`, the sessions' cost from `docs/results/sft-v1/cost.json`
+    (`session-cost/1.0`): the GPU's price an hour; the total bill, GPU
+    cost and cost per thousand requests as the file's decimal strings, and
+    the total requests and GPU hours as numbers; the session count; per
+    session its date, bill, requests, GPU hours, run count and its passes
+    reported not run, null or their count and requests; and the app the
+    cost leaves out, by date and bill. The session, run and unread-pass
+    counts are `len` ops.
 - `analysis.json`: the descriptive analyses for `/training/analysis` and
   the board's small-model band, null until
   `docs/results/sft-v1/analysis.json` exists. Counts, ranges, classes,
@@ -458,14 +514,54 @@ are:
   1, or do not sum to its headline's `silent_wrong_rated_correct` and to
   its list's length, so that every entry names one silent-wrong answer of
   the pool, or whose judge's own pass's marks do not sum to
-  `self_silent_wrong_rated_correct`.
+  `self_silent_wrong_rated_correct`;
+- a baseline ladder the training page's words do not fit
+  (`baseline_inconsistent`), read once `docs/results/sft-v1/ladder.json`
+  exists: a split other than `test`; a metric, condition, case or item
+  count or bootstrap settings other than the headline's; rows other than
+  the base, schema and few-shot rows, then the headline's seeds in order;
+  runs or rates of the base row and the seeds, or a seed mean, other than
+  the headline's; post hoc flags that do not mark the ladder and exactly
+  its schema and few-shot rows; a row with a false-ready answer, whose
+  outcome counts do not add up to the items, whose malformed answers are
+  not those cut at the token cap and the rest, or whose provider failures
+  are not all replies refused as too large; rows sent under more than one
+  token cap; or steps other than the three registered ones. The message
+  names every check that fails;
+- an SFT repair round the training page cannot show
+  (`repair_inconsistent`), read once
+  `docs/results/repair-pool/test-qwen3-1.7b-sft.json` exists: a pool whose
+  split is not `test`, that pools other passes than the headline seeds'
+  test passes, whose bootstrap is not the headline's cases and settings,
+  or whose arms were sent other answers than the seeds' triggered ones; a
+  seed without a scored round, a round that names another pass, as above,
+  or a round with an arm not run; or a comparison, pooled or per seed,
+  flagged conclusive that the 1.7B reading rule (protocol, Repair, amended
+  2026-10-26) does not read. That rule reads a difference only when its
+  interval excludes 0, an endpoint at 0 not excluding it, and at least as
+  many cases as the headline's minimum, 10, are discordant, where the
+  summaries' flag counts discordant cases only. The page shows the flag
+  as a verdict, so it never prints "conclusive" where the rule gives no
+  reading;
+- a cost the training page's words do not fit (`cost_inconsistent`), read
+  once `docs/results/sft-v1/cost.json` exists: uncounted items other than
+  the schema probes and the wake requests; passes reported not run in
+  other than exactly one session, counted otherwise than by their
+  prompts, or with their latencies in the GPU time; sessions whose runs
+  leave out the schema and few-shot rows' test passes, once the ladder
+  exists, or an arm run of a seed's round, once the round exists, or hold
+  no dev pass; or a pass reported not run that is not a test pass or
+  whose `run_manifest.json` is committed. The exporter only looks for
+  that file and never reads a pass reported not run.
 
 It exits 2 when an input cannot be read, a flag is invalid or the output
 directory is not empty. That includes a registry whose schema tag is not
 `test-runs/1.0`, a ruling whose schema tag is not `bakeoff-ruling/1.0` or
-that has a slot without a winner run id, and a judge table whose schema
-tag is not `judge-table/1.0`, each `schema_invalid`; and a ruling path
-outside the allowed roots (`path_refused`).
+that has a slot without a winner run id, a judge table whose schema tag is
+not `judge-table/1.0`, and a baseline ladder, SFT repair pool or cost whose
+schema tag is not `baseline-ladder/1.0`, `repair-pool/1.0` or
+`session-cost/1.0`, each `schema_invalid`; and a ruling path outside the
+allowed roots (`path_refused`).
 
 On the web side, `lib/data.ts` checks every document's schema id, closed key
 sets and source ops before a page renders, and `lib/judge-check.ts` fails
@@ -475,19 +571,29 @@ silent-wrong answer, the squares add up to the headline's silent-wrong
 counts, over every answer and the judge's own pass's, each mark is 0 or
 1, and in each mode the marks add up to each row's rated-correct count,
 to the headline's, over every answer and the judge's own pass's, and to
-the key's rated correct, with the other squares its rated incorrect.
+the key's rated correct, with the other squares its rated incorrect. The
+training page fails the build when `training.json` lacks the baseline
+ladder, the SFT repair round or the cost, or when no session names passes
+reported not run, since its fixed words state all four; its components
+fail it on a step's reading other than `gain`, `loss` or `inconclusive`,
+on a round, pooled or a seed's, whose arms are not exactly the registered
+counterexample, bare and resample arms, so an unknown or a missing arm
+code stops it, and on an arm that repaired more answers than it was sent.
+So the lede, the arm blocks and each seed's bars show the same arms, in
+that order.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
   a list of integers (`int`, `num`, `bool`, `ints`, `rate`, `runtime`,
-  `verdict`); the string-only kinds `text`, `unmeasured`, `split`,
-  `outcome`, `frame_kind`, `join` and `digest` are excluded from its `kind`
-  prop, and
+  `loss`, `verdict`); the string-only kinds `text`, `unmeasured`, `split`,
+  `outcome`, `frame_kind`, `join`, `digest` and `usd` are excluded from its
+  `kind` prop, and
   `tests/fmt.spec.ts` fails typecheck
   when a kind added to `lib/fmt.ts` is neither excluded there nor listed
-  with a sample value in the spec. `rate` shows three decimals and
-  `runtime` one; both round the committed decimal digits by string
-  arithmetic, a value exactly halfway away from zero, as
+  with a sample value in the spec. `rate` shows three decimals, `runtime`
+  one, and `loss`, a training loss, two significant digits; each rounds
+  the committed decimal digits by string arithmetic, a value exactly
+  halfway away from zero, as
   [`locked-test-v1.md`](../results/locked-test-v1.md) rounds, so 0.6375
   shows as 0.638 where the binary float would give 0.637.
   `<Str>` renders a string the same way, without the link.
@@ -496,6 +602,12 @@ the key's rated correct, with the other squares its rated incorrect.
   file, with the whole digest in `data-v` and in the `title`. Every page
   shows every digest this way; a replay command keeps its revision
   exact.
+  `<Usd>` renders a USD amount the same way, to the cent
+  (`data-fmt="usd"`), linked to its file, with the exact amount in
+  `data-v` and in the `title`. `usd` takes only a plain decimal string, as
+  `scripts/session_cost.py` writes one, with no sign, exponent, leading
+  zero or empty part, and rounds its digits, never a binary float, a half
+  up: the cost file's 1.02591808 shows as 1.03.
   `<Outcome>` renders a scored outcome code as the protocol's words, with
   `data-fmt="outcome"`: `silent_wrong` reads "silent-wrong", and a code the
   table does not list fails the build. The table has one code the scorer
@@ -506,15 +618,16 @@ the key's rated correct, with the other squares its rated incorrect.
   operator (`join`: `all` reads "every leaf"). Both render through
   `CodeText` in `lib/sourced-text.tsx`, which a client island uses for the
   same markup. `<Num link={false}>` leaves out the link where numbers stand
-  close, as on the ladder's axis.
+  close, as on the ladder's axis, and inside a `summary`, which may hold
+  no link.
   `<Term>` renders a reviewed name that holds a digit; the list in
-  `lib/terms.ts` is `IPv4`, `SHA-256` and `repair@1`. `verdict` shows a
-  comparison's `inconclusive` flag as "inconclusive" or "conclusive", the
-  words of `locked-test-v1.md`; the consistency test fails the flag shown
-  any other way and the verdict words on any other value. `<Split>`
-  renders a run's split as the word that names its round, with
-  `data-fmt="split"`: `test` reads "Test" and `dev` reads "Dev", and any
-  other split fails the build.
+  `lib/terms.ts` is `IPv4`, `SHA-256`, `WeiGuang-2099` and `repair@1`.
+  `verdict` shows a comparison's `inconclusive` flag as "inconclusive" or
+  "conclusive", the words of `locked-test-v1.md`; the consistency test
+  fails the flag shown any other way and the verdict words on any other
+  value. `<Split>` renders a run's split as the word that names its round,
+  with `data-fmt="split"`: `test` reads "Test" and `dev` reads "Dev", and
+  any other split fails the build.
 - **Not measured yet.** A scored summary's `not_measured` status, such as
   `repair_at_1`, is never shown as written. The scorer writes `not_run` for
   a measurement no round has made, and `docs/protocol.md` keeps "not run"
@@ -551,6 +664,9 @@ the key's rated correct, with the other squares its rated incorrect.
   - a SHA-256 digest shown other than as a digest, or a digest whose text
     is not the first twelve digits of the committed value or whose `title`
     does not hold the whole of it, and the digest kind on any other value;
+  - a USD amount whose `title` is not the exact committed amount, which
+    the number sweep cannot see, since it skips a sourced value's
+    attributes;
   - a Unicode number character outside a sourced value, a script, a style
     or a `<Term>`, in the text, a swept attribute (`start` included) or
     `document.title`;
@@ -558,7 +674,7 @@ the key's rated correct, with the other squares its rated incorrect.
   - a server-rendered HTML file whose `data-src` set differs from the
     hydrated page's.
 
-  The first four checks run twice per route: on the hydrated page, and in
+  The first five checks run twice per route: on the hydrated page, and in
   a browser context with JavaScript disabled, which sees the HTML as the
   server rendered it. A number that only the server HTML shows, and that
   hydration removes, reaches every visitor without JavaScript, every crawler
@@ -577,7 +693,39 @@ the key's rated correct, with the other squares its rated incorrect.
   order, with the condition and item that label it and its letter in each
   mode, c rated correct or i rated incorrect, from the table's lists of
   false acceptances; and it pins the headline pointers the lead and the
-  paragraph after it read, in order.
+  paragraph after it read, in order. On `/training` it re-derives the
+  words the ladder and repair sections choose from values. Each question,
+  in the ladder's order of steps, marks the reading rule's two tests met
+  or not met in its receipt, and says its interval excludes or includes
+  zero, as `ladder.json`'s bounds and discordant cases give them, an
+  endpoint at 0 not excluding 0; the step's committed reading must be the
+  rule's word: `gain` or `loss` exactly when both tests are met, by the
+  side of zero its interval lies on, and `inconclusive` otherwise. Its
+  summary reads its own step and, besides it, only the example count. The
+  post hoc tag sits on the heading exactly when `ladder.json` marks the
+  ladder post hoc, and on a row label of the strip, the receipts' bars or
+  the two tables exactly when it marks that row post hoc; of those labels
+  only the few-shot row's shows the example count, and each table lists
+  every row in ladder order. The pointers the two ledes and the strip read
+  are pinned in order, since the schema and few-shot rates, or the first
+  two steps' readings, could trade places and pass every value check, and
+  so are those of the cost section's lead, paragraph and note, whose USD
+  amounts could trade places the same way. The cost table and the ladder's
+  two tables are read cell by cell under their header words, so a value
+  moved to another column fails: the cost table's columns are Session,
+  Requests, GPU hours, Bill and What it sent, and each column of the
+  outcome and coverage tables is tied to the `ladder.json` key its cells
+  read in every row. Each question's cases better and worse are its own
+  step's, and its bars draw its step's first row, or the seeds for the
+  mean, then its second. The marks are geometry no value check sees, so
+  they are derived again too: each pooled arm draws one square per answer
+  it was sent, its repaired ones filled first; each part of a bar grows by
+  the count it hides; and each question's scale places its interval and
+  point at the bounds and difference its summary shows. A style property
+  left out reads as no number, so it cannot pass for the first step's low
+  bound, 0. The comparison labels are checked as on the board: pooled
+  over the seeds every comparison is secondary, and in each seed's round
+  counterexample against bare is primary.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool,
@@ -599,9 +747,18 @@ the key's rated correct, with the other squares its rated incorrect.
   independent resolver and an AST allowlist that keeps the exporter on the
   standard library. Its committed-tree tests export the committed files and
   pin the test-phase Reel pick, its step 5 turn, the methodology's repair
-  line and its judge block, and
+  line and its judge block, and the training page's ladder, SFT repair
+  round and cost, and
   `test_the_committed_dev_pool_picks_the_registered_dev_reel` repeats the
-  dev check that `disproof-reel.md` recorded (Measured).
+  dev check that `disproof-reel.md` recorded (Measured). The training
+  blocks' refusal cases each change one file in a copy of the committed
+  files the blocks read, so they too run only with `docs/` mounted. The
+  ladder's parametrized cases each name the check they trip, and the
+  export's message must name that check alone, so a case that another
+  check also refuses cannot hide the loss of its own. A comparison flagged
+  conclusive with an endpoint at 0, low or high, stops the export, while
+  one the 1.7B rule reads, on either side of zero, is exported, so a rule
+  that refused every conclusive flag would fail.
 
 ### CI
 
@@ -1133,6 +1290,17 @@ pnpm --filter @dfilterforge/web test:e2e
   first runs on the push that merges it.
 - The consistency test does not sweep CSS `content:`, `<head>` meta, or the
   markers CSS numbers for a list without a `start`.
+- No consistency rule ties a cost amount to the `usd` kind, as one ties a
+  digest to the digest kind: shown as text, an amount would still be
+  exact.
+- On `/training` the receipts, the tables and the seeds' rounds sit in
+  closed `details`, whose content the smoke test's axe run at load does
+  not evaluate. `tests/training.spec.ts` opens every `details` and runs
+  axe on the ladder, repair and cost sections, in light and in dark,
+  failing on a serious or critical finding as the smoke test does, and
+  checks that the open page does not scroll sideways at 320 and 400 px;
+  at those widths its tables scroll inside their wrappers, as the board's
+  do. Axe does not run on the older sections with their `details` open.
 - Next 16.3.4 on Windows writes nested segment-prefetch files into
   subdirectories, where a Linux build writes flat names. The smoke test
   exempts exactly that case, so CI and Pages use the Linux build.

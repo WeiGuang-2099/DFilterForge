@@ -1,0 +1,1 @@
+{"case_id":"ne-average-ttl","missing_slots":[],"rationale":"The average IPv4 TTL for each destination address; an aggregate statistic, not a packet set.","split":"test","status":"not_expressible"}

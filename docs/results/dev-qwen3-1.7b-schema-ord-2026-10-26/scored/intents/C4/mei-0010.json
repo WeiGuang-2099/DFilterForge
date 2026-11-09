@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"dns.resp.class","kind":"predicate","operator":"eq","value":1},{"field":"dns.resp.len","kind":"predicate","operator":"gt","value":0}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

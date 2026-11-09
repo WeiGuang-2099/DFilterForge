@@ -147,6 +147,33 @@ export function Digest({node}: StrProps): ReactNode {
   );
 }
 
+/**
+ * Renders a USD amount, a decimal string as the cost file writes it, to the
+ * cent (fmt's usd kind), linked to its file. The exact amount stays in
+ * data-v, which the consistency test checks against the file and rounds
+ * again, and in the title, which a pointer shows on hover.
+ */
+export function Usd({node}: StrProps): ReactNode {
+  const value = (
+    <span
+      data-fmt="usd"
+      data-src={JSON.stringify(node.src)}
+      data-v={JSON.stringify(node.t)}
+      title={node.t}
+    >
+      {fmt(node.t, 'usd')}
+    </span>
+  );
+  const href = permalink(node.src);
+  return href === null ? (
+    value
+  ) : (
+    <a className="num" href={href}>
+      {value}
+    </a>
+  );
+}
+
 interface WordProps {
   readonly node: StrNode;
   readonly kind: 'frame_kind' | 'join';

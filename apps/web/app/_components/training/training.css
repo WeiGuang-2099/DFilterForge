@@ -84,8 +84,169 @@
 
 @media (max-width: 760px) {
   .tr-row, .tr-axis, .tr-strata .tr-row {grid-template-columns: minmax(0, 1fr);}
-  .tr-axis span:first-child, .tr-axis span:last-child {display: none;}
+  .tr-axis > span:first-child, .tr-axis > span:last-child {display: none;}
   .tr-strata, .tr-tables {grid-template-columns: minmax(0, 1fr);}
   .tr-cases {gap: 1px;}
   .tr-case {height: 150px;}
+}
+
+/* Cheaper fixes first, the repair turn and the cost: four numbers and the
+   steps between them, three questions with their receipts, one square per
+   failed answer. Bars grow by counts; nothing divides. */
+.tr-sec-lede {max-width: 68ch; font-size: 17px; line-height: 1.55;}
+.tr-sec-lede b {font-weight: 600;}
+.tr-sec-lede + .tr-sub {margin-top: 10px;}
+/* A tag never breaks inside a line of words or a table cell. */
+.tr-tag {white-space: nowrap;}
+.tr-tag-open {background: transparent; border-color: var(--line-2); color: var(--ink-2);}
+.tr-tag-loss {background: var(--dis); border-color: var(--dis); color: var(--ground);}
+.tr-vh {position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;}
+
+.tr-flow {display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 1.7fr)); gap: 0 10px; align-items: end; margin: 22px 0 0; padding: 0 0 14px; list-style: none; border-bottom: 1px solid var(--ink);}
+.tr-flow > li {display: flex; align-items: flex-end; gap: 10px; min-width: 0;}
+.tr-flow-step {flex: 0.7 1 0; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding-bottom: 20px; font: 12px/1.2 var(--mono); color: var(--ink-2);}
+.tr-flow-ar {position: relative; display: block; width: 100%; height: 2px; background: var(--line-2);}
+.tr-flow-ar::after {content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--line-2); border-right: 0;}
+.tr-step-gain .tr-flow-ar {background: var(--ink);}
+.tr-step-gain .tr-flow-ar::after {border-left-color: var(--ink);}
+.tr-step-loss .tr-flow-ar {background: var(--dis);}
+.tr-step-loss .tr-flow-ar::after {border-left-color: var(--dis);}
+.tr-flow-cell {flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;}
+.tr-flow-nm {font: 500 12.5px/1.3 var(--sans); color: var(--ink-2);}
+/* Both post hoc levels carry their tag on a line of its own, a matched
+   pair however their names wrap. */
+.tr-flow-nm .tr-tag {display: table; margin-top: 3px;}
+.tr-flow-v {font: 500 clamp(26px, 3.4vw, 40px)/1 var(--mono); letter-spacing: -0.03em; font-variant-numeric: tabular-nums;}
+.tr-flow-sft_mean .tr-flow-v {font-weight: 700;}
+.tr-flow .bd-ci {font: 11.5px/1.4 var(--mono); color: var(--ink-2);}
+.tr-flow + .tr-sub {margin-top: 14px;}
+
+.tr-qs > li {border-bottom: 1px solid var(--line);}
+.tr-q > details > summary {display: block; list-style: none; cursor: pointer;}
+.tr-q > details > summary::-webkit-details-marker {display: none;}
+.tr-q .tr-row {grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) minmax(0, 15rem); gap: 4px 22px; padding: 14px 0; border-bottom: 0;}
+.tr-q .tr-name b {display: block; font: 600 15px/1.3 var(--sans); text-wrap: balance;}
+.tr-q summary:hover .tr-name b {text-decoration: underline; text-underline-offset: 3px;}
+.tr-q-mark::before {content: "\2193"; color: var(--ink-3);}
+.tr-q details[open] .tr-q-mark::before {content: "\2191";}
+.tr-q .tr-scale {height: 26px;}
+.tr-q .tr-scale-difference::before {top: -5px; bottom: -5px; border-left: 1.5px solid var(--ink-2);}
+.tr-q .tr-ci {top: 8px; height: 10px;}
+.tr-q .tr-ci::before {top: 4px; height: 2px;}
+/* A question's point is small enough that a short interval's cap still
+   shows beside it on a phone's scale. */
+.tr-q .tr-dot {top: 9px; width: 8px; height: 8px; margin-left: -4px;}
+.tr-q-loss .tr-ci, .tr-q-loss .tr-ci::before {border-color: var(--dis);}
+.tr-q-loss .tr-ci::before, .tr-q-loss .tr-dot {background: var(--dis);}
+.tr-axis-q {grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) minmax(0, 15rem); gap: 4px 22px;}
+.tr-axis-q > span:nth-child(2) {display: grid; grid-template-columns: 1fr auto 1fr;}
+.tr-axis-q > span:nth-child(2) > span:last-child {text-align: right;}
+
+.tr-rcpt {display: grid; grid-template-columns: minmax(0, 16rem) minmax(0, 1fr); gap: 10px 22px; padding: 2px 0 18px;}
+.tr-rule {margin: 0; padding: 0; list-style: none; font: 12.5px/1.5 var(--sans); color: var(--ink-2);}
+.tr-rule > li {position: relative; padding-left: 18px;}
+.tr-rule > li + li {margin-top: 5px;}
+.tr-mark::before {position: absolute; top: 0; left: 0; font: 700 12px/1.5 var(--mono);}
+.tr-pass .tr-mark::before {content: "+"; color: var(--ink);}
+.tr-fail .tr-mark::before {content: "\2013"; color: var(--dis);}
+.tr-mixes {display: flex; flex-direction: column; min-width: 0;}
+/* A label's line is as tall as a post hoc tag, so every bar sits as far
+   below its label, tagged or not. */
+.tr-mix-nm {margin: 3px 0 1px; font: 10.5px/19px var(--mono); color: var(--ink-2);}
+.tr-mix-bar {display: flex; height: 18px; outline: 1px solid var(--line-2); outline-offset: -1px;}
+.tr-seg {position: relative; flex-basis: 0; min-width: 0; background: var(--o);}
+.tr-seg + .tr-seg {border-left: 1px solid var(--ground);}
+/* The analysis page's outcome colours (analysis.css --o), so both pages
+   colour an outcome alike; the cut part hatches the malformed grey. */
+.tr-o-strong_exact {--o: var(--ink);}
+.tr-o-silent_wrong {--o: var(--dis);}
+.tr-o-invalid {--o: var(--ink-3);}
+.tr-o-truncated {--o: repeating-linear-gradient(135deg, var(--line-2) 0 3px, var(--ink-3) 3px 4.5px);}
+.tr-o-malformed {--o: var(--line-2);}
+.tr-o-shortcut {--o: var(--ink-2);}
+.tr-o-abstained {--o: var(--plate); box-shadow: inset 0 0 0 1px var(--ink-2);}
+.tr-o-provider_failed {--o: var(--line); box-shadow: inset 0 0 0 1px var(--ink-3);}
+.tr-legend {display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 0; list-style: none; font: 12px/1.4 var(--sans); color: var(--ink-2);}
+.tr-legend li {display: inline-flex; align-items: center; gap: 6px;}
+.tr-sw {display: inline-block; flex: none; width: 14px; height: 10px; background: var(--o); outline: 1px solid var(--line-2); outline-offset: -1px;}
+/* These two swatches show their segments' own rings, as the bars do. */
+.tr-sw.tr-o-abstained, .tr-sw.tr-o-provider_failed {outline: 0;}
+.tr-table th.tr-n, .tr-table td.tr-n {text-align: right;}
+.tr-table tbody th {font: 500 13.5px/1.35 var(--sans);}
+/* A row's label, counts and amounts keep one line, so on a phone the table
+   scrolls in its wrapper rather than breaking them; only a cell of words
+   wraps. A table whose label is long takes it from a line above the
+   wrapper, which never scrolls out of view. */
+.tr-nowrap tbody th, .tr-nowrap td {white-space: nowrap;}
+.tr-nowrap td.tr-wrap {min-width: 13rem; white-space: normal;}
+.tr-tcap {margin-bottom: 2px;}
+.tr-table-wrap + .tr-tcap {margin-top: 22px;}
+
+/* The arms in a row stretch to one height and each note grows, so the
+   squares of all three start on one line, however the notes wrap. */
+.tr-arms {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 32px; margin-top: 20px;}
+.tr-arm {display: flex; flex-direction: column; min-width: 0;}
+.tr-arm-h {display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--ink); font: 600 14px/1.3 var(--sans);}
+.tr-arm-h .m {font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap;}
+.tr-arm-n {flex: 1 0 auto; margin-top: 6px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2);}
+.tr-arm-r {margin-top: 8px; font: 12.5px/1.45 var(--mono); color: var(--ink-2);}
+.tr-arm-r [data-term] {font-family: var(--sans);}
+.tr-squares {display: grid; grid-template-columns: repeat(25, minmax(0, 1fr)); gap: 2px; margin-top: 10px;}
+/* An outline, not an inset shadow: forced colours drop box-shadow and
+   recolour an outline (see the forced-colours block). */
+.tr-sq {aspect-ratio: 1; background: var(--plate); outline: 1px solid var(--line); outline-offset: -1px;}
+.tr-sq-on {background: var(--ink); outline-color: var(--ink);}
+
+.tr-cost-big {margin-top: 6px; font: 600 clamp(30px, 4vw, 48px)/1.05 var(--sans); font-stretch: 106%; letter-spacing: -0.018em;}
+/* A mono space is about twice a word space at this size; this brings the
+   one inside the amount back to a word space. */
+.tr-cost-big .m {font-weight: 500; letter-spacing: -0.03em; word-spacing: -0.3em;}
+.tr-cost-big + .tr-sub {margin-top: 8px; font-size: 15px;}
+
+/* Four across, a step's nowrap tag can be wider than its column, and below
+   about 960 px it reaches the rate the step leads to, so there the strip
+   stacks, at a reading width on a tablet; the methodology page breaks at
+   960 px too. Each step's arrow points down. A gain's or a loss's head
+   recolours its whole border, since the four-across rule that inks its
+   left edge outranks the plain head here. A name of two lines spans its
+   rate's interval row too, so the interval stays under its rate. */
+@media (max-width: 960px) {
+  .tr-flow {grid-template-columns: minmax(0, 1fr); max-width: 32rem; padding-bottom: 0; border-bottom: 0;}
+  .tr-flow > li {flex-direction: column; align-items: stretch; gap: 0;}
+  .tr-flow-step, .tr-flow-cell {flex: none;}
+  .tr-flow-step {flex-direction: row; justify-content: flex-start; gap: 8px; padding: 6px 0 6px 2px;}
+  .tr-flow-ar {width: 2px; height: 16px;}
+  .tr-flow-ar::after {right: auto; left: -4px; top: auto; bottom: -2px; border: 5px solid transparent; border-top: 7px solid var(--line-2); border-bottom: 0;}
+  .tr-step-gain .tr-flow-ar::after {border-color: var(--ink) transparent transparent;}
+  .tr-step-loss .tr-flow-ar::after {border-color: var(--dis) transparent transparent;}
+  .tr-flow-cell {display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--ink);}
+  .tr-flow-cell .tr-flow-nm {grid-row: span 2;}
+  .tr-flow-cell .bd-ci {grid-column: 2;}
+  .tr-flow-v {font-size: 28px;}
+}
+
+@media (max-width: 760px) {
+  /* These outrank or follow the rules of the block above, so they are
+     listed again. */
+  .tr-q .tr-row, .tr-axis-q, .tr-rcpt {grid-template-columns: minmax(0, 1fr);}
+  .tr-arms {grid-template-columns: minmax(0, 1fr);}
+  /* A ladder row's long label takes two lines here, so the first counts
+     stay in view beside it. */
+  .tr-row-labels tbody th {min-width: 8.5rem; white-space: normal;}
+}
+/* On the narrowest phones the cost table's cells sit closer, so the bill,
+   its last number, stays whole in view and the words after it scroll. */
+@media (max-width: 360px) {
+  .tr-cost-table th, .tr-cost-table td {padding-right: 8px;}
+}
+/* Forced colours paint backgrounds over with Canvas and drop box shadows:
+   an empty square keeps its outline, which they recolour, as the judge
+   figure's empty squares keep their borders; a repaired square stays
+   solid, and the bars keep their fills, as the judge figure's false
+   acceptances do. A question's point and interval line, drawn as fills,
+   stay solid in the text colour, as those acceptances do. */
+@media (forced-colors: active) {
+  .tr-sq-on {forced-color-adjust: none; background: CanvasText; outline-color: CanvasText;}
+  .tr-mix-bar, .tr-sw, .tr-flow-ar {forced-color-adjust: none;}
+  .tr-q .tr-dot, .tr-q .tr-ci::before {forced-color-adjust: none; background: CanvasText;}
 }

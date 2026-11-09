@@ -1,0 +1,1 @@
+{"expression":{"field":"dns.qry.type","kind":"predicate","operator":"eq","value":1},"ir_schema_version":"1.0","scope":"packet"}

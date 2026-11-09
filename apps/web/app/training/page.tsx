@@ -2,8 +2,11 @@ import type {Metadata} from 'next';
 import Link from 'next/link';
 import type {ReactNode} from 'react';
 
+import {SessionCost} from '@/app/_components/training/cost';
 import {Against, Head, Ladder} from '@/app/_components/training/ladder';
 import {CaseStrip, Scale} from '@/app/_components/training/marks';
+import {RepairTurn} from '@/app/_components/training/repair';
+import {Steps} from '@/app/_components/training/steps';
 import {ConditionTable} from '@/app/_components/training/tables';
 import {preview} from '@/lib/preview';
 import {Num, repositoryFile, Str} from '@/lib/sourced';
@@ -24,11 +27,16 @@ export const metadata: Metadata = {
 
 // The training page shows docs/results/sft-v1/headline.json through
 // training.json: the three-seed mean first, as docs/protocol.md registers
-// (Training rules), then each seed, the coverage strata, the cases, the
-// hosted rows beside the mean and the untrained conditions. Every value is
-// a sourced node; the words around them are fixed.
+// (Training rules), then each seed, then the untrained baselines' ladder
+// from ladder.json, the coverage strata, the cases, the hosted rows beside
+// the mean and the untrained conditions, then the 1.7B repair round from the
+// SFT pool and the seeds' rounds, and the sessions' cost from cost.json.
+// Every value is a sourced node; the words around them are fixed.
 
 const HEADLINE = 'docs/results/sft-v1/headline.json';
+const LADDER = 'docs/results/sft-v1/ladder.json';
+const COST = 'docs/results/sft-v1/cost.json';
+const SFT_POOL = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
 const PROTOCOL = 'docs/protocol.md';
 const ADR = 'docs/adr/0002-hosted-inference-and-small-model.md';
 const NOTE = 'docs/decisions/self-served-runs.md';
@@ -43,7 +51,17 @@ export default function TrainingPage(): ReactNode {
   if (headline === null) {
     throw new Error('training: training.json has no headline, and the page shows one only');
   }
-  const {bootstrap, rerun_noise: rerun} = headline;
+  const {bootstrap, rerun_noise: rerun, baseline, repair, cost} = headline;
+  if (baseline === null || repair === null || cost === null) {
+    throw new Error(
+      'training: training.json lacks the baseline ladder, the repair round or the cost, ' +
+        'and the page shows all three',
+    );
+  }
+  const unread = cost.sessions.find((session) => session.unread !== null)?.unread;
+  if (unread === undefined || unread === null) {
+    throw new Error('training: the cost names no test passes reported not run');
+  }
   return (
     <article className="training">
       <Head headline={headline} />
@@ -76,6 +94,8 @@ export default function TrainingPage(): ReactNode {
           <span />
         </p>
       </section>
+
+      <Steps baseline={baseline} />
 
       <section aria-labelledby="tr-strata" className="tr-sec">
         <h2 id="tr-strata">Split by field coverage</h2>
@@ -216,6 +236,10 @@ export default function TrainingPage(): ReactNode {
         </div>
       </section>
 
+      <RepairTurn condition={headline.condition} repair={repair} />
+
+      <SessionCost cost={cost} unread={unread} />
+
       <section aria-labelledby="tr-limits" className="tr-sec">
         <h2 id="tr-limits">Limits</h2>
         <ul className="tr-limits">
@@ -240,13 +264,68 @@ export default function TrainingPage(): ReactNode {
             known; the other two were scored after the registration was pushed.
           </li>
           <li>
+            The schema and example rows were designed after every base and fine-tuned test score
+            was known, the schema row after reading the base row&apos;s malformed test answers, so
+            both are labelled post hoc. Their prompts, settings and reading were registered before
+            any of their requests, and they change no registered row.
+          </li>
+          <li>
+            Their first passes ran under a defect their dev passes showed: the client sorted the
+            schema&apos;s keys, so the grammar let an answer only abstain. Those test passes are
+            reported not run: they were never published or scored, and only their census was
+            read. These rows are their re-runs, sent in a later session.
+          </li>
+          <li>
+            The base row was sent in an earlier session than these two rows; how far a change of
+            session alone moves the base model&apos;s greedy answers is not measured (the rerun
+            line above measured one fine-tuned seed).
+          </li>
+          <li>
+            The outcome counts and the field-coverage split are shown and never read as a gain or
+            a loss.
+          </li>
+          <li>
+            Ready test answers of the two post hoc rows that scored provider failed:{' '}
+            <Num kind="int" node={baseline.schema.too_large} /> in the schema row and{' '}
+            <Num kind="int" node={baseline.few_shot.too_large} /> in the example row. Each reply
+            was larger than the client&apos;s reply size limit and counts as not exact.
+          </li>
+          <li>
+            The repair round was registered after every base and fine-tuned score and the hosted
+            round&apos;s results were known, so it is post hoc; its plans and reading were
+            registered before its first request. The adapters were trained on single-turn
+            prompts, so the bare and counterexample turns are chats they never saw in training;
+            the repair interval covers case sampling with the three adapters fixed; and the round
+            is never compared with the hosted models&apos; round on the board.
+          </li>
+          <li>
+            The cost counts the <Num kind="int" node={unread.requests} /> requests of the{' '}
+            <Num kind="int" node={unread.count} /> test passes reported not run as their prompt
+            count, one request per prompt, since their records may not be opened; their share of
+            the bill of the session that sent them stays in it, and their GPU time is left out.
+          </li>
+          <li>
+            Neither cost figure is a price for any other serving, and the repair summaries&apos;
+            spend columns are nominal, never a cost.
+          </li>
+          <li>
             The <a href={repositoryFile(NOTE)}>self-served note</a> holds the stack, the bills and
             the outages, among them a preemption that cost one seed some dev answers in an
             untrained condition.
           </li>
           <li>
-            The numbers come from the <a href={repositoryFile(HEADLINE)}>headline file</a>, which a
-            committed script writes from the scored runs and CI rebuilds.
+            The numbers come from committed files. Committed scripts write the{' '}
+            <a href={repositoryFile(HEADLINE)}>headline file</a>, the{' '}
+            <a href={repositoryFile(LADDER)}>ladder file</a> and the{' '}
+            <a href={repositoryFile(COST)}>cost file</a> from the scored runs, the runs&apos;
+            records and the bills, and CI rebuilds all three. CI also derives the{' '}
+            <a href={repositoryFile(SFT_POOL)}>repair pool file</a> and each seed&apos;s repair
+            round again, re-scores every row&apos;s scored summary and outcomes, which give the
+            tables by condition, the case-by-case counts and the replies refused as too large, and
+            counts the rerun&apos;s pair report again from its two passes. The token cap, the
+            response schema and the example count are the rows&apos; own records, the base and
+            schema rows&apos; run manifests and the few-shot row&apos;s prepare, which CI reads and
+            does not rebuild.
           </li>
         </ul>
       </section>

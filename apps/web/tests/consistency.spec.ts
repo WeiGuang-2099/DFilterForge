@@ -2,7 +2,7 @@ import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
 import {expect, test} from '@playwright/test';
-import type {Browser} from '@playwright/test';
+import type {Browser, Page} from '@playwright/test';
 
 import {fmt, isFmtKind} from '../lib/fmt';
 import {TERMS} from '../lib/terms';
@@ -214,7 +214,8 @@ function digestMismatches(value: Sourced, expected: unknown): string[] {
  * model text comes from the source, never from the page's data-cap, which
  * must agree with it. A not_measured status must be shown with the
  * unmeasured kind, and only it may be; so must a comparison's inconclusive
- * flag with the verdict kind, and a SHA-256 digest with the digest kind.
+ * flag with the verdict kind, and a SHA-256 digest with the digest kind. A
+ * USD amount, shown to the cent, keeps the exact amount in its title.
  */
 function mismatches(value: Sourced): string[] {
   const where = value.src;
@@ -264,6 +265,11 @@ function mismatches(value: Sourced): string[] {
   const digest = digestMismatches(value, expected);
   if (digest.length > 0) {
     return digest;
+  }
+  // The sweep skips a sourced value's attributes, so the amount a pointer
+  // shows on hover is checked here.
+  if (value.kind === 'usd' && value.title !== expected) {
+    return [`${where}: the title holds ${JSON.stringify(value.title)}, not the amount`];
   }
   const text = fmt(expected, value.kind);
   if (value.text !== text) {
@@ -703,11 +709,15 @@ test('the board shows the pool in its order and repair numbers from the allowed 
   );
 });
 
-test('the board labels only the registered primary comparison primary', async ({page}) => {
-  // The label is fixed words, which no value check sees. Per model,
-  // counterexample against bare is primary (docs/protocol.md, Repair);
-  // pooled, every comparison is secondary.
-  await page.goto('board/');
+/**
+ * Holds the comparison labels on one page to the registered ones: the
+ * pooled round's three comparisons, then each of the rounds' own three, in
+ * order. Pooled, every comparison is secondary; in a round of its own,
+ * counterexample against bare is primary and the two against resample carry
+ * no label (docs/protocol.md, Repair).
+ */
+async function expectRegisteredLabels(page: Page, route: string, rounds: number): Promise<void> {
+  await page.goto(route);
   const labelled = await page.locator('tr[data-label]').evaluateAll((rows) =>
     rows.map((row) => [
       row.getAttribute('data-label'),
@@ -715,18 +725,475 @@ test('the board labels only the registered primary comparison primary', async ({
       row.querySelector('.bd-tag')?.textContent ?? 'none',
     ]),
   );
-  const models = resolver.reelPool().length;
   const pooled = ['secondary', 'secondary', 'secondary'];
-  const perModel = ['primary', 'none', 'none'];
+  const perRound = ['primary', 'none', 'none'];
 
   expect(labelled.map(([label]) => label)).toEqual([
     ...pooled,
-    ...Array.from({length: models}, () => perModel).flat(),
+    ...Array.from({length: rounds}, () => perRound).flat(),
   ]);
   for (const [label, first, second, tag] of labelled) {
     expect(tag).toBe(label);
     expect(label === 'primary', `${first} - ${second}`).toBe(
       first === 'counterexample' && second === 'bare' && label !== 'secondary',
+    );
+  }
+}
+
+test('the board labels only the registered primary comparison primary', async ({page}) => {
+  // The label is fixed words, which no value check sees. Per model,
+  // counterexample against bare is primary (docs/protocol.md, Repair);
+  // pooled, every comparison is secondary.
+  await expectRegisteredLabels(page, 'board/', resolver.reelPool().length);
+});
+
+test("the training page labels only each seed's counterexample-bare comparison primary", async ({
+  page,
+}) => {
+  // Pooled over the seeds every comparison is secondary; per seed
+  // counterexample against bare is primary (docs/protocol.md, Repair,
+  // amended 2026-10-26). The labels are fixed words no value check sees.
+  const pool = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
+  await expectRegisteredLabels(
+    page,
+    'training/',
+    resolver.resolve(['len', pool, '/bases']) as number,
+  );
+});
+
+interface LadderRow {
+  readonly row: string;
+  readonly run: string;
+  readonly post_hoc: boolean;
+}
+
+interface LadderRung {
+  readonly rung: string;
+  /** The rows the step subtracts, by name; sft_mean names the seed rows. */
+  readonly first: string;
+  readonly second: string;
+  readonly reading: string;
+  readonly discordant_cases: number;
+  readonly difference: {readonly low: number; readonly high: number};
+}
+
+/** The few-shot row's example count, as the training page sources it. */
+function examplesSource(ladder: string): readonly unknown[] {
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const run = rows.find((row) => row.row === 'few_shot')?.run ?? '';
+  return ['ptr', `docs/results/${run}/prepare.json`, '/few_shot/k'];
+}
+
+/** The parsed data-src values under the first match of a selector, in order. */
+function sourcesIn(page: Page, selector: string): Promise<unknown[]> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((element) =>
+      Array.from(element.querySelectorAll('[data-src]'), (node): unknown =>
+        JSON.parse(node.getAttribute('data-src') ?? 'null'),
+      ),
+    );
+}
+
+/** The ladder rows that data-src values read, each once, in order. */
+function ladderRows(ladder: string, sources: readonly string[]): number[] {
+  const rows = sources.flatMap((source) => {
+    const [, file, at] = JSON.parse(source) as [string, string, unknown];
+    const found = file === ladder && typeof at === 'string' ? /^\/rows\/(\d+)\//.exec(at) : null;
+    return found === null ? [] : [Number(found[1])];
+  });
+  return [...new Set(rows)];
+}
+
+/**
+ * The value of the one sourced node, of [data-src, data-v] pairs, whose
+ * pointer ends with the given keys; undefined unless exactly one does.
+ */
+function valueAt(shown: readonly (readonly (string | null)[])[], keys: string): unknown {
+  const found = shown.filter(([source]) => {
+    const at: unknown = (JSON.parse(source ?? 'null') as unknown[] | null)?.[2];
+    return typeof at === 'string' && at.endsWith(`/${keys}`);
+  });
+  return found.length === 1 ? JSON.parse(found[0]?.[1] ?? 'null') : undefined;
+}
+
+// The outcome table's columns in the page's order: the words each shows and
+// the keys it reads in a ladder row (steps.tsx, PARTS, which the bars share).
+const OUTCOME_COLUMNS = [
+  ['strong exact', 'outcomes/strong_exact'],
+  ['silent-wrong', 'outcomes/silent_wrong'],
+  ['invalid', 'outcomes/invalid'],
+  ['malformed, cut at the token cap', 'malformed/truncated'],
+  ['malformed, other', 'malformed/other'],
+  ['shortcut', 'outcomes/shortcut'],
+  ['abstained', 'outcomes/abstained'],
+  ['provider failed', 'outcomes/provider_failed'],
+] as const;
+
+test("the training page's receipts mark the rule's two tests as the ladder holds them", async ({
+  page,
+}) => {
+  // Each mark and the zero words beside it are fixed words chosen from
+  // values, which no value check sees. baseline_ladder.py's rule: a step
+  // reads only when its interval excludes zero, an endpoint at zero not
+  // excluding it, and at least the minimum of cases are discordant; it then
+  // reads a gain above zero and a loss below it. A question's summary reads
+  // its own step and, besides it, only the example count, so no step stands
+  // under another step's title.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
+  const minimum = resolver.resolve(['ptr', ladder, '/bootstrap/min_discordant_cases']) as number;
+  const examples = JSON.stringify(examplesSource(ladder));
+  await page.goto('training/');
+  const drawn = await page.locator('li.tr-q').evaluateAll((items) =>
+    items.map((item) => ({
+      rung: item.getAttribute('data-rung'),
+      summary: Array.from(
+        item.querySelectorAll(':scope > details > summary [data-src]'),
+        (node) => node.getAttribute('data-src') ?? '',
+      ),
+      tests: Array.from(item.querySelectorAll('[data-test]'), (test) => ({
+        test: test.getAttribute('data-test'),
+        pass: test.getAttribute('data-pass'),
+        text: test.textContent ?? '',
+      })),
+    })),
+  );
+
+  expect(drawn.map(({rung}) => rung)).toEqual(rungs.map(({rung}) => rung));
+  rungs.forEach((rung, index) => {
+    const own = (source: string) => {
+      const [, file, at] = JSON.parse(source) as [string, string, unknown];
+      return file === ladder && typeof at === 'string' && at.startsWith(`/rungs/${String(index)}/`);
+    };
+    const summary = drawn[index]?.summary ?? [];
+    expect(summary.some(own), rung.rung).toBe(true);
+    expect(
+      summary.filter((source) => !own(source)),
+      rung.rung,
+    ).toEqual(summary.filter((source) => source === examples));
+    const zero = rung.difference.low > 0 || rung.difference.high < 0;
+    const enough = rung.discordant_cases >= minimum;
+    const tests = drawn[index]?.tests ?? [];
+    expect(
+      tests.map(({test, pass}) => [test, pass]),
+      rung.rung,
+    ).toEqual([
+      ['zero', zero ? 'yes' : 'no'],
+      ['discordant', enough ? 'yes' : 'no'],
+    ]);
+    expect(tests[0]?.text, rung.rung).toContain(zero ? 'excludes zero' : 'includes zero');
+    // The committed reading is the rule's word, which the page shows: a gain
+    // or a loss only when both tests hold, by the interval's side of zero.
+    expect(rung.reading, rung.rung).toBe(
+      zero && enough ? (rung.difference.low > 0 ? 'gain' : 'loss') : 'inconclusive',
+    );
+  });
+});
+
+test('the training page tags exactly the post hoc rows post hoc', async ({page}) => {
+  // No value check sees the tag; the protocol labels both baseline rows
+  // post hoc wherever they are shown (Training rules, amended 2026-10-26).
+  // Each labelled row of the strip, the receipts' bars and both tables
+  // draws from one ladder row; it carries the tag exactly when ladder.json
+  // marks that row post hoc, and the example count exactly when it is the
+  // few-shot row. Each table lists every row in ladder order.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const examples = JSON.stringify(examplesSource(ladder));
+  await page.goto('training/');
+  const section = page.locator('section[aria-labelledby="tr-steps"]');
+  await expect(section.locator('h2 [data-tag="post-hoc"]')).toHaveCount(
+    resolver.resolve(['ptr', ladder, '/post_hoc']) === true ? 1 : 0,
+  );
+  const items = await section
+    .locator('.tr-flow > li, .tr-mix, table.tr-table tbody tr')
+    .evaluateAll((all) =>
+      all.map((item) => ({
+        table: item.closest('table') !== null,
+        tagged: item.querySelector('[data-tag="post-hoc"]') !== null,
+        sources: Array.from(
+          item.querySelectorAll('[data-src]'),
+          (node) => node.getAttribute('data-src') ?? '',
+        ),
+      })),
+    );
+  const listed: number[] = [];
+  for (const {table, tagged, sources} of items) {
+    const drawn = new Set(
+      sources.flatMap((source) => {
+        const [, file, at] = JSON.parse(source) as [string, string, unknown];
+        const found =
+          file === ladder && typeof at === 'string' ? /^\/rows\/(\d+)\//.exec(at) : null;
+        return found === null ? [] : [Number(found[1])];
+      }),
+    );
+    expect(drawn.size, sources.join(' ')).toBeLessThanOrEqual(1);
+    const [index] = [...drawn];
+    const row = index === undefined ? undefined : rows[index];
+    expect(tagged, sources.join(' ')).toBe(row?.post_hoc === true);
+    expect(sources.includes(examples), sources.join(' ')).toBe(row?.row === 'few_shot');
+    if (table && index !== undefined) {
+      listed.push(index);
+    }
+  }
+  const order = rows.map((_, index) => index);
+  expect(listed).toEqual([...order, ...order]);
+});
+
+test("the training page's ledes and strip read each value in its place", async ({page}) => {
+  // A value swapped with another of its kind passes every value check, and
+  // the words beside it are fixed: the schema and few-shot rates could trade
+  // places, and so could the first two steps' readings, which both read
+  // inconclusive. Rows, steps and arms are found by their keys in the
+  // committed files.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const pool = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
+  const arms = resolver.resolve(['ptr', pool, '/arms']) as readonly {readonly arm: string}[];
+  const at = (pointer: string) => ['ptr', ladder, pointer];
+  const row = (name: string) => `/rows/${String(rows.findIndex((each) => each.row === name))}`;
+  const rung = (name: string) =>
+    `/rungs/${String(rungs.findIndex((each) => each.rung === name))}`;
+  const arm = (code: string) => `/arms/${String(arms.findIndex((each) => each.arm === code))}`;
+  const rate = (base: string) => ['value', 'low', 'high'].map((key) => at(`${base}/rate/${key}`));
+  const step = (name: string) => [at(`${rung(name)}/difference/value`), at(`${rung(name)}/reading`)];
+  const examples = examplesSource(ladder);
+  const steps = ['schema_minus_base', 'few_shot_minus_schema', 'sft_mean_minus_few_shot'];
+  await page.goto('training/');
+
+  expect(await sourcesIn(page, 'section[aria-labelledby="tr-steps"] p.tr-sec-lede')).toEqual([
+    at('/cases'),
+    at('/condition'),
+    at(`${row('base')}/rate/value`),
+    at(`${row('schema')}/rate/value`),
+    examples,
+    at(`${row('few_shot')}/rate/value`),
+    at('/sft_mean/rate/value'),
+    ...steps.map((name) => at(`${rung(name)}/reading`)),
+  ]);
+  expect(await sourcesIn(page, 'ol.tr-flow')).toEqual([
+    ...rate(row('base')),
+    ...step('schema_minus_base'),
+    ...rate(row('schema')),
+    ...step('few_shot_minus_schema'),
+    examples,
+    ...rate(row('few_shot')),
+    ...step('sft_mean_minus_few_shot'),
+    ...rate('/sft_mean'),
+  ]);
+  expect(await sourcesIn(page, 'section[aria-labelledby="tr-repair"] p.tr-sec-lede')).toEqual([
+    ['ptr', pool, `${arm('counterexample')}/triggered_items`],
+    ...['counterexample', 'bare', 'resample'].map((code) => [
+      'ptr',
+      pool,
+      `${arm(code)}/repaired`,
+    ]),
+  ]);
+});
+
+test("the training page's cost reads each amount in its place", async ({page}) => {
+  // The section sets values of one kind beside fixed words: four USD amounts
+  // in its lead and paragraph, and each session's requests, GPU hours and
+  // bill. Swapped, each still passes every value check: the bill would read
+  // as the cost per thousand requests. The table is read cell by cell under
+  // its header words, so a value moved to another column fails too.
+  const cost = 'docs/results/sft-v1/cost.json';
+  const at = (pointer: string) => ['ptr', cost, pointer];
+  const sessions = resolver.resolve(['ptr', cost, '/sessions']) as readonly {
+    readonly unread: unknown;
+  }[];
+  const unread = sessions.findIndex((session) => session.unread !== null);
+  const section = 'section[aria-labelledby="tr-cost"]';
+  await page.goto('training/');
+
+  expect(await sourcesIn(page, `${section} p.tr-cost-big`)).toEqual([
+    at('/total/usd_per_1000_requests'),
+  ]);
+  expect(await sourcesIn(page, `${section} p.tr-sub`)).toEqual([
+    at('/total/requests'),
+    ['len', cost, '/sessions'],
+    at('/total/bill_usd'),
+    at('/total/gpu_hours'),
+    at(`/sessions/${String(unread)}/unread/requests`),
+    at('/total/gpu_usd'),
+    at('/usd_per_gpu_hour'),
+  ]);
+  expect(await sourcesIn(page, `${section} p.tr-note`)).toEqual([
+    at('/excluded/date'),
+    at('/excluded/bill_usd'),
+  ]);
+  const table = await page.locator(`${section} table`).evaluate((element) => ({
+    head: Array.from(element.querySelectorAll('thead th'), (cell) => cell.textContent),
+    body: Array.from(element.querySelectorAll('tbody tr'), (row) =>
+      Array.from(row.children, (cell) =>
+        Array.from(cell.querySelectorAll('[data-src]'), (node): unknown =>
+          JSON.parse(node.getAttribute('data-src') ?? 'null'),
+        ),
+      ),
+    ),
+  }));
+  expect(table.head).toEqual(['Session', 'Requests', 'GPU hours', 'Bill', 'What it sent']);
+  expect(table.body).toEqual(
+    sessions.map((session, index) => {
+      const of = (key: string) => `/sessions/${String(index)}/${key}`;
+      return [
+        [at(of('date'))],
+        [at(of('requests'))],
+        [at(of('gpu_hours'))],
+        [at(of('bill_usd'))],
+        [
+          ['len', cost, of('runs')],
+          ...(session.unread === null
+            ? []
+            : [['len', cost, of('unread/runs')], at(of('unread/requests'))]),
+        ],
+      ];
+    }),
+  );
+});
+
+test("the training page's tables and questions read each count under its words", async ({
+  page,
+}) => {
+  // A count swapped with another of its row passes every value check, and
+  // the words above or beside it are fixed: silent-wrong and invalid, the two
+  // malformed parts, the two coverage strata, or a question's cases better
+  // and worse could trade places, and a question could draw another step's
+  // rows.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
+  const at = (pointer: string) => ['ptr', ladder, pointer];
+  const strata = [
+    ['every_gold_field_retrieved', 'Every gold field retrieved'],
+    ['some_gold_field_missing', 'Some gold field missing'],
+  ] as const;
+  await page.goto('training/');
+  const read = (labelledBy: string) =>
+    page.locator(`table[aria-labelledby="${labelledBy}"]`).evaluate((element) => {
+      const sources = (cell: Element) =>
+        Array.from(cell.querySelectorAll('[data-src]'), (node): unknown =>
+          JSON.parse(node.getAttribute('data-src') ?? 'null'),
+        );
+      return {
+        head: Array.from(element.querySelectorAll('thead th'), (cell) => ({
+          words: cell.textContent ?? '',
+          sources: sources(cell),
+        })),
+        body: Array.from(element.querySelectorAll('tbody tr'), (row) =>
+          Array.from(row.querySelectorAll('td'), sources),
+        ),
+      };
+    });
+  const outcomes = await read('tr-steps-outcomes');
+  expect(outcomes.head).toEqual(
+    ['Row', ...OUTCOME_COLUMNS.map(([words]) => words)].map((words) => ({words, sources: []})),
+  );
+  expect(outcomes.body).toEqual(
+    rows.map((_, index) => OUTCOME_COLUMNS.map(([, key]) => [at(`/rows/${String(index)}/${key}`)])),
+  );
+  const coverage = await read('tr-steps-coverage');
+  expect(coverage.head.map(({words, sources}) => ({words: words.split(',')[0], sources}))).toEqual([
+    {words: 'Row', sources: []},
+    ...strata.map(([key, words]) => ({words, sources: [at(`/coverage_items/${key}`)]})),
+  ]);
+  expect(coverage.body).toEqual(
+    rows.map((_, index) =>
+      strata.map(([key]) =>
+        ['value', 'low', 'high'].map((bound) =>
+          at(`/rows/${String(index)}/coverage/${key}/${bound}`),
+        ),
+      ),
+    ),
+  );
+  // A question's bars draw its first row or rows, then its second.
+  const rowsOf = (name: string) =>
+    rows.flatMap((row, index) =>
+      row.row === (name === 'sft_mean' ? 'sft' : name) ? [[index]] : [],
+    );
+  for (const [index, rung] of rungs.entries()) {
+    const question = `li.tr-q[data-rung="${rung.rung}"]`;
+    expect(await sourcesIn(page, `${question} .tr-of`), rung.rung).toEqual(
+      ['first', 'second'].map((side) => at(`/rungs/${String(index)}/${side}_better_cases`)),
+    );
+    const bars = await page.locator(`${question} .tr-mix`).evaluateAll((all) =>
+      all.map((mix) =>
+        Array.from(
+          mix.querySelectorAll('[data-src]'),
+          (node) => node.getAttribute('data-src') ?? '',
+        ),
+      ),
+    );
+    expect(bars.map((sources) => ladderRows(ladder, sources)), rung.rung).toEqual([
+      ...rowsOf(rung.first),
+      ...rowsOf(rung.second),
+    ]);
+  }
+});
+
+test('the training page draws each mark from the counts and bounds it shows', async ({page}) => {
+  // A square, a bar part's width and a scale's positions are geometry, which
+  // no value check sees. Each arm draws one square per failed answer and
+  // fills its repaired ones first, each part of a bar grows by the count it
+  // hides, and each question's interval and value sit at the bounds and value
+  // its summary shows. A style property left out reads as no number.
+  const pool = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  await page.goto('training/');
+  const arms = await page
+    .locator('section[aria-labelledby="tr-repair"] .tr-arm')
+    .evaluateAll((all) =>
+      all.map((arm) => ({
+        shown: Array.from(arm.querySelectorAll('[data-src]'), (node) => [
+          node.getAttribute('data-src'),
+          node.getAttribute('data-v'),
+        ]),
+        filled: Array.from(arm.querySelectorAll('.tr-sq'), (square) =>
+          square.classList.contains('tr-sq-on'),
+        ),
+      })),
+    );
+  expect(arms).toHaveLength(resolver.resolve(['len', pool, '/arms']) as number);
+  for (const {shown, filled} of arms) {
+    const [triggered, repaired] = [valueAt(shown, 'triggered_items'), valueAt(shown, 'repaired')];
+    expect(filled, `${String(repaired)} of ${String(triggered)}`).toEqual(
+      Array.from({length: Number(triggered)}, (_, index) => index < Number(repaired)),
+    );
+  }
+
+  const parts = await page.locator('.tr-mix .tr-seg').evaluateAll((all) =>
+    all.map((part) => ({
+      grow: part.style.flexGrow,
+      count: part.querySelector('[data-src]')?.getAttribute('data-v') ?? 'null',
+    })),
+  );
+  expect(parts.length).toBeGreaterThan(0);
+  expect(parts.map(({grow}) => (grow === '' ? null : Number(grow)))).toEqual(
+    parts.map(({count}): unknown => JSON.parse(count)),
+  );
+
+  const scales = await page.locator('li.tr-q').evaluateAll((items) =>
+    items.map((item) => {
+      const scale = item.querySelector<HTMLElement>('.tr-scale');
+      return {
+        drawn: ['--lo', '--hi', '--v'].map((name) => {
+          const text = scale?.style.getPropertyValue(name) ?? '';
+          return text === '' ? null : Number(text);
+        }),
+        shown: Array.from(item.querySelectorAll('.tr-val [data-src]'), (node) => [
+          node.getAttribute('data-src'),
+          node.getAttribute('data-v'),
+        ]),
+      };
+    }),
+  );
+  expect(scales).toHaveLength(resolver.resolve(['len', ladder, '/rungs']) as number);
+  for (const {drawn, shown} of scales) {
+    expect(drawn).toEqual(
+      ['low', 'high', 'value'].map((key) => valueAt(shown, `difference/${key}`)),
     );
   }
 });
@@ -1048,6 +1515,28 @@ test('a SHA-256 digest shows its first twelve digits and keeps the whole digest'
   expect(mismatches(shown(digest, 'digest', short, short))).toHaveLength(1);
   expect(mismatches(shown(label, 'text', name, null))).toEqual([]);
   expect(mismatches(shown(label, 'digest', name, name))).toHaveLength(1);
+});
+
+test('a USD amount keeps the exact amount in its title', () => {
+  // The title is what a pointer shows on hover. Another amount there, or the
+  // amount rounded as the text shows it, would pass every other check.
+  const cost = 'docs/results/sft-v1/cost.json';
+  const bill = ['ptr', cost, '/total/bill_usd'];
+  const amount = String(resolver.resolve(bill));
+  const other = String(resolver.resolve(['ptr', cost, '/total/gpu_usd']));
+  const shown = (title: string | null): Sourced => ({
+    src: JSON.stringify(bill),
+    v: JSON.stringify(amount),
+    kind: 'usd',
+    cap: null,
+    text: fmt(amount, 'usd'),
+    title,
+  });
+
+  expect(mismatches(shown(amount))).toEqual([]);
+  expect(mismatches(shown(other))).toHaveLength(1);
+  expect(mismatches(shown(fmt(amount, 'usd')))).toHaveLength(1);
+  expect(mismatches(shown(null))).toHaveLength(1);
 });
 
 test('the sweep finds a number in any script, in a list start and outside the terms', async ({

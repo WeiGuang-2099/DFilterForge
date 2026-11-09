@@ -22,7 +22,7 @@ jobs:
       - run: docker compose --profile dev build test
       - run: docker compose --profile dev run --rm test pyink --check src tests scripts modal
       - run: docker compose --profile dev run --rm test isort --check-only src tests scripts modal
-      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py scripts/two_turn_smoke.py scripts/repair_arms.py scripts/sft_headline.py scripts/sft_analysis.py scripts/judge_study.py
+      - run: docker compose --profile dev run --rm test pylint src scripts/model_run.py scripts/provider_reply_replay.py scripts/retrieval_recall.py scripts/probe_adequacy.py scripts/dev_bakeoff.py scripts/dev_bakeoff_configs.py scripts/test_passes.py scripts/two_turn_smoke.py scripts/repair_arms.py scripts/sft_headline.py scripts/sft_analysis.py scripts/judge_study.py scripts/baseline_ladder.py scripts/session_cost.py
       - run: docker compose --profile dev run --rm test pyright
       - run: docker compose --profile dev run --rm test lint-imports --no-cache
       - run: docker compose --profile dev run --rm test
@@ -166,6 +166,39 @@ jobs:
           --volume "$PWD/docs:/workspace/docs:ro"
           test sh -c 'test -d /workspace/docs/results
           && python scripts/sft_analysis.py --check'
+      - name: Rebuild the baseline ladder from the committed scores
+        # After the re-score and the SFT headline above, so the ladder reads
+        # scores CI has just reproduced and its test node compares them with
+        # a headline CI has just rebuilt. The test node builds the ladder
+        # from the committed base and seed rows, with copies of the base row
+        # in the two baseline rows' places, and must give the SFT headline's
+        # rates, mean and mean-minus-row block; then the committed ladder
+        # must equal its rebuild. The suite skips the node for the missing
+        # docs/ tree, and the test -d rules that out here.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_baseline_ladder.py::test_on_the_committed_rows_the_sft_rung_is_the_headline_mean
+          && python scripts/baseline_ladder.py --check'
+      - name: Rebuild the session cost from the committed runs and bills
+        # Beside the other sft-v1 rebuilds, though it reads no score: the
+        # committed bills, each listed run's manifest and attempt latencies,
+        # and the ruled 224 requests of the two test passes reported not run.
+        # The test node holds the committed sessions to the notes' request
+        # counts and the 224 to the corrected test prepares' prompt count;
+        # then the committed cost must equal its rebuild. Until every listed
+        # run is published the node skips and --check refuses, so the step
+        # fails rather than passing on a skip. The suite skips the node for
+        # the missing docs/ tree, and the test -d rules that out here.
+        run: >-
+          docker compose --profile dev run --rm
+          --volume "$PWD/docs:/workspace/docs:ro"
+          test sh -c 'test -d /workspace/docs/results
+          && python -m pytest -q -rs -p no:cacheprovider
+          tests/test_session_cost.py::test_the_committed_sessions_sent_the_requests_the_notes_count
+          && python scripts/session_cost.py --check'
       - name: Rebuild the judge study's table from its published run
         # After the re-score above, so the table counts tshark outcomes CI
         # has just reproduced. It refuses a published test run that answers
