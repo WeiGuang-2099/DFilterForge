@@ -1,0 +1,1 @@
+{"expression":{"child":{"children":[{"field":"dns.qry.type","kind":"predicate","operator":"eq","value":28},{"field":"dns.flags.response","kind":"predicate","operator":"eq","value":true}],"kind":"any"},"kind":"not"},"ir_schema_version":"1.0","scope":"packet"}

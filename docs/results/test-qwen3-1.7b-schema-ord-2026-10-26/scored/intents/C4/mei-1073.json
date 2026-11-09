@@ -1,0 +1,1 @@
+{"expression":{"child":{"children":[{"field":"ddp.src.net","kind":"predicate","operator":"eq","value":1920200000},{"field":"ddp.dst.net","kind":"predicate","operator":"eq","value":1920200000}],"kind":"all"},"kind":"not"},"ir_schema_version":"1.0","scope":"packet"}

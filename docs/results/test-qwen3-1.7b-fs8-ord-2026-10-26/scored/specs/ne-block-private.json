@@ -1,0 +1,1 @@
+{"case_id":"ne-block-private","missing_slots":[],"rationale":"Block every packet from 10.0.0.0/8 at the firewall; an enforcement action, not a selection.","split":"test","status":"not_expressible"}

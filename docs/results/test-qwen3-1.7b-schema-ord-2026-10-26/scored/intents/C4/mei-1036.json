@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"tcp.srcport","kind":"predicate","operator":"ne","value":443},{"field":"tcp.dstport","kind":"predicate","operator":"ne","value":443}],"kind":"all"},"ir_schema_version":"1.0","scope":"packet"}

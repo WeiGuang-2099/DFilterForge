@@ -1,0 +1,1 @@
+{"case_id":"ne-port-scan","missing_slots":[],"rationale":"Packets that belong to a port scan, defined as one source probing many ports; behaviour across packets with no per-packet field. Contestable against single-packet heuristics.","split":"test","status":"not_expressible"}

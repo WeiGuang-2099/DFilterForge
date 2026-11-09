@@ -1,0 +1,1 @@
+{"expression":{"children":[{"field":"ip.ttl","kind":"predicate","operator":"gt","value":1},{"children":[{"field":"ip.src","kind":"predicate","operator":"in_subnet","value":"0.0.0.0/0"},{"field":"tcp.flags.ece","kind":"predicate","operator":"eq","value":false}],"kind":"all"}],"kind":"any"},"ir_schema_version":"1.0","scope":"packet"}
