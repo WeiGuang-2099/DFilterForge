@@ -113,6 +113,9 @@
 .tr-step-loss .tr-flow-ar::after {border-left-color: var(--dis);}
 .tr-flow-cell {flex: 1 1 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;}
 .tr-flow-nm {font: 500 12.5px/1.3 var(--sans); color: var(--ink-2);}
+/* Both post hoc levels carry their tag on a line of its own, a matched
+   pair however their names wrap. */
+.tr-flow-nm .tr-tag {display: table; margin-top: 3px;}
 .tr-flow-v {font: 500 clamp(26px, 3.4vw, 40px)/1 var(--mono); letter-spacing: -0.03em; font-variant-numeric: tabular-nums;}
 .tr-flow-sft_mean .tr-flow-v {font-weight: 700;}
 .tr-flow .bd-ci {font: 11.5px/1.4 var(--mono); color: var(--ink-2);}
@@ -122,7 +125,7 @@
 .tr-q > details > summary {display: block; list-style: none; cursor: pointer;}
 .tr-q > details > summary::-webkit-details-marker {display: none;}
 .tr-q .tr-row {grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) minmax(0, 15rem); gap: 4px 22px; padding: 14px 0; border-bottom: 0;}
-.tr-q .tr-name b {display: block; font: 600 15px/1.3 var(--sans);}
+.tr-q .tr-name b {display: block; font: 600 15px/1.3 var(--sans); text-wrap: balance;}
 .tr-q summary:hover .tr-name b {text-decoration: underline; text-underline-offset: 3px;}
 .tr-q-mark::before {content: "\2193"; color: var(--ink-3);}
 .tr-q details[open] .tr-q-mark::before {content: "\2191";}
@@ -130,7 +133,9 @@
 .tr-q .tr-scale-difference::before {top: -5px; bottom: -5px; border-left: 1.5px solid var(--ink-2);}
 .tr-q .tr-ci {top: 8px; height: 10px;}
 .tr-q .tr-ci::before {top: 4px; height: 2px;}
-.tr-q .tr-dot {top: 7px; width: 12px; height: 12px; margin-left: -6px;}
+/* A question's point is small enough that a short interval's cap still
+   shows beside it on a phone's scale. */
+.tr-q .tr-dot {top: 9px; width: 8px; height: 8px; margin-left: -4px;}
 .tr-q-loss .tr-ci, .tr-q-loss .tr-ci::before {border-color: var(--dis);}
 .tr-q-loss .tr-ci::before, .tr-q-loss .tr-dot {background: var(--dis);}
 .tr-axis-q {grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) minmax(0, 15rem); gap: 4px 22px;}
@@ -145,7 +150,9 @@
 .tr-pass .tr-mark::before {content: "+"; color: var(--ink);}
 .tr-fail .tr-mark::before {content: "\2013"; color: var(--dis);}
 .tr-mixes {display: flex; flex-direction: column; min-width: 0;}
-.tr-mix-nm {margin: 3px 0 1px; font: 10.5px/1.2 var(--mono); color: var(--ink-2);}
+/* A label's line is as tall as a post hoc tag, so every bar sits as far
+   below its label, tagged or not. */
+.tr-mix-nm {margin: 3px 0 1px; font: 10.5px/19px var(--mono); color: var(--ink-2);}
 .tr-mix-bar {display: flex; height: 18px; outline: 1px solid var(--line-2); outline-offset: -1px;}
 .tr-seg {position: relative; flex-basis: 0; min-width: 0; background: var(--o);}
 .tr-seg + .tr-seg {border-left: 1px solid var(--ground);}
@@ -162,6 +169,8 @@
 .tr-legend {display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 0; list-style: none; font: 12px/1.4 var(--sans); color: var(--ink-2);}
 .tr-legend li {display: inline-flex; align-items: center; gap: 6px;}
 .tr-sw {display: inline-block; flex: none; width: 14px; height: 10px; background: var(--o); outline: 1px solid var(--line-2); outline-offset: -1px;}
+/* These two swatches show their segments' own rings, as the bars do. */
+.tr-sw.tr-o-abstained, .tr-sw.tr-o-provider_failed {outline: 0;}
 .tr-table th.tr-n, .tr-table td.tr-n {text-align: right;}
 .tr-table tbody th {font: 500 13.5px/1.35 var(--sans);}
 /* A row's label, counts and amounts keep one line, so on a phone the table
@@ -189,7 +198,9 @@
 .tr-sq-on {background: var(--ink); outline-color: var(--ink);}
 
 .tr-cost-big {margin-top: 6px; font: 600 clamp(30px, 4vw, 48px)/1.05 var(--sans); font-stretch: 106%; letter-spacing: -0.018em;}
-.tr-cost-big .m {font-weight: 500; letter-spacing: -0.03em;}
+/* A mono space is about twice a word space at this size; this brings the
+   one inside the amount back to a word space. */
+.tr-cost-big .m {font-weight: 500; letter-spacing: -0.03em; word-spacing: -0.3em;}
 .tr-cost-big + .tr-sub {margin-top: 8px; font-size: 15px;}
 
 /* Four across, a step's nowrap tag can be wider than its column, and below
@@ -227,8 +238,10 @@
    an empty square keeps its outline, which they recolour, as the judge
    figure's empty squares keep their borders; a repaired square stays
    solid, and the bars keep their fills, as the judge figure's false
-   acceptances do. */
+   acceptances do. A question's point and interval line, drawn as fills,
+   stay solid in the text colour, as those acceptances do. */
 @media (forced-colors: active) {
   .tr-sq-on {forced-color-adjust: none; background: CanvasText; outline-color: CanvasText;}
   .tr-mix-bar, .tr-sw, .tr-flow-ar {forced-color-adjust: none;}
+  .tr-q .tr-dot, .tr-q .tr-ci::before {forced-color-adjust: none; background: CanvasText;}
 }
