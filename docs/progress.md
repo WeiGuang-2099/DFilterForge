@@ -2805,6 +2805,44 @@ pyink to 26.5.1 took black past its cache-file advisory, and filelock
 Action advisory stays open, since this repository does not use that
 action. No published number changed. Hosted CI passed on main.
 
+## PR #48 merged: 2026-10-26
+
+PR #48 merged `selfserved-baselines` into `main` as bffc33b, before any
+of its requests. The call step now stops a pass at its first HTTP 5xx or
+408, timeout or dropped connection. Two untrained rows of the base model
+are registered: base + the typed-IR JSON schema
+(`dfilterforge.answer_schema`) and base + eight training examples + the
+schema (`dfilterforge.few_shot`), C4 only, with their dev and test
+prompt sets seeded and the test ones admitted 15th and 16th. So is the
+1.7B repair round on the three SFT seeds, with its six plans and nine
+dev arm prompt sets. The rules are the protocol's amendments of
+2026-10-26 and the self-served note's Baseline rows and Repair round. No
+published number changed. The PR was merged within a minute of opening;
+hosted CI, which finished later, passed on the PR and on main.
+
+## PR #49 merged: 2026-10-31
+
+PR #49 merged `selfserved-results` into `main` as 1d739af. The 1.7B
+repair round ran on the three SFT seeds in the sessions of 2026-10-28
+(dev) and 2026-10-31 (test). On dev no arm repaired any of the 46
+triggered items. On test the counterexample arm repaired 0 of the 125
+triggered items, the bare arm 2 and the resample arm 1, and no
+comparison reads as a difference: counterexample minus bare is -0.016
+[-0.041, 0.000] with 2 discordant cases
+([pool](results/repair-pool/test-qwen3-1.7b-sft.json)). The baseline
+rows' dev passes answered one string on all 80 items: the client sorted
+the schema's keys, so once an answer opened with `schema_version` and
+`status`, as the prompt lists them, the server's grammar allowed only
+`not_expressible`. 548084b sends each body's
+keys in the order they were built, the protocol's correction of
+2026-10-31 registers the re-runs under ids tagged `ord`, their test
+prompt sets are admitted 26th and 27th, and the two 2026-10-26 test
+passes are reported not run. The first session attempt, on 2026-10-27,
+waited 15 minutes for an L4 and ran nothing, at no charge; the rule it
+gave is in `docs/usage.md` (Each session). The PR was merged within a
+minute of opening; hosted CI, which finished later, passed on the PR and
+on main.
+
 ## Planned next
 
 The owner's rulings of 2026-10-06 fix three points of this order. The site
