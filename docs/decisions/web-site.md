@@ -574,8 +574,11 @@ training page fails the build when `training.json` lacks the baseline
 ladder, the SFT repair round or the cost, or when no session names passes
 reported not run, since its fixed words state all four; its components
 fail it on a step's reading other than `gain`, `loss` or `inconclusive`,
-on a pooled round without its counterexample, bare or resample arm, and
-on an arm that repaired more answers than it was sent.
+on a round, pooled or a seed's, whose arms are not exactly the registered
+counterexample, bare and resample arms, so an unknown or a missing arm
+code stops it, and on an arm that repaired more answers than it was sent.
+So the lede, the arm blocks and each seed's bars show the same arms, in
+that order.
 - **Sourced components.** `<Num>` renders a number as a link to the GitHub
   blob of its source file at the source commit, with `data-src`, `data-v` and
   `data-fmt`. It accepts only the kinds that format a number, a boolean or
@@ -659,6 +662,9 @@ on an arm that repaired more answers than it was sent.
   - a SHA-256 digest shown other than as a digest, or a digest whose text
     is not the first twelve digits of the committed value or whose `title`
     does not hold the whole of it, and the digest kind on any other value;
+  - a USD amount whose `title` is not the exact committed amount, which
+    the number sweep cannot see, since it skips a sourced value's
+    attributes;
   - a Unicode number character outside a sourced value, a script, a style
     or a `<Term>`, in the text, a swept attribute (`start` included) or
     `document.title`;
@@ -666,7 +672,7 @@ on an arm that repaired more answers than it was sent.
   - a server-rendered HTML file whose `data-src` set differs from the
     hydrated page's.
 
-  The first four checks run twice per route: on the hydrated page, and in
+  The first five checks run twice per route: on the hydrated page, and in
   a browser context with JavaScript disabled, which sees the HTML as the
   server rendered it. A number that only the server HTML shows, and that
   hydration removes, reaches every visitor without JavaScript, every crawler
@@ -690,19 +696,34 @@ on an arm that repaired more answers than it was sent.
   in the ladder's order of steps, marks the reading rule's two tests met
   or not met in its receipt, and says its interval excludes or includes
   zero, as `ladder.json`'s bounds and discordant cases give them, an
-  endpoint at 0 not excluding 0; the step's committed reading must be a
-  gain or a loss exactly when both tests are met. Its summary reads its
-  own step and, besides it, only the example count. The post hoc tag sits
-  on the heading exactly when `ladder.json` marks the ladder post hoc, and
-  on a row label of the strip, the receipts' bars or the two tables
-  exactly when it marks that row post hoc; of those labels only the
-  few-shot row's shows the example count, and each table lists every row
-  in ladder order. The pointers the two ledes and the strip read are
-  pinned in order, since the schema and few-shot rates, or the first two
-  steps' readings, could trade places and pass every value check. The
-  comparison labels are checked as on the board: pooled over the seeds
-  every comparison is secondary, and in each seed's round counterexample
-  against bare is primary.
+  endpoint at 0 not excluding 0; the step's committed reading must be the
+  rule's word: `gain` or `loss` exactly when both tests are met, by the
+  side of zero its interval lies on, and `inconclusive` otherwise. Its
+  summary reads its own step and, besides it, only the example count. The
+  post hoc tag sits on the heading exactly when `ladder.json` marks the
+  ladder post hoc, and on a row label of the strip, the receipts' bars or
+  the two tables exactly when it marks that row post hoc; of those labels
+  only the few-shot row's shows the example count, and each table lists
+  every row in ladder order. The pointers the two ledes and the strip read
+  are pinned in order, since the schema and few-shot rates, or the first
+  two steps' readings, could trade places and pass every value check, and
+  so are those of the cost section's lead, paragraph and note, whose USD
+  amounts could trade places the same way. The cost table and the ladder's
+  two tables are read cell by cell under their header words, so a value
+  moved to another column fails: the cost table's columns are Session,
+  Requests, GPU hours, Bill and What it sent, and each column of the
+  outcome and coverage tables is tied to the `ladder.json` key its cells
+  read in every row. Each question's cases better and worse are its own
+  step's, and its bars draw its step's first row, or the seeds for the
+  mean, then its second. The marks are geometry no value check sees, so
+  they are derived again too: each pooled arm draws one square per answer
+  it was sent, its repaired ones filled first; each part of a bar grows by
+  the count it hides; and each question's scale places its interval and
+  point at the bounds and difference its summary shows. A style property
+  left out reads as no number, so it cannot pass for the first step's low
+  bound, 0. The comparison labels are checked as on the board: pooled
+  over the seeds every comparison is secondary, and in each seed's round
+  counterexample against bare is primary.
   Separately, the test fails when the receipt and case routes differ from
   the resolver's executed rows, and when the resolver's own reading of the
   registry and of rule `reel-v1` gives other shown runs, another Reel pool,
@@ -729,9 +750,13 @@ on an arm that repaired more answers than it was sent.
   `test_the_committed_dev_pool_picks_the_registered_dev_reel` repeats the
   dev check that `disproof-reel.md` recorded (Measured). The training
   blocks' refusal cases each change one file in a copy of the committed
-  files the blocks read, so they too run only with `docs/` mounted. Among
-  them, a conclusive flag the 1.7B rule reads, on either side of zero, is
-  exported, so a rule that refused every conclusive flag would fail.
+  files the blocks read, so they too run only with `docs/` mounted. The
+  ladder's parametrized cases each name the check they trip, and the
+  export's message must name that check alone, so a case that another
+  check also refuses cannot hide the loss of its own. A comparison flagged
+  conclusive with an endpoint at 0, low or high, stops the export, while
+  one the 1.7B rule reads, on either side of zero, is exported, so a rule
+  that refused every conclusive flag would fail.
 
 ### CI
 
