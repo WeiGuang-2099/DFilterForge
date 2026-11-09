@@ -427,9 +427,10 @@ The 125 test items are 58 distinct items in 36 of the 40 cases.
 
 ## Measured
 
-Each pass and each training run below ran on 2026-10-08, except adapter
-sessions 3 and 4, on 2026-10-18 and 2026-10-20; every pass records source
-revision e1f61bd, except seed 2026's rerun in session 4, which records
+Each pass and each training run in the first table below ran on
+2026-10-08, except adapter sessions 3 and 4, on 2026-10-18 and
+2026-10-20; every pass records source revision e1f61bd, except
+seed 2026's rerun in session 4, which records
 c9dddb8. Costs are each Modal app's bill, from deploy or start to stop,
 read with `modal billing report` (hourly, local time, by resource) on
 2026-10-08 and again on 2026-10-18, whose rows are in
@@ -439,8 +440,9 @@ and for session 4 on 2026-10-20, in
 the dev total equals the owner's reading of the usage page. The L4 share
 at USD 0.80 an hour gives the GPU time. The estimates in `docs/usage.md`
 put the base row's dev and test passes near USD 1 and the whole plan near
-USD 7; Modal billed USD 5.16 in all, the failed first build and the rerun
-included, of which USD 4.87 before the rerun.
+USD 7; Modal billed USD 5.16 in all from 2026-10-07 to 2026-10-20, the
+failed first build and the rerun included, of which USD 4.87 before the
+rerun.
 
 | Run | Work | Total, USD | L4, USD (about) |
 | --- | --- | ---: | ---: |
@@ -491,6 +493,28 @@ the SHA-256 of each adapter's weights and config in `adapters.sha256`
 the final-step checkpoint and run-average train losses of 0.024, 0.023
 and 0.023 (seeds 17, 42, 2026); the last logged losses are about 1e-4 per
 target token, up to 8e-4 for seed 17.
+
+The baseline rows and the 1.7B repair round took three sessions, one
+`dfilterforge-vllm` app each. Their committed runs record source
+revisions bffc33b (2026-10-28), b7877ca (2026-10-31) and da4b3e8
+(2026-11-05). The sessions' bills were read with
+`modal billing report` (hourly, local time, by resource) on 2026-11-09,
+and their rows are in
+[`evidence/self-served/modal-billing-2026-10-28-to-11-05.json`](evidence/self-served/modal-billing-2026-10-28-to-11-05.json).
+Modal billed USD 1.15 for the three, over the 1,121 requests the cost
+counts (Baseline rows), and the L4 share at USD 0.80 an hour gives the
+minutes, as above. The attempt of 2026-10-27 never got a GPU and billed
+nothing. An app of 2026-10-29, `ap-oeAVuNiK99WrMlnHTKvJkL`, billed
+USD 0.0108 and sent none of these runs' requests, so the cost leaves it
+out and names it. The exact sums, the cost per 1,000 requests and the
+GPU time the committed runs' latencies sum to are in
+[`results/sft-v1/cost.json`](../results/sft-v1/cost.json).
+
+| Session | Work | Total, USD | L4, USD (about) |
+| --- | --- | ---: | ---: |
+| 2026-10-28, `ap-gCT9ocTQKMTfTF5SLJER4I` | The nine dev repair arm runs (138 requests), the two 2026-10-26 dev passes (80) and the two 2026-10-26 test passes reported not run (224, their prompt count): 442 requests | 0.27 | 0.25 (19 min) |
+| 2026-10-31, `ap-GP0X6i9el6rilY602ncFdg` | The nine test repair arm runs: 375 requests | 0.27 | 0.25 (19 min) |
+| 2026-11-05, `ap-SQliMSGAdrKbVcwmGYI84B` | The corrected baseline rows' dev passes (40 requests each) and test passes (112 each): 304 requests | 0.61 | 0.56 (42 min) |
 
 ## Limits
 
