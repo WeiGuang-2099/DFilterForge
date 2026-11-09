@@ -54,7 +54,6 @@ export function SessionCost({cost, unread}: SessionCostProps): ReactNode {
           <thead>
             <tr>
               <th scope="col">Session</th>
-              <th scope="col">What it sent</th>
               <th className="tr-n" scope="col">
                 Requests
               </th>
@@ -64,6 +63,7 @@ export function SessionCost({cost, unread}: SessionCostProps): ReactNode {
               <th className="tr-n" scope="col">
                 Bill
               </th>
+              <th scope="col">What it sent</th>
             </tr>
           </thead>
           <tbody>
@@ -72,6 +72,15 @@ export function SessionCost({cost, unread}: SessionCostProps): ReactNode {
                 <th scope="row">
                   <Str node={session.date} />
                 </th>
+                <td className="tr-n">
+                  <Num kind="int" node={session.requests} />
+                </td>
+                <td className="tr-n">
+                  <Num kind="num" node={session.gpu_hours} />
+                </td>
+                <td className="tr-n">
+                  USD <Usd node={session.bill_usd} />
+                </td>
                 <td className="tr-wrap">
                   <Num kind="int" node={session.runs} /> runs
                   {session.unread === null ? null : (
@@ -81,15 +90,6 @@ export function SessionCost({cost, unread}: SessionCostProps): ReactNode {
                       requests
                     </>
                   )}
-                </td>
-                <td className="tr-n">
-                  <Num kind="int" node={session.requests} />
-                </td>
-                <td className="tr-n">
-                  <Num kind="num" node={session.gpu_hours} />
-                </td>
-                <td className="tr-n">
-                  USD <Usd node={session.bill_usd} />
                 </td>
               </tr>
             ))}
