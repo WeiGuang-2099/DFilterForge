@@ -26,7 +26,8 @@ function number(node: NumNode, what: string): number {
   return node.v;
 }
 
-function count(node: NumNode): number {
+/** A count a sourced node holds; a mark is drawn only from counts. */
+export function count(node: NumNode): number {
   if (typeof node.v !== 'number' || !Number.isSafeInteger(node.v) || node.v < 0) {
     throw new Error(`training: ${JSON.stringify(node.v)} is not a count`);
   }
@@ -54,13 +55,20 @@ export function Scale({interval, scale, what}: ScaleProps): ReactNode {
   );
 }
 
+interface ValueProps {
+  readonly interval: Interval;
+  /** False inside a summary, which may hold no link. */
+  readonly link?: boolean;
+}
+
 /** A value with its interval, as the board writes one. */
-export function Value({interval}: {readonly interval: Interval}): ReactNode {
+export function Value({interval, link = true}: ValueProps): ReactNode {
   return (
     <span>
-      <Num kind="rate" node={interval.value} />{' '}
+      <Num kind="rate" link={link} node={interval.value} />{' '}
       <span className="bd-ci">
-        [<Num kind="rate" node={interval.low} />, <Num kind="rate" node={interval.high} />]
+        [<Num kind="rate" link={link} node={interval.low} />,{' '}
+        <Num kind="rate" link={link} node={interval.high} />]
       </span>
     </span>
   );

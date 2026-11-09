@@ -2,7 +2,7 @@ import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
 import {expect, test} from '@playwright/test';
-import type {Browser} from '@playwright/test';
+import type {Browser, Page} from '@playwright/test';
 
 import {fmt, isFmtKind} from '../lib/fmt';
 import {TERMS} from '../lib/terms';
@@ -703,11 +703,15 @@ test('the board shows the pool in its order and repair numbers from the allowed 
   );
 });
 
-test('the board labels only the registered primary comparison primary', async ({page}) => {
-  // The label is fixed words, which no value check sees. Per model,
-  // counterexample against bare is primary (docs/protocol.md, Repair);
-  // pooled, every comparison is secondary.
-  await page.goto('board/');
+/**
+ * Holds the comparison labels on one page to the registered ones: the
+ * pooled round's three comparisons, then each of the rounds' own three, in
+ * order. Pooled, every comparison is secondary; in a round of its own,
+ * counterexample against bare is primary and the two against resample carry
+ * no label (docs/protocol.md, Repair).
+ */
+async function expectRegisteredLabels(page: Page, route: string, rounds: number): Promise<void> {
+  await page.goto(route);
   const labelled = await page.locator('tr[data-label]').evaluateAll((rows) =>
     rows.map((row) => [
       row.getAttribute('data-label'),
@@ -715,13 +719,12 @@ test('the board labels only the registered primary comparison primary', async ({
       row.querySelector('.bd-tag')?.textContent ?? 'none',
     ]),
   );
-  const models = resolver.reelPool().length;
   const pooled = ['secondary', 'secondary', 'secondary'];
-  const perModel = ['primary', 'none', 'none'];
+  const perRound = ['primary', 'none', 'none'];
 
   expect(labelled.map(([label]) => label)).toEqual([
     ...pooled,
-    ...Array.from({length: models}, () => perModel).flat(),
+    ...Array.from({length: rounds}, () => perRound).flat(),
   ]);
   for (const [label, first, second, tag] of labelled) {
     expect(tag).toBe(label);
@@ -729,6 +732,218 @@ test('the board labels only the registered primary comparison primary', async ({
       first === 'counterexample' && second === 'bare' && label !== 'secondary',
     );
   }
+}
+
+test('the board labels only the registered primary comparison primary', async ({page}) => {
+  // The label is fixed words, which no value check sees. Per model,
+  // counterexample against bare is primary (docs/protocol.md, Repair);
+  // pooled, every comparison is secondary.
+  await expectRegisteredLabels(page, 'board/', resolver.reelPool().length);
+});
+
+test("the training page labels only each seed's counterexample-bare comparison primary", async ({
+  page,
+}) => {
+  // Pooled over the seeds every comparison is secondary; per seed
+  // counterexample against bare is primary (docs/protocol.md, Repair,
+  // amended 2026-10-26). The labels are fixed words no value check sees.
+  const pool = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
+  await expectRegisteredLabels(
+    page,
+    'training/',
+    resolver.resolve(['len', pool, '/bases']) as number,
+  );
+});
+
+interface LadderRow {
+  readonly row: string;
+  readonly run: string;
+  readonly post_hoc: boolean;
+}
+
+interface LadderRung {
+  readonly rung: string;
+  readonly reading: string;
+  readonly discordant_cases: number;
+  readonly difference: {readonly low: number; readonly high: number};
+}
+
+/** The few-shot row's example count, as the training page sources it. */
+function examplesSource(ladder: string): readonly unknown[] {
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const run = rows.find((row) => row.row === 'few_shot')?.run ?? '';
+  return ['ptr', `docs/results/${run}/prepare.json`, '/few_shot/k'];
+}
+
+/** The parsed data-src values under the first match of a selector, in order. */
+function sourcesIn(page: Page, selector: string): Promise<unknown[]> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((element) =>
+      Array.from(element.querySelectorAll('[data-src]'), (node): unknown =>
+        JSON.parse(node.getAttribute('data-src') ?? 'null'),
+      ),
+    );
+}
+
+test("the training page's receipts mark the rule's two tests as the ladder holds them", async ({
+  page,
+}) => {
+  // Each mark and the zero words beside it are fixed words chosen from
+  // values, which no value check sees. baseline_ladder.py's rule: a step
+  // reads only when its interval excludes zero, an endpoint at zero not
+  // excluding it, and at least the minimum of cases are discordant. A
+  // question's summary reads its own step and, besides it, only the
+  // example count, so no step stands under another step's title.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
+  const minimum = resolver.resolve(['ptr', ladder, '/bootstrap/min_discordant_cases']) as number;
+  const examples = JSON.stringify(examplesSource(ladder));
+  await page.goto('training/');
+  const drawn = await page.locator('li.tr-q').evaluateAll((items) =>
+    items.map((item) => ({
+      rung: item.getAttribute('data-rung'),
+      summary: Array.from(
+        item.querySelectorAll(':scope > details > summary [data-src]'),
+        (node) => node.getAttribute('data-src') ?? '',
+      ),
+      tests: Array.from(item.querySelectorAll('[data-test]'), (test) => ({
+        test: test.getAttribute('data-test'),
+        pass: test.getAttribute('data-pass'),
+        text: test.textContent ?? '',
+      })),
+    })),
+  );
+
+  expect(drawn.map(({rung}) => rung)).toEqual(rungs.map(({rung}) => rung));
+  rungs.forEach((rung, index) => {
+    const own = (source: string) => {
+      const [, file, at] = JSON.parse(source) as [string, string, unknown];
+      return file === ladder && typeof at === 'string' && at.startsWith(`/rungs/${String(index)}/`);
+    };
+    const summary = drawn[index]?.summary ?? [];
+    expect(summary.some(own), rung.rung).toBe(true);
+    expect(
+      summary.filter((source) => !own(source)),
+      rung.rung,
+    ).toEqual(summary.filter((source) => source === examples));
+    const zero = rung.difference.low > 0 || rung.difference.high < 0;
+    const enough = rung.discordant_cases >= minimum;
+    const tests = drawn[index]?.tests ?? [];
+    expect(
+      tests.map(({test, pass}) => [test, pass]),
+      rung.rung,
+    ).toEqual([
+      ['zero', zero ? 'yes' : 'no'],
+      ['discordant', enough ? 'yes' : 'no'],
+    ]);
+    expect(tests[0]?.text, rung.rung).toContain(zero ? 'excludes zero' : 'includes zero');
+    // The committed reading is the rule's: read only when both tests hold.
+    expect(zero && enough, rung.rung).toBe(rung.reading !== 'inconclusive');
+  });
+});
+
+test('the training page tags exactly the post hoc rows post hoc', async ({page}) => {
+  // No value check sees the tag; the protocol labels both baseline rows
+  // post hoc wherever they are shown (Training rules, amended 2026-10-26).
+  // Each labelled row of the strip, the receipts' bars and both tables
+  // draws from one ladder row; it carries the tag exactly when ladder.json
+  // marks that row post hoc, and the example count exactly when it is the
+  // few-shot row. Each table lists every row in ladder order.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const examples = JSON.stringify(examplesSource(ladder));
+  await page.goto('training/');
+  const section = page.locator('section[aria-labelledby="tr-steps"]');
+  await expect(section.locator('h2 [data-tag="post-hoc"]')).toHaveCount(
+    resolver.resolve(['ptr', ladder, '/post_hoc']) === true ? 1 : 0,
+  );
+  const items = await section
+    .locator('.tr-flow > li, .tr-mix, table.tr-table tbody tr')
+    .evaluateAll((all) =>
+      all.map((item) => ({
+        table: item.closest('table') !== null,
+        tagged: item.querySelector('[data-tag="post-hoc"]') !== null,
+        sources: Array.from(
+          item.querySelectorAll('[data-src]'),
+          (node) => node.getAttribute('data-src') ?? '',
+        ),
+      })),
+    );
+  const listed: number[] = [];
+  for (const {table, tagged, sources} of items) {
+    const drawn = new Set(
+      sources.flatMap((source) => {
+        const [, file, at] = JSON.parse(source) as [string, string, unknown];
+        const found =
+          file === ladder && typeof at === 'string' ? /^\/rows\/(\d+)\//.exec(at) : null;
+        return found === null ? [] : [Number(found[1])];
+      }),
+    );
+    expect(drawn.size, sources.join(' ')).toBeLessThanOrEqual(1);
+    const [index] = [...drawn];
+    const row = index === undefined ? undefined : rows[index];
+    expect(tagged, sources.join(' ')).toBe(row?.post_hoc === true);
+    expect(sources.includes(examples), sources.join(' ')).toBe(row?.row === 'few_shot');
+    if (table && index !== undefined) {
+      listed.push(index);
+    }
+  }
+  const order = rows.map((_, index) => index);
+  expect(listed).toEqual([...order, ...order]);
+});
+
+test("the training page's ledes and strip read each value in its place", async ({page}) => {
+  // A value swapped with another of its kind passes every value check, and
+  // the words beside it are fixed: the schema and few-shot rates could trade
+  // places, and so could the first two steps' readings, which both read
+  // inconclusive. Rows, steps and arms are found by their keys in the
+  // committed files.
+  const ladder = 'docs/results/sft-v1/ladder.json';
+  const pool = 'docs/results/repair-pool/test-qwen3-1.7b-sft.json';
+  const rows = resolver.resolve(['ptr', ladder, '/rows']) as readonly LadderRow[];
+  const rungs = resolver.resolve(['ptr', ladder, '/rungs']) as readonly LadderRung[];
+  const arms = resolver.resolve(['ptr', pool, '/arms']) as readonly {readonly arm: string}[];
+  const at = (pointer: string) => ['ptr', ladder, pointer];
+  const row = (name: string) => `/rows/${String(rows.findIndex((each) => each.row === name))}`;
+  const rung = (name: string) =>
+    `/rungs/${String(rungs.findIndex((each) => each.rung === name))}`;
+  const arm = (code: string) => `/arms/${String(arms.findIndex((each) => each.arm === code))}`;
+  const rate = (base: string) => ['value', 'low', 'high'].map((key) => at(`${base}/rate/${key}`));
+  const step = (name: string) => [at(`${rung(name)}/difference/value`), at(`${rung(name)}/reading`)];
+  const examples = examplesSource(ladder);
+  const steps = ['schema_minus_base', 'few_shot_minus_schema', 'sft_mean_minus_few_shot'];
+  await page.goto('training/');
+
+  expect(await sourcesIn(page, 'section[aria-labelledby="tr-steps"] p.tr-sec-lede')).toEqual([
+    at('/cases'),
+    at('/condition'),
+    at(`${row('base')}/rate/value`),
+    at(`${row('schema')}/rate/value`),
+    examples,
+    at(`${row('few_shot')}/rate/value`),
+    at('/sft_mean/rate/value'),
+    ...steps.map((name) => at(`${rung(name)}/reading`)),
+  ]);
+  expect(await sourcesIn(page, 'ol.tr-flow')).toEqual([
+    ...rate(row('base')),
+    ...step('schema_minus_base'),
+    ...rate(row('schema')),
+    ...step('few_shot_minus_schema'),
+    examples,
+    ...rate(row('few_shot')),
+    ...step('sft_mean_minus_few_shot'),
+    ...rate('/sft_mean'),
+  ]);
+  expect(await sourcesIn(page, 'section[aria-labelledby="tr-repair"] p.tr-sec-lede')).toEqual([
+    ['ptr', pool, `${arm('counterexample')}/triggered_items`],
+    ...['counterexample', 'bare', 'resample'].map((code) => [
+      'ptr',
+      pool,
+      `${arm(code)}/repaired`,
+    ]),
+  ]);
 });
 
 interface TracedProbe {
