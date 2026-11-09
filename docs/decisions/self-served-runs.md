@@ -334,6 +334,26 @@ rows' registration date. An outage re-run adds `-r2` after the tag
   written.
 - No other row, number or rule changes.
 
+Cost ruled 2026-11-09, before it is written (protocol, Training rules,
+amended 2026-11-09; owner ruling of 2026-11-09):
+
+- Sessions: 2026-10-28, 2026-10-31 and 2026-11-05, the `dfilterforge-vllm`
+  apps `ap-gCT9ocTQKMTfTF5SLJER4I`, `ap-GP0X6i9el6rilY602ncFdg` and
+  `ap-SQliMSGAdrKbVcwmGYI84B`, each bill read with `modal billing report`
+  (hourly, local time, by resource) on 2026-11-09. The attempt of
+  2026-10-27 never got a GPU and billed nothing. An app of 2026-10-29,
+  `ap-oeAVuNiK99WrMlnHTKvJkL`, billed USD 0.0108 and sent none of these
+  runs' requests, so the rule, which sums the sessions that sent them,
+  leaves it out and the cost names it.
+- Requests: the ones the committed runs of those sessions record
+  (`requests_sent` in each run manifest), plus 224 for the two unread
+  2026-10-26 test passes, their prompt count; their share of the
+  2026-10-28 bill stays in it.
+- GPU time: the committed runs' attempt latencies at USD 0.80 an hour,
+  without the two unread passes, which the cost says.
+- Not counted: the schema probes and the requests that woke the server,
+  though billed.
+
 ## Repair round
 
 Added 2026-10-26, before its first request (protocol, Repair, amended

@@ -671,6 +671,22 @@ cost, which may not open them, is ruled before the cost is written. No
 other row, number or rule changes: every other row sent `json_object`,
 whose grammar has no properties to order.
 
+Amended 2026-11-09, before the cost above is written (owner ruling of
+2026-11-09; the [self-served note](decisions/self-served-runs.md),
+Baseline rows, names the sessions and their bills). The sessions that
+sent these rows and the 1.7B repair round are those of 2026-10-28,
+2026-10-31 and 2026-11-05, and each one's bill is the `dfilterforge-vllm`
+app's rows that `modal billing report` gives for it, kept in
+`docs/decisions/evidence/self-served/`. The requests are the ones the
+committed runs of those sessions record, plus 224 for the two 2026-10-26
+test passes reported not run: their prompt count, one request per prompt,
+since they may not be opened to count retries. The census the 2026-10-28
+session printed found both complete in one invocation, and their share of
+that session's bill stays in it. The GPU time sums the latencies the
+committed runs' attempts record, so it leaves those two passes out, and
+the cost says so. The schema probes and the requests that woke the server
+were billed and are not counted. No other row, number or rule changes.
+
 ## Claim boundary
 
 Results hold for Wireshark 4.6.8, the isolated profile, and these synthetic IPv4
