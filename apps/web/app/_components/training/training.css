@@ -192,21 +192,32 @@
 .tr-cost-big .m {font-weight: 500; letter-spacing: -0.03em;}
 .tr-cost-big + .tr-sub {margin-top: 8px; font-size: 15px;}
 
-@media (max-width: 760px) {
-  /* These outrank or follow the rules of the block above, so they are
-     listed again. */
-  .tr-q .tr-row, .tr-axis-q, .tr-rcpt {grid-template-columns: minmax(0, 1fr);}
-  .tr-flow {grid-template-columns: minmax(0, 1fr); padding-bottom: 0; border-bottom: 0;}
+/* Four across, a step's nowrap tag can be wider than its column, and below
+   about 960 px it reaches the rate the step leads to, so there the strip
+   stacks, at a reading width on a tablet; the methodology page breaks at
+   960 px too. Each step's arrow points down. A gain's or a loss's head
+   recolours its whole border, since the four-across rule that inks its
+   left edge outranks the plain head here. A name of two lines spans its
+   rate's interval row too, so the interval stays under its rate. */
+@media (max-width: 960px) {
+  .tr-flow {grid-template-columns: minmax(0, 1fr); max-width: 32rem; padding-bottom: 0; border-bottom: 0;}
   .tr-flow > li {flex-direction: column; align-items: stretch; gap: 0;}
   .tr-flow-step, .tr-flow-cell {flex: none;}
   .tr-flow-step {flex-direction: row; justify-content: flex-start; gap: 8px; padding: 6px 0 6px 2px;}
   .tr-flow-ar {width: 2px; height: 16px;}
   .tr-flow-ar::after {right: auto; left: -4px; top: auto; bottom: -2px; border: 5px solid transparent; border-top: 7px solid var(--line-2); border-bottom: 0;}
-  .tr-step-gain .tr-flow-ar::after {border-top-color: var(--ink);}
-  .tr-step-loss .tr-flow-ar::after {border-top-color: var(--dis);}
+  .tr-step-gain .tr-flow-ar::after {border-color: var(--ink) transparent transparent;}
+  .tr-step-loss .tr-flow-ar::after {border-color: var(--dis) transparent transparent;}
   .tr-flow-cell {display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--ink);}
+  .tr-flow-cell .tr-flow-nm {grid-row: span 2;}
   .tr-flow-cell .bd-ci {grid-column: 2;}
   .tr-flow-v {font-size: 28px;}
+}
+
+@media (max-width: 760px) {
+  /* These outrank or follow the rules of the block above, so they are
+     listed again. */
+  .tr-q .tr-row, .tr-axis-q, .tr-rcpt {grid-template-columns: minmax(0, 1fr);}
   .tr-arms {grid-template-columns: minmax(0, 1fr);}
   /* A ladder row's long label takes two lines here, so the first counts
      stay in view beside it. */
