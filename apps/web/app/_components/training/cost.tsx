@@ -102,7 +102,9 @@ export function SessionCost({cost, unread}: SessionCostProps): ReactNode {
         <Str node={cost.excluded.date} /> billed USD <Usd node={cost.excluded.bill_usd} /> and
         sent none of these requests, so the cost file names it and leaves it out. The schema
         probes and the requests that woke the server were billed and are not among the counted
-        requests. Amounts are shown to the cent; the cost file holds them exact.
+        requests. Amounts are shown to the cent; the cost file holds each bill exact, as the sum
+        of Modal&apos;s billed rows, and the cost per thousand requests and the GPU cost rounded to
+        eight places.
       </p>
     </section>
   );

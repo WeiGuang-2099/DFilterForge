@@ -187,7 +187,7 @@ export function RepairTurn({repair, condition}: RepairTurnProps): ReactNode {
         Each difference is the first arm&apos;s <Term name="repair@1" /> minus the second&apos;s
         (resample is the repeatability check), paired by case over the{' '}
         <Num kind="int" node={bootstrap.cases} /> ready test cases with{' '}
-        <Num kind="int" node={bootstrap.resamples} /> resamples, seed{' '}
+        <Num kind="int" node={bootstrap.resamples} /> bootstrap resamples, seed{' '}
         <Num kind="int" node={bootstrap.seed} />, the draws used above. Pooled, a case is
         discordant when the two arms repaired a different number of its answers, the seeds&apos;
         taken together. These pooled comparisons are secondary. A comparison reads as a difference

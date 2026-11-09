@@ -291,7 +291,7 @@ export default function TrainingPage(): ReactNode {
             was larger than the client&apos;s reply size limit and counts as not exact.
           </li>
           <li>
-            The repair round was registered after every score of the small model and the hosted
+            The repair round was registered after every base and fine-tuned score and the hosted
             round&apos;s results were known, so it is post hoc; its plans and reading were
             registered before its first request. The adapters were trained on single-turn
             prompts, so the bare and counterexample turns are chats they never saw in training;
@@ -314,12 +314,18 @@ export default function TrainingPage(): ReactNode {
             untrained condition.
           </li>
           <li>
-            The numbers come from the <a href={repositoryFile(HEADLINE)}>headline file</a>, the{' '}
-            <a href={repositoryFile(LADDER)}>ladder file</a>, the{' '}
-            <a href={repositoryFile(COST)}>cost file</a>, the{' '}
+            The numbers come from committed files. Committed scripts write the{' '}
+            <a href={repositoryFile(HEADLINE)}>headline file</a>, the{' '}
+            <a href={repositoryFile(LADDER)}>ladder file</a> and the{' '}
+            <a href={repositoryFile(COST)}>cost file</a> from the scored runs, the runs&apos;
+            records and the bills, and CI rebuilds all three. CI also derives the{' '}
             <a href={repositoryFile(SFT_POOL)}>repair pool file</a> and each seed&apos;s repair
-            round, which committed code writes from the scored runs and the bills, and CI
-            rebuilds.
+            round again, re-scores every row&apos;s scored summary and outcomes, which give the
+            tables by condition, the case-by-case counts and the replies refused as too large, and
+            counts the rerun&apos;s pair report again from its two passes. The token cap, the
+            response schema and the example count are the rows&apos; own records, the base and
+            schema rows&apos; run manifests and the few-shot row&apos;s prepare, which CI reads and
+            does not rebuild.
           </li>
         </ul>
       </section>
