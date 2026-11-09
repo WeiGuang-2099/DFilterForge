@@ -49,6 +49,7 @@ src_paths = ["src", "tests"]
 include = [
   "src",
   "tests",
+  "scripts/baseline_ladder.py",
   "scripts/dev_bakeoff.py",
   "scripts/dev_bakeoff_configs.py",
   "scripts/export_web_data.py",
