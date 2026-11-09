@@ -22,13 +22,34 @@ import type {SftRepair} from '@/lib/training-data';
 
 import {count} from './marks';
 
-/** An arm of the pooled round by its code, or a throw naming the one missing. */
-function arm(arms: readonly Arm[], code: string): Arm {
+// The registered arms, in the order the page shows them: the card first and
+// the repeatability check last (docs/protocol.md, Repair).
+const ARMS = ['counterexample', 'bare', 'resample'] as const;
+
+type ArmCode = (typeof ARMS)[number];
+
+/** A round's arm by its code, or a throw naming the round and the arm missing. */
+function arm(arms: readonly Arm[], code: ArmCode, round: string): Arm {
   const found = arms.find((each) => each.arm.t === code);
   if (found === undefined) {
-    throw new Error(`training: the pooled round has no ${code} arm`);
+    throw new Error(`training: ${round} has no ${code} arm`);
   }
   return found;
+}
+
+/**
+ * A round's arms in the page's order. A round with an arm the protocol does
+ * not register, or without one it does, fails the build, so the lede, the
+ * arm blocks and each seed's bars and comparisons show the same arms.
+ */
+function registered(arms: readonly Arm[], round: string): readonly Arm[] {
+  if (arms.length !== ARMS.length) {
+    throw new Error(
+      `training: ${round} has the arms ${JSON.stringify(arms.map((each) => each.arm.t))}, ` +
+        `not ${JSON.stringify(ARMS)}`,
+    );
+  }
+  return ARMS.map((code) => arm(arms, code, round));
 }
 
 /** One square per failed answer, the repaired ones filled first. */
@@ -89,9 +110,11 @@ interface RepairTurnProps {
 
 /** The SFT seeds' test repair round: the pooled arms, then each seed's round. */
 export function RepairTurn({repair, condition}: RepairTurnProps): ReactNode {
-  const counterexample = arm(repair.arms, 'counterexample');
-  const bare = arm(repair.arms, 'bare');
-  const resample = arm(repair.arms, 'resample');
+  const round = 'the pooled round';
+  const pooled = registered(repair.arms, round);
+  const counterexample = arm(pooled, 'counterexample', round);
+  const bare = arm(pooled, 'bare', round);
+  const resample = arm(pooled, 'resample', round);
   const {bootstrap} = repair;
   return (
     <section aria-labelledby="tr-repair" className="tr-sec">
@@ -186,6 +209,7 @@ export function RepairTurn({repair, condition}: RepairTurnProps): ReactNode {
           // A seed id holds digits, which no label attribute may, so each
           // round is labelled by its heading.
           const heading = `tr-seed-${String(index)}`;
+          const arms = registered(seed.arms, `seed ${JSON.stringify(seed.seed.v)}'s round`);
           return (
             <div className="bd-pm" key={JSON.stringify(seed.seed.v)}>
               <div className="bd-pm-id">
@@ -196,7 +220,7 @@ export function RepairTurn({repair, condition}: RepairTurnProps): ReactNode {
                   <Num kind="int" node={seed.triggered_items} /> failed answers in{' '}
                   <Num kind="int" node={seed.triggered_cases} /> cases
                 </p>
-                <ArmBars arms={seed.arms} compact labelledBy={heading} />
+                <ArmBars arms={arms} compact labelledBy={heading} />
               </div>
               <Comparisons comparisons={seed.comparisons} labelledBy={heading} pooled={false} />
             </div>
