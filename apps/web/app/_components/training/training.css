@@ -84,7 +84,7 @@
 
 @media (max-width: 760px) {
   .tr-row, .tr-axis, .tr-strata .tr-row {grid-template-columns: minmax(0, 1fr);}
-  .tr-axis span:first-child, .tr-axis span:last-child {display: none;}
+  .tr-axis > span:first-child, .tr-axis > span:last-child {display: none;}
   .tr-strata, .tr-tables {grid-template-columns: minmax(0, 1fr);}
   .tr-cases {gap: 1px;}
   .tr-case {height: 150px;}
