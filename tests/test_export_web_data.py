@@ -5156,52 +5156,93 @@ def test_a_training_file_of_another_schema_exits_two(
     not _HAS_DOCS, reason="The test image carries no docs/ tree"
 )
 @pytest.mark.parametrize(
-    ("file", "keys", "value"),
+    ("file", "keys", "value", "check"),
     [
-        (_LADDER, ("split",), "dev"),
+        (_LADDER, ("split",), "dev", "the test split"),
+        # Not the headline's cases.
+        (
+            _LADDER,
+            ("cases",),
+            41,
+            "the headline's metric, condition, cases and items",
+        ),
         # Not the draws of every row above it.
-        (_LADDER, ("bootstrap", "seed"), 18),
+        (_LADDER, ("bootstrap", "seed"), 18, "the headline's draws"),
         # Not the headline's base row, or its seeds out of order.
-        (_LADDER, ("rows", 0, "run"), _SEED_PASSES[17]),
-        (_LADDER, ("rows", 3, "seed"), 2026),
+        (_LADDER, ("rows", 0, "run"), _SEED_PASSES[17], "the headline's runs"),
+        (
+            _LADDER,
+            ("rows", 3, "seed"),
+            2026,
+            "the baseline rows, then the headline's seeds",
+        ),
         # The schema row not tagged post hoc.
-        (_LADDER, ("rows", 1, "post_hoc"), False),
-        # A base rate other than the one the page's h1 shows.
-        (_LADDER, ("rows", 0, "rate", "value"), 0.0875),
-        # A false-ready answer no bar draws, and malformed parts that do not
-        # add up.
-        (_LADDER, ("rows", 2, "outcomes", "false_ready"), 1),
-        (_LADDER, ("rows", 0, "malformed", "truncated"), 5),
+        (
+            _LADDER,
+            ("rows", 1, "post_hoc"),
+            False,
+            "post hoc on the schema and few-shot rows alone",
+        ),
+        # A base rate other than the one the page's h1 shows, and a mean
+        # other than the headline's.
+        (_LADDER, ("rows", 0, "rate", "value"), 0.0875, "the headline's rates"),
+        (_LADDER, ("sft_mean", "rate", "value"), 0.4, "the headline's mean"),
+        # A false-ready answer no bar draws, outcomes that do not sum to the
+        # items, and malformed parts that do not add up.
+        (
+            _LADDER,
+            ("rows", 2, "outcomes", "false_ready"),
+            1,
+            "counts that add up",
+        ),
+        (_LADDER, ("rows", 0, "outcomes", "invalid"), 29, "counts that add up"),
+        (
+            _LADDER,
+            ("rows", 0, "malformed", "truncated"),
+            5,
+            "counts that add up",
+        ),
         # A step other than the three registered.
-        (_LADDER, ("rungs", 2, "first"), "few_shot"),
+        (_LADDER, ("rungs", 2, "first"), "few_shot", "the registered steps"),
         # A row sent under another token cap than the legend's.
         (
             f"docs/results/{_SEED_PASSES[2026]}/run_manifest.json",
             ("settings", "max_output_tokens"),
             4096,
+            "one token cap",
         ),
     ],
     ids=[
         "split",
+        "cases",
         "draws",
         "base_run",
         "seed_order",
         "post_hoc",
         "rate",
+        "mean",
         "false_ready",
+        "outcome_sum",
         "malformed_split",
         "steps",
         "token_cap",
     ],
 )
 def test_a_ladder_that_is_not_the_headlines_rows_stops_the_export(
-    training_tree: Path, file: str, keys: tuple[str | int, ...], value: object
+    training_tree: Path,
+    file: str,
+    keys: tuple[str | int, ...],
+    value: object,
+    check: str,
 ) -> None:
     _change(training_tree, file, [(keys, value)])
 
     with pytest.raises(exporter.ContractError) as caught:
         exporter.build_baseline(exporter.Repo(training_tree))
     assert caught.value.code == "baseline_inconsistent"
+    # The case's own check and no other: another check that refuses it
+    # would hide the loss of this one.
+    assert str(caught.value) == f"{_LADDER} fails: {check}"
 
 
 @pytest.mark.skipif(
@@ -5244,14 +5285,22 @@ def test_a_provider_failure_that_is_no_oversized_reply_stops_the_export(
         (_seed_round(2026), "deleted"),
         # Flagged conclusive where the 1.7B rule does not read: neither test
         # holds, [-0.018519, 0.036364] with 3 discordant cases; an endpoint
-        # at 0 does not exclude 0, [-0.113636, 0.0] with 10; and both tests
-        # must hold, an interval that excludes 0 with 9.
+        # at 0 does not exclude 0, [-0.113636, 0.0] or [0.0, 0.036364] with
+        # 10; and both tests must hold, an interval that excludes 0 with 9.
         (_SFT_POOL, [(("comparisons", 2, "inconclusive"), False)]),
         (
             _seed_round(42),
             [
                 (("comparisons", 0, "discordant"), 10),
                 (("comparisons", 0, "inconclusive"), False),
+            ],
+        ),
+        (
+            _SFT_POOL,
+            [
+                (("comparisons", 2, "difference", "low"), 0.0),
+                (("comparisons", 2, "discordant"), 10),
+                (("comparisons", 2, "inconclusive"), False),
             ],
         ),
         (
@@ -5273,6 +5322,7 @@ def test_a_provider_failure_that_is_no_oversized_reply_stops_the_export(
         "round_missing",
         "neither_test",
         "endpoint_at_zero",
+        "low_endpoint_at_zero",
         "nine_discordant",
     ],
 )
