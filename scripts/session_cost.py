@@ -134,6 +134,11 @@ def _hours(latencies: Sequence[float]) -> float:
     return round(math.fsum(latencies) / 3_600_000, 6)
 
 
+def _gpu_usd(latencies: Sequence[float]) -> Decimal:
+    """The L4 price of the hours the latencies sum to, before rounding."""
+    return Decimal(math.fsum(latencies)) / 3_600_000 * USD_PER_GPU_HOUR
+
+
 def _billed(rows: Sequence[Row], session: Session) -> tuple[list[Row], Span]:
     """The session's bill rows and the start and end of the hours they bill.
 
@@ -262,7 +267,7 @@ def build(results: Path) -> dict[str, Any]:
             "requests": requests,
             "usd_per_1000_requests": _usd(per_1000.quantize(_PLACES)),
             "gpu_hours": hours,
-            "gpu_usd": _usd(Decimal(f"{hours:.6f}") * USD_PER_GPU_HOUR),
+            "gpu_usd": _usd(_gpu_usd(latencies).quantize(_PLACES)),
         },
         "excluded": {
             "date": EXCLUDED.date,

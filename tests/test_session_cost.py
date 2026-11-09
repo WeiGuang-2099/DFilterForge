@@ -128,6 +128,25 @@ def test_the_bills_sum_over_the_requests_beside_the_gpu_time(
     assert len(built["sources"]) == 1 + 2 * 24
 
 
+def test_the_gpu_time_is_priced_before_it_is_rounded(tmp_path: Path) -> None:
+    """A millisecond more than 0.26 hours: gpu_usd prices all of it.
+
+    One run's single attempt takes 36,001 ms, so the 26 attempts sum to
+    936,001 ms. gpu_hours rounds that to the microhour, 0.26, but gpu_usd is
+    936,001 / 3,600,000 hours at USD 0.80 an hour, rounded once: 0.20800022,
+    where pricing the rounded 0.26 hours gives 0.20800000.
+    """
+    results = _tree(tmp_path)
+    run = cost.SESSIONS[2].runs[0]
+    line = canonical_json({"completion": {"latency_ms": _LATENCY_MS + 1}})
+    (results / run / "attempts" / "C4.jsonl").write_text(f"{line}\n", "utf-8")
+
+    total = cost.build(results)["total"]
+
+    assert total["gpu_hours"] == 0.26
+    assert total["gpu_usd"] == "0.20800022"
+
+
 @pytest.mark.parametrize(
     ("missing", "named"),
     [
