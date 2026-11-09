@@ -1,23 +1,22 @@
 # Implementation Progress
 
-Last updated: 2026-10-26
+Last updated: 2026-11-09
 
 ## Current slice
 
-Plan week R2's slices are merged: `passb` (plan slice 4) in PR #41,
-`exhibits` (slice 6) in PR #44 and `judge-study` (slice 5) in PR #45.
-Slice 7, `selfserved-baselines` (plan week R3), has its code, prompt
-sets and registration on its branch, before any request. The call step
-stops a pass at its first HTTP 5xx or 408, timeout or dropped
-connection. Two untrained rows of the base model are registered: base +
-JSON schema (`dfilterforge.answer_schema`) and base + eight training
-examples + schema (`dfilterforge.few_shot`), C4 only. So is the 1.7B
-repair round on the three SFT seeds, with its plans and dev arm prompt
-sets committed. The rules are in the protocol's amendments of
-2026-10-26 and the [self-served note](decisions/self-served-runs.md).
-Next is the Modal session the owner runs from home (`usage.md`,
-Baseline rows and the 1.7B repair round), then the ladder code, before
-any test row is scored, and the /training page.
+Slice 7's PRs #48 and #49 are merged: #48 registered the baseline rows
+and the 1.7B repair round, and #49 published the repair round and
+registered the rows' correction. The branch `baseline-ladder` holds the
+cost ruling of 2026-11-09, the corrected rows' dev and test passes, the
+ladder and the cost. On test C4 strong exact, paired by case, the schema
+row minus the base row is 0.025 [0.000, 0.063] and the few-shot row
+minus the schema row 0.013 [-0.088, 0.100], both inconclusive, and the
+three-seed SFT mean minus the few-shot row is 0.296 [0.196, 0.404], a
+gain; the schema and few-shot rows are post hoc
+([ladder](results/sft-v1/ladder.json)). The three sessions cost USD 1.03
+per 1,000 requests ([cost](results/sft-v1/cost.json)). Next: the ladder
+section of `/training` in treatment B ("Three questions"), which the
+owner picked on 2026-11-09, its web export, the CI run and the PR.
 
 ## Completed: pilot oracle, up to 2026-09-14
 
