@@ -15,9 +15,17 @@ import type {NumNode, StrNode} from './data';
 import {fmt} from './fmt';
 import type {FmtKind} from './fmt';
 
-// The kinds that show a string: as written, as fixed words for a code, or
-// as a digest's leading digits.
-type WordKind = 'text' | 'unmeasured' | 'split' | 'outcome' | 'frame_kind' | 'join' | 'digest';
+// The kinds that show a string: as written, as fixed words for a code, as
+// a digest's leading digits, or as a USD amount to the cent.
+type WordKind =
+  | 'text'
+  | 'unmeasured'
+  | 'split'
+  | 'outcome'
+  | 'frame_kind'
+  | 'join'
+  | 'digest'
+  | 'usd';
 
 /**
  * The kinds a number node can take. It leaves out fmt's string-only kinds,
